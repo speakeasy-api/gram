@@ -22,6 +22,8 @@ type Service interface {
 	SearchToolCalls(context.Context, *SearchToolCallsPayload) (res *SearchToolCallsResult, err error)
 	// Capture a telemetry event and forward it to PostHog
 	CaptureEvent(context.Context, *CaptureEventPayload) (res *CaptureEventResult, err error)
+	// Get aggregated metrics summary for a project or specific chat session
+	GetMetricsSummary(context.Context, *GetMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -46,7 +48,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"searchLogs", "searchToolCalls", "captureEvent"}
+var MethodNames = [4]string{"searchLogs", "searchToolCalls", "captureEvent", "getMetricsSummary"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -70,6 +72,72 @@ type CaptureEventResult struct {
 	// Whether the event was successfully captured
 	Success bool
 }
+
+// GetMetricsSummaryPayload is the payload type of the telemetry service
+// getMetricsSummary method.
+type GetMetricsSummaryPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Aggregation level (project or chat)
+	Scope MetricsScope
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Chat/conversation ID (required when scope=chat)
+	ChatID *string
+	// Optional deployment filter
+	DeploymentID *string
+}
+
+// GetMetricsSummaryResult is the result type of the telemetry service
+// getMetricsSummary method.
+type GetMetricsSummaryResult struct {
+	// Aggregated metrics
+	Metrics *Metrics
+	// Scope used for aggregation
+	Scope MetricsScope
+	// Whether telemetry is enabled for the organization
+	Enabled bool
+}
+
+// Aggregated metrics
+type Metrics struct {
+	// Sum of input tokens used
+	TotalInputTokens int64
+	// Sum of output tokens used
+	TotalOutputTokens int64
+	// Sum of all tokens used
+	TotalTokens int64
+	// Average tokens per chat request
+	AvgTokensPerRequest float64
+	// Total number of chat requests
+	TotalChatRequests int64
+	// Average chat request duration in milliseconds
+	AvgChatDurationMs float64
+	// Requests that completed naturally
+	FinishReasonStop int64
+	// Requests that resulted in tool calls
+	FinishReasonToolCalls int64
+	// Total number of tool calls
+	TotalToolCalls int64
+	// Successful tool calls (2xx status)
+	ToolCallSuccess int64
+	// Failed tool calls (4xx/5xx status)
+	ToolCallFailure int64
+	// Average tool call duration in milliseconds
+	AvgToolDurationMs float64
+	// Number of unique chat sessions (project scope only)
+	TotalChats int64
+	// Number of distinct models used (project scope only)
+	DistinctModels int64
+	// Number of distinct providers used (project scope only)
+	DistinctProviders int64
+}
+
+// Aggregation scope for metrics
+type MetricsScope string
 
 // Filter criteria for searching logs
 type SearchLogsFilter struct {

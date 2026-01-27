@@ -29,6 +29,10 @@ type Client struct {
 	// captureEvent endpoint.
 	CaptureEventDoer goahttp.Doer
 
+	// GetMetricsSummary Doer is the HTTP client used to make requests to the
+	// getMetricsSummary endpoint.
+	GetMetricsSummaryDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -49,14 +53,15 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		SearchLogsDoer:      doer,
-		SearchToolCallsDoer: doer,
-		CaptureEventDoer:    doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		SearchLogsDoer:        doer,
+		SearchToolCallsDoer:   doer,
+		CaptureEventDoer:      doer,
+		GetMetricsSummaryDoer: doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
@@ -127,6 +132,30 @@ func (c *Client) CaptureEvent() goa.Endpoint {
 		resp, err := c.CaptureEventDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "captureEvent", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMetricsSummary returns an endpoint that makes HTTP requests to the
+// telemetry service getMetricsSummary server.
+func (c *Client) GetMetricsSummary() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMetricsSummaryRequest(c.encoder)
+		decodeResponse = DecodeGetMetricsSummaryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMetricsSummaryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMetricsSummaryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getMetricsSummary", err)
 		}
 		return decodeResponse(resp)
 	}

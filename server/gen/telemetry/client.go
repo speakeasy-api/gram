@@ -15,17 +15,19 @@ import (
 
 // Client is the "telemetry" service client.
 type Client struct {
-	SearchLogsEndpoint      goa.Endpoint
-	SearchToolCallsEndpoint goa.Endpoint
-	CaptureEventEndpoint    goa.Endpoint
+	SearchLogsEndpoint        goa.Endpoint
+	SearchToolCallsEndpoint   goa.Endpoint
+	CaptureEventEndpoint      goa.Endpoint
+	GetMetricsSummaryEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, captureEvent goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, captureEvent, getMetricsSummary goa.Endpoint) *Client {
 	return &Client{
-		SearchLogsEndpoint:      searchLogs,
-		SearchToolCallsEndpoint: searchToolCalls,
-		CaptureEventEndpoint:    captureEvent,
+		SearchLogsEndpoint:        searchLogs,
+		SearchToolCallsEndpoint:   searchToolCalls,
+		CaptureEventEndpoint:      captureEvent,
+		GetMetricsSummaryEndpoint: getMetricsSummary,
 	}
 }
 
@@ -94,4 +96,27 @@ func (c *Client) CaptureEvent(ctx context.Context, p *CaptureEventPayload) (res 
 		return
 	}
 	return ires.(*CaptureEventResult), nil
+}
+
+// GetMetricsSummary calls the "getMetricsSummary" endpoint of the "telemetry"
+// service.
+// GetMetricsSummary may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetMetricsSummary(ctx context.Context, p *GetMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error) {
+	var ires any
+	ires, err = c.GetMetricsSummaryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetMetricsSummaryResult), nil
 }

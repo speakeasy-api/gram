@@ -748,6 +748,248 @@ func DecodeCaptureEventResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildGetMetricsSummaryRequest instantiates a HTTP request object with method
+// and path set to call the "telemetry" service "getMetricsSummary" endpoint
+func (c *Client) BuildGetMetricsSummaryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMetricsSummaryTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getMetricsSummary", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMetricsSummaryRequest returns an encoder for requests sent to the
+// telemetry getMetricsSummary server.
+func EncodeGetMetricsSummaryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetMetricsSummaryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getMetricsSummary", "*telemetry.GetMetricsSummaryPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetMetricsSummaryRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getMetricsSummary", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetMetricsSummaryResponse returns a decoder for responses returned by
+// the telemetry getMetricsSummary endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetMetricsSummaryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMetricsSummaryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMetricsSummaryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+			}
+			err = ValidateGetMetricsSummaryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+			}
+			res := NewGetMetricsSummaryResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMetricsSummaryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+			}
+			err = ValidateGetMetricsSummaryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+			}
+			return nil, NewGetMetricsSummaryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMetricsSummaryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+			}
+			err = ValidateGetMetricsSummaryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+			}
+			return nil, NewGetMetricsSummaryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMetricsSummaryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+			}
+			err = ValidateGetMetricsSummaryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+			}
+			return nil, NewGetMetricsSummaryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMetricsSummaryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+			}
+			err = ValidateGetMetricsSummaryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+			}
+			return nil, NewGetMetricsSummaryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMetricsSummaryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+			}
+			err = ValidateGetMetricsSummaryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+			}
+			return nil, NewGetMetricsSummaryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMetricsSummaryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+			}
+			err = ValidateGetMetricsSummaryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+			}
+			return nil, NewGetMetricsSummaryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMetricsSummaryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+			}
+			err = ValidateGetMetricsSummaryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+			}
+			return nil, NewGetMetricsSummaryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMetricsSummaryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				}
+				err = ValidateGetMetricsSummaryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				}
+				return nil, NewGetMetricsSummaryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMetricsSummaryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				}
+				err = ValidateGetMetricsSummaryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				}
+				return nil, NewGetMetricsSummaryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getMetricsSummary", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMetricsSummaryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+			}
+			err = ValidateGetMetricsSummaryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+			}
+			return nil, NewGetMetricsSummaryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getMetricsSummary", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalTelemetrySearchLogsFilterToSearchLogsFilterRequestBody builds a value
 // of type *SearchLogsFilterRequestBody from a value of type
 // *telemetry.SearchLogsFilter.
@@ -885,6 +1127,30 @@ func unmarshalToolCallSummaryResponseBodyToTelemetryToolCallSummary(v *ToolCallS
 		LogCount:          *v.LogCount,
 		HTTPStatusCode:    v.HTTPStatusCode,
 		GramUrn:           *v.GramUrn,
+	}
+
+	return res
+}
+
+// unmarshalMetricsResponseBodyToTelemetryMetrics builds a value of type
+// *telemetry.Metrics from a value of type *MetricsResponseBody.
+func unmarshalMetricsResponseBodyToTelemetryMetrics(v *MetricsResponseBody) *telemetry.Metrics {
+	res := &telemetry.Metrics{
+		TotalInputTokens:      *v.TotalInputTokens,
+		TotalOutputTokens:     *v.TotalOutputTokens,
+		TotalTokens:           *v.TotalTokens,
+		AvgTokensPerRequest:   *v.AvgTokensPerRequest,
+		TotalChatRequests:     *v.TotalChatRequests,
+		AvgChatDurationMs:     *v.AvgChatDurationMs,
+		FinishReasonStop:      *v.FinishReasonStop,
+		FinishReasonToolCalls: *v.FinishReasonToolCalls,
+		TotalToolCalls:        *v.TotalToolCalls,
+		ToolCallSuccess:       *v.ToolCallSuccess,
+		ToolCallFailure:       *v.ToolCallFailure,
+		AvgToolDurationMs:     *v.AvgToolDurationMs,
+		TotalChats:            *v.TotalChats,
+		DistinctModels:        *v.DistinctModels,
+		DistinctProviders:     *v.DistinctProviders,
 	}
 
 	return res
