@@ -242,7 +242,7 @@ func (s *Service) GetMetricsSummary(ctx context.Context, payload *telem_gen.GetM
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	logsEnabled, err := s.isLogsEnabled(ctx, authCtx.ActiveOrganizationID)
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
 	}
