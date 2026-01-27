@@ -12,17 +12,6 @@ import { deploymentsRedeployDeployment } from "../funcs/deploymentsRedeployDeplo
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -36,17 +25,6 @@ export type RedeployDeploymentMutationVariables = {
 
 export type RedeployDeploymentMutationData = components.RedeployResult;
 
-export type RedeployDeploymentMutationError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * redeploy deployments
  *
@@ -56,12 +34,12 @@ export type RedeployDeploymentMutationError =
 export function useRedeployDeploymentMutation(
   options?: MutationHookOptions<
     RedeployDeploymentMutationData,
-    RedeployDeploymentMutationError,
+    Error,
     RedeployDeploymentMutationVariables
   >,
 ): UseMutationResult<
   RedeployDeploymentMutationData,
-  RedeployDeploymentMutationError,
+  Error,
   RedeployDeploymentMutationVariables
 > {
   const client = useGramContext();

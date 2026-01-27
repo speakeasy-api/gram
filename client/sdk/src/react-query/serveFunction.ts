@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   type ServeFunctionQueryData,
 };
 
-export type ServeFunctionQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * serveFunction assets
  *
@@ -61,8 +39,8 @@ export type ServeFunctionQueryError =
 export function useServeFunction(
   request: operations.ServeFunctionRequest,
   security?: operations.ServeFunctionSecurity | undefined,
-  options?: QueryHookOptions<ServeFunctionQueryData, ServeFunctionQueryError>,
-): UseQueryResult<ServeFunctionQueryData, ServeFunctionQueryError> {
+  options?: QueryHookOptions<ServeFunctionQueryData>,
+): UseQueryResult<ServeFunctionQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildServeFunctionQuery(
@@ -84,11 +62,8 @@ export function useServeFunction(
 export function useServeFunctionSuspense(
   request: operations.ServeFunctionRequest,
   security?: operations.ServeFunctionSecurity | undefined,
-  options?: SuspenseQueryHookOptions<
-    ServeFunctionQueryData,
-    ServeFunctionQueryError
-  >,
-): UseSuspenseQueryResult<ServeFunctionQueryData, ServeFunctionQueryError> {
+  options?: SuspenseQueryHookOptions<ServeFunctionQueryData>,
+): UseSuspenseQueryResult<ServeFunctionQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildServeFunctionQuery(

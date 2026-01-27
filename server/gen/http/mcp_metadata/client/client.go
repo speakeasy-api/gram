@@ -25,6 +25,10 @@ type Client struct {
 	// setMcpMetadata endpoint.
 	SetMcpMetadataDoer goahttp.Doer
 
+	// ExportMcpMetadata Doer is the HTTP client used to make requests to the
+	// exportMcpMetadata endpoint.
+	ExportMcpMetadataDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -45,13 +49,14 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetMcpMetadataDoer:  doer,
-		SetMcpMetadataDoer:  doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		GetMcpMetadataDoer:    doer,
+		SetMcpMetadataDoer:    doer,
+		ExportMcpMetadataDoer: doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
@@ -98,6 +103,30 @@ func (c *Client) SetMcpMetadata() goa.Endpoint {
 		resp, err := c.SetMcpMetadataDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpMetadata", "setMcpMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ExportMcpMetadata returns an endpoint that makes HTTP requests to the
+// mcpMetadata service exportMcpMetadata server.
+func (c *Client) ExportMcpMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeExportMcpMetadataRequest(c.encoder)
+		decodeResponse = DecodeExportMcpMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildExportMcpMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ExportMcpMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpMetadata", "exportMcpMetadata", err)
 		}
 		return decodeResponse(resp)
 	}

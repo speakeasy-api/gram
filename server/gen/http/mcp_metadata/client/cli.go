@@ -60,7 +60,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Veniam voluptatem sed nisi nostrum pariatur assumenda.\",\n      \"instructions\": \"Expedita veniam dolores amet incidunt.\",\n      \"logo_asset_id\": \"Molestiae enim magnam ea repellendus.\",\n      \"toolset_slug\": \"ic1\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Dolores non doloremque quisquam.\",\n      \"instructions\": \"Magni optio labore sed neque.\",\n      \"logo_asset_id\": \"Omnis voluptas ut enim alias.\",\n      \"toolset_slug\": \"yxv\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
@@ -87,6 +87,45 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildExportMcpMetadataPayload builds the payload for the mcpMetadata
+// exportMcpMetadata endpoint from CLI flags.
+func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpMetadataExportMcpMetadataSessionToken string, mcpMetadataExportMcpMetadataProjectSlugInput string) (*mcpmetadata.ExportMcpMetadataPayload, error) {
+	var err error
+	var body ExportMcpMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"toolset_slug\": \"eys\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", body.ToolsetSlug, utf8.RuneCountInString(body.ToolsetSlug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpMetadataExportMcpMetadataSessionToken != "" {
+			sessionToken = &mcpMetadataExportMcpMetadataSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpMetadataExportMcpMetadataProjectSlugInput != "" {
+			projectSlugInput = &mcpMetadataExportMcpMetadataProjectSlugInput
+		}
+	}
+	v := &mcpmetadata.ExportMcpMetadataPayload{
+		ToolsetSlug: types.Slug(body.ToolsetSlug),
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

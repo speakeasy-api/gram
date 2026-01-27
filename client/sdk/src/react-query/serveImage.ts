@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   type ServeImageQueryData,
 };
 
-export type ServeImageQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * serveImage assets
  *
@@ -60,8 +38,8 @@ export type ServeImageQueryError =
  */
 export function useServeImage(
   request: operations.ServeImageRequest,
-  options?: QueryHookOptions<ServeImageQueryData, ServeImageQueryError>,
-): UseQueryResult<ServeImageQueryData, ServeImageQueryError> {
+  options?: QueryHookOptions<ServeImageQueryData>,
+): UseQueryResult<ServeImageQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildServeImageQuery(
@@ -81,8 +59,8 @@ export function useServeImage(
  */
 export function useServeImageSuspense(
   request: operations.ServeImageRequest,
-  options?: SuspenseQueryHookOptions<ServeImageQueryData, ServeImageQueryError>,
-): UseSuspenseQueryResult<ServeImageQueryData, ServeImageQueryError> {
+  options?: SuspenseQueryHookOptions<ServeImageQueryData>,
+): UseSuspenseQueryResult<ServeImageQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildServeImageQuery(

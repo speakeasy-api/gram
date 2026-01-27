@@ -6,6 +6,89 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
+var McpExportTool = Type("McpExportTool", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A tool definition in the MCP export")
+
+	Attribute("name", String, "The tool name")
+	Attribute("description", String, "Description of what the tool does")
+	Attribute("input_schema", Any, "JSON Schema for the tool's input parameters")
+
+	Required("name", "description", "input_schema")
+})
+
+var McpExportAuthHeader = Type("McpExportAuthHeader", func() {
+	Meta("struct:pkg:path", "types")
+	Description("An authentication header required by the MCP server")
+
+	Attribute("name", String, "The HTTP header name (e.g., Authorization)")
+	Attribute("display_name", String, "User-friendly display name (e.g., API Key)")
+
+	Required("name", "display_name")
+})
+
+var McpExportAuthentication = Type("McpExportAuthentication", func() {
+	Meta("struct:pkg:path", "types")
+	Description("Authentication requirements for the MCP server")
+
+	Attribute("required", Boolean, "Whether authentication is required")
+	Attribute("headers", ArrayOf(McpExportAuthHeader), "Required authentication headers")
+
+	Required("required", "headers")
+})
+
+var McpExportStdioConfig = Type("McpExportStdioConfig", func() {
+	Meta("struct:pkg:path", "types")
+	Description("Stdio-based MCP client configuration (Claude Desktop, Cursor)")
+
+	Attribute("command", String, "The command to run")
+	Attribute("args", ArrayOf(String), "Command arguments")
+	Attribute("env", MapOf(String, String), "Environment variables")
+
+	Required("command", "args")
+})
+
+var McpExportHttpConfig = Type("McpExportHttpConfig", func() {
+	Meta("struct:pkg:path", "types")
+	Description("HTTP-based MCP client configuration (VS Code)")
+
+	Attribute("type", String, "Transport type (always 'http')")
+	Attribute("url", String, "The MCP server URL")
+	Attribute("headers", MapOf(String, String), "HTTP headers with environment variable placeholders")
+
+	Required("type", "url")
+})
+
+var McpExportInstallConfigs = Type("McpExportInstallConfigs", func() {
+	Meta("struct:pkg:path", "types")
+	Description("Installation configurations for different MCP clients")
+
+	Attribute("claude_desktop", McpExportStdioConfig, "Configuration for Claude Desktop")
+	Attribute("cursor", McpExportStdioConfig, "Configuration for Cursor")
+	Attribute("vscode", McpExportHttpConfig, "Configuration for VS Code")
+	Attribute("claude_code", String, "CLI command for Claude Code")
+
+	Required("claude_desktop", "cursor", "vscode", "claude_code")
+})
+
+var McpExport = Type("McpExport", func() {
+	Meta("struct:pkg:path", "types")
+	Description("Complete MCP server export for documentation and integration")
+
+	Attribute("name", String, "The MCP server name")
+	Attribute("slug", String, "The MCP server slug")
+	Attribute("description", String, "Description of the MCP server")
+	Attribute("server_url", String, "The MCP server URL")
+	Attribute("documentation_url", String, "Link to external documentation")
+	Attribute("logo_url", String, "URL to the server logo")
+	Attribute("instructions", String, "Server instructions for users")
+	Attribute("tools", ArrayOf(McpExportTool), "Available tools on this MCP server")
+	Attribute("authentication", McpExportAuthentication, "Authentication requirements")
+	Attribute("install_configs", McpExportInstallConfigs, "Client installation configurations")
+
+	Required("name", "slug", "server_url", "tools", "authentication", "install_configs")
+})
+
 var McpMetadata = Type("McpMetadata", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -93,5 +176,30 @@ var _ = Service("mcpMetadata", func() {
 
 		Meta("openapi:operationId", "setMcpMetadata")
 		Meta("openapi:extension:x-speakeasy-name-override", "set")
+	})
+
+	Method("exportMcpMetadata", func() {
+		Description("Export MCP server details as JSON for documentation and integration purposes.")
+
+		Payload(func() {
+			Attribute("toolset_slug", shared.Slug, "The slug of the toolset to export")
+
+			Required("toolset_slug")
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(McpExport)
+
+		HTTP(func() {
+			POST("/rpc/mcpMetadata.export")
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "exportMcpMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "export")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ExportMcpMetadata"}`)
 	})
 })

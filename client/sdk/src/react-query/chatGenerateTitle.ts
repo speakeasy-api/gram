@@ -12,17 +12,6 @@ import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -37,17 +26,6 @@ export type ChatGenerateTitleMutationVariables = {
 export type ChatGenerateTitleMutationData =
   components.GenerateTitleResponseBody;
 
-export type ChatGenerateTitleMutationError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * generateTitle chat
  *
@@ -57,12 +35,12 @@ export type ChatGenerateTitleMutationError =
 export function useChatGenerateTitleMutation(
   options?: MutationHookOptions<
     ChatGenerateTitleMutationData,
-    ChatGenerateTitleMutationError,
+    Error,
     ChatGenerateTitleMutationVariables
   >,
 ): UseMutationResult<
   ChatGenerateTitleMutationData,
-  ChatGenerateTitleMutationError,
+  Error,
   ChatGenerateTitleMutationVariables
 > {
   const client = useGramContext();

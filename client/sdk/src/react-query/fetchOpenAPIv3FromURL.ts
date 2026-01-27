@@ -12,17 +12,6 @@ import { assetsFetchOpenAPIv3FromURL } from "../funcs/assetsFetchOpenAPIv3FromUR
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -37,17 +26,6 @@ export type FetchOpenAPIv3FromURLMutationVariables = {
 export type FetchOpenAPIv3FromURLMutationData =
   components.UploadOpenAPIv3Result;
 
-export type FetchOpenAPIv3FromURLMutationError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * fetchOpenAPIv3FromURL assets
  *
@@ -57,12 +35,12 @@ export type FetchOpenAPIv3FromURLMutationError =
 export function useFetchOpenAPIv3FromURLMutation(
   options?: MutationHookOptions<
     FetchOpenAPIv3FromURLMutationData,
-    FetchOpenAPIv3FromURLMutationError,
+    Error,
     FetchOpenAPIv3FromURLMutationVariables
   >,
 ): UseMutationResult<
   FetchOpenAPIv3FromURLMutationData,
-  FetchOpenAPIv3FromURLMutationError,
+  Error,
   FetchOpenAPIv3FromURLMutationVariables
 > {
   const client = useGramContext();

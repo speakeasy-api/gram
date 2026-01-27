@@ -11,17 +11,6 @@ import { GramCore } from "../core.js";
 import { environmentsDeleteSourceLink } from "../funcs/environmentsDeleteSourceLink.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -35,17 +24,6 @@ export type DeleteSourceEnvironmentLinkMutationVariables = {
 
 export type DeleteSourceEnvironmentLinkMutationData = void;
 
-export type DeleteSourceEnvironmentLinkMutationError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * deleteSourceEnvironmentLink environments
  *
@@ -55,12 +33,12 @@ export type DeleteSourceEnvironmentLinkMutationError =
 export function useDeleteSourceEnvironmentLinkMutation(
   options?: MutationHookOptions<
     DeleteSourceEnvironmentLinkMutationData,
-    DeleteSourceEnvironmentLinkMutationError,
+    Error,
     DeleteSourceEnvironmentLinkMutationVariables
   >,
 ): UseMutationResult<
   DeleteSourceEnvironmentLinkMutationData,
-  DeleteSourceEnvironmentLinkMutationError,
+  Error,
   DeleteSourceEnvironmentLinkMutationVariables
 > {
   const client = useGramContext();

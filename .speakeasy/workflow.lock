@@ -1,8 +1,22 @@
-speakeasyVersion: 1.700.1
-sources: {}
+speakeasyVersion: 1.685.0
+sources:
+    Gram-Internal:
+        sourceNamespace: gram-api-description
+        sourceRevisionDigest: sha256:ba75a0862ecb37fc08e675402d44c9265f4577530590797bdbb8111da1cc04c5
+        sourceBlobDigest: sha256:77da23f1d727de9553a4146f7e79bf6f125fb4c9ddb67607579945ca72a004b8
+        tags:
+            - latest
+            - 0.0.1
 targets:
     gram-internal:
         source: Gram-Internal
+        sourceNamespace: gram-api-description
+        sourceRevisionDigest: sha256:ba75a0862ecb37fc08e675402d44c9265f4577530590797bdbb8111da1cc04c5
+        sourceBlobDigest: sha256:77da23f1d727de9553a4146f7e79bf6f125fb4c9ddb67607579945ca72a004b8
+        codeSamplesNamespace: gram-api-description-typescript-code-samples
+        codeSamplesRevisionDigest: sha256:d8e2210638116c0275a38fa712b5cdabca33480c35bbc162556b9dd7bf3f457a
+    openrouter:
+        source: OpenRouter
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned

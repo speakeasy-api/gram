@@ -11,17 +11,6 @@ import { GramCore } from "../core.js";
 import { domainsRegisterDomain } from "../funcs/domainsRegisterDomain.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -35,17 +24,6 @@ export type RegisterDomainMutationVariables = {
 
 export type RegisterDomainMutationData = void;
 
-export type RegisterDomainMutationError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * createDomain domains
  *
@@ -55,12 +33,12 @@ export type RegisterDomainMutationError =
 export function useRegisterDomainMutation(
   options?: MutationHookOptions<
     RegisterDomainMutationData,
-    RegisterDomainMutationError,
+    Error,
     RegisterDomainMutationVariables
   >,
 ): UseMutationResult<
   RegisterDomainMutationData,
-  RegisterDomainMutationError,
+  Error,
   RegisterDomainMutationVariables
 > {
   const client = useGramContext();

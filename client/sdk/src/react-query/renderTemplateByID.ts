@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   type RenderTemplateByIDQueryData,
 };
 
-export type RenderTemplateByIDQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * renderTemplateByID templates
  *
@@ -61,11 +39,8 @@ export type RenderTemplateByIDQueryError =
 export function useRenderTemplateByID(
   request: operations.RenderTemplateByIDRequest,
   security?: operations.RenderTemplateByIDSecurity | undefined,
-  options?: QueryHookOptions<
-    RenderTemplateByIDQueryData,
-    RenderTemplateByIDQueryError
-  >,
-): UseQueryResult<RenderTemplateByIDQueryData, RenderTemplateByIDQueryError> {
+  options?: QueryHookOptions<RenderTemplateByIDQueryData>,
+): UseQueryResult<RenderTemplateByIDQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildRenderTemplateByIDQuery(
@@ -87,14 +62,8 @@ export function useRenderTemplateByID(
 export function useRenderTemplateByIDSuspense(
   request: operations.RenderTemplateByIDRequest,
   security?: operations.RenderTemplateByIDSecurity | undefined,
-  options?: SuspenseQueryHookOptions<
-    RenderTemplateByIDQueryData,
-    RenderTemplateByIDQueryError
-  >,
-): UseSuspenseQueryResult<
-  RenderTemplateByIDQueryData,
-  RenderTemplateByIDQueryError
-> {
+  options?: SuspenseQueryHookOptions<RenderTemplateByIDQueryData>,
+): UseSuspenseQueryResult<RenderTemplateByIDQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildRenderTemplateByIDQuery(

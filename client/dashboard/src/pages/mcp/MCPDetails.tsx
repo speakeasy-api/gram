@@ -31,6 +31,7 @@ import {
   invalidateGetMcpMetadata,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
+  useExportMcpMetadataMutation,
   useGetMcpMetadata,
   useRemoveOAuthServerMutation,
   useUpdateSecurityVariableDisplayNameMutation,
@@ -39,7 +40,7 @@ import {
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Badge, Button, Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Globe, Pencil, Trash2, X } from "lucide-react";
+import { Check, Copy, Download, Globe, Pencil, Trash2, X } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
@@ -62,6 +63,7 @@ export function MCPDetailPage() {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
@@ -84,6 +86,26 @@ export function MCPDetailPage() {
       >
         <Heading variant="h2">MCP Details</Heading>
         <Stack direction="horizontal" gap={2}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-block">
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={!toolset?.mcpEnabled}
+                  onClick={() => setIsExportModalOpen(true)}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export JSON
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!toolset?.mcpEnabled && (
+              <TooltipContent>
+                Enable server to export configuration
+              </TooltipContent>
+            )}
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               {!toolset?.mcpEnabled ||
@@ -147,7 +169,128 @@ export function MCPDetailPage() {
         onClose={() => setIsOAuthDetailsModalOpen(false)}
         toolset={toolset}
       />
+      <ExportJsonModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        toolsetSlug={toolset.slug}
+      />
     </Stack>
+  );
+}
+
+function ExportJsonModal({
+  isOpen,
+  onClose,
+  toolsetSlug,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  toolsetSlug: string;
+}) {
+  const exportMutation = useExportMcpMetadataMutation();
+  const [exportData, setExportData] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && !exportData && !exportMutation.isPending) {
+      exportMutation.mutate(
+        { request: { exportMcpMetadataRequestBody: { toolsetSlug } } },
+        {
+          onSuccess: (data) => {
+            setExportData(JSON.stringify(data, null, 2));
+          },
+        },
+      );
+    }
+  }, [isOpen, exportData, exportMutation, toolsetSlug]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setExportData(null);
+      setCopied(false);
+    }
+  }, [isOpen]);
+
+  const handleCopy = async () => {
+    if (exportData) {
+      await navigator.clipboard.writeText(exportData);
+      setCopied(true);
+      toast.success("Copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleDownload = () => {
+    if (exportData) {
+      const blob = new Blob([exportData], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${toolsetSlug}-mcp-export.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Downloaded successfully");
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Content className="max-w-3xl">
+        <Dialog.Header>
+          <Dialog.Title>Export MCP Configuration</Dialog.Title>
+          <Dialog.Description>
+            JSON export of your MCP server for documentation and integration.
+          </Dialog.Description>
+        </Dialog.Header>
+        <div className="mt-4">
+          {exportMutation.isPending ? (
+            <div className="flex items-center justify-center py-8">
+              <Type variant="body" color="secondary">
+                Loading...
+              </Type>
+            </div>
+          ) : exportMutation.isError ? (
+            <div className="flex items-center justify-center py-8">
+              <Type variant="body" color="error">
+                Failed to load export data. Please try again.
+              </Type>
+            </div>
+          ) : exportData ? (
+            <CodeBlock language="json" className="max-h-96 overflow-auto">
+              {exportData}
+            </CodeBlock>
+          ) : null}
+        </div>
+        <Dialog.Footer className="mt-4">
+          <Stack direction="horizontal" gap={2} className="w-full justify-end">
+            <Button variant="tertiary" onClick={onClose}>
+              Close
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleCopy}
+              disabled={!exportData || exportMutation.isPending}
+            >
+              {copied ? (
+                <Check className="mr-2 h-4 w-4" />
+              ) : (
+                <Copy className="mr-2 h-4 w-4" />
+              )}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+            <Button
+              onClick={handleDownload}
+              disabled={!exportData || exportMutation.isPending}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download
+            </Button>
+          </Stack>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 

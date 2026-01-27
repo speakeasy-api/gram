@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   queryKeyListToolsets,
 };
 
-export type ListToolsetsQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * listToolsets toolsets
  *
@@ -61,8 +39,8 @@ export type ListToolsetsQueryError =
 export function useListToolsets(
   request?: operations.ListToolsetsRequest | undefined,
   security?: operations.ListToolsetsSecurity | undefined,
-  options?: QueryHookOptions<ListToolsetsQueryData, ListToolsetsQueryError>,
-): UseQueryResult<ListToolsetsQueryData, ListToolsetsQueryError> {
+  options?: QueryHookOptions<ListToolsetsQueryData>,
+): UseQueryResult<ListToolsetsQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildListToolsetsQuery(
@@ -84,11 +62,8 @@ export function useListToolsets(
 export function useListToolsetsSuspense(
   request?: operations.ListToolsetsRequest | undefined,
   security?: operations.ListToolsetsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<
-    ListToolsetsQueryData,
-    ListToolsetsQueryError
-  >,
-): UseSuspenseQueryResult<ListToolsetsQueryData, ListToolsetsQueryError> {
+  options?: SuspenseQueryHookOptions<ListToolsetsQueryData>,
+): UseSuspenseQueryResult<ListToolsetsQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListToolsetsQuery(
