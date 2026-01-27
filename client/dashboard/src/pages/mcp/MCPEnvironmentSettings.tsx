@@ -446,15 +446,9 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     setEditingState(newEditingState);
   };
 
-  // Check if a variable has unsaved changes or has no environment entry (unmapped)
-  const hasUnsavedChanges = (envVar: EnvironmentVariable): boolean => {
-    // Find existing environment entry
+  // Check if a variable has actual user edits (not just missing config)
+  const hasUserEdits = (envVar: EnvironmentVariable): boolean => {
     const entry = environmentConfigs.find((e) => e.variableName === envVar.key);
-
-    // If no entry exists, this is an unmapped required variable that needs to be saved
-    if (!entry && envVar.isRequired) {
-      return true;
-    }
 
     // Determine the original state based on environment entry
     const originalState: EnvVarState =
@@ -464,8 +458,8 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           ? "omitted"
           : "system";
 
-    // Check if state has changed
-    if (envVar.state !== originalState) {
+    // Check if state has changed (only if there was an existing entry)
+    if (entry && envVar.state !== originalState) {
       return true;
     }
 
@@ -498,7 +492,28 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     return false;
   };
 
-  // Check if there are any unsaved changes across all variables
+  // Check if a variable needs to be saved (includes unmapped required vars)
+  const hasUnsavedChanges = (envVar: EnvironmentVariable): boolean => {
+    // Check for actual user edits first
+    if (hasUserEdits(envVar)) {
+      return true;
+    }
+
+    // Also check if required variable has no entry (needs initial config)
+    const entry = environmentConfigs.find((e) => e.variableName === envVar.key);
+    if (!entry && envVar.isRequired) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Check if there are any actual user edits (for UI indicator)
+  const hasAnyUserEdits = useMemo(() => {
+    return envVars.some(hasUserEdits);
+  }, [envVars, editingState, environmentConfigs, selectedEnvironmentView]);
+
+  // Check if there are any unsaved changes across all variables (includes unconfigured required vars)
   const hasAnyUnsavedChanges = useMemo(() => {
     return envVars.some(hasUnsavedChanges);
   }, [envVars, editingState, environmentConfigs, selectedEnvironmentView]);
@@ -716,6 +731,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 toolset.defaultEnvironmentSlug || "default"
               }
               requiredVars={requiredVars}
+              hasAnyUserEdits={hasAnyUserEdits}
               hasAnyUnsavedChanges={hasAnyUnsavedChanges}
               hasExistingConfigs={environmentConfigs.length > 0}
               onEnvironmentSelect={setSelectedEnvironmentView}
@@ -738,7 +754,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 environmentConfigs={environmentConfigs}
                 editingState={editingState}
                 editingHeaderId={editingHeaderId}
-                hasUnsavedChanges={hasUnsavedChanges(envVar)}
+                hasUnsavedChanges={hasUserEdits(envVar)}
                 onToggleState={handleToggleState}
                 onValueChange={handleValueChange}
                 onDelete={handleDeleteVariable}

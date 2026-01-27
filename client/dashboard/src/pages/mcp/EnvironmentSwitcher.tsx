@@ -19,6 +19,7 @@ interface EnvironmentSwitcherProps {
   mcpAttachedEnvironmentSlug: string | null;
   defaultEnvironmentSlug: string;
   requiredVars: EnvironmentVariable[];
+  hasAnyUserEdits: boolean;
   hasAnyUnsavedChanges: boolean;
   hasExistingConfigs: boolean;
   onEnvironmentSelect: (slug: string) => void;
@@ -34,6 +35,7 @@ export function EnvironmentSwitcher({
   mcpAttachedEnvironmentSlug,
   defaultEnvironmentSlug,
   requiredVars,
+  hasAnyUserEdits,
   hasAnyUnsavedChanges,
   hasExistingConfigs,
   onEnvironmentSelect,
@@ -98,8 +100,8 @@ export function EnvironmentSwitcher({
         );
       })}
       <div className="ml-auto flex items-center gap-2 mr-1">
-        {/* Unsaved changes indicator */}
-        {hasAnyUnsavedChanges && (
+        {/* Unsaved changes indicator - only show when user has made actual edits */}
+        {hasAnyUserEdits && (
           <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
             Unsaved changes
