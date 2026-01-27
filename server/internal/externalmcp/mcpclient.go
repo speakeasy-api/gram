@@ -3,7 +3,6 @@ package externalmcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -24,14 +23,6 @@ func (e *OAuthRequiredError) Error() string {
 	return fmt.Sprintf("OAuth authentication required for MCP server %s", e.RemoteURL)
 }
 
-func IsOAuthRequiredError(err error) (*OAuthRequiredError, bool) {
-	var oauthErr *OAuthRequiredError
-	if errors.As(err, &oauthErr) {
-		return oauthErr, true
-	}
-	return nil, false
-}
-
 // AuthRejectedError is returned when 401 (no WWW-Authenticate) or 403.
 type AuthRejectedError struct {
 	RemoteURL  string
@@ -40,14 +31,6 @@ type AuthRejectedError struct {
 
 func (e *AuthRejectedError) Error() string {
 	return fmt.Sprintf("authentication rejected by MCP server %s (status %d)", e.RemoteURL, e.StatusCode)
-}
-
-func IsAuthRejectedError(err error) (*AuthRejectedError, bool) {
-	var authErr *AuthRejectedError
-	if errors.As(err, &authErr) {
-		return authErr, true
-	}
-	return nil, false
 }
 
 // ClientOptions contains options for creating an MCP client.

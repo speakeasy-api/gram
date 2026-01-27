@@ -3,6 +3,7 @@ package externalmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -105,7 +106,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	var requiresOAuth bool
 	var oauthDiscovery *OAuthDiscoveryResult
 	mcpClient, err := NewClient(ctx, internalLogger, serverDetails.RemoteURL, serverDetails.TransportType, nil)
-	if oauthErr, ok := IsOAuthRequiredError(err); ok {
+	if oauthErr := (*OAuthRequiredError)(nil); errors.As(err, &oauthErr) {
 		requiresOAuth = true
 
 		oauthDiscovery, err = DiscoverOAuthMetadata(ctx, internalLogger, oauthErr.WWWAuthenticate, serverDetails.RemoteURL)
@@ -137,7 +138,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 				Placeholder: nil,
 			})
 		}
-	} else if authErr, ok := IsAuthRejectedError(err); ok {
+	} else if authErr := (*AuthRejectedError)(nil); errors.As(err, &authErr) {
 		logger.InfoContext(ctx, "[%s] external MCP server rejected auth probe, continuing without OAuth",
 			attr.SlogURL(serverDetails.RemoteURL),
 			attr.SlogHTTPResponseStatusCode(authErr.StatusCode),
