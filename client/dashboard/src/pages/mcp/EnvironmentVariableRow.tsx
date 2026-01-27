@@ -156,7 +156,7 @@ export function EnvironmentVariableRow({
             ) : (
               <button
                 onClick={() => onEditHeaderName(envVar.id)}
-                className="flex items-center justify-center text-muted-foreground hover:text-foreground opacity-0 group-hover/header-edit:opacity-100 transition-opacity"
+                className="flex items-center justify-center text-muted-foreground hover:text-foreground opacity-0 pointer-events-none group-hover/header-edit:opacity-100 group-hover/header-edit:pointer-events-auto transition-opacity"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
