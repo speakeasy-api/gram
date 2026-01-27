@@ -580,13 +580,15 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     }
 
     // Update MCP metadata with all environment entries
+    const environmentConfigsToSave = Array.from(updatedEntriesMap.values());
+    console.log("Saving environment configs:", environmentConfigsToSave);
     setMcpMetadataMutation.mutate({
       request: {
         setMcpMetadataRequestBody: {
           toolsetSlug: toolset.slug,
           defaultEnvironmentId:
             mcpMetadata?.defaultEnvironmentId || targetEnv.id,
-          environmentConfigs: Array.from(updatedEntriesMap.values()),
+          environmentConfigs: environmentConfigsToSave,
           externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
           instructions: mcpMetadata?.instructions,
           logoAssetId: mcpMetadata?.logoAssetId,
