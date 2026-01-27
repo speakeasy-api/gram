@@ -86,13 +86,21 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       return;
     }
 
-    // Check if the loaded vars actually changed (compare by key and state)
-    const prevKeys = prevLoadedVarsRef.current
-      .map((v) => `${v.key}:${v.state}`)
-      .join(",");
-    const newKeys = loadedEnvVars.map((v) => `${v.key}:${v.state}`).join(",");
+    // Create a hash that includes key, state, and valueGroups
+    const createHash = (vars: EnvironmentVariable[]) =>
+      vars
+        .map((v) => {
+          const valueGroupsHash = v.valueGroups
+            .map((vg) => `${vg.environments.sort().join(",")}`)
+            .join("|");
+          return `${v.key}:${v.state}:${valueGroupsHash}`;
+        })
+        .join(",");
 
-    if (prevKeys !== newKeys || !hasInitialized.current) {
+    const prevHash = createHash(prevLoadedVarsRef.current);
+    const newHash = createHash(loadedEnvVars);
+
+    if (prevHash !== newHash || !hasInitialized.current) {
       setEnvVars(loadedEnvVars);
       prevLoadedVarsRef.current = loadedEnvVars;
       hasInitialized.current = true;
@@ -415,15 +423,9 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     if (!envVar) return;
 
     const newEditingState = new Map(editingState);
-
-    // If value is empty, clear editing state to reflect current state
-    if (!newValue) {
-      newEditingState.delete(id);
-      setEditingState(newEditingState);
-      return;
-    }
-
     const current = editingState.get(id);
+
+    // Always keep the entry in editing state (even if empty) to prevent focus loss
     newEditingState.set(id, {
       value: newValue,
       headerDisplayName: current?.headerDisplayName,
@@ -500,13 +502,13 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         return true;
       }
 
-      // For existing configs, check if value changed
+      // For existing configs, check if value changed (including clearing)
       if (envVar.state === "system") {
         const currentValue = getValueForEnvironment(
           envVar,
           selectedEnvironmentView,
         );
-        if (editing.value && editing.value !== currentValue) {
+        if (editing.value !== currentValue) {
           return true;
         }
       }
@@ -563,6 +565,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       ]),
     );
     const entriesToUpdate: Array<{ name: string; value: string }> = [];
+    const entriesToRemove: string[] = [];
 
     // Process all variables and collect updates
     for (const envVar of varsToSave) {
@@ -594,6 +597,9 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         const value = getEditingValue(envVar);
         if (value) {
           entriesToUpdate.push({ name: envVar.key, value });
+        } else {
+          // Value was cleared - remove from environment
+          entriesToRemove.push(envVar.key);
         }
       }
     }
@@ -609,14 +615,14 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     }
 
     try {
-      // Update environment variables if there are any
-      if (entriesToUpdate.length > 0) {
+      // Update environment variables if there are any changes
+      if (entriesToUpdate.length > 0 || entriesToRemove.length > 0) {
         await updateEnvironmentMutation.mutateAsync({
           request: {
             slug: selectedEnvironmentView,
             updateEnvironmentRequestBody: {
               entriesToUpdate,
-              entriesToRemove: [],
+              entriesToRemove,
             },
           },
         });

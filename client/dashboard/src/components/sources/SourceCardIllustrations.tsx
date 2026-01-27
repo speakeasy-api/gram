@@ -52,7 +52,7 @@ const PATTERN_IMAGES = [
  * MCP card illustration using pattern images
  * Deterministically selects a pattern based on the toolset slug
  */
-export function MCPRobotIllustration({
+export function MCPPatternIllustration({
   className,
   toolsetSlug,
 }: IllustrationProps & { toolsetSlug: string }) {
@@ -67,7 +67,7 @@ export function MCPRobotIllustration({
     <img
       src={patternImage}
       alt=""
-      className={cn("w-full h-full object-cover", className)}
+      className={cn("w-full h-full object-fill", className)}
       aria-hidden="true"
     />
   );
@@ -77,7 +77,7 @@ export function MCPRobotIllustration({
  * Large hero illustration for MCP details page
  * Uses the same pattern as the card at full saturation
  */
-export function MCPRobotHeroIllustration({
+export function MCPHeroIllustration({
   className,
   toolsetSlug,
 }: IllustrationProps & { toolsetSlug: string }) {
@@ -92,7 +92,7 @@ export function MCPRobotHeroIllustration({
     <img
       src={patternImage}
       alt=""
-      className={cn("w-full h-full object-cover", className)}
+      className={cn("w-full h-full object-fill", className)}
       aria-hidden="true"
     />
   );

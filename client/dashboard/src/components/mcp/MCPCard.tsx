@@ -4,7 +4,7 @@ import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
-import { MCPRobotIllustration } from "../sources/SourceCardIllustrations";
+import { MCPPatternIllustration } from "../sources/SourceCardIllustrations";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
@@ -59,7 +59,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
     >
       {/* Illustration header */}
       <div className="h-36 w-full overflow-hidden border-b">
-        <MCPRobotIllustration
+        <MCPPatternIllustration
           toolsetSlug={toolset.slug}
           className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
         />

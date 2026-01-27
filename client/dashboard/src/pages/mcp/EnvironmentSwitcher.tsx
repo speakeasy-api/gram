@@ -1,7 +1,7 @@
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Button } from "@speakeasy-api/moonshine";
-import { AlertTriangle, CheckCircleIcon, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   EnvironmentVariable,
   environmentHasAllRequiredVariables,
@@ -74,15 +74,9 @@ export function EnvironmentSwitcher({
       {/* Environment tabs */}
       {sortedEnvironments.map((env) => {
         const isSelected = selectedEnvironmentView === env.slug;
-        const isAttachedEnvironment = env.slug === attachedEnvSlug;
         const envHasAllRequired = environmentHasAllRequiredVariables(
           env.slug,
           requiredVars,
-        );
-        const icon = envHasAllRequired ? (
-          <CheckCircleIcon className="w-4 h-4 text-green-600" />
-        ) : (
-          <AlertTriangle className="w-4 h-4 text-yellow-600" />
         );
 
         return (
@@ -96,7 +90,12 @@ export function EnvironmentSwitcher({
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {isAttachedEnvironment && icon}
+            <div
+              className={cn(
+                "w-2 h-2 rounded-full",
+                envHasAllRequired ? "bg-green-500" : "bg-yellow-500",
+              )}
+            />
             {getEnvironmentDisplayName(env)}
             {isSelected && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />

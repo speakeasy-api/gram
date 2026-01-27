@@ -4,7 +4,7 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ConfigForm } from "@/components/mcp_install_page/config_form";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
-import { MCPRobotHeroIllustration } from "@/components/sources/SourceCardIllustrations";
+import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
 import { ToolList } from "@/components/tool-list";
 import { BigToggle } from "@/components/ui/big-toggle";
 import { Dialog } from "@/components/ui/dialog";
@@ -252,20 +252,20 @@ export function MCPDetailPage() {
       <Page.Body fullWidth noPadding>
         {/* Hero Header with Animation - full width */}
         <div className="relative w-full h-64 overflow-hidden">
-          <MCPRobotHeroIllustration toolsetSlug={toolset.slug} />
+          <MCPHeroIllustration toolsetSlug={toolset.slug} className="saturate-[.3]" />
 
           {/* Overlay for text readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 via-foreground/20 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
             <Stack gap={2}>
               <div className="flex items-center gap-3 ml-1">
-                <Heading variant="h1" className="text-foreground">
+                <Heading variant="h1" className="text-background">
                   {toolset.name}
                 </Heading>
                 {statusBadge}
               </div>
               <div className="flex items-center gap-2 ml-1">
-                <Type muted className="max-w-2xl truncate">
+                <Type className="max-w-2xl truncate !text-background/70">
                   {mcpUrl}
                 </Type>
                 <Button
@@ -277,7 +277,7 @@ export function MCPDetailPage() {
                       toast.success("URL copied to clipboard");
                     }
                   }}
-                  className="shrink-0"
+                  className="shrink-0 text-background/70 hover:text-background"
                 >
                   <Button.LeftIcon>
                     <svg

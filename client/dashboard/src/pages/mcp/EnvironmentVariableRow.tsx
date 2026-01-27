@@ -1,7 +1,7 @@
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Button } from "@speakeasy-api/moonshine";
-import { AlertTriangle, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
   EnvironmentVariable,
@@ -72,13 +72,12 @@ export function EnvironmentVariableRow({
     editingState,
     selectedEnvironmentView,
   );
-  // Check if there's a value - either from saved state or current editing
+  // Check if there's a value - use editing state if actively editing, otherwise saved state
   const savedHasValue = environmentHasValue(envVar, selectedEnvironmentView);
-  const editingHasValue = editingState.has(envVar.id) && !!editingState.get(envVar.id)!.value;
-  const hasValue = savedHasValue || editingHasValue;
-  const hasEntry = environmentConfigs.some(
-    (e) => e.variableName === envVar.key,
-  );
+  const isActivelyEditing = editingState.has(envVar.id);
+  const editingHasValue = isActivelyEditing && !!editingState.get(envVar.id)!.value;
+  // When actively editing, use editing value to determine indicator; otherwise use saved
+  const hasValue = isActivelyEditing ? editingHasValue : savedHasValue;
 
   return (
     <div
@@ -100,12 +99,7 @@ export function EnvironmentVariableRow({
             !envVar.isRequired && "group-hover:opacity-0 transition-opacity",
           )}
         >
-          {/* Show unmapped indicator for required vars without environment entry */}
-          {envVar.isRequired && !hasEntry ? (
-            <SimpleTooltip tooltip="Not configured - save to create configuration">
-              <AlertTriangle className="w-4 h-4 text-yellow-600" />
-            </SimpleTooltip>
-          ) : envVar.state === "omitted" ? (
+          {envVar.state === "omitted" ? (
             <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
           ) : hasValue ? (
             <div className="w-2 h-2 rounded-full bg-green-500" />
@@ -119,6 +113,7 @@ export function EnvironmentVariableRow({
         {/* Delete button - hidden by default, visible on hover for non-required */}
         {!envVar.isRequired && (
           <button
+            tabIndex={-1}
             onClick={() => onDelete(envVar.id)}
             className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-muted-foreground hover:text-destructive"
           >
@@ -160,6 +155,7 @@ export function EnvironmentVariableRow({
             {showHeaderName && headerName ? (
               <SimpleTooltip tooltip={`Variable name: ${envVar.key}`}>
                 <button
+                  tabIndex={-1}
                   onClick={() => onEditHeaderName(envVar.id)}
                   className="flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                 >
@@ -168,6 +164,7 @@ export function EnvironmentVariableRow({
               </SimpleTooltip>
             ) : (
               <button
+                tabIndex={-1}
                 onClick={() => onEditHeaderName(envVar.id)}
                 className="flex items-center justify-center text-muted-foreground hover:text-foreground opacity-0 pointer-events-none group-hover/header-edit:opacity-100 group-hover/header-edit:pointer-events-auto transition-opacity"
               >
@@ -199,6 +196,7 @@ export function EnvironmentVariableRow({
             selectedEnvironmentView !==
             (mcpAttachedEnvironmentSlug || defaultEnvironmentSlug || "default")
           }
+          tabIndex={-1}
         >
           <Button.Text>
             {envVar.state === "user-provided"
@@ -230,6 +228,7 @@ export function EnvironmentVariableRow({
               />
               <button
                 type="button"
+                tabIndex={-1}
                 onClick={() => setIsPasswordVisible(!isPasswordVisible)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
               >
