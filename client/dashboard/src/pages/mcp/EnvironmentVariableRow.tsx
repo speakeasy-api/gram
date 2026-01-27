@@ -246,6 +246,7 @@ export function EnvironmentVariableRow({
                 <SelectItem
                   key={option.value}
                   value={option.value}
+                  textValue={option.label}
                   className="flex flex-col items-start"
                 >
                   <div className="flex flex-col gap-0.5">
