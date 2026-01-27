@@ -58,6 +58,10 @@ export function EnvironmentSwitcher({
   };
 
   const isViewingNonDefault = selectedEnvironmentView !== attachedEnvSlug;
+  const hasAllRequired = environmentHasAllRequiredVariables(
+    attachedEnvSlug,
+    requiredVars,
+  );
 
   if (environments.length === 0) {
     return null;
@@ -65,14 +69,15 @@ export function EnvironmentSwitcher({
 
   return (
     <div className="flex items-center gap-1 border-b">
+      {/* Environment tabs */}
       {sortedEnvironments.map((env) => {
         const isSelected = selectedEnvironmentView === env.slug;
         const isAttachedEnvironment = env.slug === attachedEnvSlug;
-        const hasAllRequired = environmentHasAllRequiredVariables(
+        const envHasAllRequired = environmentHasAllRequiredVariables(
           env.slug,
           requiredVars,
         );
-        const icon = hasAllRequired ? (
+        const icon = envHasAllRequired ? (
           <CheckCircleIcon className="w-4 h-4 text-green-600" />
         ) : (
           <AlertTriangle className="w-4 h-4 text-yellow-600" />
@@ -97,64 +102,67 @@ export function EnvironmentSwitcher({
           </button>
         );
       })}
-      <div className="ml-auto flex items-center gap-2 mr-1">
-        {/* Unsaved changes indicator - only show when user has made actual edits */}
-        {hasAnyUserEdits && (
-          <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            Unsaved changes
-          </span>
-        )}
 
-        {/* Cancel button - only shown when there are user edits and existing configs */}
-        {hasAnyUserEdits && hasExistingConfigs && (
-          <Button onClick={onCancelAll} variant="tertiary" size="xs">
-            <Button.Text>Cancel</Button.Text>
-          </Button>
-        )}
+      {/* Right side actions */}
+      <div className="ml-auto flex items-center gap-3 py-1.5 pr-3">
+        {/* Status/action area */}
+        {hasAnyUserEdits ? (
+          <>
+            {/* Unsaved changes indicator */}
+            <span className="text-xs text-amber-600 font-medium flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Unsaved changes
+            </span>
 
-        {/* Save button - always visible, disabled when no user edits */}
-        <SimpleTooltip
-          tooltip={
-            hasAnyUserEdits
-              ? "Save all environment variable changes"
-              : "No changes to save"
-          }
-        >
-          <Button
-            onClick={onSaveAll}
-            variant={hasAnyUserEdits ? "primary" : "secondary"}
-            size="xs"
-            className="mr-4"
-            disabled={!hasAnyUserEdits}
-          >
-            <Button.Text>
-              {hasExistingConfigs ? "Save All" : "Publish Configuration"}
-            </Button.Text>
-          </Button>
-        </SimpleTooltip>
+            {/* Cancel button - only for existing configs */}
+            {hasExistingConfigs && (
+              <Button onClick={onCancelAll} variant="tertiary" size="xs">
+                <Button.Text>Cancel</Button.Text>
+              </Button>
+            )}
 
-        {/* Additional actions when no user edits */}
-        {!hasAnyUserEdits && isViewingNonDefault && (
-          <SimpleTooltip tooltip="Set this as the default environment for this toolset. Non-user-provided variables will be sourced from this environment">
-            <Button
-              onClick={onSetDefaultEnvironment}
-              variant="tertiary"
-              size="xs"
-            >
-              <Button.Text>Make Default</Button.Text>
+            {/* Save button */}
+            <Button onClick={onSaveAll} variant="primary" size="xs">
+              <Button.Text>
+                {hasExistingConfigs ? "Save" : "Save Configuration"}
+              </Button.Text>
             </Button>
-          </SimpleTooltip>
-        )}
-        {!hasAnyUserEdits && !isViewingNonDefault && (
-          <SimpleTooltip tooltip="Create a new environment">
-            <Button onClick={onCreateEnvironment} variant="tertiary" size="xs">
-              <Button.Icon>
-                <Plus className="w-4 h-4" />
-              </Button.Icon>
-              <Button.Text>New Environment</Button.Text>
-            </Button>
-          </SimpleTooltip>
+          </>
+        ) : (
+          <>
+            {/* When no edits - show contextual actions */}
+            {!hasExistingConfigs && !hasAllRequired ? (
+              // Initial setup: prompt to fill required fields
+              <span className="text-xs text-muted-foreground">
+                Fill in required values to save
+              </span>
+            ) : isViewingNonDefault ? (
+              // Viewing non-default env
+              <SimpleTooltip tooltip="Set this as the default environment for this MCP server">
+                <Button
+                  onClick={onSetDefaultEnvironment}
+                  variant="secondary"
+                  size="xs"
+                >
+                  <Button.Text>Make Default</Button.Text>
+                </Button>
+              </SimpleTooltip>
+            ) : hasExistingConfigs ? (
+              // Has configs, on default env - show new environment option
+              <SimpleTooltip tooltip="Create a new environment with different values">
+                <Button
+                  onClick={onCreateEnvironment}
+                  variant="secondary"
+                  size="xs"
+                >
+                  <Button.LeftIcon>
+                    <Plus className="w-3.5 h-3.5" />
+                  </Button.LeftIcon>
+                  <Button.Text>New Environment</Button.Text>
+                </Button>
+              </SimpleTooltip>
+            ) : null}
+          </>
         )}
       </div>
     </div>

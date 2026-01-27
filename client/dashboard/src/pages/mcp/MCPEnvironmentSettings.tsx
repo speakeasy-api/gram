@@ -446,7 +446,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     setEditingState(newEditingState);
   };
 
-  // Check if a variable has actual user edits (not just missing config)
+  // Check if a variable has actual user edits
   const hasUserEdits = (envVar: EnvironmentVariable): boolean => {
     const entry = environmentConfigs.find((e) => e.variableName === envVar.key);
 
@@ -463,23 +463,27 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       return true;
     }
 
-    // If state is system, check if value changed
-    if (envVar.state === "system" && editingState.has(envVar.id)) {
-      const editing = editingState.get(envVar.id)!;
-      const currentValue = getValueForEnvironment(
-        envVar,
-        selectedEnvironmentView,
-      );
-
-      // Check if value changed (only if a value is provided)
-      if (editing.value && editing.value !== currentValue) {
-        return true;
-      }
-    }
-
-    // Check if header display name changed
+    // Check if user has entered a value in the editing state
     if (editingState.has(envVar.id)) {
       const editing = editingState.get(envVar.id)!;
+
+      // For variables without existing config, any value entry counts as an edit
+      if (!entry && editing.value) {
+        return true;
+      }
+
+      // For existing configs, check if value changed
+      if (envVar.state === "system") {
+        const currentValue = getValueForEnvironment(
+          envVar,
+          selectedEnvironmentView,
+        );
+        if (editing.value && editing.value !== currentValue) {
+          return true;
+        }
+      }
+
+      // Check if header display name changed
       const originalHeaderName = entry?.headerDisplayName || "";
       if (
         editing.headerDisplayName !== undefined &&
