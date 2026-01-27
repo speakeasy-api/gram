@@ -58,25 +58,28 @@ export function EnvironmentVariableRow({
     editingState,
   );
 
-  // Debug logging
-  const editingEntry = editingState.get(envVar.id);
-  console.log(`EnvironmentVariableRow render [${envVar.key}]:`, {
-    isEditing,
-    headerName,
-    editingEntry,
-    hasEditingState: editingState.has(envVar.id),
-  });
-  const editingValue = getEditingValue(
-    envVar,
-    editingState,
-    selectedEnvironmentView,
-  );
   const hasOverride = hasHeaderOverride(envVar, environmentConfigs);
   // Check if there's an unsaved header name edit
   const hasUnsavedHeaderEdit =
     editingState.has(envVar.id) &&
     editingState.get(envVar.id)!.headerDisplayName !== undefined;
   const showHeaderName = hasOverride || hasUnsavedHeaderEdit;
+
+  // Debug logging
+  const editingEntry = editingState.get(envVar.id);
+  console.log(`EnvironmentVariableRow render [${envVar.key}]:`, {
+    isEditing,
+    headerName,
+    showHeaderName,
+    hasOverride,
+    hasUnsavedHeaderEdit,
+    editingEntry,
+  });
+  const editingValue = getEditingValue(
+    envVar,
+    editingState,
+    selectedEnvironmentView,
+  );
   const hasValue = environmentHasValue(envVar, selectedEnvironmentView);
   const hasEntry = environmentConfigs.some(
     (e) => e.variableName === envVar.key,
