@@ -41,9 +41,21 @@ ORDER BY updated_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID) (McpMetadatum, error) {
+type GetMetadataForToolsetRow struct {
+	ID                       uuid.UUID
+	ToolsetID                uuid.UUID
+	ProjectID                uuid.UUID
+	ExternalDocumentationUrl pgtype.Text
+	LogoID                   uuid.NullUUID
+	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+}
+
+func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID) (GetMetadataForToolsetRow, error) {
 	row := q.db.QueryRow(ctx, getMetadataForToolset, toolsetID)
-	var i McpMetadatum
+	var i GetMetadataForToolsetRow
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
@@ -84,16 +96,28 @@ type UpdateHeaderDisplayNameParams struct {
 	ProjectID   uuid.UUID
 }
 
+type UpdateHeaderDisplayNameRow struct {
+	ID                       uuid.UUID
+	ToolsetID                uuid.UUID
+	ProjectID                uuid.UUID
+	ExternalDocumentationUrl pgtype.Text
+	LogoID                   uuid.NullUUID
+	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+}
+
 // Updates a single header display name in the JSONB field.
 // If display_name is empty, removes the key from the map.
-func (q *Queries) UpdateHeaderDisplayName(ctx context.Context, arg UpdateHeaderDisplayNameParams) (McpMetadatum, error) {
+func (q *Queries) UpdateHeaderDisplayName(ctx context.Context, arg UpdateHeaderDisplayNameParams) (UpdateHeaderDisplayNameRow, error) {
 	row := q.db.QueryRow(ctx, updateHeaderDisplayName,
 		arg.DisplayName,
 		arg.SecurityKey,
 		arg.ToolsetID,
 		arg.ProjectID,
 	)
-	var i McpMetadatum
+	var i UpdateHeaderDisplayNameRow
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
@@ -141,7 +165,19 @@ type UpsertMetadataParams struct {
 	Instructions             pgtype.Text
 }
 
-func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpMetadatum, error) {
+type UpsertMetadataRow struct {
+	ID                       uuid.UUID
+	ToolsetID                uuid.UUID
+	ProjectID                uuid.UUID
+	ExternalDocumentationUrl pgtype.Text
+	LogoID                   uuid.NullUUID
+	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (UpsertMetadataRow, error) {
 	row := q.db.QueryRow(ctx, upsertMetadata,
 		arg.ToolsetID,
 		arg.ProjectID,
@@ -149,7 +185,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		arg.LogoID,
 		arg.Instructions,
 	)
-	var i McpMetadatum
+	var i UpsertMetadataRow
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
