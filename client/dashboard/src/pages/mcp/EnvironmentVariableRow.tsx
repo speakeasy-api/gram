@@ -237,7 +237,7 @@ export function EnvironmentVariableRow({
           >
             <SelectTrigger
               tabIndex={-1}
-              className="h-full border-0 rounded-none bg-muted/50 focus:ring-0 focus-visible:ring-0 shadow-none w-[90px] text-xs uppercase font-mono"
+              className="h-full border-0 rounded-none bg-muted/50 focus:ring-0 focus-visible:ring-0 shadow-none w-[90px] text-xs uppercase font-mono gap-0.5"
             >
               <span>
                 {MODE_OPTIONS.find((o) => o.value === envVar.state)?.label}
