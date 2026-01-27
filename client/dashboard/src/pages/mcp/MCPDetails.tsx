@@ -4,7 +4,7 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ConfigForm } from "@/components/mcp_install_page/config_form";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
-import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
+import { MCPRobotHeroIllustration } from "@/components/sources/SourceCardIllustrations";
 import { ToolList } from "@/components/tool-list";
 import { BigToggle } from "@/components/ui/big-toggle";
 import { Dialog } from "@/components/ui/dialog";
@@ -252,13 +252,12 @@ export function MCPDetailPage() {
       <Page.Body fullWidth noPadding>
         {/* Hero Header with Animation - full width */}
         <div className="relative w-full h-64 overflow-hidden">
-          <MCPHeroIllustration
-            mcpUrl={mcpUrl || ""}
+          <MCPRobotHeroIllustration
             toolsetSlug={toolset.slug}
           />
 
-          {/* Overlay content */}
-          <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/40 to-transparent" />
+          {/* Overlay for text readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
             <Stack gap={2}>
               <div className="flex items-center gap-3 ml-1">

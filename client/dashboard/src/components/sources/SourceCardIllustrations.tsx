@@ -1,7 +1,101 @@
 import { cn } from "@/lib/utils";
 
+// Import pattern images
+import blueCascade from "@/assets/patterns/blue-cascade.png";
+import blueCascadeAlt from "@/assets/patterns/blue-cascade-alt.png";
+import blueHorizontal from "@/assets/patterns/blue-horizontal.png";
+import blueSlot from "@/assets/patterns/blue-slot.png";
+import blueTartan from "@/assets/patterns/blue-tartan.png";
+import redCascade from "@/assets/patterns/red-cascade.png";
+import redCascadeAlt from "@/assets/patterns/red-cascade-alt.png";
+import redHorizontal from "@/assets/patterns/red-horizontal.png";
+import redSlot from "@/assets/patterns/red-slot.png";
+import redTartan from "@/assets/patterns/red-tartan.png";
+import greenCascade from "@/assets/patterns/green-cascade.png";
+import greenVertical from "@/assets/patterns/green-vertical.png";
+import greenHorizontal from "@/assets/patterns/green-horizontal.png";
+import greenSlot from "@/assets/patterns/green-slot.png";
+import greenTartan from "@/assets/patterns/green-tartan.png";
+
 interface IllustrationProps {
   className?: string;
+}
+
+// Generate deterministic hash from string
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash);
+}
+
+// Seeded random number generator for deterministic "randomness"
+function seededRandom(seed: number): () => number {
+  return () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+}
+
+// Pattern images organized by color
+const PATTERN_IMAGES = [
+  // Blue patterns
+  [blueCascade, blueCascadeAlt, blueHorizontal, blueSlot, blueTartan],
+  // Red patterns
+  [redCascade, redCascadeAlt, redHorizontal, redSlot, redTartan],
+  // Green patterns
+  [greenCascade, greenVertical, greenHorizontal, greenSlot, greenTartan],
+];
+
+/**
+ * MCP card illustration using pattern images
+ * Deterministically selects a pattern based on the toolset slug
+ */
+export function MCPRobotIllustration({
+  className,
+  toolsetSlug,
+}: IllustrationProps & { toolsetSlug: string }) {
+  const seed = hashString(toolsetSlug);
+  const random = seededRandom(seed);
+
+  const colorIndex = Math.floor(random() * PATTERN_IMAGES.length);
+  const patternIndex = Math.floor(random() * PATTERN_IMAGES[colorIndex].length);
+  const patternImage = PATTERN_IMAGES[colorIndex][patternIndex];
+
+  return (
+    <img
+      src={patternImage}
+      alt=""
+      className={cn("w-full h-full object-cover", className)}
+      aria-hidden="true"
+    />
+  );
+}
+
+/**
+ * Large hero illustration for MCP details page
+ * Uses the same pattern as the card at full saturation
+ */
+export function MCPRobotHeroIllustration({
+  className,
+  toolsetSlug,
+}: IllustrationProps & { toolsetSlug: string }) {
+  const seed = hashString(toolsetSlug);
+  const random = seededRandom(seed);
+
+  const colorIndex = Math.floor(random() * PATTERN_IMAGES.length);
+  const patternIndex = Math.floor(random() * PATTERN_IMAGES[colorIndex].length);
+  const patternImage = PATTERN_IMAGES[colorIndex][patternIndex];
+
+  return (
+    <img
+      src={patternImage}
+      alt=""
+      className={cn("w-full h-full object-cover", className)}
+      aria-hidden="true"
+    />
+  );
 }
 
 /**
@@ -127,292 +221,6 @@ export function FunctionIllustration({ className }: IllustrationProps) {
 }
 
 
-// Generate deterministic color from string
-function hashStringToColor(str: string): { bg: string; accent: string; text: string } {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-
-  // Color palette matching the brand gradient colors
-  const colorPalettes = [
-    { bg: "#fce8e6", accent: "#C83228", text: "#7a1f18" }, // Red
-    { bg: "#fef0e6", accent: "#FB873F", text: "#9a4a1c" }, // Orange
-    { bg: "#f5f7e8", accent: "#D2DC91", text: "#6b7235" }, // Light green
-    { bg: "#e8f0e6", accent: "#5A8250", text: "#3a5434" }, // Green
-    { bg: "#e6ebe8", accent: "#002314", text: "#001a0f" }, // Dark green
-    { bg: "#e6e8ef", accent: "#00143C", text: "#000d28" }, // Dark blue
-    { bg: "#e8f1fc", accent: "#2873D7", text: "#1a4a8c" }, // Blue
-    { bg: "#eef5ff", accent: "#9BC3FF", text: "#4a7ab8" }, // Light blue
-  ];
-
-  return colorPalettes[Math.abs(hash) % colorPalettes.length];
-}
-
-/**
- * MCP Card illustration with repeating hand-drawn doodles
- * Parallax horizontal scroll on hover
- */
-export function MCPIllustration({
-  className,
-  mcpUrl,
-  toolsetSlug,
-}: IllustrationProps & { mcpUrl: string; toolsetSlug: string }) {
-  const colors = hashStringToColor(toolsetSlug);
-
-  // Individual doodle icons - small hand-drawn style (light stroke weights)
-  const ServerDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <rect x="0" y="0" width="18" height="24" rx="2" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.6" />
-      <line x1="3" y1="6" x2="15" y2="6" stroke={colors.accent} strokeWidth="0.6" opacity="0.4" />
-      <line x1="3" y1="11" x2="15" y2="11" stroke={colors.accent} strokeWidth="0.6" opacity="0.4" />
-      <line x1="3" y1="16" x2="15" y2="16" stroke={colors.accent} strokeWidth="0.6" opacity="0.4" />
-      <circle cx="5" cy="21" r="1.2" fill={colors.accent} opacity="0.5" />
-      <circle cx="10" cy="21" r="1.2" fill={colors.accent} opacity="0.3" />
-    </g>
-  );
-
-  const CloudDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <path
-        d="M5 18 Q0 18 0 12 Q0 6 6 6 Q6 0 14 0 Q22 0 24 6 Q30 4 32 10 Q36 10 36 14 Q36 18 32 18 Z"
-        fill="none"
-        stroke={colors.accent}
-        strokeWidth="0.8"
-        opacity="0.5"
-        strokeLinecap="round"
-      />
-    </g>
-  );
-
-  const DatabaseDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <ellipse cx="10" cy="4" rx="10" ry="4" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.5" />
-      <path d="M0 4 L0 20 Q0 24 10 24 Q20 24 20 20 L20 4" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.5" />
-      <ellipse cx="10" cy="20" rx="10" ry="4" fill="none" stroke={colors.accent} strokeWidth="0.6" opacity="0.3" />
-      <ellipse cx="10" cy="12" rx="10" ry="4" fill="none" stroke={colors.accent} strokeWidth="0.5" opacity="0.2" strokeDasharray="2 2" />
-    </g>
-  );
-
-  const WifiDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <circle cx="10" cy="20" r="1.5" fill={colors.accent} opacity="0.5" />
-      <path d="M4 14 Q10 8 16 14" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.4" strokeLinecap="round" />
-      <path d="M0 9 Q10 0 20 9" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" strokeLinecap="round" />
-    </g>
-  );
-
-  const GlobeDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <circle cx="12" cy="12" r="11" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.5" />
-      <ellipse cx="12" cy="12" rx="11" ry="4" fill="none" stroke={colors.accent} strokeWidth="0.5" opacity="0.3" />
-      <ellipse cx="12" cy="12" rx="4" ry="11" fill="none" stroke={colors.accent} strokeWidth="0.5" opacity="0.3" />
-    </g>
-  );
-
-  const NodeDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <circle cx="10" cy="10" r="8" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.5" />
-      <circle cx="10" cy="10" r="2.5" fill={colors.accent} opacity="0.4" />
-      <line x1="18" y1="10" x2="24" y2="10" stroke={colors.accent} strokeWidth="0.6" opacity="0.3" strokeDasharray="2 2" />
-      <line x1="10" y1="18" x2="10" y2="24" stroke={colors.accent} strokeWidth="0.6" opacity="0.3" strokeDasharray="2 2" />
-    </g>
-  );
-
-  // Create a repeating pattern of doodles
-  const doodles = [
-    { Component: ServerDoodle, x: 0, y: 48 },
-    { Component: CloudDoodle, x: 35, y: 20 },
-    { Component: DatabaseDoodle, x: 85, y: 50 },
-    { Component: WifiDoodle, x: 120, y: 15 },
-    { Component: NodeDoodle, x: 155, y: 55 },
-    { Component: GlobeDoodle, x: 195, y: 25 },
-    { Component: ServerDoodle, x: 235, y: 60 },
-    { Component: CloudDoodle, x: 270, y: 35 },
-    // Repeat for seamless scroll
-    { Component: DatabaseDoodle, x: 320, y: 50 },
-    { Component: WifiDoodle, x: 355, y: 15 },
-    { Component: NodeDoodle, x: 390, y: 55 },
-    { Component: GlobeDoodle, x: 430, y: 25 },
-  ];
-
-  return (
-    <div className={cn("w-full h-full overflow-hidden relative", className)} style={{ backgroundColor: colors.bg }}>
-      {/* Dotted background - contained within this element */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <pattern id={`dots-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-            <circle cx="8" cy="8" r="1.2" fill={colors.accent} opacity="0.1" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill={`url(#dots-${toolsetSlug})`} />
-      </svg>
-
-      {/* Parallax scrolling doodles */}
-      <svg
-        viewBox="0 0 280 120"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        preserveAspectRatio="xMidYMid slice"
-        className="w-full h-full relative"
-        aria-hidden="true"
-      >
-        <g className="transition-transform duration-700 ease-out group-hover:-translate-x-12">
-          {doodles.map((doodle, i) => (
-            <doodle.Component key={i} x={doodle.x} y={doodle.y} />
-          ))}
-        </g>
-      </svg>
-    </div>
-  );
-}
-
-/**
- * Large hero illustration for MCP details page
- * Repeating hand-drawn doodles with slow continuous scroll animation
- */
-export function MCPHeroIllustration({
-  className,
-  toolsetSlug,
-  mcpUrl: _mcpUrl,
-}: IllustrationProps & { toolsetSlug: string; mcpUrl?: string }) {
-  const colors = hashStringToColor(toolsetSlug);
-
-  // Larger doodle icons for hero (lighter stroke weights)
-  const ServerDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <rect x="0" y="0" width="45" height="60" rx="4" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.5" />
-      <line x1="8" y1="15" x2="37" y2="15" stroke={colors.accent} strokeWidth="0.8" opacity="0.4" />
-      <line x1="8" y1="27" x2="37" y2="27" stroke={colors.accent} strokeWidth="0.8" opacity="0.4" />
-      <line x1="8" y1="39" x2="37" y2="39" stroke={colors.accent} strokeWidth="0.8" opacity="0.4" />
-      <circle cx="12" cy="52" r="2.5" fill={colors.accent} opacity="0.5" />
-      <circle cx="23" cy="52" r="2.5" fill={colors.accent} opacity="0.3" />
-    </g>
-  );
-
-  const CloudDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <path
-        d="M12 45 Q0 45 0 30 Q0 15 15 15 Q15 0 35 0 Q55 0 60 15 Q75 10 80 25 Q90 25 90 35 Q90 45 80 45 Z"
-        fill="none"
-        stroke={colors.accent}
-        strokeWidth="1.2"
-        opacity="0.45"
-        strokeLinecap="round"
-      />
-    </g>
-  );
-
-  const DatabaseDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <ellipse cx="25" cy="10" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.5" />
-      <path d="M0 10 L0 50 Q0 60 25 60 Q50 60 50 50 L50 10" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.5" />
-      <ellipse cx="25" cy="50" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" />
-      <ellipse cx="25" cy="30" rx="25" ry="10" fill="none" stroke={colors.accent} strokeWidth="0.6" opacity="0.2" strokeDasharray="4 3" />
-    </g>
-  );
-
-  const WifiDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <circle cx="25" cy="50" r="4" fill={colors.accent} opacity="0.5" />
-      <path d="M10 35 Q25 20 40 35" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.4" strokeLinecap="round" />
-      <path d="M0 22 Q25 0 50 22" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.3" strokeLinecap="round" />
-    </g>
-  );
-
-  const GlobeDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <circle cx="30" cy="30" r="28" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.45" />
-      <ellipse cx="30" cy="30" rx="28" ry="10" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" />
-      <ellipse cx="30" cy="30" rx="10" ry="28" fill="none" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" />
-    </g>
-  );
-
-  const NodeDoodle = ({ x, y }: { x: number; y: number }) => (
-    <g transform={`translate(${x}, ${y})`}>
-      <circle cx="25" cy="25" r="20" fill="none" stroke={colors.accent} strokeWidth="1.2" opacity="0.45" />
-      <circle cx="25" cy="25" r="6" fill={colors.accent} opacity="0.35" />
-      <line x1="45" y1="25" x2="60" y2="25" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" strokeDasharray="4 3" />
-      <line x1="25" y1="45" x2="25" y2="60" stroke={colors.accent} strokeWidth="0.8" opacity="0.3" strokeDasharray="4 3" />
-    </g>
-  );
-
-  // Create rows of doodles that repeat for seamless scroll
-  const heroDoodles = [
-    // Row 1 (top)
-    { Component: CloudDoodle, x: 0, y: 30 },
-    { Component: ServerDoodle, x: 120, y: 50 },
-    { Component: NodeDoodle, x: 200, y: 20 },
-    { Component: DatabaseDoodle, x: 300, y: 55 },
-    { Component: WifiDoodle, x: 400, y: 25 },
-    { Component: GlobeDoodle, x: 480, y: 60 },
-    { Component: ServerDoodle, x: 560, y: 30 },
-    { Component: CloudDoodle, x: 650, y: 50 },
-    // Row 2 (middle)
-    { Component: DatabaseDoodle, x: 50, y: 130 },
-    { Component: WifiDoodle, x: 150, y: 145 },
-    { Component: GlobeDoodle, x: 240, y: 120 },
-    { Component: CloudDoodle, x: 340, y: 150 },
-    { Component: ServerDoodle, x: 450, y: 125 },
-    { Component: NodeDoodle, x: 530, y: 150 },
-    { Component: DatabaseDoodle, x: 620, y: 120 },
-    // Row 3 (bottom)
-    { Component: NodeDoodle, x: 20, y: 210 },
-    { Component: GlobeDoodle, x: 100, y: 230 },
-    { Component: ServerDoodle, x: 200, y: 205 },
-    { Component: WifiDoodle, x: 280, y: 235 },
-    { Component: CloudDoodle, x: 370, y: 210 },
-    { Component: DatabaseDoodle, x: 480, y: 230 },
-    { Component: NodeDoodle, x: 570, y: 205 },
-    { Component: ServerDoodle, x: 660, y: 225 },
-    // Repeat for seamless loop
-    { Component: CloudDoodle, x: 750, y: 30 },
-    { Component: ServerDoodle, x: 870, y: 50 },
-    { Component: NodeDoodle, x: 950, y: 20 },
-    { Component: WifiDoodle, x: 700, y: 145 },
-    { Component: GlobeDoodle, x: 790, y: 120 },
-    { Component: CloudDoodle, x: 890, y: 150 },
-    { Component: GlobeDoodle, x: 750, y: 230 },
-    { Component: ServerDoodle, x: 850, y: 205 },
-  ];
-
-  return (
-    <div className={cn("w-full h-full relative overflow-hidden group", className)} style={{ backgroundColor: colors.bg }}>
-      <style>{`
-        @keyframes scrollLeft {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-200px); }
-        }
-      `}</style>
-
-      {/* Dotted background */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <pattern id={`hero-dots-${toolsetSlug}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-            <circle cx="8" cy="8" r="1.2" fill={colors.accent} opacity="0.18" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill={`url(#hero-dots-${toolsetSlug})`} />
-      </svg>
-
-      {/* Scrolling doodles */}
-      <svg
-        viewBox="0 0 800 300"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        preserveAspectRatio="xMidYMid slice"
-        className="w-full h-full relative"
-        aria-hidden="true"
-      >
-        <g className="animate-[scrollLeft_30s_linear_infinite]">
-          {heroDoodles.map((doodle, i) => (
-            <doodle.Component key={i} x={doodle.x} y={doodle.y} />
-          ))}
-        </g>
-      </svg>
-    </div>
-  );
-}
 
 /**
  * Illustration for external MCP servers
