@@ -61,7 +61,7 @@ func BuildListPayload(integrationsListKeywords string, integrationsListSessionTo
 		if integrationsListKeywords != "" {
 			err = json.Unmarshal([]byte(integrationsListKeywords), &keywords)
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for keywords, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"lx6\",\n      \"zs5\",\n      \"u7l\"\n   ]'")
+				return nil, fmt.Errorf("invalid JSON for keywords, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"7p5\",\n      \"ozg\",\n      \"jwa\"\n   ]'")
 			}
 			for _, e := range keywords {
 				if utf8.RuneCountInString(e) > 20 {

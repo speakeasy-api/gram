@@ -4,24 +4,9 @@
 
 import * as z from "zod/v3";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { Metrics, Metrics$inboundSchema } from "./metrics.js";
-
-/**
- * Aggregation scope for metrics
- */
-export const GetMetricsSummaryResultScope = {
-  Project: "project",
-  Chat: "chat",
-} as const;
-/**
- * Aggregation scope for metrics
- */
-export type GetMetricsSummaryResultScope = ClosedEnum<
-  typeof GetMetricsSummaryResultScope
->;
 
 /**
  * Result of metrics summary query
@@ -35,16 +20,7 @@ export type GetMetricsSummaryResult = {
    * Aggregated metrics
    */
   metrics: Metrics;
-  /**
-   * Aggregation scope for metrics
-   */
-  scope: GetMetricsSummaryResultScope;
 };
-
-/** @internal */
-export const GetMetricsSummaryResultScope$inboundSchema: z.ZodNativeEnum<
-  typeof GetMetricsSummaryResultScope
-> = z.nativeEnum(GetMetricsSummaryResultScope);
 
 /** @internal */
 export const GetMetricsSummaryResult$inboundSchema: z.ZodType<
@@ -54,7 +30,6 @@ export const GetMetricsSummaryResult$inboundSchema: z.ZodType<
 > = z.object({
   enabled: z.boolean(),
   metrics: Metrics$inboundSchema,
-  scope: GetMetricsSummaryResultScope$inboundSchema,
 });
 
 export function getMetricsSummaryResultFromJSON(

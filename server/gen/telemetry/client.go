@@ -15,19 +15,19 @@ import (
 
 // Client is the "telemetry" service client.
 type Client struct {
-	SearchLogsEndpoint        goa.Endpoint
-	SearchToolCallsEndpoint   goa.Endpoint
-	CaptureEventEndpoint      goa.Endpoint
-	GetMetricsSummaryEndpoint goa.Endpoint
+	SearchLogsEndpoint               goa.Endpoint
+	SearchToolCallsEndpoint          goa.Endpoint
+	CaptureEventEndpoint             goa.Endpoint
+	GetProjectMetricsSummaryEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, captureEvent, getMetricsSummary goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, captureEvent, getProjectMetricsSummary goa.Endpoint) *Client {
 	return &Client{
-		SearchLogsEndpoint:        searchLogs,
-		SearchToolCallsEndpoint:   searchToolCalls,
-		CaptureEventEndpoint:      captureEvent,
-		GetMetricsSummaryEndpoint: getMetricsSummary,
+		SearchLogsEndpoint:               searchLogs,
+		SearchToolCallsEndpoint:          searchToolCalls,
+		CaptureEventEndpoint:             captureEvent,
+		GetProjectMetricsSummaryEndpoint: getProjectMetricsSummary,
 	}
 }
 
@@ -98,9 +98,9 @@ func (c *Client) CaptureEvent(ctx context.Context, p *CaptureEventPayload) (res 
 	return ires.(*CaptureEventResult), nil
 }
 
-// GetMetricsSummary calls the "getMetricsSummary" endpoint of the "telemetry"
-// service.
-// GetMetricsSummary may return the following errors:
+// GetProjectMetricsSummary calls the "getProjectMetricsSummary" endpoint of
+// the "telemetry" service.
+// GetProjectMetricsSummary may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -112,9 +112,9 @@ func (c *Client) CaptureEvent(ctx context.Context, p *CaptureEventPayload) (res 
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetMetricsSummary(ctx context.Context, p *GetMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error) {
+func (c *Client) GetProjectMetricsSummary(ctx context.Context, p *GetProjectMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error) {
 	var ires any
-	ires, err = c.GetMetricsSummaryEndpoint(ctx, p)
+	ires, err = c.GetProjectMetricsSummaryEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

@@ -739,24 +739,24 @@ func EncodeCaptureEventError(encoder func(context.Context, http.ResponseWriter) 
 	}
 }
 
-// EncodeGetMetricsSummaryResponse returns an encoder for responses returned by
-// the telemetry getMetricsSummary endpoint.
-func EncodeGetMetricsSummaryResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetProjectMetricsSummaryResponse returns an encoder for responses
+// returned by the telemetry getProjectMetricsSummary endpoint.
+func EncodeGetProjectMetricsSummaryResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*telemetry.GetMetricsSummaryResult)
 		enc := encoder(ctx, w)
-		body := NewGetMetricsSummaryResponseBody(res)
+		body := NewGetProjectMetricsSummaryResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGetMetricsSummaryRequest returns a decoder for requests sent to the
-// telemetry getMetricsSummary endpoint.
-func DecodeGetMetricsSummaryRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.GetMetricsSummaryPayload, error) {
-	return func(r *http.Request) (*telemetry.GetMetricsSummaryPayload, error) {
+// DecodeGetProjectMetricsSummaryRequest returns a decoder for requests sent to
+// the telemetry getProjectMetricsSummary endpoint.
+func DecodeGetProjectMetricsSummaryRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.GetProjectMetricsSummaryPayload, error) {
+	return func(r *http.Request) (*telemetry.GetProjectMetricsSummaryPayload, error) {
 		var (
-			body GetMetricsSummaryRequestBody
+			body GetProjectMetricsSummaryRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -770,7 +770,7 @@ func DecodeGetMetricsSummaryRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			}
 			return nil, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateGetMetricsSummaryRequestBody(&body)
+		err = ValidateGetProjectMetricsSummaryRequestBody(&body)
 		if err != nil {
 			return nil, err
 		}
@@ -792,7 +792,7 @@ func DecodeGetMetricsSummaryRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewGetMetricsSummaryPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		payload := NewGetProjectMetricsSummaryPayload(&body, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -819,9 +819,9 @@ func DecodeGetMetricsSummaryRequest(mux goahttp.Muxer, decoder func(*http.Reques
 	}
 }
 
-// EncodeGetMetricsSummaryError returns an encoder for errors returned by the
-// getMetricsSummary telemetry endpoint.
-func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeGetProjectMetricsSummaryError returns an encoder for errors returned
+// by the getProjectMetricsSummary telemetry endpoint.
+func EncodeGetProjectMetricsSummaryError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -838,7 +838,7 @@ func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetMetricsSummaryUnauthorizedResponseBody(res)
+				body = NewGetProjectMetricsSummaryUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -852,7 +852,7 @@ func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetMetricsSummaryForbiddenResponseBody(res)
+				body = NewGetProjectMetricsSummaryForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -866,7 +866,7 @@ func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetMetricsSummaryBadRequestResponseBody(res)
+				body = NewGetProjectMetricsSummaryBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -880,7 +880,7 @@ func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetMetricsSummaryNotFoundResponseBody(res)
+				body = NewGetProjectMetricsSummaryNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -894,7 +894,7 @@ func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetMetricsSummaryConflictResponseBody(res)
+				body = NewGetProjectMetricsSummaryConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -908,7 +908,7 @@ func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetMetricsSummaryUnsupportedMediaResponseBody(res)
+				body = NewGetProjectMetricsSummaryUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -922,7 +922,7 @@ func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetMetricsSummaryInvalidResponseBody(res)
+				body = NewGetProjectMetricsSummaryInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -936,7 +936,7 @@ func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetMetricsSummaryInvariantViolationResponseBody(res)
+				body = NewGetProjectMetricsSummaryInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -950,7 +950,7 @@ func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetMetricsSummaryUnexpectedResponseBody(res)
+				body = NewGetProjectMetricsSummaryUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -964,7 +964,7 @@ func EncodeGetMetricsSummaryError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetMetricsSummaryGatewayErrorResponseBody(res)
+				body = NewGetProjectMetricsSummaryGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

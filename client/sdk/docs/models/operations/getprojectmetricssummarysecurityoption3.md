@@ -1,11 +1,11 @@
-# GetMetricsSummarySecurityOption3
+# GetProjectMetricsSummarySecurityOption3
 
 ## Example Usage
 
 ```typescript
-import { GetMetricsSummarySecurityOption3 } from "@gram/client/models/operations";
+import { GetProjectMetricsSummarySecurityOption3 } from "@gram/client/models/operations";
 
-let value: GetMetricsSummarySecurityOption3 = {
+let value: GetProjectMetricsSummarySecurityOption3 = {
   projectSlugHeaderGramProject: "<value>",
   sessionHeaderGramSession: "<value>",
 };

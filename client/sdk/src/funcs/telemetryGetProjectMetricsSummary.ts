@@ -27,15 +27,15 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getMetricsSummary telemetry
+ * getProjectMetricsSummary telemetry
  *
  * @remarks
- * Get aggregated metrics summary for a project or specific chat session
+ * Get aggregated metrics summary for an entire project
  */
-export function telemetryGetMetricsSummary(
+export function telemetryGetProjectMetricsSummary(
   client: GramCore,
-  request: operations.GetMetricsSummaryRequest,
-  security?: operations.GetMetricsSummarySecurity | undefined,
+  request: operations.GetProjectMetricsSummaryRequest,
+  security?: operations.GetProjectMetricsSummarySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -61,8 +61,8 @@ export function telemetryGetMetricsSummary(
 
 async function $do(
   client: GramCore,
-  request: operations.GetMetricsSummaryRequest,
-  security?: operations.GetMetricsSummarySecurity | undefined,
+  request: operations.GetProjectMetricsSummaryRequest,
+  security?: operations.GetProjectMetricsSummarySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -83,18 +83,19 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => operations.GetMetricsSummaryRequest$outboundSchema.parse(value),
+    (value) =>
+      operations.GetProjectMetricsSummaryRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.GetMetricsSummaryPayload, {
+  const body = encodeJSON("body", payload.GetProjectMetricsSummaryPayload, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/telemetry.getMetricsSummary")();
+  const path = pathToFunc("/rpc/telemetry.getProjectMetricsSummary")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -155,7 +156,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getMetricsSummary",
+    operationID: "getProjectMetricsSummary",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

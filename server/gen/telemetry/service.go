@@ -22,8 +22,8 @@ type Service interface {
 	SearchToolCalls(context.Context, *SearchToolCallsPayload) (res *SearchToolCallsResult, err error)
 	// Capture a telemetry event and forward it to PostHog
 	CaptureEvent(context.Context, *CaptureEventPayload) (res *CaptureEventResult, err error)
-	// Get aggregated metrics summary for a project or specific chat session
-	GetMetricsSummary(context.Context, *GetMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error)
+	// Get aggregated metrics summary for an entire project
+	GetProjectMetricsSummary(context.Context, *GetProjectMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -48,7 +48,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"searchLogs", "searchToolCalls", "captureEvent", "getMetricsSummary"}
+var MethodNames = [4]string{"searchLogs", "searchToolCalls", "captureEvent", "getProjectMetricsSummary"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -73,31 +73,25 @@ type CaptureEventResult struct {
 	Success bool
 }
 
-// GetMetricsSummaryPayload is the payload type of the telemetry service
-// getMetricsSummary method.
-type GetMetricsSummaryPayload struct {
+// GetMetricsSummaryResult is the result type of the telemetry service
+// getProjectMetricsSummary method.
+type GetMetricsSummaryResult struct {
+	// Aggregated metrics
+	Metrics *Metrics
+	// Whether telemetry is enabled for the organization
+	Enabled bool
+}
+
+// GetProjectMetricsSummaryPayload is the payload type of the telemetry service
+// getProjectMetricsSummary method.
+type GetProjectMetricsSummaryPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// Aggregation level (project or chat)
-	Scope MetricsScope
 	// Start time in ISO 8601 format
 	From string
 	// End time in ISO 8601 format
 	To string
-	// Chat/conversation ID (required when scope=chat)
-	ChatID *string
-}
-
-// GetMetricsSummaryResult is the result type of the telemetry service
-// getMetricsSummary method.
-type GetMetricsSummaryResult struct {
-	// Aggregated metrics
-	Metrics *Metrics
-	// Scope used for aggregation
-	Scope MetricsScope
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // Aggregated metrics
@@ -137,9 +131,6 @@ type Metrics struct {
 	// List of tools used with success/failure counts
 	Tools []*ToolUsage
 }
-
-// Aggregation scope for metrics
-type MetricsScope string
 
 // Model usage statistics
 type ModelUsage struct {

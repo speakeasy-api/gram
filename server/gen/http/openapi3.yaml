@@ -7773,10 +7773,10 @@ paths:
             tags:
                 - telemetry
             x-speakeasy-name-override: captureEvent
-    /rpc/telemetry.getMetricsSummary:
+    /rpc/telemetry.getProjectMetricsSummary:
         post:
-            description: Get aggregated metrics summary for a project or specific chat session
-            operationId: getMetricsSummary
+            description: Get aggregated metrics summary for an entire project
+            operationId: getProjectMetricsSummary
             parameters:
                 - allowEmptyValue: true
                   description: API Key header
@@ -7803,7 +7803,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/GetMetricsSummaryPayload'
+                            $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
                 required: true
             responses:
                 "200":
@@ -7873,12 +7873,12 @@ paths:
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: getMetricsSummary telemetry
+            summary: getProjectMetricsSummary telemetry
             tags:
                 - telemetry
-            x-speakeasy-name-override: getMetricsSummary
+            x-speakeasy-name-override: getProjectMetricsSummary
             x-speakeasy-react-hook:
-                name: GetMetricsSummary
+                name: GetProjectMetricsSummary
     /rpc/telemetry.searchLogs:
         post:
             description: Search and list telemetry logs that match a search filter
@@ -12940,34 +12940,6 @@ components:
             properties:
                 metadata:
                     $ref: '#/components/schemas/McpMetadata'
-        GetMetricsSummaryPayload:
-            type: object
-            properties:
-                chat_id:
-                    type: string
-                    description: Chat/conversation ID (required when scope=chat)
-                    format: uuid
-                from:
-                    type: string
-                    description: Start time in ISO 8601 format
-                    example: "2025-12-19T10:00:00Z"
-                    format: date-time
-                scope:
-                    type: string
-                    description: Aggregation scope for metrics
-                    enum:
-                        - project
-                        - chat
-                to:
-                    type: string
-                    description: End time in ISO 8601 format
-                    example: "2025-12-19T11:00:00Z"
-                    format: date-time
-            description: Payload for getting metrics summary
-            required:
-                - scope
-                - from
-                - to
         GetMetricsSummaryResult:
             type: object
             properties:
@@ -12976,16 +12948,9 @@ components:
                     description: Whether telemetry is enabled for the organization
                 metrics:
                     $ref: '#/components/schemas/Metrics'
-                scope:
-                    type: string
-                    description: Aggregation scope for metrics
-                    enum:
-                        - project
-                        - chat
             description: Result of metrics summary query
             required:
                 - metrics
-                - scope
                 - enabled
         GetProjectForm:
             type: object
@@ -12997,6 +12962,23 @@ components:
                     maxLength: 40
             required:
                 - slug
+        GetProjectMetricsSummaryPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+            description: Payload for getting project-level metrics summary
+            required:
+                - from
+                - to
         GetProjectResult:
             type: object
             properties:

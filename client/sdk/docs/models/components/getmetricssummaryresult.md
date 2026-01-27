@@ -35,14 +35,12 @@ let value: GetMetricsSummaryResult = {
     totalTokens: 516105,
     totalToolCalls: 521684,
   },
-  scope: "project",
 };
 ```
 
 ## Fields
 
-| Field                                                                                              | Type                                                                                               | Required                                                                                           | Description                                                                                        |
-| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `enabled`                                                                                          | *boolean*                                                                                          | :heavy_check_mark:                                                                                 | Whether telemetry is enabled for the organization                                                  |
-| `metrics`                                                                                          | [components.Metrics](../../models/components/metrics.md)                                           | :heavy_check_mark:                                                                                 | Aggregated metrics                                                                                 |
-| `scope`                                                                                            | [components.GetMetricsSummaryResultScope](../../models/components/getmetricssummaryresultscope.md) | :heavy_check_mark:                                                                                 | Aggregation scope for metrics                                                                      |
+| Field                                                    | Type                                                     | Required                                                 | Description                                              |
+| -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
+| `enabled`                                                | *boolean*                                                | :heavy_check_mark:                                       | Whether telemetry is enabled for the organization        |
+| `metrics`                                                | [components.Metrics](../../models/components/metrics.md) | :heavy_check_mark:                                       | Aggregated metrics                                       |

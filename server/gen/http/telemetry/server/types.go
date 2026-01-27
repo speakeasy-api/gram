@@ -52,17 +52,13 @@ type CaptureEventRequestBody struct {
 	Properties map[string]any `form:"properties,omitempty" json:"properties,omitempty" xml:"properties,omitempty"`
 }
 
-// GetMetricsSummaryRequestBody is the type of the "telemetry" service
-// "getMetricsSummary" endpoint HTTP request body.
-type GetMetricsSummaryRequestBody struct {
-	// Aggregation level (project or chat)
-	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+// GetProjectMetricsSummaryRequestBody is the type of the "telemetry" service
+// "getProjectMetricsSummary" endpoint HTTP request body.
+type GetProjectMetricsSummaryRequestBody struct {
 	// Start time in ISO 8601 format
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
-	// Chat/conversation ID (required when scope=chat)
-	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
 }
 
 // SearchLogsResponseBody is the type of the "telemetry" service "searchLogs"
@@ -94,13 +90,11 @@ type CaptureEventResponseBody struct {
 	Success bool `form:"success" json:"success" xml:"success"`
 }
 
-// GetMetricsSummaryResponseBody is the type of the "telemetry" service
-// "getMetricsSummary" endpoint HTTP response body.
-type GetMetricsSummaryResponseBody struct {
+// GetProjectMetricsSummaryResponseBody is the type of the "telemetry" service
+// "getProjectMetricsSummary" endpoint HTTP response body.
+type GetProjectMetricsSummaryResponseBody struct {
 	// Aggregated metrics
 	Metrics *MetricsResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
-	// Scope used for aggregation
-	Scope string `form:"scope" json:"scope" xml:"scope"`
 	// Whether telemetry is enabled for the organization
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
@@ -653,10 +647,10 @@ type CaptureEventGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetMetricsSummaryUnauthorizedResponseBody is the type of the "telemetry"
-// service "getMetricsSummary" endpoint HTTP response body for the
-// "unauthorized" error.
-type GetMetricsSummaryUnauthorizedResponseBody struct {
+// GetProjectMetricsSummaryUnauthorizedResponseBody is the type of the
+// "telemetry" service "getProjectMetricsSummary" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetProjectMetricsSummaryUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -672,10 +666,10 @@ type GetMetricsSummaryUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetMetricsSummaryForbiddenResponseBody is the type of the "telemetry"
-// service "getMetricsSummary" endpoint HTTP response body for the "forbidden"
-// error.
-type GetMetricsSummaryForbiddenResponseBody struct {
+// GetProjectMetricsSummaryForbiddenResponseBody is the type of the "telemetry"
+// service "getProjectMetricsSummary" endpoint HTTP response body for the
+// "forbidden" error.
+type GetProjectMetricsSummaryForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -691,10 +685,10 @@ type GetMetricsSummaryForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetMetricsSummaryBadRequestResponseBody is the type of the "telemetry"
-// service "getMetricsSummary" endpoint HTTP response body for the
-// "bad_request" error.
-type GetMetricsSummaryBadRequestResponseBody struct {
+// GetProjectMetricsSummaryBadRequestResponseBody is the type of the
+// "telemetry" service "getProjectMetricsSummary" endpoint HTTP response body
+// for the "bad_request" error.
+type GetProjectMetricsSummaryBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -710,9 +704,10 @@ type GetMetricsSummaryBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetMetricsSummaryNotFoundResponseBody is the type of the "telemetry" service
-// "getMetricsSummary" endpoint HTTP response body for the "not_found" error.
-type GetMetricsSummaryNotFoundResponseBody struct {
+// GetProjectMetricsSummaryNotFoundResponseBody is the type of the "telemetry"
+// service "getProjectMetricsSummary" endpoint HTTP response body for the
+// "not_found" error.
+type GetProjectMetricsSummaryNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -728,9 +723,10 @@ type GetMetricsSummaryNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetMetricsSummaryConflictResponseBody is the type of the "telemetry" service
-// "getMetricsSummary" endpoint HTTP response body for the "conflict" error.
-type GetMetricsSummaryConflictResponseBody struct {
+// GetProjectMetricsSummaryConflictResponseBody is the type of the "telemetry"
+// service "getProjectMetricsSummary" endpoint HTTP response body for the
+// "conflict" error.
+type GetProjectMetricsSummaryConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -746,10 +742,10 @@ type GetMetricsSummaryConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetMetricsSummaryUnsupportedMediaResponseBody is the type of the "telemetry"
-// service "getMetricsSummary" endpoint HTTP response body for the
-// "unsupported_media" error.
-type GetMetricsSummaryUnsupportedMediaResponseBody struct {
+// GetProjectMetricsSummaryUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getProjectMetricsSummary" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetProjectMetricsSummaryUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -765,9 +761,10 @@ type GetMetricsSummaryUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetMetricsSummaryInvalidResponseBody is the type of the "telemetry" service
-// "getMetricsSummary" endpoint HTTP response body for the "invalid" error.
-type GetMetricsSummaryInvalidResponseBody struct {
+// GetProjectMetricsSummaryInvalidResponseBody is the type of the "telemetry"
+// service "getProjectMetricsSummary" endpoint HTTP response body for the
+// "invalid" error.
+type GetProjectMetricsSummaryInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -783,10 +780,10 @@ type GetMetricsSummaryInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetMetricsSummaryInvariantViolationResponseBody is the type of the
-// "telemetry" service "getMetricsSummary" endpoint HTTP response body for the
-// "invariant_violation" error.
-type GetMetricsSummaryInvariantViolationResponseBody struct {
+// GetProjectMetricsSummaryInvariantViolationResponseBody is the type of the
+// "telemetry" service "getProjectMetricsSummary" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetProjectMetricsSummaryInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -802,10 +799,10 @@ type GetMetricsSummaryInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetMetricsSummaryUnexpectedResponseBody is the type of the "telemetry"
-// service "getMetricsSummary" endpoint HTTP response body for the "unexpected"
-// error.
-type GetMetricsSummaryUnexpectedResponseBody struct {
+// GetProjectMetricsSummaryUnexpectedResponseBody is the type of the
+// "telemetry" service "getProjectMetricsSummary" endpoint HTTP response body
+// for the "unexpected" error.
+type GetProjectMetricsSummaryUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -821,10 +818,10 @@ type GetMetricsSummaryUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetMetricsSummaryGatewayErrorResponseBody is the type of the "telemetry"
-// service "getMetricsSummary" endpoint HTTP response body for the
-// "gateway_error" error.
-type GetMetricsSummaryGatewayErrorResponseBody struct {
+// GetProjectMetricsSummaryGatewayErrorResponseBody is the type of the
+// "telemetry" service "getProjectMetricsSummary" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetProjectMetricsSummaryGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1041,11 +1038,11 @@ func NewCaptureEventResponseBody(res *telemetry.CaptureEventResult) *CaptureEven
 	return body
 }
 
-// NewGetMetricsSummaryResponseBody builds the HTTP response body from the
-// result of the "getMetricsSummary" endpoint of the "telemetry" service.
-func NewGetMetricsSummaryResponseBody(res *telemetry.GetMetricsSummaryResult) *GetMetricsSummaryResponseBody {
-	body := &GetMetricsSummaryResponseBody{
-		Scope:   string(res.Scope),
+// NewGetProjectMetricsSummaryResponseBody builds the HTTP response body from
+// the result of the "getProjectMetricsSummary" endpoint of the "telemetry"
+// service.
+func NewGetProjectMetricsSummaryResponseBody(res *telemetry.GetMetricsSummaryResult) *GetProjectMetricsSummaryResponseBody {
+	body := &GetProjectMetricsSummaryResponseBody{
 		Enabled: res.Enabled,
 	}
 	if res.Metrics != nil {
@@ -1475,11 +1472,11 @@ func NewCaptureEventGatewayErrorResponseBody(res *goa.ServiceError) *CaptureEven
 	return body
 }
 
-// NewGetMetricsSummaryUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "getMetricsSummary" endpoint of the "telemetry"
-// service.
-func NewGetMetricsSummaryUnauthorizedResponseBody(res *goa.ServiceError) *GetMetricsSummaryUnauthorizedResponseBody {
-	body := &GetMetricsSummaryUnauthorizedResponseBody{
+// NewGetProjectMetricsSummaryUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getProjectMetricsSummary" endpoint of the
+// "telemetry" service.
+func NewGetProjectMetricsSummaryUnauthorizedResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryUnauthorizedResponseBody {
+	body := &GetProjectMetricsSummaryUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1490,10 +1487,11 @@ func NewGetMetricsSummaryUnauthorizedResponseBody(res *goa.ServiceError) *GetMet
 	return body
 }
 
-// NewGetMetricsSummaryForbiddenResponseBody builds the HTTP response body from
-// the result of the "getMetricsSummary" endpoint of the "telemetry" service.
-func NewGetMetricsSummaryForbiddenResponseBody(res *goa.ServiceError) *GetMetricsSummaryForbiddenResponseBody {
-	body := &GetMetricsSummaryForbiddenResponseBody{
+// NewGetProjectMetricsSummaryForbiddenResponseBody builds the HTTP response
+// body from the result of the "getProjectMetricsSummary" endpoint of the
+// "telemetry" service.
+func NewGetProjectMetricsSummaryForbiddenResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryForbiddenResponseBody {
+	body := &GetProjectMetricsSummaryForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1504,11 +1502,11 @@ func NewGetMetricsSummaryForbiddenResponseBody(res *goa.ServiceError) *GetMetric
 	return body
 }
 
-// NewGetMetricsSummaryBadRequestResponseBody builds the HTTP response body
-// from the result of the "getMetricsSummary" endpoint of the "telemetry"
-// service.
-func NewGetMetricsSummaryBadRequestResponseBody(res *goa.ServiceError) *GetMetricsSummaryBadRequestResponseBody {
-	body := &GetMetricsSummaryBadRequestResponseBody{
+// NewGetProjectMetricsSummaryBadRequestResponseBody builds the HTTP response
+// body from the result of the "getProjectMetricsSummary" endpoint of the
+// "telemetry" service.
+func NewGetProjectMetricsSummaryBadRequestResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryBadRequestResponseBody {
+	body := &GetProjectMetricsSummaryBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1519,10 +1517,11 @@ func NewGetMetricsSummaryBadRequestResponseBody(res *goa.ServiceError) *GetMetri
 	return body
 }
 
-// NewGetMetricsSummaryNotFoundResponseBody builds the HTTP response body from
-// the result of the "getMetricsSummary" endpoint of the "telemetry" service.
-func NewGetMetricsSummaryNotFoundResponseBody(res *goa.ServiceError) *GetMetricsSummaryNotFoundResponseBody {
-	body := &GetMetricsSummaryNotFoundResponseBody{
+// NewGetProjectMetricsSummaryNotFoundResponseBody builds the HTTP response
+// body from the result of the "getProjectMetricsSummary" endpoint of the
+// "telemetry" service.
+func NewGetProjectMetricsSummaryNotFoundResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryNotFoundResponseBody {
+	body := &GetProjectMetricsSummaryNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1533,10 +1532,11 @@ func NewGetMetricsSummaryNotFoundResponseBody(res *goa.ServiceError) *GetMetrics
 	return body
 }
 
-// NewGetMetricsSummaryConflictResponseBody builds the HTTP response body from
-// the result of the "getMetricsSummary" endpoint of the "telemetry" service.
-func NewGetMetricsSummaryConflictResponseBody(res *goa.ServiceError) *GetMetricsSummaryConflictResponseBody {
-	body := &GetMetricsSummaryConflictResponseBody{
+// NewGetProjectMetricsSummaryConflictResponseBody builds the HTTP response
+// body from the result of the "getProjectMetricsSummary" endpoint of the
+// "telemetry" service.
+func NewGetProjectMetricsSummaryConflictResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryConflictResponseBody {
+	body := &GetProjectMetricsSummaryConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1547,11 +1547,11 @@ func NewGetMetricsSummaryConflictResponseBody(res *goa.ServiceError) *GetMetrics
 	return body
 }
 
-// NewGetMetricsSummaryUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "getMetricsSummary" endpoint of the "telemetry"
-// service.
-func NewGetMetricsSummaryUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMetricsSummaryUnsupportedMediaResponseBody {
-	body := &GetMetricsSummaryUnsupportedMediaResponseBody{
+// NewGetProjectMetricsSummaryUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getProjectMetricsSummary" endpoint of
+// the "telemetry" service.
+func NewGetProjectMetricsSummaryUnsupportedMediaResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryUnsupportedMediaResponseBody {
+	body := &GetProjectMetricsSummaryUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1562,10 +1562,11 @@ func NewGetMetricsSummaryUnsupportedMediaResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
-// NewGetMetricsSummaryInvalidResponseBody builds the HTTP response body from
-// the result of the "getMetricsSummary" endpoint of the "telemetry" service.
-func NewGetMetricsSummaryInvalidResponseBody(res *goa.ServiceError) *GetMetricsSummaryInvalidResponseBody {
-	body := &GetMetricsSummaryInvalidResponseBody{
+// NewGetProjectMetricsSummaryInvalidResponseBody builds the HTTP response body
+// from the result of the "getProjectMetricsSummary" endpoint of the
+// "telemetry" service.
+func NewGetProjectMetricsSummaryInvalidResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryInvalidResponseBody {
+	body := &GetProjectMetricsSummaryInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1576,11 +1577,11 @@ func NewGetMetricsSummaryInvalidResponseBody(res *goa.ServiceError) *GetMetricsS
 	return body
 }
 
-// NewGetMetricsSummaryInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "getMetricsSummary" endpoint of the "telemetry"
-// service.
-func NewGetMetricsSummaryInvariantViolationResponseBody(res *goa.ServiceError) *GetMetricsSummaryInvariantViolationResponseBody {
-	body := &GetMetricsSummaryInvariantViolationResponseBody{
+// NewGetProjectMetricsSummaryInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getProjectMetricsSummary" endpoint of
+// the "telemetry" service.
+func NewGetProjectMetricsSummaryInvariantViolationResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryInvariantViolationResponseBody {
+	body := &GetProjectMetricsSummaryInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1591,11 +1592,11 @@ func NewGetMetricsSummaryInvariantViolationResponseBody(res *goa.ServiceError) *
 	return body
 }
 
-// NewGetMetricsSummaryUnexpectedResponseBody builds the HTTP response body
-// from the result of the "getMetricsSummary" endpoint of the "telemetry"
-// service.
-func NewGetMetricsSummaryUnexpectedResponseBody(res *goa.ServiceError) *GetMetricsSummaryUnexpectedResponseBody {
-	body := &GetMetricsSummaryUnexpectedResponseBody{
+// NewGetProjectMetricsSummaryUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getProjectMetricsSummary" endpoint of the
+// "telemetry" service.
+func NewGetProjectMetricsSummaryUnexpectedResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryUnexpectedResponseBody {
+	body := &GetProjectMetricsSummaryUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1606,11 +1607,11 @@ func NewGetMetricsSummaryUnexpectedResponseBody(res *goa.ServiceError) *GetMetri
 	return body
 }
 
-// NewGetMetricsSummaryGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "getMetricsSummary" endpoint of the "telemetry"
-// service.
-func NewGetMetricsSummaryGatewayErrorResponseBody(res *goa.ServiceError) *GetMetricsSummaryGatewayErrorResponseBody {
-	body := &GetMetricsSummaryGatewayErrorResponseBody{
+// NewGetProjectMetricsSummaryGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getProjectMetricsSummary" endpoint of the
+// "telemetry" service.
+func NewGetProjectMetricsSummaryGatewayErrorResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryGatewayErrorResponseBody {
+	body := &GetProjectMetricsSummaryGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1699,14 +1700,12 @@ func NewCaptureEventPayload(body *CaptureEventRequestBody, apikeyToken *string, 
 	return v
 }
 
-// NewGetMetricsSummaryPayload builds a telemetry service getMetricsSummary
-// endpoint payload.
-func NewGetMetricsSummaryPayload(body *GetMetricsSummaryRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetMetricsSummaryPayload {
-	v := &telemetry.GetMetricsSummaryPayload{
-		Scope:  telemetry.MetricsScope(*body.Scope),
-		From:   *body.From,
-		To:     *body.To,
-		ChatID: body.ChatID,
+// NewGetProjectMetricsSummaryPayload builds a telemetry service
+// getProjectMetricsSummary endpoint payload.
+func NewGetProjectMetricsSummaryPayload(body *GetProjectMetricsSummaryRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetProjectMetricsSummaryPayload {
+	v := &telemetry.GetProjectMetricsSummaryPayload{
+		From: *body.From,
+		To:   *body.To,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1786,31 +1785,20 @@ func ValidateCaptureEventRequestBody(body *CaptureEventRequestBody) (err error) 
 	return
 }
 
-// ValidateGetMetricsSummaryRequestBody runs the validations defined on
-// GetMetricsSummaryRequestBody
-func ValidateGetMetricsSummaryRequestBody(body *GetMetricsSummaryRequestBody) (err error) {
-	if body.Scope == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
-	}
+// ValidateGetProjectMetricsSummaryRequestBody runs the validations defined on
+// GetProjectMetricsSummaryRequestBody
+func ValidateGetProjectMetricsSummaryRequestBody(body *GetProjectMetricsSummaryRequestBody) (err error) {
 	if body.From == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
 	}
 	if body.To == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
 	}
-	if body.Scope != nil {
-		if !(*body.Scope == "project" || *body.Scope == "chat") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"project", "chat"}))
-		}
-	}
 	if body.From != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
 	}
 	if body.To != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
-	}
-	if body.ChatID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
 	}
 	return
 }

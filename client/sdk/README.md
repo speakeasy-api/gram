@@ -257,7 +257,7 @@ run();
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
 * [captureEvent](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
-* [getMetricsSummary](docs/sdks/telemetry/README.md#getmetricssummary) - getMetricsSummary telemetry
+* [getProjectMetricsSummary](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 
@@ -398,7 +398,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`slackSlackLogin`](docs/sdks/slack/README.md#slacklogin) - login slack
 - [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
-- [`telemetryGetMetricsSummary`](docs/sdks/telemetry/README.md#getmetricssummary) - getMetricsSummary telemetry
+- [`telemetryGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`telemetrySearchToolCalls`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 - [`templatesCreate`](docs/sdks/templates/README.md#create) - createTemplate templates
@@ -491,8 +491,8 @@ To learn about this feature and how to get started, check
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
-- [`useGetMetricsSummaryMutation`](docs/sdks/telemetry/README.md#getmetricssummary) - getMetricsSummary telemetry
 - [`useGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
+- [`useGetProjectMetricsSummaryMutation`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments

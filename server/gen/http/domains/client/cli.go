@@ -44,7 +44,7 @@ func BuildCreateDomainPayload(domainsCreateDomainBody string, domainsCreateDomai
 	{
 		err = json.Unmarshal([]byte(domainsCreateDomainBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"domain\": \"Tempora officia magni.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"domain\": \"Ut officiis molestiae dolores doloribus eligendi animi.\"\n   }'")
 		}
 	}
 	var sessionToken *string

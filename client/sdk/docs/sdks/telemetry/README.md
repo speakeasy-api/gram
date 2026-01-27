@@ -7,7 +7,7 @@ Fetch telemetry data for tools in Gram.
 ### Available Operations
 
 * [captureEvent](#captureevent) - captureEvent telemetry
-* [getMetricsSummary](#getmetricssummary) - getMetricsSummary telemetry
+* [getProjectMetricsSummary](#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 * [searchLogs](#searchlogs) - searchLogs telemetry
 * [searchToolCalls](#searchtoolcalls) - searchToolCalls telemetry
 
@@ -114,23 +114,22 @@ import {
 | errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
-## getMetricsSummary
+## getProjectMetricsSummary
 
-Get aggregated metrics summary for a project or specific chat session
+Get aggregated metrics summary for an entire project
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getMetricsSummary" method="post" path="/rpc/telemetry.getMetricsSummary" -->
+<!-- UsageSnippet language="typescript" operationID="getProjectMetricsSummary" method="post" path="/rpc/telemetry.getProjectMetricsSummary" -->
 ```typescript
 import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.telemetry.getMetricsSummary({
-    getMetricsSummaryPayload: {
+  const result = await gram.telemetry.getProjectMetricsSummary({
+    getProjectMetricsSummaryPayload: {
       from: new Date("2025-12-19T10:00:00Z"),
-      scope: "chat",
       to: new Date("2025-12-19T11:00:00Z"),
     },
   });
@@ -147,17 +146,16 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { telemetryGetMetricsSummary } from "@gram/client/funcs/telemetryGetMetricsSummary.js";
+import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await telemetryGetMetricsSummary(gram, {
-    getMetricsSummaryPayload: {
+  const res = await telemetryGetProjectMetricsSummary(gram, {
+    getProjectMetricsSummaryPayload: {
       from: new Date("2025-12-19T10:00:00Z"),
-      scope: "chat",
       to: new Date("2025-12-19T11:00:00Z"),
     },
   });
@@ -165,7 +163,7 @@ async function run() {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("telemetryGetMetricsSummary failed:", res.error);
+    console.log("telemetryGetProjectMetricsSummary failed:", res.error);
   }
 }
 
@@ -185,16 +183,16 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useGetMetricsSummaryMutation
-} from "@gram/client/react-query/telemetryGetMetricsSummary.js";
+  useGetProjectMetricsSummaryMutation
+} from "@gram/client/react-query/telemetryGetProjectMetricsSummary.js";
 ```
 
 ### Parameters
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetMetricsSummaryRequest](../../models/operations/getmetricssummaryrequest.md)                                                                                     | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.GetMetricsSummarySecurity](../../models/operations/getmetricssummarysecurity.md)                                                                                   | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `request`                                                                                                                                                                      | [operations.GetProjectMetricsSummaryRequest](../../models/operations/getprojectmetricssummaryrequest.md)                                                                       | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.GetProjectMetricsSummarySecurity](../../models/operations/getprojectmetricssummarysecurity.md)                                                                     | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { telemetryGetMetricsSummary } from "../funcs/telemetryGetMetricsSummary.js";
+import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -28,15 +28,16 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type GetMetricsSummaryMutationVariables = {
-  request: operations.GetMetricsSummaryRequest;
-  security?: operations.GetMetricsSummarySecurity | undefined;
+export type GetProjectMetricsSummaryMutationVariables = {
+  request: operations.GetProjectMetricsSummaryRequest;
+  security?: operations.GetProjectMetricsSummarySecurity | undefined;
   options?: RequestOptions;
 };
 
-export type GetMetricsSummaryMutationData = components.GetMetricsSummaryResult;
+export type GetProjectMetricsSummaryMutationData =
+  components.GetMetricsSummaryResult;
 
-export type GetMetricsSummaryMutationError =
+export type GetProjectMetricsSummaryMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -48,49 +49,49 @@ export type GetMetricsSummaryMutationError =
   | SDKValidationError;
 
 /**
- * getMetricsSummary telemetry
+ * getProjectMetricsSummary telemetry
  *
  * @remarks
- * Get aggregated metrics summary for a project or specific chat session
+ * Get aggregated metrics summary for an entire project
  */
-export function useGetMetricsSummaryMutation(
+export function useGetProjectMetricsSummaryMutation(
   options?: MutationHookOptions<
-    GetMetricsSummaryMutationData,
-    GetMetricsSummaryMutationError,
-    GetMetricsSummaryMutationVariables
+    GetProjectMetricsSummaryMutationData,
+    GetProjectMetricsSummaryMutationError,
+    GetProjectMetricsSummaryMutationVariables
   >,
 ): UseMutationResult<
-  GetMetricsSummaryMutationData,
-  GetMetricsSummaryMutationError,
-  GetMetricsSummaryMutationVariables
+  GetProjectMetricsSummaryMutationData,
+  GetProjectMetricsSummaryMutationError,
+  GetProjectMetricsSummaryMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildGetMetricsSummaryMutation(client, options),
+    ...buildGetProjectMetricsSummaryMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyGetMetricsSummary(): MutationKey {
-  return ["@gram/client", "telemetry", "getMetricsSummary"];
+export function mutationKeyGetProjectMetricsSummary(): MutationKey {
+  return ["@gram/client", "telemetry", "getProjectMetricsSummary"];
 }
 
-export function buildGetMetricsSummaryMutation(
+export function buildGetProjectMetricsSummaryMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: GetMetricsSummaryMutationVariables,
-  ) => Promise<GetMetricsSummaryMutationData>;
+    variables: GetProjectMetricsSummaryMutationVariables,
+  ) => Promise<GetProjectMetricsSummaryMutationData>;
 } {
   return {
-    mutationKey: mutationKeyGetMetricsSummary(),
-    mutationFn: function getMetricsSummaryMutationFn({
+    mutationKey: mutationKeyGetProjectMetricsSummary(),
+    mutationFn: function getProjectMetricsSummaryMutationFn({
       request,
       security,
       options,
-    }): Promise<GetMetricsSummaryMutationData> {
+    }): Promise<GetProjectMetricsSummaryMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -103,7 +104,7 @@ export function buildGetMetricsSummaryMutation(
           ),
         },
       };
-      return unwrapAsync(telemetryGetMetricsSummary(
+      return unwrapAsync(telemetryGetProjectMetricsSummary(
         client$,
         request,
         security,

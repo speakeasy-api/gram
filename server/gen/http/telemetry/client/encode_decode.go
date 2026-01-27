@@ -748,13 +748,14 @@ func DecodeCaptureEventResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
-// BuildGetMetricsSummaryRequest instantiates a HTTP request object with method
-// and path set to call the "telemetry" service "getMetricsSummary" endpoint
-func (c *Client) BuildGetMetricsSummaryRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMetricsSummaryTelemetryPath()}
+// BuildGetProjectMetricsSummaryRequest instantiates a HTTP request object with
+// method and path set to call the "telemetry" service
+// "getProjectMetricsSummary" endpoint
+func (c *Client) BuildGetProjectMetricsSummaryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetProjectMetricsSummaryTelemetryPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("telemetry", "getMetricsSummary", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("telemetry", "getProjectMetricsSummary", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -763,13 +764,13 @@ func (c *Client) BuildGetMetricsSummaryRequest(ctx context.Context, v any) (*htt
 	return req, nil
 }
 
-// EncodeGetMetricsSummaryRequest returns an encoder for requests sent to the
-// telemetry getMetricsSummary server.
-func EncodeGetMetricsSummaryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeGetProjectMetricsSummaryRequest returns an encoder for requests sent
+// to the telemetry getProjectMetricsSummary server.
+func EncodeGetProjectMetricsSummaryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*telemetry.GetMetricsSummaryPayload)
+		p, ok := v.(*telemetry.GetProjectMetricsSummaryPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("telemetry", "getMetricsSummary", "*telemetry.GetMetricsSummaryPayload", v)
+			return goahttp.ErrInvalidType("telemetry", "getProjectMetricsSummary", "*telemetry.GetProjectMetricsSummaryPayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -783,18 +784,18 @@ func EncodeGetMetricsSummaryRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewGetMetricsSummaryRequestBody(p)
+		body := NewGetProjectMetricsSummaryRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("telemetry", "getMetricsSummary", err)
+			return goahttp.ErrEncodingError("telemetry", "getProjectMetricsSummary", err)
 		}
 		return nil
 	}
 }
 
-// DecodeGetMetricsSummaryResponse returns a decoder for responses returned by
-// the telemetry getMetricsSummary endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-// DecodeGetMetricsSummaryResponse may return the following errors:
+// DecodeGetProjectMetricsSummaryResponse returns a decoder for responses
+// returned by the telemetry getProjectMetricsSummary endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetProjectMetricsSummaryResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -806,7 +807,7 @@ func EncodeGetMetricsSummaryRequest(encoder func(*http.Request) goahttp.Encoder)
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeGetMetricsSummaryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeGetProjectMetricsSummaryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -823,169 +824,169 @@ func DecodeGetMetricsSummaryResponse(decoder func(*http.Response) goahttp.Decode
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body GetMetricsSummaryResponseBody
+				body GetProjectMetricsSummaryResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 			}
-			err = ValidateGetMetricsSummaryResponseBody(&body)
+			err = ValidateGetProjectMetricsSummaryResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 			}
-			res := NewGetMetricsSummaryResultOK(&body)
+			res := NewGetProjectMetricsSummaryGetMetricsSummaryResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body GetMetricsSummaryUnauthorizedResponseBody
+				body GetProjectMetricsSummaryUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 			}
-			err = ValidateGetMetricsSummaryUnauthorizedResponseBody(&body)
+			err = ValidateGetProjectMetricsSummaryUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 			}
-			return nil, NewGetMetricsSummaryUnauthorized(&body)
+			return nil, NewGetProjectMetricsSummaryUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body GetMetricsSummaryForbiddenResponseBody
+				body GetProjectMetricsSummaryForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 			}
-			err = ValidateGetMetricsSummaryForbiddenResponseBody(&body)
+			err = ValidateGetProjectMetricsSummaryForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 			}
-			return nil, NewGetMetricsSummaryForbidden(&body)
+			return nil, NewGetProjectMetricsSummaryForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body GetMetricsSummaryBadRequestResponseBody
+				body GetProjectMetricsSummaryBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 			}
-			err = ValidateGetMetricsSummaryBadRequestResponseBody(&body)
+			err = ValidateGetProjectMetricsSummaryBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 			}
-			return nil, NewGetMetricsSummaryBadRequest(&body)
+			return nil, NewGetProjectMetricsSummaryBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body GetMetricsSummaryNotFoundResponseBody
+				body GetProjectMetricsSummaryNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 			}
-			err = ValidateGetMetricsSummaryNotFoundResponseBody(&body)
+			err = ValidateGetProjectMetricsSummaryNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 			}
-			return nil, NewGetMetricsSummaryNotFound(&body)
+			return nil, NewGetProjectMetricsSummaryNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body GetMetricsSummaryConflictResponseBody
+				body GetProjectMetricsSummaryConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 			}
-			err = ValidateGetMetricsSummaryConflictResponseBody(&body)
+			err = ValidateGetProjectMetricsSummaryConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 			}
-			return nil, NewGetMetricsSummaryConflict(&body)
+			return nil, NewGetProjectMetricsSummaryConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body GetMetricsSummaryUnsupportedMediaResponseBody
+				body GetProjectMetricsSummaryUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 			}
-			err = ValidateGetMetricsSummaryUnsupportedMediaResponseBody(&body)
+			err = ValidateGetProjectMetricsSummaryUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 			}
-			return nil, NewGetMetricsSummaryUnsupportedMedia(&body)
+			return nil, NewGetProjectMetricsSummaryUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body GetMetricsSummaryInvalidResponseBody
+				body GetProjectMetricsSummaryInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 			}
-			err = ValidateGetMetricsSummaryInvalidResponseBody(&body)
+			err = ValidateGetProjectMetricsSummaryInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 			}
-			return nil, NewGetMetricsSummaryInvalid(&body)
+			return nil, NewGetProjectMetricsSummaryInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body GetMetricsSummaryInvariantViolationResponseBody
+					body GetProjectMetricsSummaryInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+					return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 				}
-				err = ValidateGetMetricsSummaryInvariantViolationResponseBody(&body)
+				err = ValidateGetProjectMetricsSummaryInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+					return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 				}
-				return nil, NewGetMetricsSummaryInvariantViolation(&body)
+				return nil, NewGetProjectMetricsSummaryInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body GetMetricsSummaryUnexpectedResponseBody
+					body GetProjectMetricsSummaryUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+					return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 				}
-				err = ValidateGetMetricsSummaryUnexpectedResponseBody(&body)
+				err = ValidateGetProjectMetricsSummaryUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+					return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 				}
-				return nil, NewGetMetricsSummaryUnexpected(&body)
+				return nil, NewGetProjectMetricsSummaryUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("telemetry", "getMetricsSummary", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getProjectMetricsSummary", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body GetMetricsSummaryGatewayErrorResponseBody
+				body GetProjectMetricsSummaryGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 			}
-			err = ValidateGetMetricsSummaryGatewayErrorResponseBody(&body)
+			err = ValidateGetProjectMetricsSummaryGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "getMetricsSummary", err)
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
 			}
-			return nil, NewGetMetricsSummaryGatewayError(&body)
+			return nil, NewGetProjectMetricsSummaryGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("telemetry", "getMetricsSummary", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getProjectMetricsSummary", resp.StatusCode, string(body))
 		}
 	}
 }
