@@ -72,7 +72,10 @@ export function EnvironmentVariableRow({
     editingState,
     selectedEnvironmentView,
   );
-  const hasValue = environmentHasValue(envVar, selectedEnvironmentView);
+  // Check if there's a value - either from saved state or current editing
+  const savedHasValue = environmentHasValue(envVar, selectedEnvironmentView);
+  const editingHasValue = editingState.has(envVar.id) && !!editingState.get(envVar.id)!.value;
+  const hasValue = savedHasValue || editingHasValue;
   const hasEntry = environmentConfigs.some(
     (e) => e.variableName === envVar.key,
   );
