@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.26.19
+
+### Patch Changes
+
+- e1f46b5: feat: add page titles to tab
+- Updated dependencies [6744e5d]
+  - @gram-ai/elements@1.23.0
+
 ## 0.26.18
 
 ### Patch Changes
