@@ -207,7 +207,9 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     onSuccess: () => {
       invalidateAllToolset(queryClient);
       invalidateAllGetMcpMetadata(queryClient);
-      toast.success("MCP metadata updated");
+      invalidateAllListEnvironments(queryClient);
+      // Clear editing state after successful save
+      setEditingState(new Map());
       telemetry.capture("mcp_event", {
         action: "mcp_metadata_updated",
         toolset_slug: toolset.slug,
