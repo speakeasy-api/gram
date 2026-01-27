@@ -79,7 +79,10 @@ func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, p
 		return t.extractPromptToolCallPlan(ctx, tool)
 
 	case urn.ToolKindExternalMCP:
-		tool, err := t.externalmcpRepo.GetExternalMCPToolDefinitionByURN(ctx, toolUrn.String())
+		tool, err := t.externalmcpRepo.GetExternalMCPToolDefinitionByURN(ctx, externalmcpRepo.GetExternalMCPToolDefinitionByURNParams{
+			ToolUrn:   toolUrn.String(),
+			ProjectID: projectID,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("get external mcp tool definition by urn: %w", err)
 		}

@@ -1,7 +1,7 @@
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Button } from "@speakeasy-api/moonshine";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   EnvironmentVariable,
   environmentHasAllRequiredVariables,
@@ -26,7 +26,6 @@ interface EnvironmentSwitcherProps {
   onCancelAll: () => void;
   onSetDefaultEnvironment: () => void;
   onCreateEnvironment: () => void;
-  onDeleteEnvironment: () => void;
 }
 
 export function EnvironmentSwitcher({
@@ -42,7 +41,6 @@ export function EnvironmentSwitcher({
   onCancelAll,
   onSetDefaultEnvironment,
   onCreateEnvironment,
-  onDeleteEnvironment,
 }: EnvironmentSwitcherProps) {
   // Sort environments with attached environment first
   const attachedEnvSlug =
@@ -74,6 +72,7 @@ export function EnvironmentSwitcher({
       {/* Environment tabs */}
       {sortedEnvironments.map((env) => {
         const isSelected = selectedEnvironmentView === env.slug;
+        const isAttachedEnv = env.slug === attachedEnvSlug;
         const envHasAllRequired = environmentHasAllRequiredVariables(
           env.slug,
           requiredVars,
@@ -90,12 +89,14 @@ export function EnvironmentSwitcher({
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <div
-              className={cn(
-                "w-2 h-2 rounded-full",
-                envHasAllRequired ? "bg-green-500" : "bg-yellow-500",
-              )}
-            />
+            {isAttachedEnv && (
+              <div
+                className={cn(
+                  "w-2 h-2 rounded-full",
+                  envHasAllRequired ? "bg-green-500" : "bg-yellow-500",
+                )}
+              />
+            )}
             {getEnvironmentDisplayName(env)}
             {isSelected && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
@@ -138,30 +139,16 @@ export function EnvironmentSwitcher({
                 Fill in required values to save
               </span>
             ) : isViewingNonDefault ? (
-              // Viewing non-default env - show Make Default and Delete
-              <>
-                <SimpleTooltip tooltip="Set this as the default environment for this MCP server">
-                  <Button
-                    onClick={onSetDefaultEnvironment}
-                    variant="secondary"
-                    size="xs"
-                  >
-                    <Button.Text>Make Default</Button.Text>
-                  </Button>
-                </SimpleTooltip>
-                <SimpleTooltip tooltip="Delete this environment">
-                  <Button
-                    onClick={onDeleteEnvironment}
-                    variant="destructive-secondary"
-                    size="xs"
-                  >
-                    <Button.LeftIcon>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button.LeftIcon>
-                    <Button.Text>Delete</Button.Text>
-                  </Button>
-                </SimpleTooltip>
-              </>
+              // Viewing non-default env - show Make Default
+              <SimpleTooltip tooltip="Set this as the default environment for this MCP server">
+                <Button
+                  onClick={onSetDefaultEnvironment}
+                  variant="secondary"
+                  size="xs"
+                >
+                  <Button.Text>Make Default</Button.Text>
+                </Button>
+              </SimpleTooltip>
             ) : hasExistingConfigs ? (
               // Has configs, on default env - show new environment option
               <SimpleTooltip tooltip="Create a new environment with different values">

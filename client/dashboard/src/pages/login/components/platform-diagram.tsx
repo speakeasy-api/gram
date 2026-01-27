@@ -1,6 +1,6 @@
-import { motion } from "motion/react";
-import { cn } from "@/lib/utils";
 import { GramLogo } from "@/components/gram-logo";
+import { cn } from "@/lib/utils";
+import { motion } from "motion/react";
 
 // Brand gradient colors
 const BRAND_COLORS = {
@@ -239,14 +239,6 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
       <div className="flex flex-col items-center gap-4 max-w-md mx-auto py-6">
         {/* Top - Product with embedded chat */}
         <div className="w-full">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-2 text-center"
-          >
-            Your Product
-          </motion.div>
           <ProductWithChat delay={0.2} />
         </div>
 
@@ -485,45 +477,6 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
             </div>
           </motion.div>
         </div>
-
-        {/* Outputs - AI Clients & Agents */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.4 }}
-          className="flex items-center justify-center gap-6 pt-2"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider">
-              Clients
-            </span>
-            <div className="flex items-center gap-1">
-              <div className="p-1 bg-slate-100 rounded">
-                <CursorLogo />
-              </div>
-              <div className="p-1 bg-slate-100 rounded">
-                <ClaudeCodeLogo />
-              </div>
-              <div className="p-1 bg-slate-100 rounded">
-                <WindsurfLogo />
-              </div>
-            </div>
-          </div>
-          <div className="w-px h-4 bg-slate-200" />
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider">
-              Agents
-            </span>
-            <div className="flex items-center gap-1">
-              <div className="p-1 bg-slate-100 rounded">
-                <OpenAILogo />
-              </div>
-              <div className="p-1 bg-slate-100 rounded">
-                <LangChainLogo />
-              </div>
-            </div>
-          </div>
-        </motion.div>
       </div>
     </div>
   );

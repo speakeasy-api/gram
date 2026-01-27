@@ -514,7 +514,7 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
       </PageSection>
 
       <PageSection
-        heading="MCP Installation"
+        heading="Install Page"
         description="Share this page with your users to give simple instructions for getting started with your MCP in their client like Cursor or Claude Desktop."
       >
         {!toolset.mcpIsPublic && (
@@ -544,6 +544,10 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
   const [addToolsDialogOpen, setAddToolsDialogOpen] = useState(false);
 
   const tools = fullToolset?.tools ?? [];
+
+  // Check if we have orphaned tool URNs (URNs exist but tools were deleted)
+  const hasOrphanedTools =
+    (fullToolset?.toolUrns?.length ?? 0) > 0 && tools.length === 0;
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -686,7 +690,20 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
       )}
 
       {/* Tools list or empty state */}
-      {toolsToDisplay.length > 0 ? (
+      {hasOrphanedTools ? (
+        <Stack gap={4} align="center" className="py-12">
+          <div className="text-center max-w-md">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-warning" />
+            <Heading variant="h3" className="mb-2">
+              Tools Source Deleted
+            </Heading>
+            <Type muted>
+              This MCP server has tool references, but the underlying source has
+              been deleted. Re-adding the source will reinstate the tools.
+            </Type>
+          </div>
+        </Stack>
+      ) : toolsToDisplay.length > 0 ? (
         <ToolList
           tools={toolsToDisplay}
           toolset={fullToolset}

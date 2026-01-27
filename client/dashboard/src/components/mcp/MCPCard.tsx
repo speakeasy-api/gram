@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { MCPPatternIllustration } from "../sources/SourceCardIllustrations";
+import { ToolCollectionBadge } from "../tool-collection-badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
@@ -77,6 +78,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
           >
             {toolset.name}
           </Type>
+          <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
         </div>
 
         {/* Footer row with status indicator and updated time */}

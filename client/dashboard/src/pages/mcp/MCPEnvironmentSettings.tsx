@@ -5,13 +5,13 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
+import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components";
 import {
   invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments,
   invalidateAllToolset,
   useCreateEnvironmentMutation,
-  useDeleteEnvironmentMutation,
   useGetMcpMetadata,
   useListEnvironments,
   useMcpMetadataSetMutation,
@@ -40,6 +40,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
+  const routes = useRoutes();
 
   const { data: environmentsData } = useListEnvironments();
   // Use stable reference for empty array to prevent infinite loops
@@ -153,9 +154,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   const [isCreateEnvDialogOpen, setIsCreateEnvDialogOpen] = useState(false);
   const [newEnvironmentName, setNewEnvironmentName] = useState("");
 
-  // Delete environment dialog state
-  const [isDeleteEnvDialogOpen, setIsDeleteEnvDialogOpen] = useState(false);
-
   // Update environment mutation
   const updateEnvironmentMutation = useUpdateEnvironmentMutation({
     onSuccess: () => {
@@ -183,29 +181,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     onError: (error) => {
       toast.error(
         error instanceof Error ? error.message : "Failed to create environment",
-      );
-    },
-  });
-
-  // Delete environment mutation
-  const deleteEnvironmentMutation = useDeleteEnvironmentMutation({
-    onSuccess: () => {
-      invalidateAllListEnvironments(queryClient);
-      // Switch back to default environment
-      const attachedSlug =
-        mcpAttachedEnvironmentSlug ||
-        toolset.defaultEnvironmentSlug ||
-        "default";
-      setSelectedEnvironmentView(attachedSlug);
-      setIsDeleteEnvDialogOpen(false);
-      toast.success("Environment deleted");
-      telemetry.capture("environment_event", {
-        action: "environment_deleted",
-      });
-    },
-    onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete environment",
       );
     },
   });
@@ -778,7 +753,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
               onCancelAll={handleCancelAll}
               onSetDefaultEnvironment={handleSetDefaultEnvironment}
               onCreateEnvironment={() => setIsCreateEnvDialogOpen(true)}
-              onDeleteEnvironment={() => setIsDeleteEnvDialogOpen(true)}
             />
             {envVars.map((envVar, index) => (
               <EnvironmentVariableRow
@@ -818,6 +792,15 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
             </Button>
           </div>
         )}
+
+        {/* Manage Environments Link */}
+        <div className="flex justify-end">
+          <routes.environments.Link
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Manage environments →
+          </routes.environments.Link>
+        </div>
       </div>
 
       {/* Add New Variable Sheet */}
@@ -875,47 +858,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
               }
             >
               {createEnvironmentMutation.isPending ? "Creating..." : "Create"}
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
-
-      {/* Delete Environment Confirmation Dialog */}
-      <Dialog
-        open={isDeleteEnvDialogOpen}
-        onOpenChange={setIsDeleteEnvDialogOpen}
-      >
-        <Dialog.Content className="max-w-md">
-          <Dialog.Header>
-            <Dialog.Title>Delete Environment</Dialog.Title>
-          </Dialog.Header>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              Are you sure you want to delete the environment "
-              <span className="font-medium text-foreground">
-                {environments.find((e) => e.slug === selectedEnvironmentView)
-                  ?.name || selectedEnvironmentView}
-              </span>
-              "? This action cannot be undone.
-            </p>
-          </div>
-          <Dialog.Footer className="flex justify-end gap-2">
-            <Button
-              variant="tertiary"
-              onClick={() => setIsDeleteEnvDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive-primary"
-              onClick={() => {
-                deleteEnvironmentMutation.mutate({
-                  request: { slug: selectedEnvironmentView },
-                });
-              }}
-              disabled={deleteEnvironmentMutation.isPending}
-            >
-              {deleteEnvironmentMutation.isPending ? "Deleting..." : "Delete"}
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
