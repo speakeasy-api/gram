@@ -28,8 +28,7 @@ import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
 import {
   EnvVarState,
   EnvironmentVariable,
-  getAllEnvironments,
-  getValueForEnvironment,
+  getValueForEnvironment
 } from "./environmentVariableUtils";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
@@ -327,52 +326,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     });
   };
 
-  const handleDeleteVariable = (id: string) => {
-    const envVar = envVars.find((v) => v.id === id);
-    if (!envVar) return;
-
-    // Delete from all environments that have this variable
-    const allEnvs = getAllEnvironments(envVar);
-    allEnvs.forEach((envSlug) => {
-      updateEnvironmentMutation.mutate({
-        request: {
-          slug: envSlug,
-          updateEnvironmentRequestBody: {
-            entriesToUpdate: [],
-            entriesToRemove: [envVar.key],
-          },
-        },
-      });
-    });
-
-    // If this is a custom variable (not required), also remove its environment entry
-    if (!envVar.isRequired) {
-      const existingEntries = mcpMetadata?.environmentConfigs || [];
-      const updatedEntries = existingEntries.filter(
-        (e) => e.variableName !== envVar.key,
-      );
-
-      if (updatedEntries.length !== existingEntries.length) {
-        setMcpMetadataMutation.mutate({
-          request: {
-            setMcpMetadataRequestBody: {
-              toolsetSlug: toolset.slug,
-              defaultEnvironmentId: mcpMetadata?.defaultEnvironmentId,
-              environmentConfigs: updatedEntries,
-              externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-              instructions: mcpMetadata?.instructions,
-              logoAssetId: mcpMetadata?.logoAssetId,
-            },
-          },
-        });
-      }
-    }
-
-    telemetry.capture("environment_event", {
-      action: "environment_variable_deleted",
-      toolset_slug: toolset.slug,
-    });
-  };
 
   // Separate required and custom variables, sort omitted to the bottom
   const requiredVars = envVars
@@ -771,7 +724,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 hasUnsavedChanges={hasUserEdits(envVar)}
                 onStateChange={handleStateChange}
                 onValueChange={handleValueChange}
-                onDelete={handleDeleteVariable}
                 onEditHeaderName={setEditingHeaderId}
                 onHeaderDisplayNameChange={handleHeaderDisplayNameChange}
                 onHeaderBlur={() => setEditingHeaderId(null)}

@@ -1,17 +1,17 @@
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { Eye, EyeOff, Pencil } from "lucide-react";
 import { useState } from "react";
 import {
+  environmentHasValue,
   EnvironmentVariable,
   EnvVarState,
-  environmentHasValue,
   getEditingValue,
   getHeaderDisplayName,
   hasHeaderOverride,
@@ -34,7 +34,6 @@ interface EnvironmentVariableRowProps {
   hasUnsavedChanges: boolean;
   onStateChange: (id: string, state: EnvVarState) => void;
   onValueChange: (id: string, value: string) => void;
-  onDelete: (id: string) => void;
   onEditHeaderName: (id: string) => void;
   onHeaderDisplayNameChange: (id: string, value: string) => void;
   onHeaderBlur: () => void;
@@ -75,7 +74,6 @@ export function EnvironmentVariableRow({
   hasUnsavedChanges,
   onStateChange,
   onValueChange,
-  onDelete,
   onEditHeaderName,
   onHeaderDisplayNameChange,
   onHeaderBlur,
@@ -142,17 +140,6 @@ export function EnvironmentVariableRow({
             <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
           )}
         </div>
-
-        {/* Delete button - hidden by default, visible on hover for non-required */}
-        {!envVar.isRequired && (
-          <button
-            tabIndex={-1}
-            onClick={() => onDelete(envVar.id)}
-            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-muted-foreground hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
       </div>
 
       {/* Variable Info */}
@@ -243,20 +230,29 @@ export function EnvironmentVariableRow({
               </span>
             </SelectTrigger>
             <SelectContent>
-              {MODE_OPTIONS.map((option) => (
-                <SelectItem
-                  key={option.value}
-                  value={option.value}
-                  textValue={option.label}
-                >
-                  <div className="flex flex-col gap-0.5 py-1">
-                    <span className="font-medium">{option.label}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {option.description}
-                    </span>
-                  </div>
-                </SelectItem>
-              ))}
+              {MODE_OPTIONS.map((option) => {
+                const isUserProvidedOption = option.value === "user-provided";
+                const shouldDisable = isUserProvidedOption && !envVar.isRequired;
+                const description = shouldDisable
+                  ? "Only available for required variables"
+                  : option.description;
+
+                return (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    textValue={option.label}
+                    disabled={shouldDisable}
+                  >
+                    <div className="flex flex-col gap-0.5 py-1">
+                      <span className="font-medium">{option.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {description}
+                      </span>
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
 
