@@ -57,6 +57,15 @@ export function EnvironmentVariableRow({
     environmentConfigs,
     editingState,
   );
+
+  // Debug logging
+  const editingEntry = editingState.get(envVar.id);
+  console.log(`EnvironmentVariableRow render [${envVar.key}]:`, {
+    isEditing,
+    headerName,
+    editingEntry,
+    hasEditingState: editingState.has(envVar.id),
+  });
   const editingValue = getEditingValue(
     envVar,
     editingState,

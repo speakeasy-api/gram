@@ -426,6 +426,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
   // Handle header display name change
   const handleHeaderDisplayNameChange = (id: string, newName: string) => {
+    console.log("handleHeaderDisplayNameChange called:", { id, newName });
     const current = editingState.get(id);
     const newEditingState = new Map(editingState);
 
@@ -443,6 +444,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       });
     }
 
+    console.log("Setting editingState:", Object.fromEntries(newEditingState));
     setEditingState(newEditingState);
   };
 
