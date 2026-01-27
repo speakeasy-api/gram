@@ -98,25 +98,44 @@ export function EnvironmentSwitcher({
         );
       })}
       <div className="ml-auto flex items-center gap-2 mr-1">
-        {hasAnyUnsavedChanges ? (
-          <>
-            {hasExistingConfigs && (
-              <Button onClick={onCancelAll} variant="tertiary" size="xs">
-                <Button.Text>Cancel</Button.Text>
-              </Button>
-            )}
-            <Button
-              onClick={onSaveAll}
-              variant="primary"
-              size="xs"
-              className="mr-4"
-            >
-              <Button.Text>
-                {hasExistingConfigs ? "Save All" : "Publish Configuration"}
-              </Button.Text>
-            </Button>
-          </>
-        ) : isViewingNonDefault ? (
+        {/* Unsaved changes indicator */}
+        {hasAnyUnsavedChanges && (
+          <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            Unsaved changes
+          </span>
+        )}
+
+        {/* Cancel button - only shown when there are changes and existing configs */}
+        {hasAnyUnsavedChanges && hasExistingConfigs && (
+          <Button onClick={onCancelAll} variant="tertiary" size="xs">
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+        )}
+
+        {/* Save button - always visible, disabled when no changes */}
+        <SimpleTooltip
+          tooltip={
+            hasAnyUnsavedChanges
+              ? "Save all environment variable changes"
+              : "No changes to save"
+          }
+        >
+          <Button
+            onClick={onSaveAll}
+            variant={hasAnyUnsavedChanges ? "primary" : "secondary"}
+            size="xs"
+            className="mr-4"
+            disabled={!hasAnyUnsavedChanges}
+          >
+            <Button.Text>
+              {hasExistingConfigs ? "Save All" : "Publish Configuration"}
+            </Button.Text>
+          </Button>
+        </SimpleTooltip>
+
+        {/* Additional actions when no unsaved changes */}
+        {!hasAnyUnsavedChanges && isViewingNonDefault && (
           <SimpleTooltip tooltip="Set this as the default environment for this toolset. Non-user-provided variables will be sourced from this environment">
             <Button
               onClick={onSetDefaultEnvironment}
@@ -126,7 +145,8 @@ export function EnvironmentSwitcher({
               <Button.Text>Make Default</Button.Text>
             </Button>
           </SimpleTooltip>
-        ) : (
+        )}
+        {!hasAnyUnsavedChanges && !isViewingNonDefault && (
           <SimpleTooltip tooltip="Create a new environment">
             <Button onClick={onCreateEnvironment} variant="tertiary" size="xs">
               <Button.Icon>

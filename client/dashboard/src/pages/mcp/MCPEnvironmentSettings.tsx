@@ -738,6 +738,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 environmentConfigs={environmentConfigs}
                 editingState={editingState}
                 editingHeaderId={editingHeaderId}
+                hasUnsavedChanges={hasUnsavedChanges(envVar)}
                 onToggleState={handleToggleState}
                 onValueChange={handleValueChange}
                 onDelete={handleDeleteVariable}

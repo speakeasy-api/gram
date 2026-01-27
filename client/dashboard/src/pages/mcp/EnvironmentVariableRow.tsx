@@ -25,6 +25,7 @@ interface EnvironmentVariableRowProps {
   }>;
   editingState: Map<string, { value: string; headerDisplayName?: string }>;
   editingHeaderId: string | null;
+  hasUnsavedChanges: boolean;
   onToggleState: (id: string) => void;
   onValueChange: (id: string, value: string) => void;
   onDelete: (id: string) => void;
@@ -43,6 +44,7 @@ export function EnvironmentVariableRow({
   environmentConfigs,
   editingState,
   editingHeaderId,
+  hasUnsavedChanges,
   onToggleState,
   onValueChange,
   onDelete,
@@ -78,10 +80,15 @@ export function EnvironmentVariableRow({
   return (
     <div
       className={cn(
-        "group grid grid-cols-[auto_1fr_auto] gap-4 items-center px-5 py-4 transition-colors",
+        "group grid grid-cols-[auto_1fr_auto] gap-4 items-center px-5 py-4 transition-colors relative",
         index !== totalCount - 1 && "border-b",
+        hasUnsavedChanges && "bg-amber-50/50 dark:bg-amber-950/20",
       )}
     >
+      {/* Unsaved changes indicator */}
+      {hasUnsavedChanges && (
+        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-amber-500" />
+      )}
       {/* Status indicator / Delete button */}
       <div className="relative w-6 h-6 flex items-center justify-center">
         {/* Status indicator - visible by default, hidden on hover for non-required */}
