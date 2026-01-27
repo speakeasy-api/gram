@@ -204,15 +204,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
   // Set toolset environment link mutation (for making an environment the default)
   const setMcpMetadataMutation = useMcpMetadataSetMutation({
-    onSuccess: async () => {
-      // Invalidate and wait for refetch before clearing editing state
-      await Promise.all([
-        invalidateAllToolset(queryClient),
-        invalidateAllGetMcpMetadata(queryClient),
-        invalidateAllListEnvironments(queryClient),
-      ]);
-      // Clear editing state after data is refetched
-      setEditingState(new Map());
+    onSuccess: () => {
+      // Note: handleSaveAll uses mutateAsync and handles invalidation itself
+      // This onSuccess is for other callers like handleSetDefaultEnvironment
+      invalidateAllToolset(queryClient);
+      invalidateAllGetMcpMetadata(queryClient);
       telemetry.capture("mcp_event", {
         action: "mcp_metadata_updated",
         toolset_slug: toolset.slug,
@@ -612,39 +608,53 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       return;
     }
 
-    // Update environment variables if there are any
-    if (entriesToUpdate.length > 0) {
-      updateEnvironmentMutation.mutate({
+    try {
+      // Update environment variables if there are any
+      if (entriesToUpdate.length > 0) {
+        await updateEnvironmentMutation.mutateAsync({
+          request: {
+            slug: selectedEnvironmentView,
+            updateEnvironmentRequestBody: {
+              entriesToUpdate,
+              entriesToRemove: [],
+            },
+          },
+        });
+      }
+
+      // Update MCP metadata with all environment entries
+      const environmentConfigsToSave = Array.from(updatedEntriesMap.values());
+      await setMcpMetadataMutation.mutateAsync({
         request: {
-          slug: selectedEnvironmentView,
-          updateEnvironmentRequestBody: {
-            entriesToUpdate,
-            entriesToRemove: [],
+          setMcpMetadataRequestBody: {
+            toolsetSlug: toolset.slug,
+            defaultEnvironmentId:
+              mcpMetadata?.defaultEnvironmentId || targetEnv.id,
+            environmentConfigs: environmentConfigsToSave,
+            externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
+            instructions: mcpMetadata?.instructions,
+            logoAssetId: mcpMetadata?.logoAssetId,
           },
         },
       });
+
+      // Both mutations succeeded - invalidate and refetch
+      await Promise.all([
+        invalidateAllToolset(queryClient),
+        invalidateAllGetMcpMetadata(queryClient),
+        invalidateAllListEnvironments(queryClient),
+      ]);
+
+      // Clear editing state after data is refetched
+      setEditingState(new Map());
+
+      toast.success(`Saved ${varsToSave.length} variable(s)`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save variables",
+      );
+      return;
     }
-
-    // Update MCP metadata with all environment entries
-    const environmentConfigsToSave = Array.from(updatedEntriesMap.values());
-    setMcpMetadataMutation.mutate({
-      request: {
-        setMcpMetadataRequestBody: {
-          toolsetSlug: toolset.slug,
-          defaultEnvironmentId:
-            mcpMetadata?.defaultEnvironmentId || targetEnv.id,
-          environmentConfigs: environmentConfigsToSave,
-          externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
-          instructions: mcpMetadata?.instructions,
-          logoAssetId: mcpMetadata?.logoAssetId,
-        },
-      },
-    });
-
-    // Note: Don't clear editing state here - let it persist until queries refetch
-    // This keeps the indicator green during the refetch period
-
-    toast.success(`Saved ${varsToSave.length} variable(s)`);
 
     telemetry.capture("environment_event", {
       action: "bulk_save_variables",
