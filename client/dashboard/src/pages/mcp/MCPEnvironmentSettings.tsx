@@ -426,7 +426,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
   // Handle header display name change
   const handleHeaderDisplayNameChange = (id: string, newName: string) => {
-    console.log("handleHeaderDisplayNameChange called:", { id, newName });
     const current = editingState.get(id);
     const newEditingState = new Map(editingState);
 
@@ -444,7 +443,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       });
     }
 
-    console.log("Setting editingState:", Object.fromEntries(newEditingState));
     setEditingState(newEditingState);
   };
 
@@ -583,7 +581,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
     // Update MCP metadata with all environment entries
     const environmentConfigsToSave = Array.from(updatedEntriesMap.values());
-    console.log("Saving environment configs:", environmentConfigsToSave);
     setMcpMetadataMutation.mutate({
       request: {
         setMcpMetadataRequestBody: {

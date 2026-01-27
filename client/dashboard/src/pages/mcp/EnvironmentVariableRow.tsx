@@ -65,16 +65,6 @@ export function EnvironmentVariableRow({
     editingState.get(envVar.id)!.headerDisplayName !== undefined;
   const showHeaderName = hasOverride || hasUnsavedHeaderEdit;
 
-  // Debug logging
-  const editingEntry = editingState.get(envVar.id);
-  console.log(`EnvironmentVariableRow render [${envVar.key}]:`, {
-    isEditing,
-    headerName,
-    showHeaderName,
-    hasOverride,
-    hasUnsavedHeaderEdit,
-    editingEntry,
-  });
   const editingValue = getEditingValue(
     envVar,
     editingState,
