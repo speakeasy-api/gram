@@ -281,10 +281,10 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 
 const getMetricsSummary = `-- name: GetMetricsSummary :one
 SELECT
-    -- Cardinality (only meaningful for project scope, exclude empty strings)
-    uniqExactIf(toString(attributes.` + "`gen_ai.conversation.id`" + `), ? = 'project' AND toString(attributes.` + "`gen_ai.conversation.id`" + `) != '') AS total_chats,
-    uniqExactIf(toString(attributes.` + "`gen_ai.response.model`" + `), ? = 'project' AND toString(attributes.` + "`gen_ai.response.model`" + `) != '') AS distinct_models,
-    uniqExactIf(toString(attributes.` + "`gen_ai.provider.name`" + `), ? = 'project' AND toString(attributes.` + "`gen_ai.provider.name`" + `) != '') AS distinct_providers,
+    -- Cardinality (exclude empty strings)
+    uniqExactIf(toString(attributes.` + "`gen_ai.conversation.id`" + `), toString(attributes.` + "`gen_ai.conversation.id`" + `) != '') AS total_chats,
+    uniqExactIf(toString(attributes.` + "`gen_ai.response.model`" + `), toString(attributes.` + "`gen_ai.response.model`" + `) != '') AS distinct_models,
+    uniqExactIf(toString(attributes.` + "`gen_ai.provider.name`" + `), toString(attributes.` + "`gen_ai.provider.name`" + `) != '') AS distinct_providers,
 
     -- Token metrics (from chat completion events)
     sumIf(toInt64OrZero(toString(attributes.` + "`gen_ai.usage.input_tokens`" + `)),
@@ -339,28 +339,20 @@ FROM telemetry_logs
 WHERE gram_project_id = ?
     AND time_unix_nano >= ?
     AND time_unix_nano <= ?
-    -- Chat filter (only applied when scope=chat)
-    AND (? = 'project' OR toString(attributes.` + "`gen_ai.conversation.id`" + `) = ?)
 `
 
 type GetMetricsSummaryParams struct {
-	Scope         string // "project" or "chat"
 	GramProjectID string
 	TimeStart     int64
 	TimeEnd       int64
-	ChatID        string // Required when scope=chat
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryParams) (*MetricsSummaryRow, error) {
 	rows, err := q.conn.Query(ctx, getMetricsSummary,
-		arg.Scope,             // 1: cardinality check (total_chats)
-		arg.Scope,             // 2: cardinality check (distinct_models)
-		arg.Scope,             // 3: cardinality check (distinct_providers)
-		arg.GramProjectID,     // 4: gram_project_id
-		arg.TimeStart,         // 5: time_unix_nano >=
-		arg.TimeEnd,           // 6: time_unix_nano <=
-		arg.Scope, arg.ChatID, // 7,8: chat filter
+		arg.GramProjectID, // 1: gram_project_id
+		arg.TimeStart,     // 2: time_unix_nano >=
+		arg.TimeEnd,       // 3: time_unix_nano <=
 	)
 	if err != nil {
 		return nil, err

@@ -12,27 +12,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetMetricsSummary_LogsDisabled(t *testing.T) {
+func TestGetProjectMetricsSummary_LogsDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = switchOrganizationInCtx(t, ctx)
+	ctx = switchOrganizationInCtx(t, ctx, ti.disabledLogsOrgID)
 
 	now := time.Now().UTC()
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	_, err := ti.service.GetMetricsSummary(ctx, &gen.GetMetricsSummaryPayload{
-		Scope: "project",
-		From:  from,
-		To:    to,
+	_, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+		From: from,
+		To:   to,
 	})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "telemetry is not enabled")
+	require.Contains(t, err.Error(), "logs are not enabled")
 }
 
-func TestGetMetricsSummary_Empty(t *testing.T) {
+func TestGetProjectMetricsSummary_Empty(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -41,10 +40,9 @@ func TestGetMetricsSummary_Empty(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.GetMetricsSummary(ctx, &gen.GetMetricsSummaryPayload{
-		Scope: "project",
-		From:  from,
-		To:    to,
+	result, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+		From: from,
+		To:   to,
 	})
 
 	require.NoError(t, err)
@@ -55,45 +53,7 @@ func TestGetMetricsSummary_Empty(t *testing.T) {
 	require.Equal(t, int64(0), result.Metrics.TotalToolCalls)
 }
 
-func TestGetMetricsSummary_InvalidScope(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-
-	now := time.Now().UTC()
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
-
-	_, err := ti.service.GetMetricsSummary(ctx, &gen.GetMetricsSummaryPayload{
-		Scope: "invalid",
-		From:  from,
-		To:    to,
-	})
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "scope must be 'project' or 'chat'")
-}
-
-func TestGetMetricsSummary_ChatScopeMissingChatID(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-
-	now := time.Now().UTC()
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
-
-	_, err := ti.service.GetMetricsSummary(ctx, &gen.GetMetricsSummaryPayload{
-		Scope: "chat",
-		From:  from,
-		To:    to,
-	})
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "chat_id is required when scope is 'chat'")
-}
-
-func TestGetMetricsSummary_ProjectScope(t *testing.T) {
+func TestGetProjectMetricsSummary(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -124,16 +84,14 @@ func TestGetMetricsSummary_ProjectScope(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.GetMetricsSummary(ctx, &gen.GetMetricsSummaryPayload{
-		Scope: "project",
-		From:  from,
-		To:    to,
+	result, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+		From: from,
+		To:   to,
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.True(t, result.Enabled)
-	require.Equal(t, gen.MetricsScope("project"), result.Scope)
 
 	m := result.Metrics
 	require.NotNil(t, m)
@@ -156,7 +114,7 @@ func TestGetMetricsSummary_ProjectScope(t *testing.T) {
 	require.Equal(t, int64(2), m.ToolCallSuccess) // 2 with status 200
 	require.Equal(t, int64(1), m.ToolCallFailure) // 1 with status 500
 
-	// Cardinality (project scope only)
+	// Cardinality
 	require.Equal(t, int64(2), m.TotalChats)        // 2 distinct chat IDs
 	require.Equal(t, int64(2), m.DistinctModels)    // gpt-4, claude-3
 	require.Equal(t, int64(2), m.DistinctProviders) // openai, anthropic
@@ -167,7 +125,7 @@ func TestGetMetricsSummary_ProjectScope(t *testing.T) {
 	for _, model := range m.Models {
 		modelCounts[model.Name] = model.Count
 	}
-	require.Equal(t, int64(2), modelCounts["gpt-4"])   // 2 chat completions with gpt-4
+	require.Equal(t, int64(2), modelCounts["gpt-4"])    // 2 chat completions with gpt-4
 	require.Equal(t, int64(1), modelCounts["claude-3"]) // 1 chat completion with claude-3
 
 	// Tool breakdown
@@ -187,71 +145,7 @@ func TestGetMetricsSummary_ProjectScope(t *testing.T) {
 	require.Equal(t, int64(0), toolStats["tools:http:weather:forecast"].FailureCount)
 }
 
-func TestGetMetricsSummary_ChatScope(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	projectID := authCtx.ProjectID.String()
-	deploymentID := uuid.New().String()
-
-	now := time.Now().UTC()
-	chatID1 := uuid.New().String()
-	chatID2 := uuid.New().String()
-
-	// Insert chat completion logs for chat 1
-	insertChatCompletionLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID1, 100, 50, 150, 1.5, "stop", "gpt-4", "openai")
-	insertChatCompletionLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID1, 200, 100, 300, 2.0, "tool_calls", "gpt-4", "openai")
-
-	// Insert chat completion logs for chat 2 (should not be included)
-	insertChatCompletionLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), chatID2, 500, 250, 750, 3.0, "stop", "claude-3", "anthropic")
-
-	// Wait for ClickHouse eventual consistency
-	time.Sleep(200 * time.Millisecond)
-
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
-
-	result, err := ti.service.GetMetricsSummary(ctx, &gen.GetMetricsSummaryPayload{
-		Scope:  "chat",
-		From:   from,
-		To:     to,
-		ChatID: &chatID1,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.True(t, result.Enabled)
-	require.Equal(t, gen.MetricsScope("chat"), result.Scope)
-
-	m := result.Metrics
-	require.NotNil(t, m)
-
-	// Token metrics (only chat 1)
-	require.Equal(t, int64(300), m.TotalInputTokens)  // 100 + 200
-	require.Equal(t, int64(150), m.TotalOutputTokens) // 50 + 100
-	require.Equal(t, int64(450), m.TotalTokens)       // 150 + 300
-
-	// Chat request metrics (only chat 1)
-	require.Equal(t, int64(2), m.TotalChatRequests)
-
-	// Resolution status (only chat 1)
-	require.Equal(t, int64(1), m.FinishReasonStop)
-	require.Equal(t, int64(1), m.FinishReasonToolCalls)
-
-	// Cardinality should be 0 for chat scope
-	require.Equal(t, int64(0), m.TotalChats)
-	require.Equal(t, int64(0), m.DistinctModels)
-	require.Equal(t, int64(0), m.DistinctProviders)
-}
-
 func insertChatCompletionLog(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, chatID string, inputTokens, outputTokens, totalTokens int, durationSec float64, finishReason, model, provider string) {
-	t.Helper()
-	insertChatCompletionLogWithDeployment(t, ctx, projectID, deploymentID, timestamp, chatID, inputTokens, outputTokens, totalTokens, durationSec, finishReason, model, provider)
-}
-
-func insertChatCompletionLogWithDeployment(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, chatID string, inputTokens, outputTokens, totalTokens int, durationSec float64, finishReason, model, provider string) {
 	t.Helper()
 
 	conn, err := infra.NewClickhouseClient(t)
@@ -261,15 +155,15 @@ func insertChatCompletionLogWithDeployment(t *testing.T, ctx context.Context, pr
 	require.NoError(t, err)
 
 	attributes := map[string]any{
-		"gen_ai.conversation.id":        chatID,
-		"gen_ai.conversation.duration":  durationSec,
+		"gen_ai.conversation.id":         chatID,
+		"gen_ai.conversation.duration":   durationSec,
 		"gen_ai.response.finish_reasons": "['" + finishReason + "']",
-		"gen_ai.usage.input_tokens":     inputTokens,
-		"gen_ai.usage.output_tokens":    outputTokens,
-		"gen_ai.usage.total_tokens":     totalTokens,
-		"gen_ai.response.model":         model,
-		"gen_ai.provider.name":          provider,
-		"gram.resource.urn":             "agents:chat:completion",
+		"gen_ai.usage.input_tokens":      inputTokens,
+		"gen_ai.usage.output_tokens":     outputTokens,
+		"gen_ai.usage.total_tokens":      totalTokens,
+		"gen_ai.response.model":          model,
+		"gen_ai.provider.name":           provider,
+		"gram.resource.urn":              "agents:chat:completion",
 	}
 
 	attrsJSON, err := json.Marshal(attributes)

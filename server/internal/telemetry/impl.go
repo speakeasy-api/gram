@@ -42,12 +42,6 @@ type Service struct {
 var _ telem_gen.Service = (*Service)(nil)
 var _ telem_gen.Auther = (*Service)(nil)
 
-// MetricsScope constants for type-safe scope comparisons.
-const (
-	MetricsScopeProject telem_gen.MetricsScope = "project"
-	MetricsScopeChat    telem_gen.MetricsScope = "chat"
-)
-
 func NewService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
@@ -105,7 +99,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}
 
 	if !params.enabled {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+		return &telem_gen.SearchLogsResult{Logs: []*telem_gen.TelemetryLogRecord{}, Enabled: false, NextCursor: nil}, nil
 	}
 
 	// Extract SearchLogs-specific filter fields
@@ -184,7 +178,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	if !params.enabled {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+		return &telem_gen.SearchToolCallsResult{ToolCalls: []*telem_gen.ToolCallSummary{}, Enabled: false, NextCursor: nil}, nil
 	}
 
 	// Extract SearchToolCalls-specific filter fields
@@ -237,8 +231,8 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}, nil
 }
 
-// GetMetricsSummary retrieves aggregated metrics for a project or chat.
-func (s *Service) GetMetricsSummary(ctx context.Context, payload *telem_gen.GetMetricsSummaryPayload) (res *telem_gen.GetMetricsSummaryResult, err error) {
+// GetProjectMetricsSummary retrieves aggregated metrics for an entire project.
+func (s *Service) GetProjectMetricsSummary(ctx context.Context, payload *telem_gen.GetProjectMetricsSummaryPayload) (res *telem_gen.GetMetricsSummaryResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -253,34 +247,25 @@ func (s *Service) GetMetricsSummary(ctx context.Context, payload *telem_gen.GetM
 		return nil, oops.E(oops.CodeForbidden, nil, logsDisabledMsg)
 	}
 
-	if payload.Scope != MetricsScopeProject && payload.Scope != MetricsScopeChat {
-		return nil, oops.E(oops.CodeBadRequest, nil, "scope must be 'project' or 'chat'")
-	}
-
-	chatID := ""
-	if payload.Scope == MetricsScopeChat {
-		if payload.ChatID == nil || *payload.ChatID == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "chat_id is required when scope is 'chat'")
-		}
-		chatID = *payload.ChatID
-	}
-
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
 	if err != nil {
 		return nil, err
 	}
 
 	metrics, err := s.chRepo.GetMetricsSummary(ctx, repo.GetMetricsSummaryParams{
-		Scope:         string(payload.Scope),
 		GramProjectID: authCtx.ProjectID.String(),
 		TimeStart:     timeStart,
 		TimeEnd:       timeEnd,
-		ChatID:        chatID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving AI metrics")
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving project metrics")
 	}
 
+	return buildMetricsSummaryResult(*metrics), nil
+}
+
+// buildMetricsSummaryResult converts repo metrics to the API response format.
+func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMetricsSummaryResult {
 	// Convert models map to ModelUsage slice
 	models := make([]*telem_gen.ModelUsage, 0, len(metrics.Models))
 	for name, count := range metrics.Models {
@@ -322,9 +307,8 @@ func (s *Service) GetMetricsSummary(ctx context.Context, payload *telem_gen.GetM
 			Models:                models,
 			Tools:                 tools,
 		},
-		Scope:   payload.Scope,
 		Enabled: true,
-	}, nil
+	}
 }
 
 // searchParams contains common validated parameters for telemetry search endpoints.

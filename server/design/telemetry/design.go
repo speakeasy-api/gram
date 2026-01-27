@@ -116,8 +116,8 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "captureEvent")
 	})
 
-	Method("getMetricsSummary", func() {
-		Description("Get aggregated metrics summary for a project or specific chat session")
+	Method("getProjectMetricsSummary", func() {
+		Description("Get aggregated metrics summary for an entire project")
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
 		})
@@ -127,7 +127,7 @@ var _ = Service("telemetry", func() {
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Extend(GetMetricsSummaryPayload)
+			Extend(GetProjectMetricsSummaryPayload)
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
@@ -136,16 +136,16 @@ var _ = Service("telemetry", func() {
 		Result(GetMetricsSummaryResult)
 
 		HTTP(func() {
-			POST("/rpc/telemetry.getMetricsSummary")
+			POST("/rpc/telemetry.getProjectMetricsSummary")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "getMetricsSummary")
-		Meta("openapi:extension:x-speakeasy-name-override", "getMetricsSummary")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMetricsSummary"}`)
+		Meta("openapi:operationId", "getProjectMetricsSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getProjectMetricsSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectMetricsSummary"}`)
 	})
 })
 
@@ -332,11 +332,6 @@ var CaptureEventResult = Type("CaptureEventResult", func() {
 
 // Metrics types
 
-var MetricsScope = Type("MetricsScope", String, func() {
-	Description("Aggregation scope for metrics")
-	Enum("project", "chat")
-})
-
 var ModelUsage = Type("ModelUsage", func() {
 	Description("Model usage statistics")
 
@@ -410,10 +405,9 @@ var Metrics = Type("Metrics", func() {
 	)
 })
 
-var GetMetricsSummaryPayload = Type("GetMetricsSummaryPayload", func() {
-	Description("Payload for getting metrics summary")
+var GetProjectMetricsSummaryPayload = Type("GetProjectMetricsSummaryPayload", func() {
+	Description("Payload for getting project-level metrics summary")
 
-	Attribute("scope", MetricsScope, "Aggregation level (project or chat)")
 	Attribute("from", String, "Start time in ISO 8601 format", func() {
 		Format(FormatDateTime)
 		Example("2025-12-19T10:00:00Z")
@@ -422,19 +416,15 @@ var GetMetricsSummaryPayload = Type("GetMetricsSummaryPayload", func() {
 		Format(FormatDateTime)
 		Example("2025-12-19T11:00:00Z")
 	})
-	Attribute("chat_id", String, "Chat/conversation ID (required when scope=chat)", func() {
-		Format(FormatUUID)
-	})
 
-	Required("scope", "from", "to")
+	Required("from", "to")
 })
 
 var GetMetricsSummaryResult = Type("GetMetricsSummaryResult", func() {
 	Description("Result of metrics summary query")
 
 	Attribute("metrics", Metrics, "Aggregated metrics")
-	Attribute("scope", MetricsScope, "Scope used for aggregation")
 	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("metrics", "scope", "enabled")
+	Required("metrics", "enabled")
 })
