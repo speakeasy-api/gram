@@ -896,7 +896,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
               variant="destructive-primary"
               onClick={() => {
                 deleteEnvironmentMutation.mutate({
-                  environmentSlug: selectedEnvironmentView,
+                  request: { slug: selectedEnvironmentView },
                 });
               }}
               disabled={deleteEnvironmentMutation.isPending}
