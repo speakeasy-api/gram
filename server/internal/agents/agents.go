@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
@@ -547,7 +548,7 @@ func (s *Service) ExecuteTool(
 	err = s.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{
 		SystemEnv:  gateway.CIEnvFrom(systemConfig),
 		UserConfig: ciEnv,
-	}, plan, tm.NewNoopToolCallLogger())
+	}, plan, tm.HTTPLogAttributes{})
 	if err != nil {
 		return "", fmt.Errorf("tool proxy error: %w", err)
 	}
@@ -572,11 +573,11 @@ func (s *Service) GetCompletionFromMessages(
 	ctx context.Context,
 	orgID string,
 	projectID string,
-	messages []openrouter.OpenAIChatMessage,
+	messages []or.Message,
 	toolDefs []openrouter.Tool,
 	temperature *float64,
 	model string,
-) (*openrouter.OpenAIChatMessage, error) {
+) (*or.Message, error) {
 	msg, err := s.chatClient.GetCompletionFromMessages(ctx, orgID, projectID, messages, toolDefs, temperature, model)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get completion from messages: %w", err)

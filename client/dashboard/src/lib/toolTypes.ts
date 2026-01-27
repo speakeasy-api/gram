@@ -1,5 +1,6 @@
 import { useLatestDeployment } from "@/hooks/toolTypes";
 import {
+  ExternalMCPToolDefinition,
   FunctionResourceDefinition,
   FunctionToolDefinition,
   Resource as GeneratedResource,
@@ -26,7 +27,10 @@ export type Toolset = Omit<GeneratedToolset, "tools" | "resources"> & {
 export type Tool =
   | ({ type: "http" } & HTTPToolDefinition)
   | ({ type: "prompt" } & PromptTemplate)
-  | ({ type: "function" } & FunctionToolDefinition);
+  | ({ type: "function" } & FunctionToolDefinition)
+  | ({ type: "external-mcp" } & ExternalMCPToolDefinition & {
+        isProxy: boolean;
+      });
 
 export type ToolGroup = {
   key: string;
@@ -46,7 +50,15 @@ export const asTool = (tool: GeneratedTool): Tool | undefined => {
   } else if (tool.functionToolDefinition) {
     return { type: "function", ...tool.functionToolDefinition };
   } else if (tool.externalMcpToolDefinition) {
-    return undefined; // Omit external MCP tools, as they require special handling
+    if (tool.externalMcpToolDefinition.type !== "proxy") {
+      return {
+        ...tool.externalMcpToolDefinition, // Has to be done in this order because externalMcpToolDefinition also has a type field
+        type: "external-mcp",
+        isProxy: tool.externalMcpToolDefinition.type === "proxy",
+      };
+    } else {
+      return undefined; // Omit external MCP proxy tools, as they require special handling
+    }
   } else {
     throw new Error("Unexpected tool type");
   }
@@ -113,6 +125,8 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
       } else if (tool.type === "function") {
         // TODO: As the UX gets built out this should get more granular, tying to which function asset
         groupKey = "functions";
+      } else if (tool.type === "external-mcp") {
+        groupKey = "external-mcp";
       } else {
         groupKey = "custom";
       }

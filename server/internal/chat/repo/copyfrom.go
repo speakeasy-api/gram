@@ -33,6 +33,9 @@ func (r iteratorForCreateChatMessage) Values() ([]interface{}, error) {
 		r.rows[0].Role,
 		r.rows[0].ProjectID,
 		r.rows[0].Content,
+		r.rows[0].ContentRaw,
+		r.rows[0].ContentAssetUrl,
+		r.rows[0].StorageError,
 		r.rows[0].Model,
 		r.rows[0].MessageID,
 		r.rows[0].ToolCallID,
@@ -43,6 +46,10 @@ func (r iteratorForCreateChatMessage) Values() ([]interface{}, error) {
 		r.rows[0].PromptTokens,
 		r.rows[0].CompletionTokens,
 		r.rows[0].TotalTokens,
+		r.rows[0].Origin,
+		r.rows[0].UserAgent,
+		r.rows[0].IpAddress,
+		r.rows[0].Source,
 	}, nil
 }
 
@@ -51,5 +58,5 @@ func (r iteratorForCreateChatMessage) Err() error {
 }
 
 func (q *Queries) CreateChatMessage(ctx context.Context, arg []CreateChatMessageParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"chat_id", "role", "project_id", "content", "model", "message_id", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "prompt_tokens", "completion_tokens", "total_tokens"}, &iteratorForCreateChatMessage{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"chat_id", "role", "project_id", "content", "content_raw", "content_asset_url", "storage_error", "model", "message_id", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "prompt_tokens", "completion_tokens", "total_tokens", "origin", "user_agent", "ip_address", "source"}, &iteratorForCreateChatMessage{rows: arg})
 }

@@ -72,6 +72,19 @@ type AddOAuthProxyServerRequestBody struct {
 	OauthProxyServer *OAuthProxyServerFormRequestBody `form:"oauth_proxy_server" json:"oauth_proxy_server" xml:"oauth_proxy_server"`
 }
 
+// UpdateSecurityVariableDisplayNameRequestBody is the type of the "toolsets"
+// service "updateSecurityVariableDisplayName" endpoint HTTP request body.
+type UpdateSecurityVariableDisplayNameRequestBody struct {
+	// The slug of the toolset containing the security variable
+	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
+	// The security scheme key (e.g., 'BearerAuth', 'ApiKeyAuth') from the OpenAPI
+	// spec
+	SecurityKey string `form:"security_key" json:"security_key" xml:"security_key"`
+	// The user-friendly display name. Set to empty string to clear and use the
+	// original name.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+}
+
 // CreateToolsetResponseBody is the type of the "toolsets" service
 // "createToolset" endpoint HTTP response body.
 type CreateToolsetResponseBody struct {
@@ -497,6 +510,32 @@ type AddOAuthProxyServerResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// UpdateSecurityVariableDisplayNameResponseBody is the type of the "toolsets"
+// service "updateSecurityVariableDisplayName" endpoint HTTP response body.
+type UpdateSecurityVariableDisplayNameResponseBody struct {
+	// The unique identifier of the security variable
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The type of security
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// The name of the security scheme (actual header/parameter name)
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// User-friendly display name for the security variable (defaults to name if
+	// not set)
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Where the security token is placed
+	InPlacement *string `form:"in_placement,omitempty" json:"in_placement,omitempty" xml:"in_placement,omitempty"`
+	// The security scheme
+	Scheme *string `form:"scheme,omitempty" json:"scheme,omitempty" xml:"scheme,omitempty"`
+	// The bearer format
+	BearerFormat *string `form:"bearer_format,omitempty" json:"bearer_format,omitempty" xml:"bearer_format,omitempty"`
+	// The OAuth types
+	OauthTypes []string `form:"oauth_types,omitempty" json:"oauth_types,omitempty" xml:"oauth_types,omitempty"`
+	// The OAuth flows
+	OauthFlows []byte `form:"oauth_flows,omitempty" json:"oauth_flows,omitempty" xml:"oauth_flows,omitempty"`
+	// The environment variables
+	EnvVariables []string `form:"env_variables,omitempty" json:"env_variables,omitempty" xml:"env_variables,omitempty"`
 }
 
 // CreateToolsetUnauthorizedResponseBody is the type of the "toolsets" service
@@ -2345,12 +2384,207 @@ type AddOAuthProxyServerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdateSecurityVariableDisplayNameUnauthorizedResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpdateSecurityVariableDisplayNameUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSecurityVariableDisplayNameForbiddenResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "forbidden" error.
+type UpdateSecurityVariableDisplayNameForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSecurityVariableDisplayNameBadRequestResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "bad_request" error.
+type UpdateSecurityVariableDisplayNameBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSecurityVariableDisplayNameNotFoundResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "not_found" error.
+type UpdateSecurityVariableDisplayNameNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSecurityVariableDisplayNameConflictResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "conflict" error.
+type UpdateSecurityVariableDisplayNameConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody is the type of
+// the "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "unsupported_media" error.
+type UpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSecurityVariableDisplayNameInvalidResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "invalid" error.
+type UpdateSecurityVariableDisplayNameInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSecurityVariableDisplayNameInvariantViolationResponseBody is the type
+// of the "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "invariant_violation" error.
+type UpdateSecurityVariableDisplayNameInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSecurityVariableDisplayNameUnexpectedResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "unexpected" error.
+type UpdateSecurityVariableDisplayNameUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSecurityVariableDisplayNameGatewayErrorResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpdateSecurityVariableDisplayNameGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
+	// The unique identifier of the security variable
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The type of security
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// The name of the security scheme
+	// The name of the security scheme (actual header/parameter name)
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// User-friendly display name for the security variable (defaults to name if
+	// not set)
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Where the security token is placed
 	InPlacement *string `form:"in_placement,omitempty" json:"in_placement,omitempty" xml:"in_placement,omitempty"`
 	// The security scheme
@@ -2616,18 +2850,19 @@ type PromptTemplateResponseBody struct {
 // ExternalMCPToolDefinitionResponseBody is used to define fields on response
 // body types.
 type ExternalMCPToolDefinitionResponseBody struct {
-	// The ID of the tool definition
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The URN of this tool (tools:externalmcp:<slug>:proxy)
-	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+	// Whether or not the tool is a proxy tool
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	// The ID of the deployments_external_mcps record
 	DeploymentExternalMcpID *string `form:"deployment_external_mcp_id,omitempty" json:"deployment_external_mcp_id,omitempty" xml:"deployment_external_mcp_id,omitempty"`
 	// The ID of the deployment
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// The ID of the MCP registry
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The specifier of the external MCP server (e.g.,
+	// 'io.modelcontextprotocol.anonymous/exa')
+	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
+	// The name of the external MCP server (e.g., exa)
+	RegistryServerName *string `form:"registry_server_name,omitempty" json:"registry_server_name,omitempty" xml:"registry_server_name,omitempty"`
 	// The slug used for tool prefixing (e.g., github)
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL to connect to the MCP server
@@ -2646,10 +2881,37 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	OauthRegistrationEndpoint *string `form:"oauth_registration_endpoint,omitempty" json:"oauth_registration_endpoint,omitempty" xml:"oauth_registration_endpoint,omitempty"`
 	// The OAuth scopes supported by the server
 	OauthScopesSupported []string `form:"oauth_scopes_supported,omitempty" json:"oauth_scopes_supported,omitempty" xml:"oauth_scopes_supported,omitempty"`
-	// When the tool definition was created.
+	// The creation date of the tool.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the tool definition was last updated.
+	// The last update date of the tool.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The ID of the tool
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The URN of this tool
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+	// The ID of the project
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The name of the tool
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName *string `form:"canonical_name,omitempty" json:"canonical_name,omitempty" xml:"canonical_name,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 }
 
 // ResourceResponseBody is used to define fields on response body types.
@@ -2947,6 +3209,18 @@ func NewAddOAuthProxyServerRequestBody(p *toolsets.AddOAuthProxyServerPayload) *
 	body := &AddOAuthProxyServerRequestBody{}
 	if p.OauthProxyServer != nil {
 		body.OauthProxyServer = marshalTypesOAuthProxyServerFormToOAuthProxyServerFormRequestBody(p.OauthProxyServer)
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameRequestBody builds the HTTP request body
+// from the payload of the "updateSecurityVariableDisplayName" endpoint of the
+// "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameRequestBody(p *toolsets.UpdateSecurityVariableDisplayNamePayload) *UpdateSecurityVariableDisplayNameRequestBody {
+	body := &UpdateSecurityVariableDisplayNameRequestBody{
+		ToolsetSlug: string(p.ToolsetSlug),
+		SecurityKey: p.SecurityKey,
+		DisplayName: p.DisplayName,
 	}
 	return body
 }
@@ -5167,6 +5441,184 @@ func NewAddOAuthProxyServerGatewayError(body *AddOAuthProxyServerGatewayErrorRes
 	return v
 }
 
+// NewUpdateSecurityVariableDisplayNameSecurityVariableOK builds a "toolsets"
+// service "updateSecurityVariableDisplayName" endpoint result from a HTTP "OK"
+// response.
+func NewUpdateSecurityVariableDisplayNameSecurityVariableOK(body *UpdateSecurityVariableDisplayNameResponseBody) *types.SecurityVariable {
+	v := &types.SecurityVariable{
+		ID:           *body.ID,
+		Type:         body.Type,
+		Name:         *body.Name,
+		DisplayName:  body.DisplayName,
+		InPlacement:  *body.InPlacement,
+		Scheme:       *body.Scheme,
+		BearerFormat: body.BearerFormat,
+		OauthFlows:   body.OauthFlows,
+	}
+	if body.OauthTypes != nil {
+		v.OauthTypes = make([]string, len(body.OauthTypes))
+		for i, val := range body.OauthTypes {
+			v.OauthTypes[i] = val
+		}
+	}
+	v.EnvVariables = make([]string, len(body.EnvVariables))
+	for i, val := range body.EnvVariables {
+		v.EnvVariables[i] = val
+	}
+
+	return v
+}
+
+// NewUpdateSecurityVariableDisplayNameUnauthorized builds a toolsets service
+// updateSecurityVariableDisplayName endpoint unauthorized error.
+func NewUpdateSecurityVariableDisplayNameUnauthorized(body *UpdateSecurityVariableDisplayNameUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSecurityVariableDisplayNameForbidden builds a toolsets service
+// updateSecurityVariableDisplayName endpoint forbidden error.
+func NewUpdateSecurityVariableDisplayNameForbidden(body *UpdateSecurityVariableDisplayNameForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSecurityVariableDisplayNameBadRequest builds a toolsets service
+// updateSecurityVariableDisplayName endpoint bad_request error.
+func NewUpdateSecurityVariableDisplayNameBadRequest(body *UpdateSecurityVariableDisplayNameBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSecurityVariableDisplayNameNotFound builds a toolsets service
+// updateSecurityVariableDisplayName endpoint not_found error.
+func NewUpdateSecurityVariableDisplayNameNotFound(body *UpdateSecurityVariableDisplayNameNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSecurityVariableDisplayNameConflict builds a toolsets service
+// updateSecurityVariableDisplayName endpoint conflict error.
+func NewUpdateSecurityVariableDisplayNameConflict(body *UpdateSecurityVariableDisplayNameConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSecurityVariableDisplayNameUnsupportedMedia builds a toolsets
+// service updateSecurityVariableDisplayName endpoint unsupported_media error.
+func NewUpdateSecurityVariableDisplayNameUnsupportedMedia(body *UpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSecurityVariableDisplayNameInvalid builds a toolsets service
+// updateSecurityVariableDisplayName endpoint invalid error.
+func NewUpdateSecurityVariableDisplayNameInvalid(body *UpdateSecurityVariableDisplayNameInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSecurityVariableDisplayNameInvariantViolation builds a toolsets
+// service updateSecurityVariableDisplayName endpoint invariant_violation error.
+func NewUpdateSecurityVariableDisplayNameInvariantViolation(body *UpdateSecurityVariableDisplayNameInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSecurityVariableDisplayNameUnexpected builds a toolsets service
+// updateSecurityVariableDisplayName endpoint unexpected error.
+func NewUpdateSecurityVariableDisplayNameUnexpected(body *UpdateSecurityVariableDisplayNameUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSecurityVariableDisplayNameGatewayError builds a toolsets service
+// updateSecurityVariableDisplayName endpoint gateway_error error.
+func NewUpdateSecurityVariableDisplayNameGatewayError(body *UpdateSecurityVariableDisplayNameGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateCreateToolsetResponseBody runs the validations defined on
 // CreateToolsetResponseBody
 func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err error) {
@@ -6166,6 +6618,27 @@ func ValidateAddOAuthProxyServerResponseBody(body *AddOAuthProxyServerResponseBo
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameResponseBody runs the validations
+// defined on UpdateSecurityVariableDisplayNameResponseBody
+func ValidateUpdateSecurityVariableDisplayNameResponseBody(body *UpdateSecurityVariableDisplayNameResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.InPlacement == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("in_placement", "body"))
+	}
+	if body.Scheme == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scheme", "body"))
+	}
+	if body.EnvVariables == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("env_variables", "body"))
 	}
 	return
 }
@@ -8573,9 +9046,262 @@ func ValidateAddOAuthProxyServerGatewayErrorResponseBody(body *AddOAuthProxyServ
 	return
 }
 
+// ValidateUpdateSecurityVariableDisplayNameUnauthorizedResponseBody runs the
+// validations defined on
+// updateSecurityVariableDisplayName_unauthorized_response_body
+func ValidateUpdateSecurityVariableDisplayNameUnauthorizedResponseBody(body *UpdateSecurityVariableDisplayNameUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameForbiddenResponseBody runs the
+// validations defined on
+// updateSecurityVariableDisplayName_forbidden_response_body
+func ValidateUpdateSecurityVariableDisplayNameForbiddenResponseBody(body *UpdateSecurityVariableDisplayNameForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameBadRequestResponseBody runs the
+// validations defined on
+// updateSecurityVariableDisplayName_bad_request_response_body
+func ValidateUpdateSecurityVariableDisplayNameBadRequestResponseBody(body *UpdateSecurityVariableDisplayNameBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameNotFoundResponseBody runs the
+// validations defined on
+// updateSecurityVariableDisplayName_not_found_response_body
+func ValidateUpdateSecurityVariableDisplayNameNotFoundResponseBody(body *UpdateSecurityVariableDisplayNameNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameConflictResponseBody runs the
+// validations defined on
+// updateSecurityVariableDisplayName_conflict_response_body
+func ValidateUpdateSecurityVariableDisplayNameConflictResponseBody(body *UpdateSecurityVariableDisplayNameConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody runs
+// the validations defined on
+// updateSecurityVariableDisplayName_unsupported_media_response_body
+func ValidateUpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody(body *UpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameInvalidResponseBody runs the
+// validations defined on
+// updateSecurityVariableDisplayName_invalid_response_body
+func ValidateUpdateSecurityVariableDisplayNameInvalidResponseBody(body *UpdateSecurityVariableDisplayNameInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameInvariantViolationResponseBody runs
+// the validations defined on
+// updateSecurityVariableDisplayName_invariant_violation_response_body
+func ValidateUpdateSecurityVariableDisplayNameInvariantViolationResponseBody(body *UpdateSecurityVariableDisplayNameInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameUnexpectedResponseBody runs the
+// validations defined on
+// updateSecurityVariableDisplayName_unexpected_response_body
+func ValidateUpdateSecurityVariableDisplayNameUnexpectedResponseBody(body *UpdateSecurityVariableDisplayNameUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameGatewayErrorResponseBody runs the
+// validations defined on
+// updateSecurityVariableDisplayName_gateway_error_response_body
+func ValidateUpdateSecurityVariableDisplayNameGatewayErrorResponseBody(body *UpdateSecurityVariableDisplayNameGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSecurityVariableResponseBody runs the validations defined on
 // SecurityVariableResponseBody
 func ValidateSecurityVariableResponseBody(body *SecurityVariableResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8916,23 +9642,20 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 // ValidateExternalMCPToolDefinitionResponseBody runs the validations defined
 // on ExternalMCPToolDefinitionResponseBody
 func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefinitionResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ToolUrn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
-	}
 	if body.DeploymentExternalMcpID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_external_mcp_id", "body"))
 	}
 	if body.DeploymentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
 	}
+	if body.RegistrySpecifier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_specifier", "body"))
+	}
+	if body.RegistryServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_server_name", "body"))
+	}
 	if body.RegistryID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("registry_id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
@@ -8955,6 +9678,27 @@ func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefiniti
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.CanonicalName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Schema == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
+	}
+	if body.ToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
+	}
 	if body.TransportType != nil {
 		if !(*body.TransportType == "streamable-http" || *body.TransportType == "sse") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.transport_type", *body.TransportType, []any{"streamable-http", "sse"}))
@@ -8965,6 +9709,16 @@ func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefiniti
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.Canonical != nil {
+		if err2 := ValidateCanonicalToolAttributesResponseBody(body.Canonical); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Variation != nil {
+		if err2 := ValidateToolVariationResponseBody(body.Variation); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }

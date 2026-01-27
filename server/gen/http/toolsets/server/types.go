@@ -72,6 +72,19 @@ type AddOAuthProxyServerRequestBody struct {
 	OauthProxyServer *OAuthProxyServerFormRequestBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
 }
 
+// UpdateSecurityVariableDisplayNameRequestBody is the type of the "toolsets"
+// service "updateSecurityVariableDisplayName" endpoint HTTP request body.
+type UpdateSecurityVariableDisplayNameRequestBody struct {
+	// The slug of the toolset containing the security variable
+	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
+	// The security scheme key (e.g., 'BearerAuth', 'ApiKeyAuth') from the OpenAPI
+	// spec
+	SecurityKey *string `form:"security_key,omitempty" json:"security_key,omitempty" xml:"security_key,omitempty"`
+	// The user-friendly display name. Set to empty string to clear and use the
+	// original name.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+}
+
 // CreateToolsetResponseBody is the type of the "toolsets" service
 // "createToolset" endpoint HTTP response body.
 type CreateToolsetResponseBody struct {
@@ -497,6 +510,32 @@ type AddOAuthProxyServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateSecurityVariableDisplayNameResponseBody is the type of the "toolsets"
+// service "updateSecurityVariableDisplayName" endpoint HTTP response body.
+type UpdateSecurityVariableDisplayNameResponseBody struct {
+	// The unique identifier of the security variable
+	ID string `form:"id" json:"id" xml:"id"`
+	// The type of security
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// The name of the security scheme (actual header/parameter name)
+	Name string `form:"name" json:"name" xml:"name"`
+	// User-friendly display name for the security variable (defaults to name if
+	// not set)
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Where the security token is placed
+	InPlacement string `form:"in_placement" json:"in_placement" xml:"in_placement"`
+	// The security scheme
+	Scheme string `form:"scheme" json:"scheme" xml:"scheme"`
+	// The bearer format
+	BearerFormat *string `form:"bearer_format,omitempty" json:"bearer_format,omitempty" xml:"bearer_format,omitempty"`
+	// The OAuth types
+	OauthTypes []string `form:"oauth_types,omitempty" json:"oauth_types,omitempty" xml:"oauth_types,omitempty"`
+	// The OAuth flows
+	OauthFlows []byte `form:"oauth_flows,omitempty" json:"oauth_flows,omitempty" xml:"oauth_flows,omitempty"`
+	// The environment variables
+	EnvVariables []string `form:"env_variables" json:"env_variables" xml:"env_variables"`
 }
 
 // CreateToolsetUnauthorizedResponseBody is the type of the "toolsets" service
@@ -2345,12 +2384,207 @@ type AddOAuthProxyServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdateSecurityVariableDisplayNameUnauthorizedResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpdateSecurityVariableDisplayNameUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSecurityVariableDisplayNameForbiddenResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "forbidden" error.
+type UpdateSecurityVariableDisplayNameForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSecurityVariableDisplayNameBadRequestResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "bad_request" error.
+type UpdateSecurityVariableDisplayNameBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSecurityVariableDisplayNameNotFoundResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "not_found" error.
+type UpdateSecurityVariableDisplayNameNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSecurityVariableDisplayNameConflictResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "conflict" error.
+type UpdateSecurityVariableDisplayNameConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody is the type of
+// the "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "unsupported_media" error.
+type UpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSecurityVariableDisplayNameInvalidResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "invalid" error.
+type UpdateSecurityVariableDisplayNameInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSecurityVariableDisplayNameInvariantViolationResponseBody is the type
+// of the "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "invariant_violation" error.
+type UpdateSecurityVariableDisplayNameInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSecurityVariableDisplayNameUnexpectedResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "unexpected" error.
+type UpdateSecurityVariableDisplayNameUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSecurityVariableDisplayNameGatewayErrorResponseBody is the type of the
+// "toolsets" service "updateSecurityVariableDisplayName" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpdateSecurityVariableDisplayNameGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
+	// The unique identifier of the security variable
+	ID string `form:"id" json:"id" xml:"id"`
 	// The type of security
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// The name of the security scheme
+	// The name of the security scheme (actual header/parameter name)
 	Name string `form:"name" json:"name" xml:"name"`
+	// User-friendly display name for the security variable (defaults to name if
+	// not set)
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Where the security token is placed
 	InPlacement string `form:"in_placement" json:"in_placement" xml:"in_placement"`
 	// The security scheme
@@ -2616,18 +2850,19 @@ type PromptTemplateResponseBody struct {
 // ExternalMCPToolDefinitionResponseBody is used to define fields on response
 // body types.
 type ExternalMCPToolDefinitionResponseBody struct {
-	// The ID of the tool definition
-	ID string `form:"id" json:"id" xml:"id"`
-	// The URN of this tool (tools:externalmcp:<slug>:proxy)
-	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
+	// Whether or not the tool is a proxy tool
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	// The ID of the deployments_external_mcps record
 	DeploymentExternalMcpID string `form:"deployment_external_mcp_id" json:"deployment_external_mcp_id" xml:"deployment_external_mcp_id"`
 	// The ID of the deployment
 	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
 	// The ID of the MCP registry
 	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
-	// The reverse-DNS name of the external MCP server (e.g., ai.exa/exa)
-	Name string `form:"name" json:"name" xml:"name"`
+	// The specifier of the external MCP server (e.g.,
+	// 'io.modelcontextprotocol.anonymous/exa')
+	RegistrySpecifier string `form:"registry_specifier" json:"registry_specifier" xml:"registry_specifier"`
+	// The name of the external MCP server (e.g., exa)
+	RegistryServerName string `form:"registry_server_name" json:"registry_server_name" xml:"registry_server_name"`
 	// The slug used for tool prefixing (e.g., github)
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// The URL to connect to the MCP server
@@ -2646,10 +2881,37 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	OauthRegistrationEndpoint *string `form:"oauth_registration_endpoint,omitempty" json:"oauth_registration_endpoint,omitempty" xml:"oauth_registration_endpoint,omitempty"`
 	// The OAuth scopes supported by the server
 	OauthScopesSupported []string `form:"oauth_scopes_supported,omitempty" json:"oauth_scopes_supported,omitempty" xml:"oauth_scopes_supported,omitempty"`
-	// When the tool definition was created.
+	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the tool definition was last updated.
+	// The last update date of the tool.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The ID of the tool
+	ID string `form:"id" json:"id" xml:"id"`
+	// The URN of this tool
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
+	// The ID of the project
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The name of the tool
+	Name string `form:"name" json:"name" xml:"name"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName string `form:"canonical_name" json:"canonical_name" xml:"canonical_name"`
+	// Description of the tool
+	Description string `form:"description" json:"description" xml:"description"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema string `form:"schema" json:"schema" xml:"schema"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 }
 
 // ResourceResponseBody is used to define fields on response body types.
@@ -3727,6 +3989,37 @@ func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServer
 	}
 	if res.OauthProxyServer != nil {
 		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameResponseBody builds the HTTP response
+// body from the result of the "updateSecurityVariableDisplayName" endpoint of
+// the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameResponseBody(res *types.SecurityVariable) *UpdateSecurityVariableDisplayNameResponseBody {
+	body := &UpdateSecurityVariableDisplayNameResponseBody{
+		ID:           res.ID,
+		Type:         res.Type,
+		Name:         res.Name,
+		DisplayName:  res.DisplayName,
+		InPlacement:  res.InPlacement,
+		Scheme:       res.Scheme,
+		BearerFormat: res.BearerFormat,
+		OauthFlows:   res.OauthFlows,
+	}
+	if res.OauthTypes != nil {
+		body.OauthTypes = make([]string, len(res.OauthTypes))
+		for i, val := range res.OauthTypes {
+			body.OauthTypes[i] = val
+		}
+	}
+	if res.EnvVariables != nil {
+		body.EnvVariables = make([]string, len(res.EnvVariables))
+		for i, val := range res.EnvVariables {
+			body.EnvVariables[i] = val
+		}
+	} else {
+		body.EnvVariables = []string{}
 	}
 	return body
 }
@@ -5166,6 +5459,156 @@ func NewAddOAuthProxyServerGatewayErrorResponseBody(res *goa.ServiceError) *AddO
 	return body
 }
 
+// NewUpdateSecurityVariableDisplayNameUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "updateSecurityVariableDisplayName"
+// endpoint of the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameUnauthorizedResponseBody(res *goa.ServiceError) *UpdateSecurityVariableDisplayNameUnauthorizedResponseBody {
+	body := &UpdateSecurityVariableDisplayNameUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameForbiddenResponseBody builds the HTTP
+// response body from the result of the "updateSecurityVariableDisplayName"
+// endpoint of the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameForbiddenResponseBody(res *goa.ServiceError) *UpdateSecurityVariableDisplayNameForbiddenResponseBody {
+	body := &UpdateSecurityVariableDisplayNameForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameBadRequestResponseBody builds the HTTP
+// response body from the result of the "updateSecurityVariableDisplayName"
+// endpoint of the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameBadRequestResponseBody(res *goa.ServiceError) *UpdateSecurityVariableDisplayNameBadRequestResponseBody {
+	body := &UpdateSecurityVariableDisplayNameBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameNotFoundResponseBody builds the HTTP
+// response body from the result of the "updateSecurityVariableDisplayName"
+// endpoint of the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameNotFoundResponseBody(res *goa.ServiceError) *UpdateSecurityVariableDisplayNameNotFoundResponseBody {
+	body := &UpdateSecurityVariableDisplayNameNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameConflictResponseBody builds the HTTP
+// response body from the result of the "updateSecurityVariableDisplayName"
+// endpoint of the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameConflictResponseBody(res *goa.ServiceError) *UpdateSecurityVariableDisplayNameConflictResponseBody {
+	body := &UpdateSecurityVariableDisplayNameConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "updateSecurityVariableDisplayName" endpoint of the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody {
+	body := &UpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameInvalidResponseBody builds the HTTP
+// response body from the result of the "updateSecurityVariableDisplayName"
+// endpoint of the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameInvalidResponseBody(res *goa.ServiceError) *UpdateSecurityVariableDisplayNameInvalidResponseBody {
+	body := &UpdateSecurityVariableDisplayNameInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "updateSecurityVariableDisplayName" endpoint of the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameInvariantViolationResponseBody(res *goa.ServiceError) *UpdateSecurityVariableDisplayNameInvariantViolationResponseBody {
+	body := &UpdateSecurityVariableDisplayNameInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameUnexpectedResponseBody builds the HTTP
+// response body from the result of the "updateSecurityVariableDisplayName"
+// endpoint of the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameUnexpectedResponseBody(res *goa.ServiceError) *UpdateSecurityVariableDisplayNameUnexpectedResponseBody {
+	body := &UpdateSecurityVariableDisplayNameUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSecurityVariableDisplayNameGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "updateSecurityVariableDisplayName"
+// endpoint of the "toolsets" service.
+func NewUpdateSecurityVariableDisplayNameGatewayErrorResponseBody(res *goa.ServiceError) *UpdateSecurityVariableDisplayNameGatewayErrorResponseBody {
+	body := &UpdateSecurityVariableDisplayNameGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
 func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
@@ -5337,6 +5780,21 @@ func NewAddOAuthProxyServerPayload(body *AddOAuthProxyServerRequestBody, slug st
 	return v
 }
 
+// NewUpdateSecurityVariableDisplayNamePayload builds a toolsets service
+// updateSecurityVariableDisplayName endpoint payload.
+func NewUpdateSecurityVariableDisplayNamePayload(body *UpdateSecurityVariableDisplayNameRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.UpdateSecurityVariableDisplayNamePayload {
+	v := &toolsets.UpdateSecurityVariableDisplayNamePayload{
+		ToolsetSlug: types.Slug(*body.ToolsetSlug),
+		SecurityKey: *body.SecurityKey,
+		DisplayName: *body.DisplayName,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateToolsetRequestBody runs the validations defined on
 // CreateToolsetRequestBody
 func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error) {
@@ -5399,6 +5857,39 @@ func ValidateAddOAuthProxyServerRequestBody(body *AddOAuthProxyServerRequestBody
 	if body.OauthProxyServer != nil {
 		if err2 := ValidateOAuthProxyServerFormRequestBody(body.OauthProxyServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateUpdateSecurityVariableDisplayNameRequestBody runs the validations
+// defined on UpdateSecurityVariableDisplayNameRequestBody
+func ValidateUpdateSecurityVariableDisplayNameRequestBody(body *UpdateSecurityVariableDisplayNameRequestBody) (err error) {
+	if body.ToolsetSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
+	}
+	if body.SecurityKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("security_key", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	if body.ToolsetSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", *body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.ToolsetSlug != nil {
+		if utf8.RuneCountInString(*body.ToolsetSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", *body.ToolsetSlug, utf8.RuneCountInString(*body.ToolsetSlug), 40, false))
+		}
+	}
+	if body.SecurityKey != nil {
+		if utf8.RuneCountInString(*body.SecurityKey) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.security_key", *body.SecurityKey, utf8.RuneCountInString(*body.SecurityKey), 60, false))
+		}
+	}
+	if body.DisplayName != nil {
+		if utf8.RuneCountInString(*body.DisplayName) > 120 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.display_name", *body.DisplayName, utf8.RuneCountInString(*body.DisplayName), 120, false))
 		}
 	}
 	return

@@ -16,7 +16,7 @@ func TestSearchLogs_LogsDisabled(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 
-	ctx = switchOrganizationInCtx(t, ctx)
+	ctx = switchOrganizationInCtx(t, ctx, ti.disabledLogsOrgID)
 
 	now := time.Now().UTC()
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
@@ -606,7 +606,7 @@ func TestSearchToolCalls_LogsDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = switchOrganizationInCtx(t, ctx)
+	ctx = switchOrganizationInCtx(t, ctx, ti.disabledLogsOrgID)
 
 	now := time.Now().UTC()
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
@@ -823,7 +823,7 @@ func insertTelemetryLog(t *testing.T, ctx context.Context, projectID, deployment
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	id, err := fromTimeV7(timestamp)
+	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
 	err = conn.Exec(ctx, `
@@ -861,7 +861,7 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	id, err := fromTimeV7(params.timestamp)
+	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
 	err = conn.Exec(ctx, `

@@ -768,15 +768,30 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   project_id uuid,
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
   content TEXT NOT NULL,
+  -- if message content is small enough then we'll store it straight in the
+  -- database column for fast retrieval. If it's too large then the
+  -- `content_raw` will be NULL. We'll always store messages in an asset store
+  -- referenced by `content_asset_id` and `content_asset_url`.
+  content_raw JSONB,
+  content_asset_url TEXT, -- denormalization of the asset URL for faster access
   model TEXT,
   message_id TEXT,
-  user_id TEXT,
-  external_user_id TEXT,
   finish_reason TEXT,
   tool_calls JSONB,
   prompt_tokens BIGINT NOT NULL DEFAULT 0,
   completion_tokens BIGINT NOT NULL DEFAULT 0,
   total_tokens BIGINT NOT NULL DEFAULT 0,
+
+  -- If there was an error storing the message content in the asset store,
+  -- we can record the error message here for debugging.
+  storage_error TEXT,
+
+  user_id TEXT,
+  external_user_id TEXT,
+  origin TEXT,
+  user_agent TEXT,
+  ip_address TEXT,
+  source TEXT, -- Elements, Playground, etc.
 
   tool_call_id TEXT,
   tool_urn TEXT,
@@ -930,6 +945,8 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   external_documentation_url TEXT,
   logo_id UUID,
   instructions TEXT,
+  header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
+  default_environment_id UUID, -- Informs mcp_environment_configs which environment to load from by default
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -938,7 +955,25 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   CONSTRAINT mcp_metadata_logo_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE SET NULL,
   CONSTRAINT mcp_metadata_toolset_id FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
   CONSTRAINT mcp_metadata_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_metadata_toolset_id_key UNIQUE (toolset_id)
+  CONSTRAINT mcp_metadata_toolset_id_key UNIQUE (toolset_id),
+  CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS mcp_environment_configs (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  project_id UUID NOT NULL,
+  mcp_metadata_id UUID NOT NULL,
+  variable_name TEXT NOT NULL,
+  header_display_name TEXT,
+  provided_by TEXT NOT NULL DEFAULT 'user', -- 'user', 'system', 'none'
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_environment_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_environment_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_environment_configs_mcp_metadata_id_fkey FOREIGN KEY (mcp_metadata_id) REFERENCES mcp_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_environment_configs_mcp_metadata_id_variable_name_key UNIQUE (mcp_metadata_id, variable_name)
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -1123,6 +1158,13 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   transport_type TEXT NOT NULL,
   requires_oauth BOOLEAN NOT NULL DEFAULT FALSE,
 
+  type TEXT NOT NULL DEFAULT 'proxy',
+
+  -- Set when type is not 'proxy'
+  name TEXT,
+  description TEXT,
+  schema JSONB,
+
   -- OAuth metadata
   -- '2.1' = MCP OAuth with RFC 8414 discovery + dynamic registration
   -- '2.0' = legacy OAuth 2.0 (no AS discovery, requires static client config)
@@ -1132,6 +1174,7 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   oauth_token_endpoint TEXT,
   oauth_registration_endpoint TEXT,
   oauth_scopes_supported TEXT[],
+  header_definitions JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

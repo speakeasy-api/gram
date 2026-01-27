@@ -2424,6 +2424,251 @@ func DecodeAddOAuthProxyServerResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildUpdateSecurityVariableDisplayNameRequest instantiates a HTTP request
+// object with method and path set to call the "toolsets" service
+// "updateSecurityVariableDisplayName" endpoint
+func (c *Client) BuildUpdateSecurityVariableDisplayNameRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateSecurityVariableDisplayNameToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "updateSecurityVariableDisplayName", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateSecurityVariableDisplayNameRequest returns an encoder for
+// requests sent to the toolsets updateSecurityVariableDisplayName server.
+func EncodeUpdateSecurityVariableDisplayNameRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.UpdateSecurityVariableDisplayNamePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "updateSecurityVariableDisplayName", "*toolsets.UpdateSecurityVariableDisplayNamePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateSecurityVariableDisplayNameRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("toolsets", "updateSecurityVariableDisplayName", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateSecurityVariableDisplayNameResponse returns a decoder for
+// responses returned by the toolsets updateSecurityVariableDisplayName
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeUpdateSecurityVariableDisplayNameResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateSecurityVariableDisplayNameResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateSecurityVariableDisplayNameResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			err = ValidateUpdateSecurityVariableDisplayNameResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			res := NewUpdateSecurityVariableDisplayNameSecurityVariableOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateSecurityVariableDisplayNameUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			err = ValidateUpdateSecurityVariableDisplayNameUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			return nil, NewUpdateSecurityVariableDisplayNameUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateSecurityVariableDisplayNameForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			err = ValidateUpdateSecurityVariableDisplayNameForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			return nil, NewUpdateSecurityVariableDisplayNameForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateSecurityVariableDisplayNameBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			err = ValidateUpdateSecurityVariableDisplayNameBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			return nil, NewUpdateSecurityVariableDisplayNameBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateSecurityVariableDisplayNameNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			err = ValidateUpdateSecurityVariableDisplayNameNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			return nil, NewUpdateSecurityVariableDisplayNameNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateSecurityVariableDisplayNameConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			err = ValidateUpdateSecurityVariableDisplayNameConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			return nil, NewUpdateSecurityVariableDisplayNameConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			err = ValidateUpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			return nil, NewUpdateSecurityVariableDisplayNameUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateSecurityVariableDisplayNameInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			err = ValidateUpdateSecurityVariableDisplayNameInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			return nil, NewUpdateSecurityVariableDisplayNameInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateSecurityVariableDisplayNameInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+				}
+				err = ValidateUpdateSecurityVariableDisplayNameInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+				}
+				return nil, NewUpdateSecurityVariableDisplayNameInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateSecurityVariableDisplayNameUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+				}
+				err = ValidateUpdateSecurityVariableDisplayNameUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+				}
+				return nil, NewUpdateSecurityVariableDisplayNameUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "updateSecurityVariableDisplayName", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateSecurityVariableDisplayNameGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			err = ValidateUpdateSecurityVariableDisplayNameGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateSecurityVariableDisplayName", err)
+			}
+			return nil, NewUpdateSecurityVariableDisplayNameGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "updateSecurityVariableDisplayName", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalSecurityVariableResponseBodyToTypesSecurityVariable builds a value
 // of type *types.SecurityVariable from a value of type
 // *SecurityVariableResponseBody.
@@ -2432,8 +2677,10 @@ func unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(v *SecurityVar
 		return nil
 	}
 	res := &types.SecurityVariable{
+		ID:           *v.ID,
 		Type:         v.Type,
 		Name:         *v.Name,
+		DisplayName:  v.DisplayName,
 		InPlacement:  *v.InPlacement,
 		Scheme:       *v.Scheme,
 		BearerFormat: v.BearerFormat,
@@ -2728,12 +2975,12 @@ func unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinit
 		return nil
 	}
 	res := &types.ExternalMCPToolDefinition{
-		ID:                         *v.ID,
-		ToolUrn:                    *v.ToolUrn,
+		Type:                       v.Type,
 		DeploymentExternalMcpID:    *v.DeploymentExternalMcpID,
 		DeploymentID:               *v.DeploymentID,
 		RegistryID:                 *v.RegistryID,
-		Name:                       *v.Name,
+		RegistrySpecifier:          *v.RegistrySpecifier,
+		RegistryServerName:         *v.RegistryServerName,
 		Slug:                       *v.Slug,
 		RemoteURL:                  *v.RemoteURL,
 		TransportType:              *v.TransportType,
@@ -2744,12 +2991,29 @@ func unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinit
 		OauthRegistrationEndpoint:  v.OauthRegistrationEndpoint,
 		CreatedAt:                  *v.CreatedAt,
 		UpdatedAt:                  *v.UpdatedAt,
+		ID:                         *v.ID,
+		ToolUrn:                    *v.ToolUrn,
+		ProjectID:                  *v.ProjectID,
+		Name:                       *v.Name,
+		CanonicalName:              *v.CanonicalName,
+		Description:                *v.Description,
+		SchemaVersion:              v.SchemaVersion,
+		Schema:                     *v.Schema,
+		Confirm:                    v.Confirm,
+		ConfirmPrompt:              v.ConfirmPrompt,
+		Summarizer:                 v.Summarizer,
 	}
 	if v.OauthScopesSupported != nil {
 		res.OauthScopesSupported = make([]string, len(v.OauthScopesSupported))
 		for i, val := range v.OauthScopesSupported {
 			res.OauthScopesSupported[i] = val
 		}
+	}
+	if v.Canonical != nil {
+		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
 	}
 
 	return res

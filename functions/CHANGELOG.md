@@ -1,5 +1,11 @@
 # function-runners
 
+## 0.3.1
+
+### Patch Changes
+
+- fc06ca2: Updated the Node.js version range in the apko image config for Gram Functions to include allow for newer minor/patch versions of Node.js v22.
+
 ## 0.3.0
 
 ### Minor Changes

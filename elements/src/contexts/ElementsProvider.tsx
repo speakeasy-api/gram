@@ -20,6 +20,7 @@ import {
   type ApprovalHelpers,
   type FrontendTool,
 } from '@/lib/tools'
+import { cn } from '@/lib/utils'
 import { recommended } from '@/plugins'
 import { ElementsConfig, Model, OAuthContextState } from '@/types'
 import { Plugin } from '@/types/plugins'
@@ -27,6 +28,7 @@ import {
   AssistantRuntimeProvider,
   AssistantTool,
   unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
+  useAssistantState,
 } from '@assistant-ui/react'
 import {
   frontendTools as convertFrontendToolsToAISDKTools,
@@ -54,6 +56,39 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { ElementsContext } from './contexts'
 import { ToolApprovalProvider } from './ToolApprovalContext'
+import {
+  ConnectionStatusProvider,
+  useConnectionStatusOptional,
+} from './ConnectionStatusContext'
+import { ToolExecutionProvider } from './ToolExecutionContext'
+
+/**
+ * Extracts executable tools from frontend tool definitions.
+ * Frontend tools created via defineFrontendTool have an unstable_tool property
+ * that contains the tool definition with execute function.
+ */
+function extractExecutableTools(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  frontendTools: Record<string, FrontendTool<any, any>> | undefined
+): Record<
+  string,
+  { execute?: (args: unknown, options?: unknown) => Promise<unknown> }
+> {
+  if (!frontendTools) return {}
+
+  return Object.fromEntries(
+    Object.entries(frontendTools).map(([name, tool]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolDef = (tool as any).unstable_tool
+      return [
+        name,
+        {
+          execute: toolDef?.execute,
+        },
+      ]
+    })
+  )
+}
 
 export interface ElementsProviderProps {
   children: ReactNode
@@ -107,10 +142,7 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
  * Main provider component that sets up auth, tools, and transport.
  * Delegates to either WithHistory or WithoutHistory based on config.
  */
-const ElementsProviderWithApproval = ({
-  children,
-  config,
-}: ElementsProviderProps) => {
+const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   const apiUrl = getApiUrl(config)
   const auth = useAuth({
     auth: config.api,
@@ -142,12 +174,17 @@ const ElementsProviderWithApproval = ({
     })
   }, [])
 
+  // Generate a stable chat ID for server-side persistence (when history is disabled)
+  // When history is enabled, the thread adapter manages chat IDs instead
+  const chatIdRef = useRef<string | null>(null)
+
   const { data: mcpTools } = useMCPTools({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
+    chatId: chatIdRef.current ?? undefined,
   })
 
   // OAuth status checking (only if OAuth is configured)
@@ -201,6 +238,9 @@ const ElementsProviderWithApproval = ({
     whitelistTool: toolApproval.whitelistTool,
   })
 
+  // Connection status for tracking network failures
+  const connectionStatus = useConnectionStatusOptional()
+
   approvalHelpersRef.current = {
     requestApproval: toolApproval.requestApproval,
     isToolApproved: toolApproval.isToolApproved,
@@ -236,12 +276,13 @@ const ElementsProviderWithApproval = ({
   // but runtime is created using transport. The ref gets populated after runtime creation.
   const runtimeRef = useRef<ReturnType<typeof useChatRuntime> | null>(null)
 
-  // Generate a stable chat ID for server-side persistence (when history is disabled)
-  // When history is enabled, the thread adapter manages chat IDs instead
-  const chatIdRef = useRef<string | null>(null)
-
   // Map to share local thread IDs to UUIDs between adapter and transport (for history mode)
   const localIdToUuidMapRef = useRef(new Map<string, string>())
+
+  // Ref to store the current thread's remoteId, synced from assistant-ui state.
+  // This is needed because the runtime object doesn't expose threadListItem.remoteId
+  // in a way that's accessible from the transport's sendMessages function.
+  const currentRemoteIdRef = useRef<string | null>(null)
 
   // Create chat transport configuration
   const transport = useMemo<ChatTransport<UIMessage>>(
@@ -253,29 +294,23 @@ const ElementsProviderWithApproval = ({
           throw new Error('Session is loading')
         }
 
-        // Get chat ID - try runtime's thread remoteId first (history mode),
+        // Get chat ID - use the synced remoteId ref first (history mode),
         // fall back to generated ID (non-history mode)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const runtimeAny = runtimeRef.current as any
+        let chatId = currentRemoteIdRef.current
 
-        // Try multiple paths to get thread info
-        const threadListItemState = runtimeAny?.threadListItem?.getState?.()
-        const threadsState = runtimeAny?.threads?.getState?.()
+        // If we have a valid remoteId (not a local ID), use it directly
+        if (chatId && !isLocalThreadId(chatId)) {
+          // chatId is already set correctly from the synced ref
+        } else if (isLocalThreadId(chatId) || !chatId) {
+          // For local thread IDs or no ID, check/generate UUID mapping
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const runtimeAny = runtimeRef.current as any
+          const threadsState = runtimeAny?.threads?.getState?.()
+          const localThreadId = (threadsState?.mainThreadId ??
+            threadsState?.threadIds?.[0]) as string | undefined
 
-        // Get the thread ID - try different sources
-        const threadRemoteId = threadListItemState?.remoteId as
-          | string
-          | undefined
-        const localThreadId = (threadListItemState?.id ??
-          threadsState?.mainThreadId ??
-          threadsState?.threadIds?.[0]) as string | undefined
-
-        let chatId = threadRemoteId
-
-        if (isLocalThreadId(chatId) || (!chatId && localThreadId)) {
           const lookupKey = chatId ?? localThreadId
           if (lookupKey) {
-            // For local thread IDs, check if we already have a UUID mapping
             const existingUuid = localIdToUuidMapRef.current.get(lookupKey)
             if (existingUuid) {
               chatId = existingUuid
@@ -305,6 +340,8 @@ const ElementsProviderWithApproval = ({
         const headersWithChatId = {
           ...auth.headers,
           'Gram-Chat-ID': chatId,
+          'X-Gram-Source': 'elements',
+          ...config.api?.headers, // We do this after X-Gram-Source so the playground can override it
           ...(config.gramEnvironment && {
             'Gram-Environment': config.gramEnvironment,
           }),
@@ -357,13 +394,47 @@ const ElementsProviderWithApproval = ({
             onError: ({ error }) => {
               console.error('Stream error in onError callback:', error)
               trackError(error, { source: 'streaming' })
+
+              // Check if this is a network/connection error
+              const isNetworkError =
+                error instanceof TypeError ||
+                (error instanceof Error &&
+                  (error.message.includes('fetch') ||
+                    error.message.includes('network') ||
+                    error.message.includes('Failed to fetch') ||
+                    error.message.includes('NetworkError') ||
+                    error.message.includes('ECONNREFUSED') ||
+                    error.message.includes('ETIMEDOUT')))
+
+              if (isNetworkError) {
+                connectionStatus?.markDisconnected()
+              }
             },
           })
+
+          // Mark as connected when stream starts successfully
+          connectionStatus?.markConnected()
 
           return result.toUIMessageStream()
         } catch (error) {
           console.error('Error creating stream:', error)
           trackError(error, { source: 'stream-creation' })
+
+          // Check if this is a network/connection error
+          const isNetworkError =
+            error instanceof TypeError ||
+            (error instanceof Error &&
+              (error.message.includes('fetch') ||
+                error.message.includes('network') ||
+                error.message.includes('Failed to fetch') ||
+                error.message.includes('NetworkError') ||
+                error.message.includes('ECONNREFUSED') ||
+                error.message.includes('ETIMEDOUT')))
+
+          if (isNetworkError) {
+            connectionStatus?.markDisconnected()
+          }
+
           throw error
         }
       },
@@ -381,6 +452,7 @@ const ElementsProviderWithApproval = ({
       apiUrl,
       auth.headers,
       auth.isLoading,
+      connectionStatus,
     ]
   )
 
@@ -429,6 +501,24 @@ const ElementsProviderWithApproval = ({
 
   const frontendTools = config.tools?.frontendTools ?? {}
 
+  // Create combined executable tools for direct tool execution (ActionButton)
+  // Uses a simplified type that focuses on the execute function
+  type ExecutableToolSet = Record<
+    string,
+    | { execute?: (args: unknown, options?: unknown) => Promise<unknown> }
+    | undefined
+  >
+  const executableTools = useMemo<ExecutableToolSet>(() => {
+    const extractedFrontendTools = extractExecutableTools(
+      config.tools?.frontendTools
+    )
+    // MCP tools and extracted frontend tools both have execute functions
+    return {
+      ...mcpTools,
+      ...extractedFrontendTools,
+    } as ExecutableToolSet
+  }, [mcpTools, config.tools?.frontendTools])
+
   // Render the appropriate runtime provider based on history config.
   // We use separate components to avoid conditional hook calls.
   if (historyEnabled && !auth.isLoading) {
@@ -441,6 +531,8 @@ const ElementsProviderWithApproval = ({
         runtimeRef={runtimeRef}
         frontendTools={frontendTools}
         localIdToUuidMap={localIdToUuidMapRef.current}
+        currentRemoteIdRef={currentRemoteIdRef}
+        executableTools={executableTools}
       >
         {children}
       </ElementsProviderWithHistory>
@@ -453,11 +545,19 @@ const ElementsProviderWithApproval = ({
       contextValue={contextValue}
       runtimeRef={runtimeRef}
       frontendTools={frontendTools}
+      executableTools={executableTools}
     >
       {children}
     </ElementsProviderWithoutHistory>
   )
 }
+
+// Shared type for executable tools
+type ExecutableToolSet = Record<
+  string,
+  | { execute?: (args: unknown, options?: unknown) => Promise<unknown> }
+  | undefined
+>
 
 // Separate component for history-enabled mode to avoid conditional hook calls
 interface ElementsProviderWithHistoryProps {
@@ -470,6 +570,26 @@ interface ElementsProviderWithHistoryProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
   localIdToUuidMap: Map<string, string>
+  currentRemoteIdRef: React.RefObject<string | null>
+  executableTools: ExecutableToolSet
+}
+
+/**
+ * Component that syncs the current thread's remoteId to a ref.
+ * Must be rendered inside AssistantRuntimeProvider to access the state.
+ */
+const ThreadIdSync = ({
+  remoteIdRef,
+}: {
+  remoteIdRef: React.RefObject<string | null>
+}) => {
+  const remoteId = useAssistantState(
+    ({ threadListItem }) => threadListItem.remoteId ?? null
+  )
+  useEffect(() => {
+    remoteIdRef.current = remoteId
+  }, [remoteId, remoteIdRef])
+  return null
 }
 
 const ElementsProviderWithHistory = ({
@@ -481,6 +601,8 @@ const ElementsProviderWithHistory = ({
   runtimeRef,
   frontendTools,
   localIdToUuidMap,
+  currentRemoteIdRef,
+  executableTools,
 }: ElementsProviderWithHistoryProps) => {
   const threadListAdapter = useGramThreadListAdapter({
     apiUrl,
@@ -526,10 +648,22 @@ const ElementsProviderWithHistory = ({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <ThreadIdSync remoteIdRef={currentRemoteIdRef} />
       <HistoryProvider>
         <ElementsContext.Provider value={contextValue}>
-          <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
-          <FrontendTools tools={frontendTools} />
+          <ToolExecutionProvider tools={executableTools}>
+            <div
+              className={cn(
+                ROOT_SELECTOR,
+                (contextValue?.config.variant === 'standalone' ||
+                  contextValue?.config.variant === 'sidecar') &&
+                  'h-full'
+              )}
+            >
+              {children}
+            </div>
+            <FrontendTools tools={frontendTools} />
+          </ToolExecutionProvider>
         </ElementsContext.Provider>
       </HistoryProvider>
     </AssistantRuntimeProvider>
@@ -544,6 +678,7 @@ interface ElementsProviderWithoutHistoryProps {
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
+  executableTools: ExecutableToolSet
 }
 
 const ElementsProviderWithoutHistory = ({
@@ -552,6 +687,7 @@ const ElementsProviderWithoutHistory = ({
   contextValue,
   runtimeRef,
   frontendTools,
+  executableTools,
 }: ElementsProviderWithoutHistoryProps) => {
   const runtime = useChatRuntime({ transport })
 
@@ -563,8 +699,19 @@ const ElementsProviderWithoutHistory = ({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ElementsContext.Provider value={contextValue}>
-        <div className={`${ROOT_SELECTOR} h-full`}>{children}</div>
-        <FrontendTools tools={frontendTools} />
+        <ToolExecutionProvider tools={executableTools}>
+          <div
+            className={cn(
+              ROOT_SELECTOR,
+              (contextValue?.config.variant === 'standalone' ||
+                contextValue?.config.variant === 'sidecar') &&
+                'h-full'
+            )}
+          >
+            {children}
+          </div>
+          <FrontendTools tools={frontendTools} />
+        </ToolExecutionProvider>
       </ElementsContext.Provider>
     </AssistantRuntimeProvider>
   )
@@ -575,9 +722,11 @@ const queryClient = new QueryClient()
 export const ElementsProvider = (props: ElementsProviderProps) => {
   return (
     <QueryClientProvider client={queryClient}>
-      <ToolApprovalProvider>
-        <ElementsProviderWithApproval {...props} />
-      </ToolApprovalProvider>
+      <ConnectionStatusProvider>
+        <ToolApprovalProvider>
+          <ElementsProviderInner {...props} />
+        </ToolApprovalProvider>
+      </ConnectionStatusProvider>
     </QueryClientProvider>
   )
 }

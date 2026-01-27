@@ -12,15 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getHeaderDisplayNames = `-- name: GetHeaderDisplayNames :one
+SELECT header_display_names
+FROM mcp_metadata
+WHERE toolset_id = $1
+`
+
+func (q *Queries) GetHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getHeaderDisplayNames, toolsetID)
+	var header_display_names []byte
+	err := row.Scan(&header_display_names)
+	return header_display_names, err
+}
+
 const getMetadataForToolset = `-- name: GetMetadataForToolset :one
-SELECT id,
-       toolset_id,
-       project_id,
-       external_documentation_url,
-       logo_id,
-       instructions,
-       created_at,
-       updated_at
+SELECT id, toolset_id, project_id, external_documentation_url, logo_id, instructions, header_display_names, default_environment_id, created_at, updated_at
 FROM mcp_metadata
 WHERE toolset_id = $1
 ORDER BY updated_at DESC
@@ -37,6 +43,70 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID
 		&i.ExternalDocumentationUrl,
 		&i.LogoID,
 		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateHeaderDisplayName = `-- name: UpdateHeaderDisplayName :one
+UPDATE mcp_metadata
+SET header_display_names = CASE
+    WHEN $1::TEXT = '' THEN header_display_names - $2::TEXT
+    ELSE jsonb_set(header_display_names, ARRAY[$2::TEXT], to_jsonb($1::TEXT))
+    END,
+    updated_at = clock_timestamp()
+WHERE toolset_id = $3 AND project_id = $4
+RETURNING id,
+          toolset_id,
+          project_id,
+          external_documentation_url,
+          logo_id,
+          instructions,
+          header_display_names,
+          created_at,
+          updated_at
+`
+
+type UpdateHeaderDisplayNameParams struct {
+	DisplayName string
+	SecurityKey string
+	ToolsetID   uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type UpdateHeaderDisplayNameRow struct {
+	ID                       uuid.UUID
+	ToolsetID                uuid.UUID
+	ProjectID                uuid.UUID
+	ExternalDocumentationUrl pgtype.Text
+	LogoID                   uuid.NullUUID
+	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+}
+
+// Updates a single header display name in the JSONB field.
+// If display_name is empty, removes the key from the map.
+func (q *Queries) UpdateHeaderDisplayName(ctx context.Context, arg UpdateHeaderDisplayNameParams) (UpdateHeaderDisplayNameRow, error) {
+	row := q.db.QueryRow(ctx, updateHeaderDisplayName,
+		arg.DisplayName,
+		arg.SecurityKey,
+		arg.ToolsetID,
+		arg.ProjectID,
+	)
+	var i UpdateHeaderDisplayNameRow
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.ProjectID,
+		&i.ExternalDocumentationUrl,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -57,14 +127,7 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
               updated_at = clock_timestamp()
-RETURNING id,
-          toolset_id,
-          project_id,
-          external_documentation_url,
-          logo_id,
-          instructions,
-          created_at,
-          updated_at
+RETURNING id, toolset_id, project_id, external_documentation_url, logo_id, instructions, header_display_names, default_environment_id, created_at, updated_at
 `
 
 type UpsertMetadataParams struct {
@@ -91,6 +154,8 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		&i.ExternalDocumentationUrl,
 		&i.LogoID,
 		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

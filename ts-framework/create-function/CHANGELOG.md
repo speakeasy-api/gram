@@ -1,5 +1,13 @@
 # @gram-ai/create-function
 
+## 0.12.3
+
+## 0.12.2
+
+### Patch Changes
+
+- 82c1a79: Generated `AGENTS.md` in each gram function template now includes documentation on how to integrate OAuth for an external data source into a function.
+
 ## 0.12.1
 
 ### Patch Changes

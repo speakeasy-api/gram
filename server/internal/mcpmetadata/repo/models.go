@@ -16,6 +16,8 @@ type McpMetadatum struct {
 	ExternalDocumentationUrl pgtype.Text
 	LogoID                   uuid.NullUUID
 	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	DefaultEnvironmentID     uuid.NullUUID
 	CreatedAt                pgtype.Timestamptz
 	UpdatedAt                pgtype.Timestamptz
 }

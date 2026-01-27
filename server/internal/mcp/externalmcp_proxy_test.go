@@ -4,16 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -36,226 +34,72 @@ type mockToolResponse struct {
 	IsError bool
 }
 
-// sseResponseChannel manages the channel for sending SSE responses
-type sseResponseChannel struct {
-	ch     chan []byte
-	mu     sync.Mutex
-	closed bool
-}
-
-func newSSEResponseChannel() *sseResponseChannel {
-	return &sseResponseChannel{
-		ch: make(chan []byte, 100),
-	}
-}
-
-func (s *sseResponseChannel) send(data []byte) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.closed {
-		s.ch <- data
-	}
-}
-
-func (s *sseResponseChannel) close() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.closed {
-		s.closed = true
-		close(s.ch)
-	}
-}
-
 // newMockExternalMCPServer creates an httptest server that speaks the MCP protocol
+// using the official MCP SDK, which properly handles session management for both
+// SSE and StreamableHTTP transports.
 func newMockExternalMCPServer(t *testing.T, transportType externalmcp_types.TransportType, tools []mockTool) *httptest.Server {
 	t.Helper()
 
-	// For SSE transport, we need a channel to send responses back to the SSE stream
-	var sseResp *sseResponseChannel
-	if transportType == externalmcp_types.TransportTypeSSE {
-		sseResp = newSSEResponseChannel()
-	}
+	// Create a new MCP server
+	mcpServer := mcp.NewServer(&mcp.Implementation{
+		Name:    "test-external-mcp-server",
+		Version: "1.0.0",
+	}, nil)
 
-	// Helper to process JSON-RPC requests and generate responses
-	processRequest := func(rpcRequest map[string]any) map[string]any {
-		method, ok := rpcRequest["method"].(string)
-		if !ok {
-			return nil
-		}
+	// Register each mock tool with the server
+	for _, tool := range tools {
+		// Capture the tool response for the closure
+		toolResponse := tool.Response
 
-		requestID := rpcRequest["id"]
+		// Convert the input schema to JSON for the Tool definition
+		inputSchemaJSON, err := json.Marshal(tool.InputSchema)
+		require.NoError(t, err)
 
-		switch method {
-		case "initialize":
-			return map[string]any{
-				"jsonrpc": "2.0",
-				"id":      requestID,
-				"result": map[string]any{
-					"protocolVersion": "2025-03-26",
-					"capabilities": map[string]any{
-						"tools": map[string]any{},
-					},
-					"serverInfo": map[string]any{
-						"name":    "test-external-mcp-server",
-						"version": "1.0.0",
-					},
-				},
-			}
-		case "notifications/initialized":
-			return nil
-		case "tools/list":
-			toolsList := make([]map[string]any, 0, len(tools))
-			for _, tool := range tools {
-				toolsList = append(toolsList, map[string]any{
-					"name":        tool.Name,
-					"description": tool.Description,
-					"inputSchema": tool.InputSchema,
-				})
-			}
-			return map[string]any{
-				"jsonrpc": "2.0",
-				"id":      requestID,
-				"result": map[string]any{
-					"tools": toolsList,
-				},
-			}
-		case "tools/call":
-			params, ok := rpcRequest["params"].(map[string]any)
-			if !ok {
-				return nil
-			}
-			toolName, ok := params["name"].(string)
-			if !ok {
-				return nil
-			}
-
-			var mockResp mockToolResponse
-			for _, tool := range tools {
-				if tool.Name == toolName {
-					mockResp = tool.Response
-					break
-				}
-			}
-
-			return map[string]any{
-				"jsonrpc": "2.0",
-				"id":      requestID,
-				"result": map[string]any{
-					"content": mockResp.Content,
-					"isError": mockResp.IsError,
-				},
-			}
-		default:
-			t.Logf("unexpected method: %s", method)
-			return nil
-		}
-	}
-
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			if transportType == externalmcp_types.TransportTypeSSE {
-				w.Header().Set("Content-Type", "text/event-stream")
-				w.Header().Set("Cache-Control", "no-cache")
-				w.Header().Set("Connection", "keep-alive")
-				w.WriteHeader(http.StatusOK)
-
-				flusher, ok := w.(http.Flusher)
-				if !ok {
-					t.Fatal("ResponseWriter doesn't support flushing")
-					return
-				}
-
-				endpoint := "/mcp"
-				_, _ = fmt.Fprintf(w, "event: endpoint\ndata: %s\n\n", endpoint)
-				flusher.Flush()
-
-				for {
-					select {
-					case data, ok := <-sseResp.ch:
-						if !ok {
-							return
-						}
-						_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", data)
-						flusher.Flush()
-					case <-r.Context().Done():
-						// Client disconnected - just return, don't close shared channel
-						return
+		// Add the tool to the server using the low-level AddTool method
+		// which allows us to use json.RawMessage for the input schema
+		mcpServer.AddTool(&mcp.Tool{
+			Name:        tool.Name,
+			Description: tool.Description,
+			InputSchema: json.RawMessage(inputSchemaJSON),
+		}, func(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			// Convert the mock response content to MCP Content types
+			content := make([]mcp.Content, 0, len(toolResponse.Content))
+			for _, c := range toolResponse.Content {
+				contentType, _ := c["type"].(string)
+				switch contentType {
+				case "text":
+					text, _ := c["text"].(string)
+					content = append(content, &mcp.TextContent{Text: text})
+				default:
+					// For unknown types, try to use text if available
+					if text, ok := c["text"].(string); ok {
+						content = append(content, &mcp.TextContent{Text: text})
 					}
 				}
 			}
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		if r.Method == http.MethodDelete {
-			// Don't close the shared channel on DELETE - just acknowledge
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		if r.Method != http.MethodPost {
-			t.Fatalf("unexpected HTTP method: %s", r.Method)
-			return
-		}
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Logf("error reading body: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		defer func() { _ = r.Body.Close() }()
-
-		var rpcRequests []map[string]any
-		if err := json.Unmarshal(body, &rpcRequests); err != nil {
-			var singleRequest map[string]any
-			if err := json.Unmarshal(body, &singleRequest); err != nil {
-				t.Logf("error parsing JSON: %v", err)
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			rpcRequests = []map[string]any{singleRequest}
-		}
-
-		responses := make([]map[string]any, 0, len(rpcRequests))
-		for _, rpcRequest := range rpcRequests {
-			response := processRequest(rpcRequest)
-			if response != nil {
-				responses = append(responses, response)
-			}
-		}
-
-		if transportType == externalmcp_types.TransportTypeSSE && sseResp != nil {
-			for _, response := range responses {
-				data, err := json.Marshal(response)
-				if err != nil {
-					t.Logf("error marshaling response: %v", err)
-					continue
-				}
-				sseResp.send(data)
-			}
-			w.WriteHeader(http.StatusAccepted)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if len(rpcRequests) == 1 && len(responses) == 1 {
-			_ = json.NewEncoder(w).Encode(responses[0])
-		} else {
-			_ = json.NewEncoder(w).Encode(responses)
-		}
-	})
-
-	server := httptest.NewServer(handler)
-
-	if sseResp != nil {
-		t.Cleanup(func() {
-			sseResp.close()
+			return &mcp.CallToolResult{
+				Content: content,
+				IsError: toolResponse.IsError,
+			}, nil
 		})
 	}
 
-	return server
+	// Create the appropriate HTTP handler based on transport type
+	var handler http.Handler
+	switch transportType {
+	case externalmcp_types.TransportTypeSSE:
+		handler = mcp.NewSSEHandler(func(_ *http.Request) *mcp.Server {
+			return mcpServer
+		}, nil)
+	case externalmcp_types.TransportTypeStreamableHTTP:
+		handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
+			return mcpServer
+		}, nil)
+	default:
+		t.Fatalf("unsupported transport type: %s", transportType)
+	}
+
+	return httptest.NewServer(handler)
 }
 
 // externalMCPConfig contains configuration for setting up external MCP in tests
@@ -352,6 +196,7 @@ func setupToolsetWithExternalMCP(
 	toolDef, err := externalmcpRepo.CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
 		ExternalMcpAttachmentID:    attachment.ID,
 		ToolUrn:                    toolURN,
+		Type:                       "proxy",
 		RemoteUrl:                  mockServerURL,
 		TransportType:              transportType,
 		RequiresOauth:              false,

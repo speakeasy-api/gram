@@ -8,10 +8,15 @@
 package types
 
 type SecurityVariable struct {
+	// The unique identifier of the security variable
+	ID string
 	// The type of security
 	Type *string
-	// The name of the security scheme
+	// The name of the security scheme (actual header/parameter name)
 	Name string
+	// User-friendly display name for the security variable (defaults to name if
+	// not set)
+	DisplayName *string
 	// Where the security token is placed
 	InPlacement string
 	// The security scheme

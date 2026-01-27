@@ -22,12 +22,16 @@ export default tseslint.config(
   includeIgnoreFile(gitignorePath),
   ...storybook.configs['flat/recommended'],
   {
-    ignores: ['scripts/generate-utility-docs.js', 'bin/cli.js'],
+    ignores: ['scripts/generate-utility-docs.js', 'bin/cli.js', '.storybook/**'],
   },
   {
     languageOptions: {
       globals: {
         console: true,
+      },
+      parserOptions: {
+        tsconfigRootDir: __dirname,
+        project: true,
       },
     },
   },
@@ -55,6 +59,13 @@ export default tseslint.config(
           argsIgnorePattern: '^_',
         },
       ],
+    },
+  },
+  // Context files commonly export both providers and hooks
+  {
+    files: ['src/contexts/**/*.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   }
 )

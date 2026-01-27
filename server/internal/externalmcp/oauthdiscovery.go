@@ -26,7 +26,7 @@ const (
 
 // OAuthDiscoveryResult contains the OAuth metadata discovered for an external MCP server.
 type OAuthDiscoveryResult struct {
-	Version               string   // "2.1", "2.0", or "none"
+	Version               string // "2.1", "2.0", or "none"
 	AuthorizationEndpoint string
 	TokenEndpoint         string
 	RegistrationEndpoint  string
@@ -57,7 +57,7 @@ type ExternalMCPOAuthConfig struct {
 // in the toolset that requires OAuth, or nil if none found.
 func ResolveOAuthConfig(toolset *types.Toolset) *ExternalMCPOAuthConfig {
 	for _, tool := range toolset.Tools {
-		if !conv.IsProxyTool(tool) || !tool.ExternalMcpToolDefinition.RequiresOauth {
+		if tool.ExternalMcpToolDefinition == nil || !tool.ExternalMcpToolDefinition.RequiresOauth {
 			continue
 		}
 

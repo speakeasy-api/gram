@@ -27,7 +27,7 @@ type GCSBlobStore struct {
 var _ BlobStore = (*GCSBlobStore)(nil)
 
 func NewGCSBlobStore(ctx context.Context, logger *slog.Logger, bucketURI string) (*GCSBlobStore, error) {
-	client, err := storage.NewClient(ctx, storage.WithJSONReads())
+	client, err := storage.NewGRPCClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("create gcs client: %w", err)
 	}

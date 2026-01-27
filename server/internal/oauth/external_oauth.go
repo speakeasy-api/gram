@@ -752,7 +752,7 @@ func (s *ExternalOAuthService) getExternalOAuthConfig(ctx context.Context, tools
 		ScopesSupported:       matchedTool.OauthScopesSupported,
 		ClientID:              "", // Populated via DCR
 		ClientSecret:          "", // Populated via DCR
-		ProviderName:          matchedTool.Name,
+		ProviderName:          matchedTool.Name.String,
 	}
 
 	s.logger.DebugContext(ctx, "found OAuth config for external MCP tool",
@@ -912,12 +912,12 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 
 	// Store the registration
 	_, err = s.oauthRepo.UpsertExternalOAuthClientRegistration(ctx, repo.UpsertExternalOAuthClientRegistrationParams{
-		OrganizationID:         organizationID,
-		OauthServerIssuer:      oauthConfig.Issuer,
-		ClientID:               dcrResp.ClientID,
-		ClientSecretEncrypted:  pgtype.Text{String: stringPtrOrEmpty(encryptedSecret), Valid: encryptedSecret != nil},
-		ClientIDIssuedAt:       pgtype.Timestamptz{Time: timeOrZero(issuedAt), Valid: issuedAt != nil, InfinityModifier: pgtype.Finite},
-		ClientSecretExpiresAt:  pgtype.Timestamptz{Time: timeOrZero(expiresAt), Valid: expiresAt != nil, InfinityModifier: pgtype.Finite},
+		OrganizationID:        organizationID,
+		OauthServerIssuer:     oauthConfig.Issuer,
+		ClientID:              dcrResp.ClientID,
+		ClientSecretEncrypted: pgtype.Text{String: stringPtrOrEmpty(encryptedSecret), Valid: encryptedSecret != nil},
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: timeOrZero(issuedAt), Valid: issuedAt != nil, InfinityModifier: pgtype.Finite},
+		ClientSecretExpiresAt: pgtype.Timestamptz{Time: timeOrZero(expiresAt), Valid: expiresAt != nil, InfinityModifier: pgtype.Finite},
 	})
 	if err != nil {
 		return "", "", fmt.Errorf("store client registration: %w", err)

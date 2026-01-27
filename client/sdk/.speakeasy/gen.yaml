@@ -16,6 +16,7 @@ generation:
     requestResponseComponentNamesFeb2024: true
     securityFeb2025: true
     sharedErrorComponentsApr2025: false
+    sharedNestedComponentsJan2026: false
   auth:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
@@ -25,13 +26,13 @@ generation:
     allOfMergeStrategy: shallowMerge
   requestBodyFieldName: ""
   persistentEdits:
-    enabled: "true"
+    enabled: never
   tests:
     generateTests: true
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.25.12
+  version: 0.26.1
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}

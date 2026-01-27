@@ -37,12 +37,12 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
-		response := getServerResponse{
-			Server: serverJSON{
+		response := serverDetailsEntry{
+			Server: serverDetailsJSON{
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemote{
+				Remotes: []serverRemoteBasic{
 					{URL: "https://example.com/streamable", Type: "streamable-http"},
 				},
 			},
@@ -82,12 +82,12 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
-		response := getServerResponse{
-			Server: serverJSON{
+		response := serverDetailsEntry{
+			Server: serverDetailsJSON{
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemote{
+				Remotes: []serverRemoteBasic{
 					{URL: "https://example.com/sse", Type: "sse"},
 				},
 			},
@@ -127,12 +127,12 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
-		response := getServerResponse{
-			Server: serverJSON{
+		response := serverDetailsEntry{
+			Server: serverDetailsJSON{
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemote{
+				Remotes: []serverRemoteBasic{
 					{URL: "https://example.com/sse", Type: "sse"},
 					{URL: "https://example.com/streamable", Type: "streamable-http"},
 				},

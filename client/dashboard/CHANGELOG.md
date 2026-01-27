@@ -1,5 +1,57 @@
 # dashboard
 
+## 0.26.19
+
+### Patch Changes
+
+- e1f46b5: feat: add page titles to tab
+- Updated dependencies [6744e5d]
+  - @gram-ai/elements@1.23.0
+
+## 0.26.18
+
+### Patch Changes
+
+- Updated dependencies [258b503]
+  - @gram-ai/elements@1.22.5
+
+## 0.26.17
+
+### Patch Changes
+
+- 156bc66: Fix logs page on dashboard and correct display issues in Elements library
+- f8a3eae: Show all envirnoment variables for basic auth in mcp details and install page
+- Updated dependencies [a57b307]
+- Updated dependencies [156bc66]
+- Updated dependencies [834a770]
+  - @gram-ai/elements@1.22.4
+  - @gram/client@0.27.0
+
+## 0.26.16
+
+### Patch Changes
+
+- 484bbe0: Enable renaming of MCP authorization headers and with user friendly display names. These names are used as the default names of environment variables on the user facing MCP config.
+- Updated dependencies [484bbe0]
+  - @gram/client@0.25.16
+
+## 0.26.15
+
+### Patch Changes
+
+- Updated dependencies [d733319]
+  - @gram-ai/elements@1.22.3
+
+## 0.26.14
+
+### Patch Changes
+
+- 9073203: Fix elements onboarding in dashboard which was broken by shadow DOM changes
+- d6ae47c: Always connect to servers in playground through gram domain in order to avoid
+  conflicting with CSP connect-src
+- Updated dependencies [9073203]
+  - @gram-ai/elements@1.22.2
+
 ## 0.26.13
 
 ### Patch Changes

@@ -1,7 +1,9 @@
 import { ToolCallMessagePartProps } from '@assistant-ui/react'
 import type { Meta, StoryFn } from '@storybook/react-vite'
 import React from 'react'
+import z from 'zod'
 import { Chat } from '..'
+import { defineFrontendTool } from '../../../lib/tools'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Tools',
@@ -162,6 +164,126 @@ CustomToolComponent.parameters = {
         components: {
           kitchen_sink_get_get_card_details: CardPinRevealComponent,
         },
+      },
+    },
+  },
+}
+
+/**
+ * Demonstrates the generativeUI plugin which renders `ui` code blocks
+ * as dynamic UI widgets.
+ *
+ * The LLM outputs JSON in a ```ui code fence, and the plugin renders it
+ * using the built-in component catalog (Card, Grid, Metric, Table, etc.)
+ */
+export const GenerativeUI: Story = () => <Chat />
+GenerativeUI.parameters = {
+  elements: {
+    config: {
+      variant: 'standalone',
+      welcome: {
+        title: 'Data Explorer',
+        subtitle: 'Ask questions about your data',
+        suggestions: [
+          {
+            title: 'Sales metrics',
+            label: 'This month',
+            prompt:
+              'What are our sales numbers this month? Revenue is $125,000, conversion rate is 3.2%, and we have 1,420 orders.',
+          },
+          {
+            title: 'Team members',
+            label: 'Directory',
+            prompt:
+              'List our team members: Alice (alice@co.com, Admin, Active), Bob (bob@co.com, Editor, Active), Charlie (charlie@co.com, Viewer, Pending)',
+          },
+          {
+            title: 'Project status',
+            label: 'Sprint progress',
+            prompt:
+              'How is our current sprint going? We have 12 tasks total, 8 completed, 3 in progress, and 1 blocked. The team has 4 developers.',
+          },
+          {
+            title: 'Website analytics',
+            label: 'Last 7 days',
+            prompt:
+              "Show me last week's website stats: 45,000 page views, 2.1% bounce rate, 3m 24s average session, top pages are /home, /pricing, /docs",
+          },
+        ],
+      },
+    },
+  },
+}
+
+// Frontend tools for the ActionButton demo
+const ApproveRequestTool = defineFrontendTool<{ id: number }, string>(
+  {
+    description: 'Approve a pending request',
+    parameters: z.object({
+      id: z.number().describe('The request ID to approve'),
+    }),
+    execute: async ({ id }) => {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      return `Request #${id} has been approved successfully.`
+    },
+  },
+  'approve_request'
+)
+
+const RejectRequestTool = defineFrontendTool<
+  { id: number; reason?: string },
+  string
+>(
+  {
+    description: 'Reject a pending request',
+    parameters: z.object({
+      id: z.number().describe('The request ID to reject'),
+      reason: z.string().optional().describe('Reason for rejection'),
+    }),
+    execute: async ({ id, reason }) => {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      return `Request #${id} has been rejected.${reason ? ` Reason: ${reason}` : ''}`
+    },
+  },
+  'reject_request'
+)
+
+const actionTools = {
+  approve_request: ApproveRequestTool,
+  reject_request: RejectRequestTool,
+}
+
+/**
+ * Demonstrates ActionButton in generative UI that triggers tool calls.
+ *
+ * The LLM generates UI with ActionButton components that, when clicked,
+ * directly execute the tool without an LLM roundtrip.
+ */
+export const GenerativeUIWithActions: Story = () => <Chat />
+GenerativeUIWithActions.parameters = {
+  elements: {
+    config: {
+      variant: 'standalone',
+      welcome: {
+        title: 'Expense Approvals',
+        subtitle: 'Review and process pending requests',
+        suggestions: [
+          {
+            title: 'Pending expenses',
+            label: 'Needs review',
+            prompt: `I need to review these pending expense requests:
+
+Request #1247: Sarah Chen submitted $450 for conference registration
+Request #1248: Mike Johnson submitted $89 for software subscription
+Request #1249: Lisa Park submitted $1,200 for client dinner
+
+I need to be able to approve or reject each one.`,
+          },
+        ],
+      },
+      tools: {
+        frontendTools: actionTools,
       },
     },
   },

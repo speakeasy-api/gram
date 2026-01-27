@@ -2359,6 +2359,243 @@ func EncodeAddOAuthProxyServerError(encoder func(context.Context, http.ResponseW
 	}
 }
 
+// EncodeUpdateSecurityVariableDisplayNameResponse returns an encoder for
+// responses returned by the toolsets updateSecurityVariableDisplayName
+// endpoint.
+func EncodeUpdateSecurityVariableDisplayNameResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*types.SecurityVariable)
+		enc := encoder(ctx, w)
+		body := NewUpdateSecurityVariableDisplayNameResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeUpdateSecurityVariableDisplayNameRequest returns a decoder for
+// requests sent to the toolsets updateSecurityVariableDisplayName endpoint.
+func DecodeUpdateSecurityVariableDisplayNameRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*toolsets.UpdateSecurityVariableDisplayNamePayload, error) {
+	return func(r *http.Request) (*toolsets.UpdateSecurityVariableDisplayNamePayload, error) {
+		var (
+			body UpdateSecurityVariableDisplayNameRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return nil, gerr
+			}
+			return nil, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUpdateSecurityVariableDisplayNameRequestBody(&body)
+		if err != nil {
+			return nil, err
+		}
+
+		var (
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload := NewUpdateSecurityVariableDisplayNamePayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeUpdateSecurityVariableDisplayNameError returns an encoder for errors
+// returned by the updateSecurityVariableDisplayName toolsets endpoint.
+func EncodeUpdateSecurityVariableDisplayNameError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateSecurityVariableDisplayNameUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateSecurityVariableDisplayNameForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateSecurityVariableDisplayNameBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateSecurityVariableDisplayNameNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateSecurityVariableDisplayNameConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateSecurityVariableDisplayNameUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateSecurityVariableDisplayNameInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateSecurityVariableDisplayNameInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateSecurityVariableDisplayNameUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateSecurityVariableDisplayNameGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalTypesSecurityVariableToSecurityVariableResponseBody builds a value of
 // type *SecurityVariableResponseBody from a value of type
 // *types.SecurityVariable.
@@ -2367,8 +2604,10 @@ func marshalTypesSecurityVariableToSecurityVariableResponseBody(v *types.Securit
 		return nil
 	}
 	res := &SecurityVariableResponseBody{
+		ID:           v.ID,
 		Type:         v.Type,
 		Name:         v.Name,
+		DisplayName:  v.DisplayName,
 		InPlacement:  v.InPlacement,
 		Scheme:       v.Scheme,
 		BearerFormat: v.BearerFormat,
@@ -2687,12 +2926,12 @@ func marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBod
 		return nil
 	}
 	res := &ExternalMCPToolDefinitionResponseBody{
-		ID:                         v.ID,
-		ToolUrn:                    v.ToolUrn,
+		Type:                       v.Type,
 		DeploymentExternalMcpID:    v.DeploymentExternalMcpID,
 		DeploymentID:               v.DeploymentID,
 		RegistryID:                 v.RegistryID,
-		Name:                       v.Name,
+		RegistrySpecifier:          v.RegistrySpecifier,
+		RegistryServerName:         v.RegistryServerName,
 		Slug:                       v.Slug,
 		RemoteURL:                  v.RemoteURL,
 		TransportType:              v.TransportType,
@@ -2703,12 +2942,29 @@ func marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBod
 		OauthRegistrationEndpoint:  v.OauthRegistrationEndpoint,
 		CreatedAt:                  v.CreatedAt,
 		UpdatedAt:                  v.UpdatedAt,
+		ID:                         v.ID,
+		ToolUrn:                    v.ToolUrn,
+		ProjectID:                  v.ProjectID,
+		Name:                       v.Name,
+		CanonicalName:              v.CanonicalName,
+		Description:                v.Description,
+		SchemaVersion:              v.SchemaVersion,
+		Schema:                     v.Schema,
+		Confirm:                    v.Confirm,
+		ConfirmPrompt:              v.ConfirmPrompt,
+		Summarizer:                 v.Summarizer,
 	}
 	if v.OauthScopesSupported != nil {
 		res.OauthScopesSupported = make([]string, len(v.OauthScopesSupported))
 		for i, val := range v.OauthScopesSupported {
 			res.OauthScopesSupported[i] = val
 		}
+	}
+	if v.Canonical != nil {
+		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
 	}
 
 	return res

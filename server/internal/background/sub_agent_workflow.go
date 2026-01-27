@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -68,21 +69,15 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 		systemPrompt += fmt.Sprintf("\n\nInstructions: %s", params.Instructions)
 	}
 
-	messages := []openrouter.OpenAIChatMessage{
-		{
-			Role:       "system",
-			Content:    systemPrompt,
-			ToolCalls:  nil,
-			ToolCallID: "",
-			Name:       "",
-		},
-		{
-			Role:       "user",
-			Content:    fmt.Sprintf("Goal: %s\n\nContext: %s", params.Goal, params.Context),
-			ToolCalls:  nil,
-			ToolCallID: "",
-			Name:       "",
-		},
+	messages := []or.Message{
+		or.CreateMessageSystem(or.SystemMessage{
+			Content: or.CreateSystemMessageContentStr(systemPrompt),
+			Name:    nil,
+		}),
+		or.CreateMessageUser(or.UserMessage{
+			Content: or.CreateUserMessageContentStr(fmt.Sprintf("Goal: %s\n\nContext: %s", params.Goal, params.Context)),
+			Name:    nil,
+		}),
 	}
 
 	toolCallCount := 0
@@ -162,10 +157,10 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 			}, nil
 		}
 
-		msg := modelCallOutput.Message
-		messages = append(messages, *msg)
+		msg := *modelCallOutput.Message
+		messages = append(messages, msg)
 
-		if len(msg.ToolCalls) == 0 {
+		if msg.Type != or.MessageTypeAssistant {
 			// Add final message to output for history
 			messageID := "msg_" + workflow.Now(ctx).Format("20060102150405")
 			output = append(output, agents.OutputMessage{
@@ -176,13 +171,13 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 				Content: []agents.OutputTextContent{
 					{
 						Type: "output_text",
-						Text: msg.Content,
+						Text: openrouter.GetText(msg),
 					},
 				},
 			})
 			// Return the final message content as the result, along with output for history
 			return &SubAgentWorkflowResult{
-				Result:        msg.Content,
+				Result:        openrouter.GetText(msg),
 				Output:        output,
 				Error:         nil,
 				ToolCallCount: toolCallCount,
@@ -191,13 +186,13 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 
 		// Execute tool calls in parallel
 		type toolCallFuture struct {
-			toolCall     openrouter.ToolCall
+			toolCall     or.ChatMessageToolCall
 			future       workflow.Future
 			toolCallName string
 		}
 
-		toolCallFutures := make([]toolCallFuture, 0, len(msg.ToolCalls))
-		for _, tc := range msg.ToolCalls {
+		toolCallFutures := make([]toolCallFuture, 0, len(msg.AssistantMessage.ToolCalls))
+		for _, tc := range msg.AssistantMessage.ToolCalls {
 			toolMeta, ok := toolMetadata[tc.Function.Name]
 			if !ok {
 				toolMeta = activities.ToolMetadata{
@@ -259,13 +254,10 @@ When making tool calls, prioritize parallel execution. If multiple operations do
 				output = append(output, outputItem)
 			}
 
-			messages = append(messages, openrouter.OpenAIChatMessage{
-				Role:       "tool",
-				Content:    toolCallOutput.ToolOutput,
-				Name:       tcf.toolCall.Function.Name,
+			messages = append(messages, or.CreateMessageTool(or.ToolResponseMessage{
+				Content:    or.CreateToolResponseMessageContentStr(toolCallOutput.ToolOutput),
 				ToolCallID: tcf.toolCall.ID,
-				ToolCalls:  nil,
-			})
+			}))
 		}
 	}
 }

@@ -57,6 +57,10 @@ type Client struct {
 	// addOAuthProxyServer endpoint.
 	AddOAuthProxyServerDoer goahttp.Doer
 
+	// UpdateSecurityVariableDisplayName Doer is the HTTP client used to make
+	// requests to the updateSecurityVariableDisplayName endpoint.
+	UpdateSecurityVariableDisplayNameDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -77,21 +81,22 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateToolsetDoer:            doer,
-		ListToolsetsDoer:             doer,
-		UpdateToolsetDoer:            doer,
-		DeleteToolsetDoer:            doer,
-		GetToolsetDoer:               doer,
-		CheckMCPSlugAvailabilityDoer: doer,
-		CloneToolsetDoer:             doer,
-		AddExternalOAuthServerDoer:   doer,
-		RemoveOAuthServerDoer:        doer,
-		AddOAuthProxyServerDoer:      doer,
-		RestoreResponseBody:          restoreBody,
-		scheme:                       scheme,
-		host:                         host,
-		decoder:                      dec,
-		encoder:                      enc,
+		CreateToolsetDoer:                     doer,
+		ListToolsetsDoer:                      doer,
+		UpdateToolsetDoer:                     doer,
+		DeleteToolsetDoer:                     doer,
+		GetToolsetDoer:                        doer,
+		CheckMCPSlugAvailabilityDoer:          doer,
+		CloneToolsetDoer:                      doer,
+		AddExternalOAuthServerDoer:            doer,
+		RemoveOAuthServerDoer:                 doer,
+		AddOAuthProxyServerDoer:               doer,
+		UpdateSecurityVariableDisplayNameDoer: doer,
+		RestoreResponseBody:                   restoreBody,
+		scheme:                                scheme,
+		host:                                  host,
+		decoder:                               dec,
+		encoder:                               enc,
 	}
 }
 
@@ -330,6 +335,30 @@ func (c *Client) AddOAuthProxyServer() goa.Endpoint {
 		resp, err := c.AddOAuthProxyServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "addOAuthProxyServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateSecurityVariableDisplayName returns an endpoint that makes HTTP
+// requests to the toolsets service updateSecurityVariableDisplayName server.
+func (c *Client) UpdateSecurityVariableDisplayName() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateSecurityVariableDisplayNameRequest(c.encoder)
+		decodeResponse = DecodeUpdateSecurityVariableDisplayNameResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateSecurityVariableDisplayNameRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateSecurityVariableDisplayNameDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "updateSecurityVariableDisplayName", err)
 		}
 		return decodeResponse(resp)
 	}

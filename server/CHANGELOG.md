@@ -1,5 +1,35 @@
 # server
 
+## 0.20.1
+
+### Patch Changes
+
+- f3f6c82: Add machinery for tracking mcp header / environemnt configuration
+
+## 0.20.0
+
+### Minor Changes
+
+- 834a770: Removes old tool toolmetrics logs logic and endpoints.
+
+### Patch Changes
+
+- 4e50632: Adds clickhouse logging for GenAI events
+- f8a3eae: Show all envirnoment variables for basic auth in mcp details and install page
+
+## 0.19.0
+
+### Minor Changes
+
+- e5e4127: Introduced an internal OpenRouter Go SDK generated with Speakeasy and makes use of it in the Gram server's chat service to deserialize requests. This SDK is intended to be replaced by a future official OpenRouter SDK when that becomes available.
+
+## 0.18.5
+
+### Patch Changes
+
+- 7daaf31: Added endpoints for creating presigned URLs for chat attachments and accessing them using JWT tokens with a limited TTL. This is currently an exploratory feature and may be removed or changed in the near future.
+- e4c02a1: proxy fully metadata objects for external oauth servers
+
 ## 0.18.4
 
 ### Patch Changes

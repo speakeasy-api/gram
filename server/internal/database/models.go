@@ -76,15 +76,22 @@ type ChatMessage struct {
 	ProjectID        uuid.NullUUID
 	Role             string
 	Content          string
+	ContentRaw       []byte
+	ContentAssetUrl  pgtype.Text
 	Model            pgtype.Text
 	MessageID        pgtype.Text
-	UserID           pgtype.Text
-	ExternalUserID   pgtype.Text
 	FinishReason     pgtype.Text
 	ToolCalls        []byte
 	PromptTokens     int64
 	CompletionTokens int64
 	TotalTokens      int64
+	StorageError     pgtype.Text
+	UserID           pgtype.Text
+	ExternalUserID   pgtype.Text
+	Origin           pgtype.Text
+	UserAgent        pgtype.Text
+	IpAddress        pgtype.Text
+	Source           pgtype.Text
 	ToolCallID       pgtype.Text
 	ToolUrn          urn.Tool
 	ToolOutcome      pgtype.Text
@@ -211,11 +218,16 @@ type ExternalMcpToolDefinition struct {
 	RemoteUrl                  string
 	TransportType              types.TransportType
 	RequiresOauth              bool
+	Type                       string
+	Name                       pgtype.Text
+	Description                pgtype.Text
+	Schema                     []byte
 	OauthVersion               string
 	OauthAuthorizationEndpoint pgtype.Text
 	OauthTokenEndpoint         pgtype.Text
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
+	HeaderDefinitions          []byte
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeletedAt                  pgtype.Timestamptz
@@ -377,6 +389,17 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type McpEnvironmentConfig struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	McpMetadataID     uuid.UUID
+	VariableName      string
+	HeaderDisplayName pgtype.Text
+	ProvidedBy        string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
 type McpMetadatum struct {
 	ID                       uuid.UUID
 	ToolsetID                uuid.UUID
@@ -384,6 +407,8 @@ type McpMetadatum struct {
 	ExternalDocumentationUrl pgtype.Text
 	LogoID                   uuid.NullUUID
 	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	DefaultEnvironmentID     uuid.NullUUID
 	CreatedAt                pgtype.Timestamptz
 	UpdatedAt                pgtype.Timestamptz
 }

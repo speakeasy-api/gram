@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -107,27 +108,21 @@ func (c *ChatClient) AgentChat(
 		defer cancel()
 	}
 
-	var messages []openrouter.OpenAIChatMessage
+	var messages []or.Message
 
 	// Optional system prompt
 	if opts.SystemPrompt != nil {
-		messages = append(messages, openrouter.OpenAIChatMessage{
-			Role:       "system",
-			Content:    *opts.SystemPrompt,
-			ToolCalls:  nil,
-			ToolCallID: "",
-			Name:       "",
-		})
+		messages = append(messages, or.CreateMessageSystem(or.SystemMessage{
+			Content: or.CreateSystemMessageContentStr(*opts.SystemPrompt),
+			Name:    nil,
+		}))
 	}
 
 	// User message
-	messages = append(messages, openrouter.OpenAIChatMessage{
-		Role:       "user",
-		Content:    prompt,
-		ToolCalls:  nil,
-		ToolCallID: "",
-		Name:       "",
-	})
+	messages = append(messages, or.CreateMessageUser(or.UserMessage{
+		Content: or.CreateUserMessageContentStr(prompt),
+		Name:    nil,
+	}))
 
 	// Register tool definitions and their executors
 	agentTools := opts.AdditionalTools
@@ -156,12 +151,12 @@ func (c *ChatClient) AgentChat(
 		messages = append(messages, *msg)
 
 		// No tool calls = final assistant message
-		if len(msg.ToolCalls) == 0 {
-			return msg.Content, nil
+		if msg.Type != or.MessageTypeAssistant {
+			return openrouter.GetText(*msg), nil
 		}
 
 		// Tool call loop
-		for _, tc := range msg.ToolCalls {
+		for _, tc := range msg.AssistantMessage.ToolCalls {
 			c.logger.InfoContext(ctx, "Tool called", attr.SlogToolName(tc.Function.Name))
 
 			var output string
@@ -179,13 +174,10 @@ func (c *ChatClient) AgentChat(
 				}
 			}
 
-			messages = append(messages, openrouter.OpenAIChatMessage{
-				Role:       "tool",
-				Content:    output,
-				Name:       tc.Function.Name,
+			messages = append(messages, or.CreateMessageTool(or.ToolResponseMessage{
+				Content:    or.CreateToolResponseMessageContentStr(output),
 				ToolCallID: tc.ID,
-				ToolCalls:  nil,
-			})
+			}))
 		}
 	}
 }
@@ -283,7 +275,7 @@ func (c *ChatClient) LoadToolsetTools(
 			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{
 				SystemEnv:  systemConfig,
 				UserConfig: ciEnv,
-			}, plan, tm.NewNoopToolCallLogger())
+			}, plan, tm.HTTPLogAttributes{})
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

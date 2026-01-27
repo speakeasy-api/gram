@@ -270,6 +270,30 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "addOAuthProxyServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOAuthProxyServer"}`)
 	})
+
+	Method("updateSecurityVariableDisplayName", func() {
+		Description("Update the display name of a security variable for user-friendly presentation")
+
+		Payload(func() {
+			Extend(UpdateSecurityVariableDisplayNameForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(shared.SecurityVariable)
+
+		HTTP(func() {
+			POST("/rpc/toolsets.updateSecurityVariableDisplayName")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateSecurityVariableDisplayName")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateSecurityVariableDisplayName")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateSecurityVariableDisplayName"}`)
+	})
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
@@ -316,4 +340,18 @@ var AddOAuthProxyServerForm = Type("AddOAuthProxyServerForm", func() {
 	Attribute("oauth_proxy_server", shared.OAuthProxyServerForm, "The OAuth proxy server data to create and associate with the toolset")
 	security.ProjectPayload()
 	Required("slug", "oauth_proxy_server")
+})
+
+var UpdateSecurityVariableDisplayNameForm = Type("UpdateSecurityVariableDisplayNameForm", func() {
+	Attribute("toolset_slug", shared.Slug, "The slug of the toolset containing the security variable")
+	Attribute("security_key", String, func() {
+		Description("The security scheme key (e.g., 'BearerAuth', 'ApiKeyAuth') from the OpenAPI spec")
+		MaxLength(60)
+	})
+	Attribute("display_name", String, func() {
+		Description("The user-friendly display name. Set to empty string to clear and use the original name.")
+		MaxLength(120)
+	})
+	security.ProjectPayload()
+	Required("toolset_slug", "security_key", "display_name")
 })

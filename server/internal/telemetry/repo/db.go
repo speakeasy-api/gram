@@ -2,10 +2,8 @@ package repo
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // CHTX is the interface for executing ClickHouse queries and commands.
@@ -17,27 +15,19 @@ type CHTX interface {
 
 // Queries contains methods for executing database operations.
 type Queries struct {
-	conn       CHTX
-	logger     *slog.Logger
-	tracer     trace.Tracer
+	conn CHTX
 }
 
 // WithConn returns a new Queries instance using the provided connection.
 func (q *Queries) WithConn(conn CHTX) *Queries {
 	return &Queries{
-		conn:       conn,
-		logger:     q.logger,
-		tracer:     q.tracer,
+		conn: conn,
 	}
 }
 
 // New creates a new Queries instance with logger and tracer.
-func New(logger *slog.Logger, traceProvider trace.TracerProvider, conn CHTX) *Queries {
-	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/repo")
-
+func New(conn CHTX) *Queries {
 	return &Queries{
-		conn:       conn,
-		logger:     logger,
-		tracer:     tracer,
+		conn: conn,
 	}
 }

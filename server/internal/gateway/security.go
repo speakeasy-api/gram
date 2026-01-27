@@ -31,7 +31,7 @@ func processSecurity(
 	cacheImpl cache.Cache,
 	env ToolCallEnv,
 	serverURL string,
-	toolCallLogger tm.ToolCallLogger,
+	attrRecorder tm.HTTPLogAttributes,
 ) bool {
 	// Merge: system env is base, user config overrides
 	mergedEnv := NewCaseInsensitiveEnv()
@@ -49,7 +49,7 @@ func processSecurity(
 	}
 	defer func() {
 		// if tool calling logging is enabled this will record the headers that were set with redaction
-		toolCallLogger.RecordRequestHeaders(securityHeadersProcessed, true)
+		attrRecorder.RecordRequestHeaders(securityHeadersProcessed, true)
 	}()
 	for _, security := range plan.Security {
 		if !security.Type.Valid {

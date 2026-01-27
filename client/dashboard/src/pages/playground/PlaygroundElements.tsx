@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import {
   Chat,
@@ -22,7 +23,6 @@ import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useEnvironment } from "../environments/Environment";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getAuthStatus } from "./PlaygroundAuth";
 import {
   GramComposer,
@@ -163,6 +163,9 @@ export function PlaygroundElements({
           url: getServerURL(),
           sessionFn: getSession,
           ...(oauthConfig && { oauth: oauthConfig }),
+          headers: {
+            "X-Gram-Source": "playground",
+          },
         },
         history: {
           enabled: true,

@@ -1,5 +1,36 @@
 # @gram-ai/elements
 
+## 1.23.0
+
+### Minor Changes
+
+- 6744e5d: Add generative UI plugin for dynamic widget rendering. The plugin renders `ui` code blocks as interactive widgets including Card, Grid, Metric, Table, Badge, Progress, List, and ActionButton components. ActionButton enables triggering tool calls directly from generated UI.
+
+## 1.22.5
+
+### Patch Changes
+
+- 258b503: Updated the message conversion logic to properly rehydrate assistant messages that include tool call results.
+
+## 1.22.4
+
+### Patch Changes
+
+- a57b307: Fix resumption of chats
+- 156bc66: Fix logs page on dashboard and correct display issues in Elements library
+
+## 1.22.3
+
+### Patch Changes
+
+- d733319: Add chat-id header to mcp discovery
+
+## 1.22.2
+
+### Patch Changes
+
+- 9073203: Fix elements onboarding in dashboard which was broken by shadow DOM changes
+
 ## 1.22.1
 
 ### Patch Changes

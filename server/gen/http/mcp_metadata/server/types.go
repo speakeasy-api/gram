@@ -48,6 +48,8 @@ type SetMcpMetadataResponseBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Maps security scheme keys to user-friendly display names
+	HeaderDisplayNames map[string]string `form:"header_display_names,omitempty" json:"header_display_names,omitempty" xml:"header_display_names,omitempty"`
 	// When the metadata entry was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the metadata entry was last updated
@@ -438,6 +440,8 @@ type McpMetadataResponseBody struct {
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Maps security scheme keys to user-friendly display names
+	HeaderDisplayNames map[string]string `form:"header_display_names,omitempty" json:"header_display_names,omitempty" xml:"header_display_names,omitempty"`
 	// When the metadata entry was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the metadata entry was last updated
@@ -465,6 +469,14 @@ func NewSetMcpMetadataResponseBody(res *types.McpMetadata) *SetMcpMetadataRespon
 		Instructions:             res.Instructions,
 		CreatedAt:                res.CreatedAt,
 		UpdatedAt:                res.UpdatedAt,
+	}
+	if res.HeaderDisplayNames != nil {
+		body.HeaderDisplayNames = make(map[string]string, len(res.HeaderDisplayNames))
+		for key, val := range res.HeaderDisplayNames {
+			tk := key
+			tv := val
+			body.HeaderDisplayNames[tk] = tv
+		}
 	}
 	return body
 }

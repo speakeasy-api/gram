@@ -18,6 +18,97 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/keys"
 )
 
+type AuthOptions struct {
+	Profile      *profile.Profile
+	ProfilePath  string
+	APIURL       string
+	DashboardURL string
+	ProjectSlug  string
+}
+
+type AuthResult struct {
+	Profile *profile.Profile
+}
+
+func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
+	logger := logging.PullLogger(ctx)
+
+	if opts.ProfilePath == "" {
+		var err error
+		opts.ProfilePath, err = profile.DefaultProfilePath()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get profile path: %w", err)
+		}
+	}
+
+	apiURLStr := opts.APIURL
+	if apiURLStr == "" {
+		apiURLStr = workflow.DefaultBaseURL
+	}
+
+	apiURL, err := url.Parse(apiURLStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid API URL: %w", err)
+	}
+
+	dashboardURL := opts.DashboardURL
+	if dashboardURL == "" {
+		dashboardURL = apiURL.String()
+	}
+
+	profileName := profileNameFromURL(apiURL.String())
+	keysClient := api.NewKeysClientFromURL(apiURL)
+
+	prof := opts.Profile
+	if prof == nil {
+		prof, _ = profile.LoadByName(opts.ProfilePath, profileName)
+	}
+
+	if canRefreshProfile(prof) {
+		err := refreshProfile(ctx, logger, prof, profileName, apiURL.String(), keysClient, opts.ProfilePath)
+		if err == nil {
+			logger.InfoContext(ctx, fmt.Sprintf(
+				"Authentication successful for org '%s' (project: '%s')",
+				prof.Org.Name,
+				prof.DefaultProjectSlug,
+			))
+
+			savedProf, err := profile.LoadByName(opts.ProfilePath, profileName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load profile: %w", err)
+			}
+			return &AuthResult{Profile: savedProf}, nil
+		}
+	}
+
+	projectSlug := opts.ProjectSlug
+	if err := authenticateNewProfile(
+		ctx,
+		logger,
+		profileName,
+		apiURL.String(),
+		dashboardURL,
+		keysClient,
+		opts.ProfilePath,
+	); err != nil {
+		return nil, err
+	}
+
+	savedProf, err := profile.LoadByName(opts.ProfilePath, profileName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load profile: %w", err)
+	}
+
+	if projectSlug != "" && projectSlug != savedProf.DefaultProjectSlug {
+		if err := profile.UpdateProjectSlug(opts.ProfilePath, projectSlug); err != nil {
+			logger.WarnContext(ctx, "failed to update project slug", slog.String("error", err.Error()))
+		}
+		savedProf, _ = profile.LoadByName(opts.ProfilePath, profileName)
+	}
+
+	return &AuthResult{Profile: savedProf}, nil
+}
+
 func newAuthCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "auth",
@@ -107,13 +198,6 @@ func profileNameFromURL(apiURL string) string {
 		return "default"
 	}
 	return strings.ReplaceAll(parsed.Host, ".", "-")
-}
-
-func determineProfileName(prof *profile.Profile, apiURL string) string {
-	if prof != nil {
-		return prof.Name
-	}
-	return profileNameFromURL(apiURL)
 }
 
 func getProfilePath(c *cli.Context) (string, error) {
@@ -246,52 +330,33 @@ func authenticateNewProfile(
 func doAuth(c *cli.Context) error {
 	ctx := c.Context
 	logger := logging.PullLogger(ctx)
-	prof := profile.FromContext(ctx)
-
-	apiURL, err := workflow.ResolveURL(c, prof)
-	if err != nil {
-		return fmt.Errorf("invalid API URL: %w", err)
-	}
-
-	// Get dashboard URL for browser authentication
-	dashboardURL := apiURL.String()
-	if c.IsSet("dashboard-url") {
-		dashboardURL = c.String("dashboard-url")
-	}
-
-	profileName := c.String("profile")
-	if profileName == "" {
-		profileName = determineProfileName(prof, apiURL.String())
-	}
-
-	keysClient := api.NewKeysClientFromURL(apiURL)
 
 	profilePath, err := getProfilePath(c)
 	if err != nil {
 		return fmt.Errorf("failed to get profile path: %w", err)
 	}
 
-	if canRefreshProfile(prof) {
-		err := refreshProfile(ctx, logger, prof, profileName, apiURL.String(), keysClient, profilePath)
-		if err == nil {
-			msg := fmt.Sprintf(
-				"Authentication successful for org '%s' (project: '%s')",
-				prof.Org.Name,
-				prof.DefaultProjectSlug,
-			)
-			logger.InfoContext(ctx, msg)
-			return nil
-		}
-		// If refresh failed, fall through to authenticate new profile
+	var dashboardURL string
+	if c.IsSet("dashboard-url") {
+		dashboardURL = c.String("dashboard-url")
 	}
 
-	return authenticateNewProfile(
-		ctx,
-		logger,
-		profileName,
-		apiURL.String(),
-		dashboardURL,
-		keysClient,
-		profilePath,
-	)
+	result, err := DoAuth(ctx, AuthOptions{
+		Profile:      profile.FromContext(ctx),
+		ProfilePath:  profilePath,
+		APIURL:       c.String("api-url"),
+		DashboardURL: dashboardURL,
+		ProjectSlug:  c.String("project"),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to authenticate: %w", err)
+	}
+
+	logger.InfoContext(ctx, fmt.Sprintf(
+		"Authentication successful for org '%s' (project: '%s')",
+		result.Profile.Org.Name,
+		result.Profile.DefaultProjectSlug,
+	))
+
+	return nil
 }

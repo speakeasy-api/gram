@@ -54,8 +54,8 @@ export const AssistantSidecar: FC<AssistantSidecarProps> = ({ className }) => {
         <div className="aui-sidecar-header flex h-14 shrink-0 items-center justify-between border-b px-4">
           <span
             className={cn(
-              'text-md flex items-center gap-2 font-medium',
-              isGenerating && 'shimmer'
+              'text-foreground text-md flex items-center gap-2 font-medium',
+              isGenerating && 'title-shimmer'
             )}
           >
             {title}

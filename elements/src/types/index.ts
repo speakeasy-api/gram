@@ -336,6 +336,18 @@ export type BaseApiConfig = {
    * }
    */
   url?: string
+
+  /**
+   * Additional headers to send with the API request.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   api: {
+   *     headers: { 'X-My-Header': 'my-value' },
+   *   },
+   * }
+   */
+  headers?: Record<string, string>
 }
 
 export type SessionAuthConfig = {

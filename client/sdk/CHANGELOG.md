@@ -1,5 +1,17 @@
 # @gram/client
 
+## 0.27.0
+
+### Minor Changes
+
+- 834a770: Removes old tool toolmetrics logs logic and endpoints.
+
+## 0.25.16
+
+### Patch Changes
+
+- 484bbe0: Enable renaming of MCP authorization headers and with user friendly display names. These names are used as the default names of environment variables on the user facing MCP config.
+
 ## 0.25.12
 
 ### Patch Changes

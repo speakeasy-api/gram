@@ -7,15 +7,15 @@ import (
 
 	"github.com/google/uuid"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 type ExecuteToolCallInput struct {
 	OrgID        string
 	ProjectID    uuid.UUID
-	ToolCall     openrouter.ToolCall
+	ToolCall     or.ChatMessageToolCall
 	ToolMetadata ToolMetadata
 }
 

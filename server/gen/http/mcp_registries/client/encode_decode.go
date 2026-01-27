@@ -281,6 +281,33 @@ func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalM
 		IconURL:           v.IconURL,
 		Meta:              v.Meta,
 	}
+	if v.Tools != nil {
+		res.Tools = make([]*types.ExternalMCPTool, len(v.Tools))
+		for i, val := range v.Tools {
+			if val == nil {
+				res.Tools[i] = nil
+				continue
+			}
+			res.Tools[i] = unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool builds a value of
+// type *types.ExternalMCPTool from a value of type
+// *ExternalMCPToolResponseBody.
+func unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool(v *ExternalMCPToolResponseBody) *types.ExternalMCPTool {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPTool{
+		Name:        v.Name,
+		Description: v.Description,
+		InputSchema: v.InputSchema,
+		Annotations: v.Annotations,
+	}
 
 	return res
 }

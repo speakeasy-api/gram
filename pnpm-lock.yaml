@@ -422,6 +422,12 @@ importers:
       '@datadog/browser-rum':
         specifier: ^6.24.1
         version: 6.24.1
+      '@json-render/core':
+        specifier: ^0.2.0
+        version: 0.2.0(zod@4.2.1)
+      '@json-render/react':
+        specifier: ^0.2.0
+        version: 0.2.0(react@19.2.3)(zod@4.2.1)
       '@openrouter/ai-sdk-provider':
         specifier: ^1.4.1
         version: 1.5.4(ai@5.0.90(zod@4.2.1))(zod@4.2.1)
@@ -482,6 +488,9 @@ importers:
       vega:
         specifier: ^6.2.0
         version: 6.2.0
+      vega-interpreter:
+        specifier: ^1.0.5
+        version: 1.2.1
       vite-plugin-externalize-deps:
         specifier: ^0.10.0
         version: 0.10.0(vite@7.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
@@ -498,6 +507,9 @@ importers:
       '@eslint/js':
         specifier: ^9.39.1
         version: 9.39.2
+      '@openrouter/sdk':
+        specifier: ^0.3.14
+        version: 0.3.14
       '@storybook/addon-docs':
         specifier: ^10.0.8
         version: 10.1.10(@types/react@19.2.7)(esbuild@0.27.0)(rollup@4.53.3)(storybook@10.1.10(@testing-library/dom@10.4.1)(prettier@3.7.4)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(vite@7.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
@@ -1664,6 +1676,16 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@json-render/core@0.2.0':
+    resolution: {integrity: sha512-LBKv4M5skz7JRpTn53g6qF/zj5u/xUhuCp6WtJn/ZTIxGEAogH8sn3Ql/Nk/O0sgbQHtriRmoJuI23/5fGCXPw==}
+    peerDependencies:
+      zod: ^4.0.0
+
+  '@json-render/react@0.2.0':
+    resolution: {integrity: sha512-4tdoMfc3t0Je+DMNsyJguz7aJkqfLhEY8/mvBchL9kweRfJHAZocT7doyqRCGAnCBtIXCKQ8YAbm0sb0Qr9OFw==}
+    peerDependencies:
+      react: ^19.0.0
+
   '@kwsites/file-exists@1.1.1':
     resolution: {integrity: sha512-m9/5YGR18lIwxSFDwfE3oA7bWuq9kdau6ugN4H2rJeyhFQZcG9AgSHkQtSD15a8WvTgfz9aikZMrKPHvbpqFiw==}
 
@@ -1771,6 +1793,9 @@ packages:
 
   '@openrouter/sdk@0.1.27':
     resolution: {integrity: sha512-RH//L10bSmc81q25zAZudiI4kNkLgxF2E+WU42vghp3N6TEvZ6F0jK7uT3tOxkEn91gzmMw9YVmDENy7SJsajQ==}
+
+  '@openrouter/sdk@0.3.14':
+    resolution: {integrity: sha512-+smUr3ZmMLXO/vLjXKvQzED44vd+45U4GoSTOOnNcln5lLv4JslPtCRBIYXEVx+adiBsiRkFaq5BAPsZhKIEDA==}
 
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
@@ -7001,6 +7026,9 @@ packages:
   vega-hierarchy@5.1.0:
     resolution: {integrity: sha512-rZlU8QJNETlB6o73lGCPybZtw2fBBsRIRuFE77aCLFHdGsh6wIifhplVarqE9icBqjUHRRUOmcEYfzwVIPr65g==}
 
+  vega-interpreter@1.2.1:
+    resolution: {integrity: sha512-EMHLGxJ+SWfh1K/fHDRlHEZtLA/2ZNAXItYb5e8CxuAIm/Ha/3DHX/8VlvbTGIciUpuwmcKx4tVhJWlKreQ/Yw==}
+
   vega-label@2.1.0:
     resolution: {integrity: sha512-/hgf+zoA3FViDBehrQT42Lta3t8In6YwtMnwjYlh72zNn1p3c7E3YUBwqmAqTM1x+tudgzMRGLYig+bX1ewZxQ==}
 
@@ -7039,6 +7067,9 @@ packages:
 
   vega-typings@2.1.0:
     resolution: {integrity: sha512-zdis4Fg4gv37yEvTTSZEVMNhp8hwyEl7GZ4X4HHddRVRKxWFsbyKvZx/YW5Z9Ox4sjxVA2qHzEbod4Fdx+SEJA==}
+
+  vega-util@1.17.4:
+    resolution: {integrity: sha512-+y3ZW7dEqM8Ck+KRsd+jkMfxfE7MrQxUyIpNjkfhIpGEreym+aTn7XUw1DKXqclr8mqTQvbilPo16B3lnBr0wA==}
 
   vega-util@2.1.0:
     resolution: {integrity: sha512-PGfp0m0QCufDmcxKJCWQy4Ov23FoF8DSXmoJwSezi3itQaa2hbxK0+xwsTMP2vy4PR16Pu25HMzgMwXVW1+33w==}
@@ -8473,6 +8504,17 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@json-render/core@0.2.0(zod@4.2.1)':
+    dependencies:
+      zod: 4.2.1
+
+  '@json-render/react@0.2.0(react@19.2.3)(zod@4.2.1)':
+    dependencies:
+      '@json-render/core': 0.2.0(zod@4.2.1)
+      react: 19.2.3
+    transitivePeerDependencies:
+      - zod
+
   '@kwsites/file-exists@1.1.1':
     dependencies:
       debug: 4.4.3
@@ -8656,6 +8698,10 @@ snapshots:
       zod: 4.2.1
 
   '@openrouter/sdk@0.1.27':
+    dependencies:
+      zod: 4.2.1
+
+  '@openrouter/sdk@0.3.14':
     dependencies:
       zod: 4.2.1
 
@@ -14568,6 +14614,10 @@ snapshots:
       vega-dataflow: 6.1.0
       vega-util: 2.1.0
 
+  vega-interpreter@1.2.1:
+    dependencies:
+      vega-util: 1.17.4
+
   vega-label@2.1.0:
     dependencies:
       vega-canvas: 2.0.0
@@ -14656,6 +14706,8 @@ snapshots:
       vega-event-selector: 4.0.0
       vega-expression: 6.1.0
       vega-util: 2.1.0
+
+  vega-util@1.17.4: {}
 
   vega-util@2.1.0: {}
 
