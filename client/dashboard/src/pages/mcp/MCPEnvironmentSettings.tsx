@@ -204,11 +204,14 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
   // Set toolset environment link mutation (for making an environment the default)
   const setMcpMetadataMutation = useMcpMetadataSetMutation({
-    onSuccess: () => {
-      invalidateAllToolset(queryClient);
-      invalidateAllGetMcpMetadata(queryClient);
-      invalidateAllListEnvironments(queryClient);
-      // Clear editing state after successful save
+    onSuccess: async () => {
+      // Invalidate and wait for refetch before clearing editing state
+      await Promise.all([
+        invalidateAllToolset(queryClient),
+        invalidateAllGetMcpMetadata(queryClient),
+        invalidateAllListEnvironments(queryClient),
+      ]);
+      // Clear editing state after data is refetched
       setEditingState(new Map());
       telemetry.capture("mcp_event", {
         action: "mcp_metadata_updated",
