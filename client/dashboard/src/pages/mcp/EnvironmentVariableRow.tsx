@@ -237,9 +237,11 @@ export function EnvironmentVariableRow({
           >
             <SelectTrigger
               tabIndex={-1}
-              className="h-full border-0 rounded-none bg-muted/50 focus:ring-0 focus-visible:ring-0 shadow-none w-[130px] text-xs"
+              className="h-full border-0 rounded-none bg-muted/50 focus:ring-0 focus-visible:ring-0 shadow-none w-[100px] text-xs"
             >
-              <SelectValue />
+              <span>
+                {MODE_OPTIONS.find((o) => o.value === envVar.state)?.label}
+              </span>
             </SelectTrigger>
             <SelectContent>
               {MODE_OPTIONS.map((option) => (
@@ -247,9 +249,8 @@ export function EnvironmentVariableRow({
                   key={option.value}
                   value={option.value}
                   textValue={option.label}
-                  className="flex flex-col items-start"
                 >
-                  <div className="flex flex-col gap-0.5">
+                  <div className="flex flex-col gap-0.5 py-1">
                     <span className="font-medium">{option.label}</span>
                     <span className="text-xs text-muted-foreground">
                       {option.description}
