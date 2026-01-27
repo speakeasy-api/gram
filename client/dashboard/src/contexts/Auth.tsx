@@ -219,13 +219,12 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
-  const previewMode = searchParams.get("preview") === "true";
   if (redirectParam) {
     if (!import.meta.env.DEV) {
       console.log("(0.2) redirecting to redirectParam", redirectParam);
       return <Navigate to={redirectParam} replace />;
     }
-  } else if (session.organization && !projectSlug && !previewMode) {
+  } else if (session.organization && !projectSlug) {
     console.log("(1) redirecting to preferred project", projectSlug);
     // if we're logged in but the URL doesn't have a project slug, redirect to
     // the default project
@@ -254,7 +253,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
         replace
       />
     );
-  } else if (session.organization.slug !== orgSlug && !previewMode) {
+  } else if (session.organization.slug !== orgSlug) {
     console.log("(2) redirecting to organization");
 
     // make sure we don't direct to an org we aren't authenticated with
