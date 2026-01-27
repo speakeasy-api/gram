@@ -1,10 +1,17 @@
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Button } from "@speakeasy-api/moonshine";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
   EnvironmentVariable,
+  EnvVarState,
   environmentHasValue,
   getEditingValue,
   getHeaderDisplayName,
@@ -26,13 +33,35 @@ interface EnvironmentVariableRowProps {
   editingState: Map<string, { value: string; headerDisplayName?: string }>;
   editingHeaderId: string | null;
   hasUnsavedChanges: boolean;
-  onToggleState: (id: string) => void;
+  onStateChange: (id: string, state: EnvVarState) => void;
   onValueChange: (id: string, value: string) => void;
   onDelete: (id: string) => void;
   onEditHeaderName: (id: string) => void;
   onHeaderDisplayNameChange: (id: string, value: string) => void;
   onHeaderBlur: () => void;
 }
+
+const MODE_OPTIONS: Array<{
+  value: EnvVarState;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "system",
+    label: "System",
+    description: "Value is stored securely and injected by the system",
+  },
+  {
+    value: "user-provided",
+    label: "User",
+    description: "User must provide this value when connecting",
+  },
+  {
+    value: "omitted",
+    label: "Omit",
+    description: "Variable is not included in the configuration",
+  },
+];
 
 export function EnvironmentVariableRow({
   envVar,
@@ -45,7 +74,7 @@ export function EnvironmentVariableRow({
   editingState,
   editingHeaderId,
   hasUnsavedChanges,
-  onToggleState,
+  onStateChange,
   onValueChange,
   onDelete,
   onEditHeaderName,
@@ -53,7 +82,7 @@ export function EnvironmentVariableRow({
   onHeaderBlur,
 }: EnvironmentVariableRowProps) {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const isEditing = editingHeaderId === envVar.id;
+  const isEditingHeader = editingHeaderId === envVar.id;
   const headerName = getHeaderDisplayName(
     envVar,
     environmentConfigs,
@@ -79,6 +108,10 @@ export function EnvironmentVariableRow({
     isActivelyEditing && !!editingState.get(envVar.id)!.value;
   // When actively editing, use editing value to determine indicator; otherwise use saved
   const hasValue = isActivelyEditing ? editingHasValue : savedHasValue;
+
+  const isDisabled =
+    selectedEnvironmentView !==
+    (mcpAttachedEnvironmentSlug || defaultEnvironmentSlug || "default");
 
   return (
     <div
@@ -125,7 +158,7 @@ export function EnvironmentVariableRow({
 
       {/* Variable Info */}
       <div className="min-w-0">
-        {isEditing ? (
+        {isEditingHeader ? (
           <input
             type="text"
             value={headerName}
@@ -186,61 +219,83 @@ export function EnvironmentVariableRow({
         )}
       </div>
 
-      {/* Right side: State Button + Value */}
-      <div className="flex items-center gap-4">
-        {/* State cycle button */}
-        <Button
-          size="xs"
-          variant="secondary"
-          onClick={() => onToggleState(envVar.id)}
-          disabled={
-            selectedEnvironmentView !==
-            (mcpAttachedEnvironmentSlug || defaultEnvironmentSlug || "default")
-          }
-          tabIndex={-1}
-        >
-          <Button.Text>
-            {envVar.state === "user-provided"
-              ? "User Provided"
-              : envVar.state === "system"
-                ? "System"
-                : "Omitted"}
-          </Button.Text>
-        </Button>
-
-        {/* Value Input or status badge */}
-        <div className="w-56">
-          {envVar.state === "user-provided" ? (
-            <div className="h-9 flex items-center px-3 rounded-md bg-muted text-xs text-muted-foreground font-mono">
-              Set at runtime
-            </div>
-          ) : envVar.state === "omitted" ? (
-            <div className="h-9 flex items-center px-3 rounded-md bg-muted text-xs text-muted-foreground font-mono">
-              Not included
-            </div>
-          ) : (
-            <div className="relative">
-              <input
-                type={isPasswordVisible ? "text" : "password"}
-                value={editingValue}
-                onChange={(e) => onValueChange(envVar.id, e.target.value)}
-                placeholder="Enter value..."
-                className="w-full h-9 px-3 pr-10 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              <button
-                type="button"
-                tabIndex={-1}
-                onClick={() => setIsPasswordVisible(!isPasswordVisible)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {isPasswordVisible ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
+      {/* Combined Mode + Value Input */}
+      <div className="flex items-center">
+        <div
+          className={cn(
+            "flex items-center h-9 rounded-md border border-input bg-background overflow-hidden",
+            "focus-within:ring-2 focus-within:ring-ring",
           )}
+        >
+          {/* Mode Dropdown */}
+          <Select
+            value={envVar.state}
+            onValueChange={(value) =>
+              onStateChange(envVar.id, value as EnvVarState)
+            }
+            disabled={isDisabled}
+          >
+            <SelectTrigger
+              tabIndex={-1}
+              className="h-full border-0 rounded-none bg-muted/50 focus:ring-0 focus-visible:ring-0 shadow-none w-[130px] text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MODE_OPTIONS.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  className="flex flex-col items-start"
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium">{option.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {option.description}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Divider */}
+          <div className="w-px h-5 bg-border" />
+
+          {/* Value Input or Status Text */}
+          <div className="w-48 h-full">
+            {envVar.state === "user-provided" ? (
+              <div className="h-full flex items-center px-3 text-xs text-muted-foreground font-mono">
+                Set at runtime
+              </div>
+            ) : envVar.state === "omitted" ? (
+              <div className="h-full flex items-center px-3 text-xs text-muted-foreground font-mono">
+                Not included
+              </div>
+            ) : (
+              <div className="relative h-full">
+                <input
+                  type={isPasswordVisible ? "text" : "password"}
+                  value={editingValue}
+                  onChange={(e) => onValueChange(envVar.id, e.target.value)}
+                  placeholder="Enter value..."
+                  className="w-full h-full px-3 pr-9 bg-transparent text-sm font-mono placeholder:text-muted-foreground focus:outline-none"
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setIsPasswordVisible(!isPasswordVisible)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {isPasswordVisible ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

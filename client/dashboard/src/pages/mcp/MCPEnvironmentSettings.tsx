@@ -676,23 +676,16 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     setEnvVars(loadedEnvVars);
   };
 
-  // Cycle between user-provided, system, and omitted states
-  const handleToggleState = (id: string) => {
+  // Handle state change from dropdown
+  const handleStateChange = (id: string, newState: EnvVarState) => {
     const envVar = envVars.find((v) => v.id === id);
     if (!envVar) return;
-
-    const nextState: EnvVarState =
-      envVar.state === "user-provided"
-        ? "system"
-        : envVar.state === "system"
-          ? "omitted"
-          : "user-provided";
 
     // Update local state
     setEnvVars(
       envVars.map((v) => {
         if (v.id !== id) return v;
-        return { ...v, state: nextState };
+        return { ...v, state: newState };
       }),
     );
 
@@ -802,7 +795,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 editingState={editingState}
                 editingHeaderId={editingHeaderId}
                 hasUnsavedChanges={hasUserEdits(envVar)}
-                onToggleState={handleToggleState}
+                onStateChange={handleStateChange}
                 onValueChange={handleValueChange}
                 onDelete={handleDeleteVariable}
                 onEditHeaderName={setEditingHeaderId}
