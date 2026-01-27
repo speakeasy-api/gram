@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -37,7 +38,22 @@ type LogParams struct {
 }
 
 func (s *Service) CreateLog(params LogParams) {
-	s.logWriter.Enqueue(params)
+	ctx := context.Background()
+
+	enabled, err := s.logsEnabled(ctx, params.ToolInfo.OrganizationID)
+	if err != nil || !enabled {
+		return
+	}
+
+	logParams, err := buildTelemetryLogParams(params)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to build telemetry log params", attr.SlogError(err))
+		return
+	}
+
+	if err := s.chRepo.InsertTelemetryLog(ctx, *logParams); err != nil {
+		s.logger.ErrorContext(ctx, "failed to insert telemetry log", attr.SlogError(err))
+	}
 }
 
 // buildTelemetryLogParams constructs InsertTelemetryLogParams from attributes.

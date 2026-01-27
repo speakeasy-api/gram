@@ -97,9 +97,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	logWriter := telemetry.NewLogWriter(logger, chConn, logsEnabled, telemetry.LogWriterOptions{})
-
-	svc := telemetry.NewService(logger, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, logWriter, posthogClient)
+	svc := telemetry.NewService(logger, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, posthogClient)
 
 	return ctx, &testInstance{
 		service:        svc,

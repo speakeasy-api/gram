@@ -34,7 +34,6 @@ type Service struct {
 	tracer       trace.Tracer
 	posthog      PosthogClient
 	chatSessions *chatsessions.Manager
-	logWriter    *LogWriter
 	logsEnabled  LogsEnabled
 }
 
@@ -48,10 +47,8 @@ func NewService(
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
 	logsEnabled LogsEnabled,
-	logWriter *LogWriter,
 	posthogClient PosthogClient) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
-
 	chRepo := repo.New(chConn)
 
 	return &Service{
@@ -64,7 +61,6 @@ func NewService(
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
 		posthog:      posthogClient,
 		chatSessions: chatSessions,
-		logWriter:    logWriter,
 	}
 }
 

@@ -572,10 +572,7 @@ func newStartCommand() *cli.Command {
 
 				return isEnabled, nil
 			}
-			logWriter := tm.NewLogWriter(logger, chDB, logsEnabled, tm.LogWriterOptions{BufferSize: 1000, Workers: 5})
-			shutdownFuncs = append(shutdownFuncs, logWriter.Shutdown)
-
-			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, logWriter, posthogClient)
+			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, posthogClient)
 
 			mux := goahttp.NewMuxer()
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
