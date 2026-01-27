@@ -261,9 +261,6 @@ export function EnvironmentVariableRow({
             </SelectContent>
           </Select>
 
-          {/* Divider */}
-          <div className="w-px h-5 bg-border" />
-
           {/* Value Input or Status Text */}
           <div className="w-48 h-full">
             {envVar.state === "user-provided" ? (
