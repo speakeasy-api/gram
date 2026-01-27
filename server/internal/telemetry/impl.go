@@ -41,6 +41,12 @@ type Service struct {
 var _ telem_gen.Service = (*Service)(nil)
 var _ telem_gen.Auther = (*Service)(nil)
 
+// MetricsScope constants for type-safe scope comparisons.
+const (
+	MetricsScopeProject telem_gen.MetricsScope = "project"
+	MetricsScopeChat    telem_gen.MetricsScope = "chat"
+)
+
 func NewService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
@@ -226,6 +232,74 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 		ToolCalls:  toolCalls,
 		Enabled:    true,
 		NextCursor: nextCursor,
+	}, nil
+}
+
+// GetMetricsSummary retrieves aggregated metrics for a project or chat.
+func (s *Service) GetMetricsSummary(ctx context.Context, payload *telem_gen.GetMetricsSummaryPayload) (res *telem_gen.GetMetricsSummaryResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.isLogsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeForbidden, nil, "telemetry is not enabled for this organization")
+	}
+
+	if payload.Scope != MetricsScopeProject && payload.Scope != MetricsScopeChat {
+		return nil, oops.E(oops.CodeBadRequest, nil, "scope must be 'project' or 'chat'")
+	}
+
+	chatID := ""
+	if payload.Scope == MetricsScopeChat {
+		if payload.ChatID == nil || *payload.ChatID == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "chat_id is required when scope is 'chat'")
+		}
+		chatID = *payload.ChatID
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	metrics, err := s.chRepo.GetMetricsSummary(ctx, repo.GetMetricsSummaryParams{
+		Scope:            string(payload.Scope),
+		GramProjectID:    authCtx.ProjectID.String(),
+		TimeStart:        timeStart,
+		TimeEnd:          timeEnd,
+		ChatID:           chatID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving AI metrics")
+	}
+
+	//nolint:gosec // Values are bounded counts that won't overflow int64
+	return &telem_gen.GetMetricsSummaryResult{
+		Metrics: &telem_gen.Metrics{
+			TotalInputTokens:      metrics.TotalInputTokens,
+			TotalOutputTokens:     metrics.TotalOutputTokens,
+			TotalTokens:           metrics.TotalTokens,
+			AvgTokensPerRequest:   metrics.AvgTokensPerReq,
+			TotalChatRequests:     int64(metrics.TotalChatRequests),
+			AvgChatDurationMs:     metrics.AvgChatDurationMs,
+			FinishReasonStop:      int64(metrics.FinishReasonStop),
+			FinishReasonToolCalls: int64(metrics.FinishReasonToolCalls),
+			TotalToolCalls:        int64(metrics.TotalToolCalls),
+			ToolCallSuccess:       int64(metrics.ToolCallSuccess),
+			ToolCallFailure:       int64(metrics.ToolCallFailure),
+			AvgToolDurationMs:     metrics.AvgToolDurationMs,
+			TotalChats:            int64(metrics.TotalChats),
+			DistinctModels:        int64(metrics.DistinctModels),
+			DistinctProviders:     int64(metrics.DistinctProviders),
+		},
+		Scope:   payload.Scope,
+		Enabled: true,
 	}, nil
 }
 

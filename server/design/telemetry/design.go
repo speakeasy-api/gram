@@ -116,6 +116,38 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:operationId", "captureEvent")
 		Meta("openapi:extension:x-speakeasy-name-override", "captureEvent")
 	})
+
+	Method("getMetricsSummary", func() {
+		Description("Get aggregated metrics summary for a project or specific chat session")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetMetricsSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetMetricsSummaryResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getMetricsSummary")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMetricsSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMetricsSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMetricsSummary"}`)
+	})
 })
 
 var TelemetryFilter = Type("TelemetryFilter", func() {
@@ -298,4 +330,90 @@ var CaptureEventResult = Type("CaptureEventResult", func() {
 	Attribute("success", Boolean, "Whether the event was successfully captured")
 
 	Required("success")
+})
+
+// Metrics types
+
+var MetricsScope = Type("MetricsScope", String, func() {
+	Description("Aggregation scope for metrics")
+	Enum("project", "chat")
+})
+
+var Metrics = Type("Metrics", func() {
+	Description("Aggregated metrics")
+
+	// Token usage
+	Attribute("total_input_tokens", Int64, "Sum of input tokens used")
+	Attribute("total_output_tokens", Int64, "Sum of output tokens used")
+	Attribute("total_tokens", Int64, "Sum of all tokens used")
+	Attribute("avg_tokens_per_request", Float64, "Average tokens per chat request")
+
+	// Chat requests
+	Attribute("total_chat_requests", Int64, "Total number of chat requests")
+	Attribute("avg_chat_duration_ms", Float64, "Average chat request duration in milliseconds")
+
+	// Resolution status (count of each finish reason)
+	Attribute("finish_reason_stop", Int64, "Requests that completed naturally")
+	Attribute("finish_reason_tool_calls", Int64, "Requests that resulted in tool calls")
+
+	// Tool calls
+	Attribute("total_tool_calls", Int64, "Total number of tool calls")
+	Attribute("tool_call_success", Int64, "Successful tool calls (2xx status)")
+	Attribute("tool_call_failure", Int64, "Failed tool calls (4xx/5xx status)")
+	Attribute("avg_tool_duration_ms", Float64, "Average tool call duration in milliseconds")
+
+	// Cardinality (project scope only, 0 for chat scope)
+	Attribute("total_chats", Int64, "Number of unique chat sessions (project scope only)")
+	Attribute("distinct_models", Int64, "Number of distinct models used (project scope only)")
+	Attribute("distinct_providers", Int64, "Number of distinct providers used (project scope only)")
+
+	Required(
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"avg_tokens_per_request",
+		"total_chat_requests",
+		"avg_chat_duration_ms",
+		"finish_reason_stop",
+		"finish_reason_tool_calls",
+		"total_tool_calls",
+		"tool_call_success",
+		"tool_call_failure",
+		"avg_tool_duration_ms",
+		"total_chats",
+		"distinct_models",
+		"distinct_providers",
+	)
+})
+
+var GetMetricsSummaryPayload = Type("GetMetricsSummaryPayload", func() {
+	Description("Payload for getting metrics summary")
+
+	Attribute("scope", MetricsScope, "Aggregation level (project or chat)")
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("chat_id", String, "Chat/conversation ID (required when scope=chat)", func() {
+		Format(FormatUUID)
+	})
+	Attribute("deployment_id", String, "Optional deployment filter", func() {
+		Format(FormatUUID)
+	})
+
+	Required("scope", "from", "to")
+})
+
+var GetMetricsSummaryResult = Type("GetMetricsSummaryResult", func() {
+	Description("Result of metrics summary query")
+
+	Attribute("metrics", Metrics, "Aggregated metrics")
+	Attribute("scope", MetricsScope, "Scope used for aggregation")
+	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
+
+	Required("metrics", "scope", "enabled")
 })
