@@ -91,12 +91,12 @@ func TestService_ExportMcpMetadata_McpNotEnabled(t *testing.T) {
 	})
 	require.NoError(t, err, "create toolset")
 
-	// Try to export - should fail because MCP is not enabled
+	// Try to export - should fail because MCP is not enabled (returns not found to avoid leaking info)
 	_, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
 		ToolsetSlug: types.Slug(toolset.Slug),
 	})
 	require.Error(t, err, "should return error for toolset with MCP disabled")
-	require.Contains(t, err.Error(), "MCP is not enabled", "error message should indicate MCP is not enabled")
+	require.Contains(t, err.Error(), "MCP server not found", "error should indicate server not found")
 }
 
 func TestService_ExportMcpMetadata_WithMetadata(t *testing.T) {

@@ -256,7 +256,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	}
 
 	if !toolset.McpEnabled {
-		return nil, oops.E(oops.CodeBadRequest, nil, "MCP is not enabled for this toolset").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
 	}
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
@@ -283,7 +283,9 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		docsURL = conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl)
 		instructions = conv.FromPGText[string](metadataRecord.Instructions)
 		if len(metadataRecord.HeaderDisplayNames) > 0 {
-			_ = json.Unmarshal(metadataRecord.HeaderDisplayNames, &headerDisplayNames)
+			if err := json.Unmarshal(metadataRecord.HeaderDisplayNames, &headerDisplayNames); err != nil {
+				s.logger.ErrorContext(ctx, "failed to unmarshal header display names", attr.SlogError(err))
+			}
 		}
 	} else if !errors.Is(metadataErr, pgx.ErrNoRows) {
 		s.logger.WarnContext(ctx, "failed to load MCP metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))
