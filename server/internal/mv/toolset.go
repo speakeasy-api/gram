@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ettle/strcase"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -42,6 +43,14 @@ type functionManifestVariable struct {
 type authInputManifest struct {
 	Type     string `json:"type"`
 	Variable string `json:"variable"`
+}
+
+type externalMCPHeaderDefinition struct {
+	Name        string  `json:"name"`
+	IsSecret    bool    `json:"isSecret"`
+	IsRequired  bool    `json:"isRequired"`
+	Description *string `json:"description,omitempty"`
+	Placeholder *string `json:"placeholder,omitempty"`
 }
 
 func DescribeToolsetEntry(
@@ -95,6 +104,7 @@ func DescribeToolsetEntry(
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
 	var functionEnvVars []*types.FunctionEnvironmentVariable
+	var externalMCPHeaderDefinitions []*types.ExternalMCPHeaderDefinition
 	if len(toolUrns) > 0 {
 		definitions, err := toolsRepo.FindHttpToolEntriesByUrn(ctx, tr.FindHttpToolEntriesByUrnParams{
 			ProjectID: pid,
@@ -211,6 +221,13 @@ func DescribeToolsetEntry(
 				Name:    externalMCPTool.Slug + ":proxy",
 				ToolUrn: externalMCPTool.ToolUrn,
 			})
+
+			headerDefs, err := extractExternalMCPHeaderDefinitions(ctx, logger, externalMCPTool.HeaderDefinitions, externalMCPTool.Slug)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract external mcp header definitions").Log(ctx, logger)
+			}
+			externalMCPHeaderDefinitions = append(externalMCPHeaderDefinitions, headerDefs...)
+
 		}
 
 		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, toolset.ID, envQueries)
@@ -275,6 +292,7 @@ func DescribeToolsetEntry(
 		SecurityVariables:            securityVars,
 		ServerVariables:              serverVars,
 		FunctionEnvironmentVariables: dedupeFunctionEnvVars(functionEnvVars),
+		ExternalMcpHeaderDefinitions: dedupeExternalMCPHeaderDefinitions(externalMCPHeaderDefinitions),
 		Description:                  conv.FromPGText[string](toolset.Description),
 		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
 		McpEnabled:                   &toolset.McpEnabled,
@@ -494,6 +512,7 @@ func DescribeToolset(
 	}
 
 	functionEnvVars := dedupeFunctionEnvVars(toolsetTools.FunctionEnvVars)
+	externalMCPHeaderDefinitions := dedupeExternalMCPHeaderDefinitions(toolsetTools.ExternalMCPHeaderDefinitions)
 
 	for _, functionEnvironmentVariable := range functionEnvVars {
 		if functionEnvironmentVariable != nil && functionEnvironmentVariable.AuthInputType != nil && *functionEnvironmentVariable.AuthInputType == "oauth2" {
@@ -512,6 +531,7 @@ func DescribeToolset(
 		SecurityVariables:            toolsetTools.SecurityVars,
 		ServerVariables:              toolsetTools.ServerVars,
 		FunctionEnvironmentVariables: functionEnvVars,
+		ExternalMcpHeaderDefinitions: externalMCPHeaderDefinitions,
 		Description:                  conv.FromPGText[string](toolset.Description),
 		Tools:                        toolsetTools.Tools,
 		ToolsetVersion:               toolsetVersion,
@@ -555,6 +575,7 @@ func readToolsetTools(
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
 	var functionEnvVars []*types.FunctionEnvironmentVariable
+	var externalMCPHeaderDefinitions []*types.ExternalMCPHeaderDefinition
 
 	// NOTE: A slight shortcoming here is that the cache is keyed by the active deployment id, but the queries below don't strictly depend on
 	// the deployment ID fetched above. Technically the deployment could change at just the right time to mess up the cache.
@@ -787,6 +808,13 @@ func readToolsetTools(
 					Variation:                  nil,
 				},
 			})
+
+			headerDefs, err := extractExternalMCPHeaderDefinitions(ctx, logger, def.HeaderDefinitions, def.Slug)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract external mcp header definitions").Log(ctx, logger)
+			}
+			externalMCPHeaderDefinitions = append(externalMCPHeaderDefinitions, headerDefs...)
+
 		}
 	}
 
@@ -841,14 +869,15 @@ func readToolsetTools(
 	}
 
 	toolsetTools := ToolsetBaseContents{
-		DeploymentID:    activeDeploymentID.String(),
-		ToolsetID:       toolsetID.String(),
-		Version:         toolsetVersion,
-		Tools:           tools,
-		Resources:       resources,
-		SecurityVars:    securityVars,
-		ServerVars:      serverVars,
-		FunctionEnvVars: functionEnvVars,
+		DeploymentID:                 activeDeploymentID.String(),
+		ToolsetID:                    toolsetID.String(),
+		Version:                      toolsetVersion,
+		Tools:                        tools,
+		Resources:                    resources,
+		SecurityVars:                 securityVars,
+		ServerVars:                   serverVars,
+		FunctionEnvVars:              functionEnvVars,
+		ExternalMCPHeaderDefinitions: externalMCPHeaderDefinitions,
 	}
 
 	if toolsetCache != nil && activeDeploymentID != uuid.Nil {
@@ -1078,6 +1107,47 @@ func dedupeFunctionEnvVars(vars []*types.FunctionEnvironmentVariable) []*types.F
 	}
 
 	return slices.Collect(maps.Values(deduped))
+}
+
+func extractExternalMCPHeaderDefinitions(ctx context.Context, logger *slog.Logger, headerData []byte, sourceSlug string) ([]*types.ExternalMCPHeaderDefinition, error) {
+	if len(headerData) == 0 {
+		return nil, nil
+	}
+
+	var headers []externalMCPHeaderDefinition
+	if err := json.Unmarshal(headerData, &headers); err != nil {
+		return nil, fmt.Errorf("parse external mcp header definitions: %w", err)
+	}
+
+	definitions := make([]*types.ExternalMCPHeaderDefinition, 0, len(headers))
+	for _, header := range headers {
+		definitions = append(definitions, &types.ExternalMCPHeaderDefinition{
+			Name:        strcase.ToSNAKE(sourceSlug + "_" + header.Name),
+			HeaderName:  header.Name,
+			Description: header.Description,
+			Placeholder: header.Placeholder,
+			Required:    header.IsRequired,
+			Secret:      header.IsSecret,
+		})
+	}
+
+	return definitions, nil
+}
+
+func dedupeExternalMCPHeaderDefinitions(definitions []*types.ExternalMCPHeaderDefinition) []*types.ExternalMCPHeaderDefinition {
+	seen := make(map[string]bool, len(definitions))
+	deduped := make([]*types.ExternalMCPHeaderDefinition, 0, len(definitions))
+	for _, definition := range definitions {
+		if definition == nil {
+			continue
+		}
+		if seen[definition.Name] {
+			continue
+		}
+		seen[definition.Name] = true
+		deduped = append(deduped, definition)
+	}
+	return deduped
 }
 
 const defaultPromptTemplateKind = "prompt"

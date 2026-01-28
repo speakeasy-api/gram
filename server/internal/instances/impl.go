@@ -40,6 +40,7 @@ import (
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -192,14 +193,15 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	}
 
 	return &gen.GetInstanceResult{
-		Name:                         toolset.Name,
-		Description:                  toolset.Description,
-		SecurityVariables:            toolset.SecurityVariables,
-		ServerVariables:              toolset.ServerVariables,
-		FunctionEnvironmentVariables: toolset.FunctionEnvironmentVariables,
-		Tools:                        toolset.Tools,
-		PromptTemplates:              promptTemplates,
-		McpServers:                   mcpServers,
+		Name:                          toolset.Name,
+		Description:                   toolset.Description,
+		SecurityVariables:             toolset.SecurityVariables,
+		ServerVariables:               toolset.ServerVariables,
+		FunctionEnvironmentVariables:  toolset.FunctionEnvironmentVariables,
+		ExternalMcpHeaderDefinitions:  toolset.ExternalMcpHeaderDefinitions,
+		Tools:                         toolset.Tools,
+		PromptTemplates:               promptTemplates,
+		McpServers:                    mcpServers,
 	}, nil
 }
 
@@ -263,7 +265,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	toolsetSlug := r.URL.Query().Get("toolset_slug")
 	chatID := r.URL.Query().Get("chat_id")
 
-	ciEnv := gateway.NewCaseInsensitiveEnv()
+	ciEnv := toolconfig.NewCaseInsensitiveEnv()
 	if environmentSlug := r.URL.Query().Get(environmentSlugQueryParam); environmentSlug != "" {
 		envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
 			ProjectID: *authCtx.ProjectID,
@@ -325,9 +327,10 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	interceptor := newResponseInterceptor(w)
 
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, gateway.ToolCallEnv{
+	err = s.toolProxy.Do(ctx, interceptor, requestBody, toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
+		OAuthToken: "", // Instances do not support OAuth tokens for external MCP
 	}, plan, attrRecorder)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)

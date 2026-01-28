@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -55,7 +56,7 @@ func handleResourcesRead(
 	payload *mcpInputs,
 	req *rawRequest,
 	toolProxy *gateway.ToolProxy,
-	env gateway.EnvironmentLoader,
+	env toolconfig.EnvironmentLoader,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	telemSvc *tm.Service,
@@ -181,9 +182,10 @@ func handleResourcesRead(
 		telemSvc.CreateLog(params)
 	}()
 
-	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), gateway.ToolCallEnv{
+	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
+		OAuthToken: "", // Resources do not support OAuth tokens for external MCP
 	}, plan, logAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)

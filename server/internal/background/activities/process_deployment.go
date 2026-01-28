@@ -410,7 +410,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 		pool.Go(func() error {
 			processor := externalmcp.NewToolExtractor(p.logger, p.db, p.registryClient)
 
-			return processor.Do(ctx, externalmcp.ToolExtractorTask{
+return processor.Do(ctx, externalmcp.ToolExtractorTask{
 				OrgSlug:      orgSlug,
 				ProjectSlug:  projectSlug,
 				ProjectID:    projectID,

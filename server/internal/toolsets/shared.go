@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ettle/strcase"
 	"github.com/google/uuid"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
@@ -294,17 +295,39 @@ func (t *Toolsets) extractExternalMCPToolCallPlan(ctx context.Context, tool exte
 		URN:              toolUrn,
 	}
 
+	// Parse header definitions from JSON
+	var headerDefs []gateway.ExternalMCPHeaderDef
+	if len(tool.HeaderDefinitions) > 0 {
+		var headers []externalMCPHeaderJSON
+		if err := json.Unmarshal(tool.HeaderDefinitions, &headers); err != nil {
+			return nil, fmt.Errorf("parse external mcp header definitions: %w", err)
+		}
+		headerDefs = make([]gateway.ExternalMCPHeaderDef, 0, len(headers))
+		for _, h := range headers {
+			headerDefs = append(headerDefs, gateway.ExternalMCPHeaderDef{
+				Name:       strcase.ToSNAKE(tool.Slug + "_" + h.Name),
+				HeaderName: h.Name,
+			})
+		}
+	}
+
 	// Note: The ToolName field is "proxy" for proxy tools. Actual external tool names
-	// are resolved at runtime when the tool is called (e.g., "notion:search" -> ToolName="search").
+	// are resolved at runtime when the tool is called (e.g., "notion--search" -> ToolName="search").
 	plan := &gateway.ExternalMCPToolCallPlan{
-		RemoteURL:     tool.RemoteUrl,
-		TransportType: tool.TransportType,
-		ToolName:      toolUrn.Name, // "proxy" for proxy tools, actual tool name for direct calls
-		Slug:          tool.Slug,
-		RequiresOAuth: tool.RequiresOauth,
+		RemoteURL:         tool.RemoteUrl,
+		TransportType:     tool.TransportType,
+		ToolName:          toolUrn.Name, // "proxy" for proxy tools, actual tool name for direct calls
+		Slug:              tool.Slug,
+		RequiresOAuth:     tool.RequiresOauth,
+		HeaderDefinitions: headerDefs,
 	}
 
 	return gateway.NewExternalMCPToolCallPlan(descriptor, plan), nil
+}
+
+// externalMCPHeaderJSON is used to parse the JSON header definitions from the database.
+type externalMCPHeaderJSON struct {
+	Name string `json:"name"`
 }
 
 func UnmarshalParameterSettings(settings []byte) (map[string]*gateway.HTTPParameter, error) {

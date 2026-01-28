@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ExternalMCPHeaderDefinition,
+  ExternalMCPHeaderDefinition$inboundSchema,
+} from "./externalmcpheaderdefinition.js";
+import {
   ExternalOAuthServer,
   ExternalOAuthServer$inboundSchema,
 } from "./externaloauthserver.js";
@@ -59,6 +63,10 @@ export type Toolset = {
    * Description of the toolset
    */
   description?: string | undefined;
+  /**
+   * The external MCP header definitions that are relevant to the toolset
+   */
+  externalMcpHeaderDefinitions?: Array<ExternalMCPHeaderDefinition> | undefined;
   externalOauthServer?: ExternalOAuthServer | undefined;
   /**
    * The function environment variables that are relevant to the toolset
@@ -150,6 +158,9 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     custom_domain_id: z.string().optional(),
     default_environment_slug: z.string().optional(),
     description: z.string().optional(),
+    external_mcp_header_definitions: z.array(
+      ExternalMCPHeaderDefinition$inboundSchema,
+    ).optional(),
     external_oauth_server: ExternalOAuthServer$inboundSchema.optional(),
     function_environment_variables: z.array(
       FunctionEnvironmentVariable$inboundSchema,
@@ -182,6 +193,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "created_at": "createdAt",
       "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",
+      "external_mcp_header_definitions": "externalMcpHeaderDefinitions",
       "external_oauth_server": "externalOauthServer",
       "function_environment_variables": "functionEnvironmentVariables",
       "mcp_enabled": "mcpEnabled",

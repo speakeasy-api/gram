@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -275,9 +276,9 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			recorder := httptest.NewRecorder()
 
 			// Execute the proxy call
-			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-				SystemEnv:  NewCaseInsensitiveEnv(),
+			ciEnv := toolconfig.NewCaseInsensitiveEnv()
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
 			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
@@ -404,9 +405,9 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 			recorder := httptest.NewRecorder()
 
 			// Execute the proxy call
-			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-				SystemEnv:  NewCaseInsensitiveEnv(),
+			ciEnv := toolconfig.NewCaseInsensitiveEnv()
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
 			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
@@ -754,9 +755,9 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 			recorder := httptest.NewRecorder()
 
 			// Execute the proxy call
-			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-				SystemEnv:  NewCaseInsensitiveEnv(),
+			ciEnv := toolconfig.NewCaseInsensitiveEnv()
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
 			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 			require.NoError(t, err)
@@ -974,9 +975,9 @@ func TestToolProxy_Do_Body(t *testing.T) {
 			recorder := httptest.NewRecorder()
 
 			// Execute the proxy call
-			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ToolCallEnv{
-				SystemEnv:  NewCaseInsensitiveEnv(),
+			ciEnv := toolconfig.NewCaseInsensitiveEnv()
+			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), toolconfig.ToolCallEnv{
+				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
 			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 			require.NoError(t, err)
@@ -1314,9 +1315,9 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 			recorder := httptest.NewRecorder()
 
 			// Execute the proxy call
-			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), ToolCallEnv{
-				SystemEnv:  NewCaseInsensitiveEnv(),
+			ciEnv := toolconfig.NewCaseInsensitiveEnv()
+			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), toolconfig.ToolCallEnv{
+				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
 			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
@@ -1415,9 +1416,9 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// Execute the resource read
-	ciEnv := NewCaseInsensitiveEnv()
-	err = proxy.ReadResource(ctx, recorder, bytes.NewReader([]byte("{}")), ToolCallEnv{
-		SystemEnv:  NewCaseInsensitiveEnv(),
+	ciEnv := toolconfig.NewCaseInsensitiveEnv()
+	err = proxy.ReadResource(ctx, recorder, bytes.NewReader([]byte("{}")), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: ciEnv,
 	}, resourcePlan, tm.HTTPLogAttributes{})
 
@@ -1557,9 +1558,9 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// Execute the proxy call
-	ciEnv := NewCaseInsensitiveEnv()
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-		SystemEnv:  NewCaseInsensitiveEnv(),
+	ciEnv := toolconfig.NewCaseInsensitiveEnv()
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: ciEnv,
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
@@ -1654,12 +1655,12 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// Set up environment with user config containing API_KEY
-	userConfig := NewCaseInsensitiveEnv()
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig.Set("API_KEY", "test-user-api-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-		SystemEnv:  NewCaseInsensitiveEnv(),
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
 	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
@@ -1739,13 +1740,13 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// Set up environment with user config containing SECRET_VAR that is NOT in the plan
-	userConfig := NewCaseInsensitiveEnv()
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig.Set("SECRET_VAR", "should-not-be-sent")
 	userConfig.Set("ANOTHER_VAR", "also-should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-		SystemEnv:  NewCaseInsensitiveEnv(),
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
 	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
@@ -1849,14 +1850,14 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// Set up environment with user config containing variables
-	userConfig := NewCaseInsensitiveEnv()
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig.Set("ALLOWED_VAR", "this-should-be-sent")
 	userConfig.Set("NOT_IN_PLAN", "this-should-not-be-sent")
 	userConfig.Set("SECRET_KEY", "also-should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-		SystemEnv:  NewCaseInsensitiveEnv(),
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
@@ -1946,13 +1947,14 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// Set up environment with system env containing the API key
-	systemEnv := NewCaseInsensitiveEnv()
+	systemEnv := toolconfig.NewCaseInsensitiveEnv()
 	systemEnv.Set("SYSTEM_API_KEY", "system-secret-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
-		UserConfig: NewCaseInsensitiveEnv(),
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
 	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
@@ -2054,15 +2056,16 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// Set up environment with system env containing sensitive variables
-	systemEnv := NewCaseInsensitiveEnv()
+	systemEnv := toolconfig.NewCaseInsensitiveEnv()
 	systemEnv.Set("SYSTEM_VAR", "system-value")
 	systemEnv.Set("DB_PASSWORD", "super-secret-password")
 	systemEnv.Set("NOT_IN_PLAN", "should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
-		UserConfig: NewCaseInsensitiveEnv(),
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
@@ -2152,14 +2155,14 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// Set up BOTH system env and user config with API_KEY
-	systemEnv := NewCaseInsensitiveEnv()
+	systemEnv := toolconfig.NewCaseInsensitiveEnv()
 	systemEnv.Set("API_KEY", "system-api-key")
 
-	userConfig := NewCaseInsensitiveEnv()
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig.Set("API_KEY", "user-override-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
 	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
@@ -2263,16 +2266,16 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 	recorder := httptest.NewRecorder()
 
 	// Set up BOTH system env and user config with overlapping variables
-	systemEnv := NewCaseInsensitiveEnv()
+	systemEnv := toolconfig.NewCaseInsensitiveEnv()
 	systemEnv.Set("DATABASE_URL", "postgres://system-db")
 	systemEnv.Set("API_KEY", "system-key")
 
-	userConfig := NewCaseInsensitiveEnv()
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig.Set("DATABASE_URL", "postgres://user-override-db")
 	userConfig.Set("API_KEY", "user-override-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
 	}, toolCallPlan, tm.HTTPLogAttributes{})
@@ -2380,12 +2383,12 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// Set up environment with user config containing the auth input variable
-	userConfig := NewCaseInsensitiveEnv()
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig.Set("OAUTH_TOKEN", "user-oauth-token-value")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-		SystemEnv:  NewCaseInsensitiveEnv(),
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
@@ -2491,12 +2494,12 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 	recorder := httptest.NewRecorder()
 
 	// Set up environment WITHOUT the auth input variable in user config
-	userConfig := NewCaseInsensitiveEnv()
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig.Set("OTHER_VAR", "some-value")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-		SystemEnv:  NewCaseInsensitiveEnv(),
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
@@ -2602,14 +2605,14 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 	recorder := httptest.NewRecorder()
 
 	// Set up BOTH system env and user config with the auth input variable
-	systemEnv := NewCaseInsensitiveEnv()
+	systemEnv := toolconfig.NewCaseInsensitiveEnv()
 	systemEnv.Set("BEARER_TOKEN", "system-bearer-token")
 
-	userConfig := NewCaseInsensitiveEnv()
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig.Set("BEARER_TOKEN", "user-bearer-token")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
 	}, toolCallPlan, tm.HTTPLogAttributes{})
@@ -2719,14 +2722,14 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 	recorder := httptest.NewRecorder()
 
 	// Set up environment with both regular variables and auth input variable
-	userConfig := NewCaseInsensitiveEnv()
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig.Set("DATABASE_URL", "postgres://localhost/db")
 	userConfig.Set("API_KEY", "regular-api-key")
 	userConfig.Set("OAUTH_TOKEN", "oauth-token-value")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-		SystemEnv:  NewCaseInsensitiveEnv(),
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
@@ -2831,12 +2834,12 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// Set up environment with a potential auth input variable
-	userConfig := NewCaseInsensitiveEnv()
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig.Set("OAUTH_TOKEN", "should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ToolCallEnv{
-		SystemEnv:  NewCaseInsensitiveEnv(),
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
