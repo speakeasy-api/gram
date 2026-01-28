@@ -127,8 +127,13 @@ export function useFollowOnSuggestions(): {
   // 4. We haven't already processed this message
   useEffect(() => {
     if (isRunning) {
-      // Clear suggestions when a new run starts
+      // Abort any in-flight request and clear suggestions when a new run starts
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
       setSuggestions([])
+      setIsLoading(false)
       return
     }
 
