@@ -12,11 +12,10 @@ import {
   Chat,
   ChatHistory,
   GramElementsProvider,
-  type ExternalOAuthConfig,
   type Model,
 } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useToolset } from "@gram/client/react-query/toolset.js";
 import { HistoryIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useMemo, useState } from "react";
@@ -29,6 +28,8 @@ import {
   GramThreadWelcome,
   PlaygroundAuthWarningContext,
 } from "./PlaygroundElementsOverrides";
+import { useQuery } from "@tanstack/react-query";
+import { ExternalMCPToolDefinition } from "@gram/client/models/components";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -55,8 +56,7 @@ export function PlaygroundElements({
   const initialThreadId = searchParams.get("threadId") ?? undefined;
 
   // Get toolset data to construct MCP URL
-  const { data: toolsetsData } = useListToolsets();
-  const toolset = toolsetsData?.toolsets?.find((ts) => ts.slug === toolsetSlug);
+  const { data: toolset } = useToolset({ slug: toolsetSlug ?? "" });
 
   // Get MCP URL from toolset (always uses Gram domain, not custom domains)
   const mcpUrl = useInternalMcpUrl(toolset);
@@ -74,45 +74,6 @@ export function PlaygroundElements({
           })),
         })
       : null;
-
-  // Create OAuth config if toolset has external OAuth server configured
-  const oauthConfig: ExternalOAuthConfig | undefined = useMemo(() => {
-    if (!toolset?.externalOauthServer?.metadata) {
-      return undefined;
-    }
-
-    const metadata = toolset.externalOauthServer.metadata as {
-      issuer?: string;
-    };
-
-    if (!metadata.issuer) {
-      return undefined;
-    }
-
-    return {
-      issuer: metadata.issuer,
-      toolsetId: toolset.id,
-      onAuthRequired: (authUrl: string) => {
-        // Open OAuth authorization in a popup window
-        const popup = window.open(
-          authUrl,
-          "oauth_popup",
-          "width=600,height=700,scrollbars=yes"
-        );
-        if (!popup) {
-          // Fallback to redirect if popup blocked
-          window.location.href = authUrl;
-        }
-      },
-      onAuthSuccess: (provider: string) => {
-        toast.success(`Successfully connected to ${provider}`);
-      },
-      onAuthError: (error: string) => {
-        toast.error(`OAuth authentication failed: ${error}`);
-      },
-      redirectUri: window.location.href.split("?")[0], // Current page without query params
-    };
-  }, [toolset?.externalOauthServer?.metadata, toolset?.id]);
 
   // Create getSession function using SDK mutation with session auth
   const getSession = useCallback(async () => {
@@ -146,6 +107,12 @@ export function PlaygroundElements({
     project.slug,
   ]);
 
+  const externalMcpOAuth = useExternalMcpOAuthToken({
+    apiUrl: getServerURL(),
+    toolsetSlug: toolsetSlug ?? "",
+    sessionHeaders: {},
+  });
+
   // Don't render until we have a valid MCP URL
   if (!mcpUrl || !toolsetSlug) {
     return (
@@ -162,7 +129,6 @@ export function PlaygroundElements({
         api: {
           url: getServerURL(),
           sessionFn: getSession,
-          ...(oauthConfig && { oauth: oauthConfig }),
           headers: {
             "X-Gram-Source": "playground",
           },
@@ -174,6 +140,11 @@ export function PlaygroundElements({
         },
         mcp: mcpUrl,
         gramEnvironment: environmentSlug ?? undefined,
+        environment: {
+          ...(externalMcpOAuth.accessToken
+            ? { Authorization: `Bearer ${externalMcpOAuth.accessToken}` }
+            : {}),
+        },
         variant: "standalone",
         model: {
           defaultModel: model as Model,
@@ -232,3 +203,178 @@ export function PlaygroundElements({
     </GramElementsProvider>
   );
 }
+
+type OAuthStatus = "authenticated" | "unauthenticated" | "expired";
+
+/**
+ * Response from the backend OAuth token endpoint
+ */
+interface OAuthTokenResponse {
+  status: OAuthStatus;
+  access_token: string;
+  token_type: string;
+  expires_at?: string;
+  scope?: string;
+}
+
+/**
+ * Return type for the useOAuthToken hook
+ */
+export interface UseOAuthTokenResult {
+  required: boolean;
+  oauthStatus: OAuthStatus | null;
+  /** The OAuth access token (only available when authenticated) */
+  accessToken: string | null;
+  /** Token type (e.g., 'Bearer') */
+  tokenType: string | null;
+  /** Whether the token is being fetched */
+  isLoading: boolean;
+  /** Error message if token fetch failed */
+  error: string | null;
+  /** Token expiration time */
+  expiresAt: Date | null;
+  /** OAuth scopes granted */
+  scope: string | null;
+  /** Refetch the token */
+  refetch: () => Promise<void>;
+}
+
+/**
+ * Hook to fetch the OAuth access token for authenticated users.
+ *
+ * This hook retrieves the decrypted OAuth access token from the backend,
+ * which can be used for making authenticated requests to external APIs.
+ *
+ * **Note:** For MCP tool execution, you typically don't need this hook
+ * as the backend automatically retrieves and uses the OAuth token.
+ * This hook is useful when you need to make direct authenticated
+ * requests from the frontend or display token information.
+ *
+ * @example
+ * ```tsx
+ * const { accessToken, isLoading, error } = useOAuthToken({
+ *   apiUrl: 'https://app.getgram.ai',
+ *   auth: config.api,
+ *   sessionHeaders: { 'Gram-Chat-Session': sessionToken },
+ * });
+ *
+ * if (accessToken) {
+ *   // Use token for authenticated API calls
+ *   fetch('https://api.example.com/data', {
+ *     headers: { Authorization: `Bearer ${accessToken}` }
+ *   });
+ * }
+ * ```
+ */
+const useExternalMcpOAuthToken = ({
+  apiUrl,
+  toolsetSlug,
+  sessionHeaders,
+}: {
+  apiUrl: string;
+  toolsetSlug: string;
+  sessionHeaders: Record<string, string>;
+}): UseOAuthTokenResult => {
+  const session = useSession();
+  const { data: toolset } = useToolset({ slug: toolsetSlug });
+
+  const externalMcpOAuthConfig: { issuer: string } | undefined = useMemo(() => {
+    let firstToolWithOAuth: ExternalMCPToolDefinition | undefined = undefined;
+    for (const tool of toolset?.tools ?? []) {
+      if (
+        tool.externalMcpToolDefinition?.requiresOauth &&
+        tool.externalMcpToolDefinition.oauthVersion !== "none"
+      ) {
+        firstToolWithOAuth = tool.externalMcpToolDefinition;
+      }
+    }
+
+    if (!firstToolWithOAuth) return undefined;
+    if (!firstToolWithOAuth.oauthTokenEndpoint) return undefined;
+
+    return {
+      issuer: new URL(firstToolWithOAuth.oauthTokenEndpoint).origin,
+    };
+  }, [toolset]);
+
+  // Query key for caching OAuth token
+  const queryKey = useMemo(() => ["oauthToken", toolsetSlug], [toolsetSlug]);
+
+  // Fetch OAuth token from the backend
+  const {
+    data: tokenResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<OAuthTokenResponse, Error>({
+    queryKey,
+    queryFn: async (): Promise<OAuthTokenResponse> => {
+      const params = new URLSearchParams({
+        toolset_id: toolset?.id ?? "",
+        issuer: externalMcpOAuthConfig?.issuer ?? "",
+      });
+
+      const response = await fetch(
+        `${apiUrl}/oauth-external/token?${params.toString()}`,
+        {
+          method: "GET",
+          headers: {
+            "Gram-Session": session.session,
+            ...sessionHeaders,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      let status: OAuthStatus;
+      if (!response.ok) {
+        switch (response.status) {
+          case 404:
+            status = "unauthenticated";
+            break;
+          case 401:
+            status = "expired";
+            break;
+          default:
+            throw new Error(
+              `Failed to get OAuth token: ${await response.text()}`,
+            );
+        }
+      } else {
+        status = "authenticated";
+      }
+
+      return {
+        status,
+        ...(await response.json()),
+      };
+    },
+    enabled: externalMcpOAuthConfig !== undefined,
+    staleTime: 5 * 60 * 1000, // Token considered stale after 5 minutes
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+  });
+
+  // Parse expiration time if present
+  const expiresAt = useMemo(() => {
+    if (tokenResponse?.expires_at) {
+      return new Date(tokenResponse.expires_at);
+    }
+    return null;
+  }, [tokenResponse?.expires_at]);
+
+  const handleRefetch = async () => {
+    await refetch();
+  };
+
+  return {
+    required: externalMcpOAuthConfig !== undefined,
+    oauthStatus: tokenResponse?.status ?? null,
+    accessToken: tokenResponse?.access_token ?? null,
+    tokenType: tokenResponse?.token_type ?? null,
+    isLoading,
+    error: error?.message ?? null,
+    expiresAt,
+    scope: tokenResponse?.scope ?? null,
+    refetch: handleRefetch,
+  };
+};

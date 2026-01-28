@@ -22,7 +22,7 @@ import {
 } from '@/lib/tools'
 import { cn } from '@/lib/utils'
 import { recommended } from '@/plugins'
-import { ElementsConfig, Model, OAuthContextState } from '@/types'
+import { ElementsConfig, Model } from '@/types'
 import { Plugin } from '@/types/plugins'
 import {
   AssistantRuntimeProvider,
@@ -178,6 +178,14 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // When history is enabled, the thread adapter manages chat IDs instead
   const chatIdRef = useRef<string | null>(null)
 
+  // OAuth status checking (only if OAuth is configured)
+  const oauthConfig = getOAuthConfig(config.api)
+  const oauthStatus = useOAuthStatus({
+    apiUrl,
+    auth: config.api,
+    sessionHeaders: auth.headers ?? {},
+  })
+
   const { data: mcpTools } = useMCPTools({
     auth,
     mcp: config.mcp,
@@ -185,14 +193,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
     chatId: chatIdRef.current ?? undefined,
-  })
-
-  // OAuth status checking (only if OAuth is configured)
-  const oauthConfig = getOAuthConfig(config.api)
-  const oauthStatus = useOAuthStatus({
-    apiUrl,
-    auth: config.api,
-    sessionHeaders: auth.headers ?? {},
   })
 
   // Handle OAuth callback parameters from URL (after redirect back)
@@ -458,30 +458,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
 
   const historyEnabled = config.history?.enabled ?? false
 
-  // Create OAuth context state from hook result
-  const oauthContextState: OAuthContextState = useMemo(
-    () => ({
-      status: oauthStatus.status,
-      isLoading: oauthStatus.isLoading,
-      error: oauthStatus.error,
-      providerName: oauthStatus.providerName,
-      expiresAt: oauthStatus.expiresAt,
-      startAuthorization: oauthStatus.startAuthorization,
-      disconnect: oauthStatus.disconnect,
-      refresh: oauthStatus.refresh,
-    }),
-    [
-      oauthStatus.status,
-      oauthStatus.isLoading,
-      oauthStatus.error,
-      oauthStatus.providerName,
-      oauthStatus.expiresAt,
-      oauthStatus.startAuthorization,
-      oauthStatus.disconnect,
-      oauthStatus.refresh,
-    ]
-  )
-
   // Shared context value for ElementsContext
   const contextValue = useMemo(
     () => ({
@@ -494,9 +470,8 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       setIsOpen,
       plugins,
       mcpTools,
-      oauth: oauthContextState,
     }),
-    [config, model, isExpanded, isOpen, plugins, mcpTools, oauthContextState]
+    [config, model, isExpanded, isOpen, plugins, mcpTools]
   )
 
   const frontendTools = config.tools?.frontendTools ?? {}

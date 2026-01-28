@@ -3,10 +3,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
-import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { ExternalMCPToolDefinition } from "@gram/client/models/components";
+import {
+  ExternalMCPToolDefinition,
+  Toolset,
+} from "@gram/client/models/components";
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
@@ -17,10 +19,10 @@ import { toast } from "sonner";
  * Extract OAuth configuration from external MCP tools in the toolset.
  * Returns the first external MCP tool that requires OAuth, or undefined.
  */
-function getExternalMcpOAuthConfig(
+export function getExternalMcpOAuthConfig(
   toolset: Toolset,
 ): ExternalMCPToolDefinition | undefined {
-  for (const tool of toolset.rawTools ?? []) {
+  for (const tool of toolset.tools ?? []) {
     if (
       tool.externalMcpToolDefinition?.requiresOauth &&
       tool.externalMcpToolDefinition.oauthVersion !== "none"
@@ -94,7 +96,11 @@ function ExternalMcpOAuthConnection({
     : undefined;
 
   // Query OAuth status
-  const { data: oauthStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery({
+  const {
+    data: oauthStatus,
+    isLoading: statusLoading,
+    refetch: refetchStatus,
+  } = useQuery({
     queryKey: ["mcpOauthStatus", toolset.id, mcpOAuthConfig.slug],
     queryFn: async () => {
       if (!issuer) return { status: "needs_auth" as const };
@@ -161,7 +167,9 @@ function ExternalMcpOAuthConnection({
       queryClient.invalidateQueries({
         queryKey: ["mcpOauthStatus", toolset.id, mcpOAuthConfig.slug],
       });
-      toast.success(`Disconnected from ${mcpOAuthConfig.name || mcpOAuthConfig.slug}`);
+      toast.success(
+        `Disconnected from ${mcpOAuthConfig.name || mcpOAuthConfig.slug}`,
+      );
     },
     onError: () => {
       toast.error("Failed to disconnect");
@@ -215,21 +223,23 @@ function ExternalMcpOAuthConnection({
   return (
     <div className="border rounded-md p-3 bg-muted/30">
       <Stack gap={2}>
-        <Stack direction="horizontal" align="center" className="justify-between">
+        <Stack
+          direction="horizontal"
+          align="center"
+          className="justify-between"
+        >
           <Type variant="small" className="font-medium">
             {oauthVersionLabel}
           </Type>
           {statusLoading ? (
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
           ) : isConnected ? (
-            <Badge variant="success" size="sm">
+            <Badge variant="success">
               <CheckCircle className="size-3 mr-1" />
               Connected
             </Badge>
           ) : (
-            <Badge variant="warning" size="sm">
-              Not Connected
-            </Badge>
+            <Badge variant="warning">Not Connected</Badge>
           )}
         </Stack>
 
@@ -273,9 +283,11 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
   const apiUrl = getServerURL();
 
   // Extract OAuth metadata from toolset
-  const oauthMetadata = toolset.externalOauthServer?.metadata as {
-    issuer?: string;
-  } | undefined;
+  const oauthMetadata = toolset.externalOauthServer?.metadata as
+    | {
+        issuer?: string;
+      }
+    | undefined;
   const issuer = oauthMetadata?.issuer;
 
   // Query OAuth status
@@ -398,21 +410,23 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
   return (
     <div className="border rounded-md p-3 bg-muted/30">
       <Stack gap={2}>
-        <Stack direction="horizontal" align="center" className="justify-between">
+        <Stack
+          direction="horizontal"
+          align="center"
+          className="justify-between"
+        >
           <Type variant="small" className="font-medium">
             External OAuth
           </Type>
           {statusLoading ? (
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
           ) : isConnected ? (
-            <Badge variant="success" size="sm">
+            <Badge variant="success">
               <CheckCircle className="size-3 mr-1" />
               Connected
             </Badge>
           ) : (
-            <Badge variant="warning" size="sm">
-              Not Connected
-            </Badge>
+            <Badge variant="warning">Not Connected</Badge>
           )}
         </Stack>
 
@@ -482,7 +496,11 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
   ]);
 
   // Show "no auth required" only if there are no env vars AND no OAuth of any kind
-  if (relevantEnvVars.length === 0 && !hasExternalOAuth && !hasExternalMcpOAuth) {
+  if (
+    relevantEnvVars.length === 0 &&
+    !hasExternalOAuth &&
+    !hasExternalMcpOAuth
+  ) {
     return (
       <div className="text-center py-4">
         <Type variant="small" className="text-muted-foreground">

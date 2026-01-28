@@ -406,9 +406,6 @@ export function ToolsetPanel({
             <PlaygroundAuth
               toolset={{
                 ...fullToolsetData,
-                // Map SDK's `tools` to `rawTools` for compatibility with Toolset type
-                rawTools: fullToolsetData.tools ?? [],
-                tools: asTools(fullToolsetData.tools ?? []),
               }}
               environment={{
                 slug: environmentData.slug,

@@ -976,7 +976,12 @@ export interface HistoryConfig {
  */
 export type OAuthContextState = {
   /** Current OAuth status */
-  status: 'authenticated' | 'needs_auth' | 'disconnected' | 'loading' | 'disabled'
+  status:
+    | 'authenticated'
+    | 'needs_auth'
+    | 'disconnected'
+    | 'loading'
+    | 'disabled'
   /** Whether OAuth status is loading */
   isLoading: boolean
   /** Error message if status check failed */
@@ -1006,6 +1011,4 @@ export type ElementsContextType = {
   setIsOpen: (isOpen: boolean) => void
   plugins: Plugin[]
   mcpTools: Record<string, unknown> | undefined
-  /** OAuth authentication state (if OAuth is configured) */
-  oauth: OAuthContextState
 }
