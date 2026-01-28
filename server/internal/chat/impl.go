@@ -661,8 +661,12 @@ func (s *Service) GenerateFollowOnSuggestions(ctx context.Context, payload *gen.
 	// Find the last assistant message
 	var lastAssistantMessage string
 	for i := len(payload.Messages) - 1; i >= 0; i-- {
-		if payload.Messages[i].Role == "assistant" {
-			lastAssistantMessage = payload.Messages[i].Content
+		msg := payload.Messages[i]
+		if msg == nil {
+			continue
+		}
+		if msg.Role == "assistant" {
+			lastAssistantMessage = msg.Content
 			break
 		}
 	}
@@ -713,6 +717,9 @@ Message:
 		startIdx = len(payload.Messages) - 10
 	}
 	for _, msg := range payload.Messages[startIdx:] {
+		if msg == nil {
+			continue
+		}
 		conversationBuilder.WriteString(fmt.Sprintf("%s: %s\n", msg.Role, msg.Content))
 	}
 	conversation := conversationBuilder.String()
