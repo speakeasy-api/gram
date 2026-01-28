@@ -141,7 +141,11 @@ export function MCPDetailPage() {
 
     try {
       const result = await exportMutation.mutateAsync({
-        mcpSlug: toolset.mcpSlug,
+        request: {
+          exportMcpMetadataRequestBody: {
+            mcpSlug: toolset.mcpSlug,
+          },
+        },
       });
 
       // Create and download the JSON file
