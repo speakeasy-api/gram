@@ -28,7 +28,12 @@ export default function MetricsPage() {
   const client = useGramContext();
 
   const { data, isPending, error } = useQuery({
-    queryKey: ["@gram/client", "telemetry", "getProjectMetricsSummary", dateRange],
+    queryKey: [
+      "@gram/client",
+      "telemetry",
+      "getProjectMetricsSummary",
+      dateRange,
+    ],
     queryFn: () => {
       const { from, to } = getDateRange(dateRange);
       return unwrapAsync(
@@ -85,7 +90,10 @@ export default function MetricsPage() {
                     Experimental
                   </span>
                 </div>
-                <DateRangeSelect value={dateRange} onValueChange={setDateRange} />
+                <DateRangeSelect
+                  value={dateRange}
+                  onValueChange={setDateRange}
+                />
               </div>
               <p className="text-sm text-muted-foreground">
                 Project-level observability metrics
@@ -124,10 +132,7 @@ function MetricsLoadingSkeleton() {
       {/* KPI Cards skeleton */}
       <div className="grid grid-cols-4 gap-3">
         {[1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className="p-4 rounded-xl border border-border bg-card"
-          >
+          <div key={i} className="p-4 rounded-xl border border-border bg-card">
             <Skeleton className="h-9 w-9 rounded-lg mb-3" />
             <Skeleton className="h-3 w-16 mb-2" />
             <Skeleton className="h-7 w-20 mb-1" />
@@ -170,7 +175,10 @@ function MetricsError({ error }: { error: Error }) {
 function MetricsDisabledState() {
   return (
     <div className="flex flex-col items-center gap-3 py-12">
-      <Icon name="chart-no-axes-combined" className="size-8 text-muted-foreground" />
+      <Icon
+        name="chart-no-axes-combined"
+        className="size-8 text-muted-foreground"
+      />
       <span className="text-muted-foreground">
         Metrics are disabled for your organization.
       </span>

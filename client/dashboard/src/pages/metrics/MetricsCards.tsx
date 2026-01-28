@@ -79,7 +79,7 @@ export function MetricsCards({ metrics }: MetricsCardsProps) {
               <div
                 className={cn(
                   "flex items-center justify-center size-9 rounded-lg",
-                  card.iconBg
+                  card.iconBg,
                 )}
               >
                 <card.icon className={cn("size-5", card.iconColor)} />

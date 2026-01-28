@@ -11,11 +11,7 @@ import { useSession } from "@/contexts/Auth";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
-import {
-  AlertTriangleIcon,
-  MinusIcon,
-  TestTube2Icon,
-} from "lucide-react";
+import { AlertTriangleIcon, MinusIcon, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { FeatureRequestModal } from "./FeatureRequestModal";

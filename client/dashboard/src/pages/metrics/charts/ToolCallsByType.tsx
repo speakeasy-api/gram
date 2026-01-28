@@ -9,7 +9,9 @@ interface ToolCallsByTypeProps {
 
 export function ToolCallsByType({ tools }: ToolCallsByTypeProps) {
   const bars = useMemo(() => {
-    const sorted = [...tools].sort((a, b) => b.count - a.count).slice(0, MAX_CHART_ITEMS);
+    const sorted = [...tools]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, MAX_CHART_ITEMS);
     if (sorted.length === 0) return [];
     const max = sorted[0].count;
     return sorted.map((tool) => ({
