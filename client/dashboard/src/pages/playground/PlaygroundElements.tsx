@@ -144,9 +144,9 @@ export function PlaygroundElements({
           showModelPicker: false,
         },
         welcome: {
-          title: "Test Your Toolset",
+          title: "Test Your MCP Server",
           subtitle:
-            "This chat has access to the selected toolset. Use it to test your tools.",
+            "This chat has access to the selected MCP server. Use it to test your tools.",
           suggestions: [],
         },
         composer: {

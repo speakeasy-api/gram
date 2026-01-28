@@ -17,10 +17,6 @@ import { useEnvironmentVariables } from "../mcp/useEnvironmentVariables";
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
-  environment?: {
-    slug: string;
-    entries?: Array<{ name: string; value: string }>;
-  };
   onUserProvidedHeadersChange?: (headers: Record<string, string>) => void;
 }
 
@@ -58,10 +54,8 @@ export function getAuthStatus(
   };
 }
 
-export function 
-PlaygroundAuth({
+export function PlaygroundAuth({
   toolset,
-  environment,
   onUserProvidedHeadersChange,
 }: PlaygroundAuthProps) {
   const routes = useRoutes();
@@ -79,12 +73,11 @@ PlaygroundAuth({
     },
   );
   const mcpMetadata = mcpMetadataData?.metadata;
+  const defaultEnvironmentSlug =
+   environments.find((env) => env.id === mcpMetadata?.defaultEnvironmentId)?.slug ?? "default";
 
   // Load environment variables using the same hook as MCPAuthenticationTab
   const envVars = useEnvironmentVariables(toolset, environments, mcpMetadata);
-
-  // Get the currently selected environment slug
-  const currentEnvironmentSlug = environment?.slug || "default";
 
   // Track user-provided header values
   const [userProvidedValues, setUserProvidedValues] = useState<
@@ -95,7 +88,7 @@ PlaygroundAuth({
   const missingRequiredCount = useMissingRequiredEnvVars(
     toolset,
     environments,
-    currentEnvironmentSlug,
+    defaultEnvironmentSlug,
     mcpMetadata,
   );
 
@@ -129,8 +122,8 @@ PlaygroundAuth({
     <div className="space-y-3">
       {envVars.map((envVar) => {
         // Use the same utilities as MCPAuthenticationTab to get values
-        const hasValue = environmentHasValue(envVar, currentEnvironmentSlug);
-        const value = getValueForEnvironment(envVar, currentEnvironmentSlug);
+        const hasValue = environmentHasValue(envVar, defaultEnvironmentSlug);
+        const value = getValueForEnvironment(envVar, defaultEnvironmentSlug);
 
         // Get header display name override if it exists
         const envConfig = mcpMetadata?.environmentConfigs?.find(

@@ -11,16 +11,14 @@ import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
 } from "@/contexts/Telemetry";
-import { useLatestDeployment } from "@/hooks/toolTypes";
-import { asTools, Tool } from "@/lib/toolTypes";
+import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
+import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import {
   queryKeyInstance,
   queryKeyListToolsets,
-  useInstance,
-  useListEnvironments,
   useListToolsets,
-  useUpdateToolsetMutation,
+  useUpdateToolsetMutation
 } from "@gram/client/react-query/index.js";
 import { ResizablePanel } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,7 +26,6 @@ import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { useEnvironment } from "../environments/Environment";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import { ChatProvider, useChatContext } from "./ChatContext";
 import { ChatConfig } from "./ChatWindow";
@@ -178,31 +175,15 @@ export function ToolsetPanel({
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
 
   const { data: toolsetsData } = useListToolsets();
-  const { data: environmentsData } = useListEnvironments();
   const routes = useRoutes();
   const updateToolsetMutation = useUpdateToolsetMutation();
   const queryClient = useQueryClient();
 
   const toolsets = toolsetsData?.toolsets;
-  const environments = environmentsData?.environments;
 
   const selectedToolset = configRef.current.toolsetSlug;
-  const selectedEnvironment = configRef.current.environmentSlug;
 
-  const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
-
-  const environmentData = useEnvironment(selectedEnvironment ?? undefined);
-
-  // Fetch instance data to get tools
-  const { data: instanceData } = useInstance(
-    {
-      toolsetSlug: selectedToolset ?? "",
-    },
-    undefined,
-    {
-      enabled: !!selectedToolset && !!selectedEnvironment,
-    },
-  );
+  const {data: toolset} = useToolset(selectedToolset ?? undefined); 
 
   const { data: deployment } = useLatestDeployment();
 
@@ -243,12 +224,6 @@ export function ToolsetPanel({
       setSelectedEnvironment(toolset.defaultEnvironmentSlug);
     }
   }, [configRef, setSelectedEnvironment, toolset]);
-
-  // Transform tools data for the config panel
-  const tools = useMemo(
-    () => asTools(instanceData?.tools ?? []),
-    [instanceData?.tools],
-  );
 
   // Track which tools are selected for bulk actions
   const [enabledTools, setEnabledTools] = useState<Set<string>>(new Set());
@@ -347,7 +322,7 @@ export function ToolsetPanel({
   return (
     <>
       <PlaygroundConfigPanel
-        tools={tools}
+        tools={toolset?.tools ?? []}
         selectedTools={enabledTools}
         onToolToggle={(toolId) => {
           setEnabledTools((prev) => {
@@ -383,35 +358,11 @@ export function ToolsetPanel({
             </SelectContent>
           </Select>
         }
-        environmentSelector={
-          <Select
-            value={selectedEnvironment ?? undefined}
-            onValueChange={setSelectedEnvironment}
-          >
-            <SelectTrigger size="sm" className="w-full">
-              <SelectValue placeholder="Select environment" />
-            </SelectTrigger>
-            <SelectContent>
-              {environments?.map((env) => (
-                <SelectItem key={env.slug} value={env.slug}>
-                  {env.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
         authSettings={
-          toolset && environmentData ? (
+          toolset ? (
             <PlaygroundAuth
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               toolset={toolset as any}
-              environment={{
-                slug: environmentData.slug,
-                entries: environmentData.entries?.map((e) => ({
-                  name: e.name,
-                  value: e.value,
-                })),
-              }}
               onUserProvidedHeadersChange={onUserProvidedHeadersChange}
             />
           ) : undefined
@@ -422,7 +373,7 @@ export function ToolsetPanel({
                 name: toolset.name,
                 slug: toolset.slug,
                 description: toolset.description,
-                toolCount: tools.length,
+                toolCount: toolset.tools.length,
                 updatedAt: toolset.updatedAt,
               }
             : undefined
@@ -453,7 +404,7 @@ export function ToolsetPanel({
           onOpenChange={setShowManageToolsDialog}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           toolset={toolset as any}
-          currentTools={tools}
+          currentTools={toolset.tools}
           onAddTools={(toolUrns) => handleAddTools(toolUrns)}
           onRemoveTools={(toolUrns) => handleRemoveTools(toolUrns)}
           initialGroup={manageToolsGroup}
