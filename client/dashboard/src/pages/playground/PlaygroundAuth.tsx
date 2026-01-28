@@ -8,7 +8,7 @@ import {
   useGetMcpMetadata,
   useListEnvironments,
 } from "@gram/client/react-query";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import {
   environmentHasValue,
   getValueForEnvironment,
@@ -21,6 +21,7 @@ interface PlaygroundAuthProps {
     slug: string;
     entries?: Array<{ name: string; value: string }>;
   };
+  onUserProvidedHeadersChange?: (headers: Record<string, string>) => void;
 }
 
 const SECRET_FIELD_INDICATORS = ["SECRET", "KEY", "TOKEN", "PASSWORD"] as const;
@@ -57,7 +58,12 @@ export function getAuthStatus(
   };
 }
 
-export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
+export function 
+PlaygroundAuth({
+  toolset,
+  environment,
+  onUserProvidedHeadersChange,
+}: PlaygroundAuthProps) {
   const routes = useRoutes();
 
   // Use the same environment data fetching as MCPAuthenticationTab
@@ -80,19 +86,10 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
   // Get the currently selected environment slug
   const currentEnvironmentSlug = environment?.slug || "default";
 
-  // Filter to only show required variables that are relevant for the playground
-  // (exclude server_url variables as they can't be configured in playground)
-  const relevantEnvVars = useMemo(() => {
-    return envVars.filter((envVar) => {
-      // Only show required variables
-      if (!envVar.isRequired) return false;
-
-      // Filter out server_url variables
-      if (envVar.key.toLowerCase().includes("server_url")) return false;
-
-      return true;
-    });
-  }, [envVars]);
+  // Track user-provided header values
+  const [userProvidedValues, setUserProvidedValues] = useState<
+    Record<string, string>
+  >({});
 
   // Calculate missing required variables using the same hook as MCPAuthenticationTab
   const missingRequiredCount = useMissingRequiredEnvVars(
@@ -102,7 +99,23 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
     mcpMetadata,
   );
 
-  if (relevantEnvVars.length === 0) {
+  // Notify parent component when user-provided values change
+  useEffect(() => {
+    if (onUserProvidedHeadersChange) {
+      // Build headers object with MCP- prefix and proper header names
+      const headers: Record<string, string> = {};
+      Object.entries(userProvidedValues).forEach(([varKey, value]) => {
+        if (value.trim()) {
+          // Use MCP- prefix with the header name
+          const headerKey = `MCP-${varKey.replace(/\s+/g, "-").replace(/_/g, "-")}`;
+          headers[headerKey] = value;
+        }
+      });
+      onUserProvidedHeadersChange(headers);
+    }
+  }, [userProvidedValues, onUserProvidedHeadersChange, mcpMetadata]);
+
+  if (envVars.length === 0) {
     return (
       <div className="text-center py-4">
         <Type variant="small" className="text-muted-foreground">
@@ -114,29 +127,39 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
 
   return (
     <div className="space-y-3">
-      {relevantEnvVars.map((envVar) => {
+      {envVars.map((envVar) => {
         // Use the same utilities as MCPAuthenticationTab to get values
         const hasValue = environmentHasValue(envVar, currentEnvironmentSlug);
         const value = getValueForEnvironment(envVar, currentEnvironmentSlug);
+
+        // Get header display name override if it exists
+        const envConfig = mcpMetadata?.environmentConfigs?.find(
+          (config) => config.variableName === envVar.key,
+        );
+        const displayName = envConfig?.headerDisplayName || envVar.key;
 
         // Determine if this is a secret field
         const isSecret = SECRET_FIELD_INDICATORS.some((indicator) =>
           envVar.key.toUpperCase().includes(indicator),
         );
 
-        // Determine display value based on state
+        // Determine display value and editability based on state
         let displayValue = "";
         let placeholder = "Not set";
+        let isEditable = false;
 
         if (envVar.state === "user-provided") {
-          displayValue = "";
-          placeholder = "Provided by user at runtime";
+          displayValue = userProvidedValues[envVar.key] || "";
+          placeholder = "Enter value here";
+          isEditable = true;
         } else if (envVar.state === "omitted") {
           displayValue = "";
           placeholder = "Omitted";
+          isEditable = false;
         } else if (envVar.state === "system" && hasValue && value) {
           displayValue = isSecret ? PASSWORD_MASK : value;
           placeholder = "Configured";
+          isEditable = false;
         }
 
         return (
@@ -145,22 +168,24 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
               htmlFor={`auth-${envVar.id}`}
               className="text-xs font-medium"
             >
-              {envVar.key}
-              {envVar.state === "user-provided" && (
-                <span className="ml-1 text-muted-foreground">(user)</span>
-              )}
-              {envVar.state === "omitted" && (
-                <span className="ml-1 text-muted-foreground">(omitted)</span>
-              )}
+              {displayName}
             </Label>
             <Input
               id={`auth-${envVar.id}`}
               value={displayValue}
+              onChange={(newValue) => {
+                if (isEditable) {
+                  setUserProvidedValues((prev) => ({
+                    ...prev,
+                    [envVar.key]: newValue,
+                  }));
+                }
+              }}
               placeholder={placeholder}
               type={isSecret ? "password" : "text"}
               className="font-mono text-xs h-7"
-              readOnly
-              disabled
+              readOnly={!isEditable}
+              disabled={!isEditable}
             />
           </div>
         );
@@ -178,7 +203,7 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
           hash="authentication"
           className="underline hover:text-foreground"
         >
-          toolset settings
+          MCP settings
         </routes.mcp.details.Link>
       </Type>
     </div>

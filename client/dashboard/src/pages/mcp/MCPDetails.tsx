@@ -50,6 +50,7 @@ import {
   CheckCircleIcon,
   Globe,
   LockIcon,
+  Play,
   Trash2,
   XCircleIcon,
 } from "lucide-react";
@@ -260,48 +261,62 @@ export function MCPDetailPage() {
           {/* Overlay for text readability */}
           <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 via-foreground/20 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
-            <Stack gap={2}>
-              <div className="flex items-center gap-3 ml-1">
-                <Heading variant="h1" className="text-background">
-                  {toolset.name}
-                </Heading>
-                {statusBadge}
-              </div>
-              <div className="flex items-center gap-2 ml-1">
-                <Type className="max-w-2xl truncate !text-background/70">
-                  {mcpUrl}
-                </Type>
+            <div className="flex items-end justify-between">
+              <Stack gap={2}>
+                <div className="flex items-center gap-3 ml-1">
+                  <Heading variant="h1" className="text-background">
+                    {toolset.name}
+                  </Heading>
+                  {statusBadge}
+                </div>
+                <div className="flex items-center gap-2 ml-1">
+                  <Type className="max-w-2xl truncate !text-background/70">
+                    {mcpUrl}
+                  </Type>
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => {
+                      if (mcpUrl) {
+                        navigator.clipboard.writeText(mcpUrl);
+                        toast.success("URL copied to clipboard");
+                      }
+                    }}
+                    className="shrink-0 text-background/70 hover:text-background"
+                  >
+                    <Button.LeftIcon>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                      </svg>
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Copy URL</Button.Text>
+                  </Button>
+                </div>
+              </Stack>
+              <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
                 <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => {
-                    if (mcpUrl) {
-                      navigator.clipboard.writeText(mcpUrl);
-                      toast.success("URL copied to clipboard");
-                    }
-                  }}
-                  className="shrink-0 text-background/70 hover:text-background"
+                  variant="secondary"
+                  size="md"
+                  className="bg-background/10 hover:bg-background/20 text-background border-background/20"
                 >
                   <Button.LeftIcon>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                    </svg>
+                    <Play className="w-4 h-4" />
                   </Button.LeftIcon>
-                  <Button.Text className="sr-only">Copy URL</Button.Text>
+                  <Button.Text>Playground</Button.Text>
                 </Button>
-              </div>
-            </Stack>
+              </routes.playground.Link>
+            </div>
           </div>
 
           {/* Action buttons */}

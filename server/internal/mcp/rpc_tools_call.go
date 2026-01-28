@@ -28,6 +28,7 @@ import (
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -65,6 +66,7 @@ func handleToolsCall(
 	featuresClient *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal temporal_client.Client,
+	mcpMetadataRepo *mcpmetadata_repo.Queries,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -161,6 +163,16 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
+	toolCallEnv := gateway.ToolCallEnv{
+		UserConfig: userConfig,
+		SystemEnv:  systemConfig,
+	}
+
+	err = toolCallEnv.FilterOmittedEnvVars(ctx, mcpMetadataRepo, toolsetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").Log(ctx, logger)
+	}
+
 	descriptor := plan.Descriptor
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
@@ -226,8 +238,7 @@ func handleToolsCall(
 		telemSvc.CreateLog(ctx, params)
 	}()
 
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), gateway.ToolCallEnv{
-		UserConfig: userConfig, SystemEnv: systemConfig}, plan, logAttrs)
+	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}

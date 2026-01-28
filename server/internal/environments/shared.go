@@ -153,7 +153,9 @@ func (e *EnvironmentEntries) LoadMCPAttachedEnvironment(
 	// Create a set of variable names that should be included
 	includeVars := make(map[string]bool, len(mcpEnvConfigs))
 	for _, mcpConfig := range mcpEnvConfigs {
-		includeVars[mcpConfig.VariableName] = true
+		if mcpConfig.ProvidedBy == "system" {
+			includeVars[mcpConfig.VariableName] = true
+		}
 	}
 
 	// Build the environment map with only the variables configured for this MCP

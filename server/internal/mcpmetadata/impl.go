@@ -174,7 +174,7 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP install page metadata").Log(ctx, s.logger)
 	}
 
-	metadata, err := toMcpMetadata(ctx, s.repo, record)
+	metadata, err := ToMCPMetadata(ctx, s.repo, record)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to convert metadata").Log(ctx, s.logger)
 	}
@@ -272,14 +272,14 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		}
 	}
 
-	return toMcpMetadata(ctx, s.repo, result)
+	return ToMCPMetadata(ctx, s.repo, result)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func toMcpMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMetadatum) (*types.McpMetadata, error) {
+func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMetadatum) (*types.McpMetadata, error) {
 	// Parse header display names from JSONB (deprecated field)
 	headerDisplayNames := make(map[string]string)
 	if len(record.HeaderDisplayNames) > 0 {
@@ -493,7 +493,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 
 		// Load header display names from environment entries table and deprecated column
-		metadata, err := toMcpMetadata(ctx, s.repo, metadataRecord)
+		metadata, err := ToMCPMetadata(ctx, s.repo, metadataRecord)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to convert metadata to get header display names", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
 		} else {

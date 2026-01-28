@@ -2,10 +2,14 @@ package gateway
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 )
 
 type EnvironmentLoader interface {
@@ -96,4 +100,55 @@ func (c *CaseInsensitiveEnv) All() map[string]string {
 type ToolCallEnv struct {
 	SystemEnv  *CaseInsensitiveEnv
 	UserConfig *CaseInsensitiveEnv
+}
+
+func (e ToolCallEnv) FilterOmittedEnvVars(
+	ctx context.Context,
+	repo *mcpmetadata_repo.Queries,
+	toolsetID uuid.UUID,
+) error {
+	rawMetadata, err := repo.GetMetadataForToolset(ctx, toolsetID)
+	if err != nil {
+		// Fallback behavior for backwards compatibility
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	mcpMetadata, err := mcpmetadata.ToMCPMetadata(ctx, repo, rawMetadata)
+	if err != nil {
+		return err
+	}
+
+	// Fallback behavior for backwards compatibility
+	if mcpMetadata.DefaultEnvironmentID == nil {
+		return nil
+	}
+
+	systemKeysToRetain := make(map[string]bool)
+	userKeysToRetain := make(map[string]bool)
+	for _, config := range mcpMetadata.EnvironmentConfigs {
+		if config.ProvidedBy == "system" {
+			systemKeysToRetain[strings.ToLower(config.VariableName)] = true
+		} else if config.ProvidedBy == "user" {
+			userKeysToRetain[strings.ToLower(config.VariableName)] = true
+		}
+	}
+
+	// Delete environment variables that are not meant to be sourced from the given location
+	// E.G. if a variable is set to "system" it should not be sourced from the user config
+	// Removes anything not explicitly listed as a system or user variable
+	for key := range e.SystemEnv.data {
+		if !systemKeysToRetain[key] {
+			delete(e.SystemEnv.data, key)
+		}
+	}
+	for key := range e.UserConfig.data {
+		if !userKeysToRetain[key] {
+			delete(e.UserConfig.data, key)
+		}
+	}
+
+	return nil
 }

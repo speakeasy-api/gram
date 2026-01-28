@@ -35,6 +35,8 @@ interface PlaygroundElementsProps {
   model: string;
   /** Additional action buttons to render alongside the share button */
   additionalActions?: React.ReactNode;
+  /** User-provided auth headers for user-provided variables */
+  userProvidedHeaders?: Record<string, string>;
 }
 
 export function PlaygroundElements({
@@ -42,6 +44,7 @@ export function PlaygroundElements({
   environmentSlug,
   model,
   additionalActions,
+  userProvidedHeaders = {},
 }: PlaygroundElementsProps) {
   const session = useSession();
   const project = useProject();
@@ -115,6 +118,8 @@ export function PlaygroundElements({
     );
   }
 
+
+  console.log("userProvidedHeaders", userProvidedHeaders);
   return (
     <GramElementsProvider
       config={{
@@ -124,6 +129,7 @@ export function PlaygroundElements({
           sessionFn: getSession,
           headers: {
             "X-Gram-Source": "playground",
+            ...userProvidedHeaders,
           },
         },
         history: {
@@ -132,7 +138,7 @@ export function PlaygroundElements({
           initialThreadId,
         },
         mcp: mcpUrl,
-        gramEnvironment: environmentSlug ?? undefined,
+        // gramEnvironment: environmentSlug ?? undefined,
         variant: "standalone",
         model: {
           defaultModel: model as Model,
@@ -156,6 +162,7 @@ export function PlaygroundElements({
           ThreadWelcome: GramThreadWelcome,
           Composer: GramComposer,
         },
+        environment: userProvidedHeaders,
       }}
     >
       <PlaygroundAuthWarningContext.Provider

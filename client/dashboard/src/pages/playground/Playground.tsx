@@ -62,6 +62,9 @@ function PlaygroundInner() {
   const [temperature, setTemperature] = useState(0.5);
   const [model, setModel] = useState("anthropic/claude-sonnet-4.5");
   const [maxTokens, setMaxTokens] = useState(4096);
+  const [userProvidedHeaders, setUserProvidedHeaders] = useState<
+    Record<string, string>
+  >({});
 
   // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
   const chatConfigRef = useRef({
@@ -111,6 +114,7 @@ function PlaygroundInner() {
               setModel={setModel}
               maxTokens={maxTokens}
               setMaxTokens={setMaxTokens}
+              onUserProvidedHeadersChange={setUserProvidedHeaders}
             />
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
@@ -119,6 +123,7 @@ function PlaygroundInner() {
                 toolsetSlug={selectedToolset}
                 environmentSlug={selectedEnvironment}
                 model={model}
+                userProvidedHeaders={userProvidedHeaders}
                 additionalActions={
                   <div className="flex items-center justify-end w-full px-4">
                     <ShareChatButton />
@@ -153,6 +158,7 @@ export function ToolsetPanel({
   setModel,
   maxTokens,
   setMaxTokens,
+  onUserProvidedHeadersChange,
 }: {
   configRef: ChatConfig;
   setSelectedToolset: (toolset: string) => void;
@@ -163,6 +169,7 @@ export function ToolsetPanel({
   setModel: (model: string) => void;
   maxTokens: number;
   setMaxTokens: (tokens: number) => void;
+  onUserProvidedHeadersChange?: (headers: Record<string, string>) => void;
 }) {
   const [showManageToolsDialog, setShowManageToolsDialog] = useState(false);
   const [manageToolsGroup, setManageToolsGroup] = useState<
@@ -365,7 +372,7 @@ export function ToolsetPanel({
             onValueChange={setSelectedToolset}
           >
             <SelectTrigger size="sm" className="w-full">
-              <SelectValue placeholder="Select toolset" />
+              <SelectValue placeholder="Select MCP" />
             </SelectTrigger>
             <SelectContent>
               {toolsets?.map((ts) => (
@@ -405,6 +412,7 @@ export function ToolsetPanel({
                   value: e.value,
                 })),
               }}
+              onUserProvidedHeadersChange={onUserProvidedHeadersChange}
             />
           ) : undefined
         }
