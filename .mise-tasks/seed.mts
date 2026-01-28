@@ -356,10 +356,20 @@ async function upsertToolset(init: {
   if (!toolRes.ok) {
     abort(`Failed to list tools for project \`${projectSlug}\``, toolRes.error);
   }
-  // Only include HTTP tools (client-side filter for safety)
-  const toolUrns = toolRes.value.tools
-    .filter((t) => t.httpToolDefinition)
-    .map((t) => t.httpToolDefinition!.toolUrn);
+  const toolUrns = toolRes.value.tools.map((t) => {
+    switch (true) {
+      case !!t.httpToolDefinition:
+        return t.httpToolDefinition.toolUrn;
+      case !!t.functionToolDefinition:
+        return t.functionToolDefinition.toolUrn;
+      case !!t.externalMcpToolDefinition:
+        return t.externalMcpToolDefinition.toolUrn;
+      case !!t.promptTemplate:
+        return t.promptTemplate.toolUrn;
+      default:
+        assert(false, "Unknown tool type: " + JSON.stringify(t));
+    }
+  });
 
   let toolset: Toolset;
   const name = assetSlug + "-seed";
