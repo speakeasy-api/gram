@@ -678,19 +678,26 @@ func (s *Service) GenerateFollowOnSuggestions(ctx context.Context, payload *gen.
 	}
 	conversation := conversationBuilder.String()
 
-	systemPrompt := fmt.Sprintf(`Generate exactly %d follow-up questions that the USER would ask the ASSISTANT.
+	systemPrompt := fmt.Sprintf(`Generate exactly %d follow-up questions the user could ask to learn MORE from the assistant.
 
-These are questions the user might want to ask next to learn more. Write from the user's perspective, asking the assistant.
+The user wants to dig deeper into what the assistant just explained. Generate questions that ask the assistant to elaborate, compare, or provide more details.
 
-Focus primarily on the LAST message in the conversation - suggestions should be directly relevant to what was just discussed.
+IMPORTANT: If the assistant asked the user a question, IGNORE it. Instead, generate questions about the information/content the assistant provided.
+
+Good examples:
+- "How does X compare to Y?"
+- "Can you explain more about Z?"
+- "What are the pros and cons of X?"
+
+Bad examples (DO NOT generate these):
+- Questions that answer what the assistant asked
+- Questions about the user's own preferences or needs
+- Questions like "What should I choose?" or "What do I need?"
 
 Rules:
-- Questions the user would ask to get more information from the assistant
-- Do NOT generate questions the assistant would ask the user
-- Prioritize the most recent assistant response when generating questions
-- No preambles like "That's interesting!" or "I've heard that"
-- Keep each question concise (under 15 words)
-- Make questions diverse, exploring different aspects of the latest response
+- Focus on the informational content the assistant provided
+- Ask for elaboration, comparisons, or deeper explanations
+- Keep each question concise (under 12 words)
 - No numbering or bullet points
 - One question per line, nothing else`, count)
 
