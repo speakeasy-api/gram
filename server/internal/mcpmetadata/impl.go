@@ -111,6 +111,7 @@ type hostedPageData struct {
 	SiteURL           string
 	LogoAssetURL      string
 	DocsURL           string
+	DocsSlug          string
 	Instructions      string
 	IsPublic          bool
 }
@@ -473,6 +474,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		SiteURL:           s.siteURL.String(),
 		LogoAssetURL:      logoAssetURL,
 		DocsURL:           docsURL,
+		DocsSlug:          "",
 		Instructions:      instructions,
 		IsPublic:          toolset.McpIsPublic,
 	}
