@@ -682,12 +682,15 @@ func (s *Service) GenerateFollowOnSuggestions(ctx context.Context, payload *gen.
 
 These are questions the user might want to ask next to learn more. Write from the user's perspective, asking the assistant.
 
+Focus primarily on the LAST message in the conversation - suggestions should be directly relevant to what was just discussed.
+
 Rules:
 - Questions the user would ask to get more information from the assistant
 - Do NOT generate questions the assistant would ask the user
+- Prioritize the most recent assistant response when generating questions
 - No preambles like "That's interesting!" or "I've heard that"
 - Keep each question concise (under 15 words)
-- Make questions diverse, exploring different aspects of the topic
+- Make questions diverse, exploring different aspects of the latest response
 - No numbering or bullet points
 - One question per line, nothing else`, count)
 
