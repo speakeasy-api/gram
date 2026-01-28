@@ -16,8 +16,8 @@ import {
 } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { HistoryIcon } from "lucide-react";
-import { useTheme } from "next-themes";
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -49,7 +49,7 @@ export function PlaygroundElements({
   const session = useSession();
   const project = useProject();
   const createSessionMutation = useChatSessionsCreateMutation();
-  const { resolvedTheme } = useTheme();
+  const { theme: resolvedTheme } = useMoonshineConfig();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [searchParams] = useSearchParams();
 
@@ -70,11 +70,11 @@ export function PlaygroundElements({
   const authStatus =
     toolset && environmentData
       ? getAuthStatus(toolset, {
-          entries: environmentData.entries?.map((e) => ({
-            name: e.name,
-            value: e.value,
-          })),
-        })
+        entries: environmentData.entries?.map((e) => ({
+          name: e.name,
+          value: e.value,
+        })),
+      })
       : null;
 
   // Create getSession function using SDK mutation with session auth
