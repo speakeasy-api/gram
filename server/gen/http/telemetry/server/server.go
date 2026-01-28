@@ -19,10 +19,11 @@ import (
 
 // Server lists the telemetry service endpoint HTTP handlers.
 type Server struct {
-	Mounts          []*MountPoint
-	SearchLogs      http.Handler
-	SearchToolCalls http.Handler
-	CaptureEvent    http.Handler
+	Mounts                   []*MountPoint
+	SearchLogs               http.Handler
+	SearchToolCalls          http.Handler
+	CaptureEvent             http.Handler
+	GetProjectMetricsSummary http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -55,10 +56,12 @@ func New(
 			{"SearchLogs", "POST", "/rpc/telemetry.searchLogs"},
 			{"SearchToolCalls", "POST", "/rpc/telemetry.searchToolCalls"},
 			{"CaptureEvent", "POST", "/rpc/telemetry.captureEvent"},
+			{"GetProjectMetricsSummary", "POST", "/rpc/telemetry.getProjectMetricsSummary"},
 		},
-		SearchLogs:      NewSearchLogsHandler(e.SearchLogs, mux, decoder, encoder, errhandler, formatter),
-		SearchToolCalls: NewSearchToolCallsHandler(e.SearchToolCalls, mux, decoder, encoder, errhandler, formatter),
-		CaptureEvent:    NewCaptureEventHandler(e.CaptureEvent, mux, decoder, encoder, errhandler, formatter),
+		SearchLogs:               NewSearchLogsHandler(e.SearchLogs, mux, decoder, encoder, errhandler, formatter),
+		SearchToolCalls:          NewSearchToolCallsHandler(e.SearchToolCalls, mux, decoder, encoder, errhandler, formatter),
+		CaptureEvent:             NewCaptureEventHandler(e.CaptureEvent, mux, decoder, encoder, errhandler, formatter),
+		GetProjectMetricsSummary: NewGetProjectMetricsSummaryHandler(e.GetProjectMetricsSummary, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -70,6 +73,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SearchLogs = m(s.SearchLogs)
 	s.SearchToolCalls = m(s.SearchToolCalls)
 	s.CaptureEvent = m(s.CaptureEvent)
+	s.GetProjectMetricsSummary = m(s.GetProjectMetricsSummary)
 }
 
 // MethodNames returns the methods served.
@@ -80,6 +84,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSearchLogsHandler(mux, h.SearchLogs)
 	MountSearchToolCallsHandler(mux, h.SearchToolCalls)
 	MountCaptureEventHandler(mux, h.CaptureEvent)
+	MountGetProjectMetricsSummaryHandler(mux, h.GetProjectMetricsSummary)
 }
 
 // Mount configures the mux to serve the telemetry endpoints.
@@ -223,6 +228,60 @@ func NewCaptureEventHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "captureEvent")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetProjectMetricsSummaryHandler configures the mux to serve the
+// "telemetry" service "getProjectMetricsSummary" endpoint.
+func MountGetProjectMetricsSummaryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getProjectMetricsSummary", otelhttp.WithRouteTag("/rpc/telemetry.getProjectMetricsSummary", f).ServeHTTP)
+}
+
+// NewGetProjectMetricsSummaryHandler creates a HTTP handler which loads the
+// HTTP request and calls the "telemetry" service "getProjectMetricsSummary"
+// endpoint.
+func NewGetProjectMetricsSummaryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetProjectMetricsSummaryRequest(mux, decoder)
+		encodeResponse = EncodeGetProjectMetricsSummaryResponse(encoder)
+		encodeError    = EncodeGetProjectMetricsSummaryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getProjectMetricsSummary")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

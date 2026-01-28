@@ -6,7 +6,7 @@ contents:
     - alpine-baselayout-data
     - ca-certificates-bundle
     - su-exec
-    - nodejs=22.16.0-r2
+    - nodejs~22
     - gram-runner
 
 cmd: gram-runner -language javascript

@@ -44,6 +44,7 @@ export * from "./getCreditUsage.js";
 export * from "./getDomain.js";
 export * from "./getMcpMetadata.js";
 export * from "./getPeriodUsage.js";
+export * from "./getProjectMetricsSummary.js";
 export * from "./getSlackConnection.js";
 export * from "./getSourceEnvironment.js";
 export * from "./getToolsetEnvironment.js";

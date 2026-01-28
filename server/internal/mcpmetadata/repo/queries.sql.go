@@ -12,32 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteAllEnvironmentConfigs = `-- name: DeleteAllEnvironmentConfigs :exec
-DELETE FROM mcp_environment_configs
-WHERE mcp_metadata_id = $1
-`
-
-func (q *Queries) DeleteAllEnvironmentConfigs(ctx context.Context, mcpMetadataID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteAllEnvironmentConfigs, mcpMetadataID)
-	return err
-}
-
-const deleteEnvironmentConfig = `-- name: DeleteEnvironmentConfig :exec
-DELETE FROM mcp_environment_configs
-WHERE mcp_metadata_id = $1
-  AND variable_name = $2
-`
-
-type DeleteEnvironmentConfigParams struct {
-	McpMetadataID uuid.UUID
-	VariableName  string
-}
-
-func (q *Queries) DeleteEnvironmentConfig(ctx context.Context, arg DeleteEnvironmentConfigParams) error {
-	_, err := q.db.Exec(ctx, deleteEnvironmentConfig, arg.McpMetadataID, arg.VariableName)
-	return err
-}
-
 const getHeaderDisplayNames = `-- name: GetHeaderDisplayNames :one
 SELECT header_display_names
 FROM mcp_metadata
@@ -52,16 +26,7 @@ func (q *Queries) GetHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUID
 }
 
 const getMetadataForToolset = `-- name: GetMetadataForToolset :one
-SELECT id,
-       toolset_id,
-       project_id,
-       external_documentation_url,
-       logo_id,
-       instructions,
-       header_display_names,
-       default_environment_id,
-       created_at,
-       updated_at
+SELECT id, toolset_id, project_id, external_documentation_url, logo_id, instructions, header_display_names, default_environment_id, created_at, updated_at
 FROM mcp_metadata
 WHERE toolset_id = $1
 ORDER BY updated_at DESC
@@ -86,95 +51,62 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID
 	return i, err
 }
 
-const listEnvironmentConfigs = `-- name: ListEnvironmentConfigs :many
-SELECT id,
-       project_id,
-       mcp_metadata_id,
-       variable_name,
-       header_display_name,
-       provided_by,
-       created_at,
-       updated_at
-FROM mcp_environment_configs
-WHERE mcp_metadata_id = $1
-ORDER BY variable_name ASC
-`
-
-func (q *Queries) ListEnvironmentConfigs(ctx context.Context, mcpMetadataID uuid.UUID) ([]McpEnvironmentConfig, error) {
-	rows, err := q.db.Query(ctx, listEnvironmentConfigs, mcpMetadataID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []McpEnvironmentConfig
-	for rows.Next() {
-		var i McpEnvironmentConfig
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.McpMetadataID,
-			&i.VariableName,
-			&i.HeaderDisplayName,
-			&i.ProvidedBy,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const upsertEnvironmentConfig = `-- name: UpsertEnvironmentConfig :one
-INSERT INTO mcp_environment_configs (
-    project_id,
-    mcp_metadata_id,
-    variable_name,
-    header_display_name,
-    provided_by
-) VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (mcp_metadata_id, variable_name)
-DO UPDATE SET header_display_name = EXCLUDED.header_display_name,
-              provided_by = EXCLUDED.provided_by,
-              updated_at = clock_timestamp()
+const updateHeaderDisplayName = `-- name: UpdateHeaderDisplayName :one
+UPDATE mcp_metadata
+SET header_display_names = CASE
+    WHEN $1::TEXT = '' THEN header_display_names - $2::TEXT
+    ELSE jsonb_set(header_display_names, ARRAY[$2::TEXT], to_jsonb($1::TEXT))
+    END,
+    updated_at = clock_timestamp()
+WHERE toolset_id = $3 AND project_id = $4
 RETURNING id,
+          toolset_id,
           project_id,
-          mcp_metadata_id,
-          variable_name,
-          header_display_name,
-          provided_by,
+          external_documentation_url,
+          logo_id,
+          instructions,
+          header_display_names,
           created_at,
           updated_at
 `
 
-type UpsertEnvironmentConfigParams struct {
-	ProjectID         uuid.UUID
-	McpMetadataID     uuid.UUID
-	VariableName      string
-	HeaderDisplayName pgtype.Text
-	ProvidedBy        string
+type UpdateHeaderDisplayNameParams struct {
+	DisplayName string
+	SecurityKey string
+	ToolsetID   uuid.UUID
+	ProjectID   uuid.UUID
 }
 
-func (q *Queries) UpsertEnvironmentConfig(ctx context.Context, arg UpsertEnvironmentConfigParams) (McpEnvironmentConfig, error) {
-	row := q.db.QueryRow(ctx, upsertEnvironmentConfig,
+type UpdateHeaderDisplayNameRow struct {
+	ID                       uuid.UUID
+	ToolsetID                uuid.UUID
+	ProjectID                uuid.UUID
+	ExternalDocumentationUrl pgtype.Text
+	LogoID                   uuid.NullUUID
+	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+}
+
+// Updates a single header display name in the JSONB field.
+// If display_name is empty, removes the key from the map.
+func (q *Queries) UpdateHeaderDisplayName(ctx context.Context, arg UpdateHeaderDisplayNameParams) (UpdateHeaderDisplayNameRow, error) {
+	row := q.db.QueryRow(ctx, updateHeaderDisplayName,
+		arg.DisplayName,
+		arg.SecurityKey,
+		arg.ToolsetID,
 		arg.ProjectID,
-		arg.McpMetadataID,
-		arg.VariableName,
-		arg.HeaderDisplayName,
-		arg.ProvidedBy,
 	)
-	var i McpEnvironmentConfig
+	var i UpdateHeaderDisplayNameRow
 	err := row.Scan(
 		&i.ID,
+		&i.ToolsetID,
 		&i.ProjectID,
-		&i.McpMetadataID,
-		&i.VariableName,
-		&i.HeaderDisplayName,
-		&i.ProvidedBy,
+		&i.ExternalDocumentationUrl,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -187,26 +119,15 @@ INSERT INTO mcp_metadata (
     project_id,
     external_documentation_url,
     logo_id,
-    instructions,
-    default_environment_id
-) VALUES ($1, $2, $3, $4, $5, $6)
+    instructions
+) VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (toolset_id)
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
-              default_environment_id = EXCLUDED.default_environment_id,
               updated_at = clock_timestamp()
-RETURNING id,
-          toolset_id,
-          project_id,
-          external_documentation_url,
-          logo_id,
-          instructions,
-          header_display_names,
-          default_environment_id,
-          created_at,
-          updated_at
+RETURNING id, toolset_id, project_id, external_documentation_url, logo_id, instructions, header_display_names, default_environment_id, created_at, updated_at
 `
 
 type UpsertMetadataParams struct {
@@ -215,7 +136,6 @@ type UpsertMetadataParams struct {
 	ExternalDocumentationUrl pgtype.Text
 	LogoID                   uuid.NullUUID
 	Instructions             pgtype.Text
-	DefaultEnvironmentID     uuid.NullUUID
 }
 
 func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpMetadatum, error) {
@@ -225,7 +145,6 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		arg.ExternalDocumentationUrl,
 		arg.LogoID,
 		arg.Instructions,
-		arg.DefaultEnvironmentID,
 	)
 	var i McpMetadatum
 	err := row.Scan(

@@ -1,9 +1,0 @@
-# DeleteKeysResponse
-
-
-## Fields
-
-| Field                                                                                   | Type                                                                                    | Required                                                                                | Description                                                                             | Example                                                                                 |
-| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `HTTPMeta`                                                                              | [components.HTTPMetadata](../../models/components/httpmetadata.md)                      | :heavy_check_mark:                                                                      | N/A                                                                                     |                                                                                         |
-| `Object`                                                                                | [*operations.DeleteKeysResponseBody](../../models/operations/deletekeysresponsebody.md) | :heavy_minus_sign:                                                                      | API key deleted successfully                                                            | {<br/>"deleted": true<br/>}                                                             |

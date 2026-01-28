@@ -26,7 +26,10 @@ const PASSWORD_MASK = "••••••••";
 export function getAuthStatus(
   toolset: Pick<
     Toolset,
-    "securityVariables" | "serverVariables" | "functionEnvironmentVariables"
+    | "securityVariables"
+    | "serverVariables"
+    | "functionEnvironmentVariables"
+    | "externalMcpHeaderDefinitions"
   >,
   environment?: { entries?: Array<{ name: string; value: string }> },
 ): { hasMissingAuth: boolean; missingCount: number } {
@@ -41,6 +44,9 @@ export function getAuthStatus(
     ) ?? []),
     ...(toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ??
       []),
+    ...(toolset?.externalMcpHeaderDefinitions?.map(
+      (headerDef) => headerDef.name,
+    ) ?? []),
   ];
 
   const missingCount = relevantEnvVars.filter((varName) => {
@@ -74,7 +80,7 @@ export function PlaygroundAuth({
   );
   const mcpMetadata = mcpMetadataData?.metadata;
   const defaultEnvironmentSlug =
-   environments.find((env) => env.id === mcpMetadata?.defaultEnvironmentId)?.slug ?? "default";
+    environments.find((env) => env.id === mcpMetadata?.defaultEnvironmentId)?.slug ?? "default";
 
   // Load environment variables using the same hook as MCPAuthenticationTab
   const envVars = useEnvironmentVariables(toolset, environments, mcpMetadata);

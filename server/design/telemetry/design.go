@@ -15,7 +15,6 @@ var _ = Service("telemetry", func() {
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
-
 	Method("searchLogs", func() {
 		Description("Search and list telemetry logs that match a search filter")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -115,6 +114,38 @@ var _ = Service("telemetry", func() {
 
 		Meta("openapi:operationId", "captureEvent")
 		Meta("openapi:extension:x-speakeasy-name-override", "captureEvent")
+	})
+
+	Method("getProjectMetricsSummary", func() {
+		Description("Get aggregated metrics summary for an entire project")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetProjectMetricsSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetMetricsSummaryResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getProjectMetricsSummary")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getProjectMetricsSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getProjectMetricsSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectMetricsSummary"}`)
 	})
 })
 
@@ -226,7 +257,6 @@ var SearchToolCallsFilter = Type("SearchToolCallsFilter", func() {
 	Extend(TelemetryFilter)
 })
 
-
 var SearchToolCallsPayload = Type("SearchToolCallsPayload", func() {
 	Description("Payload for searching tool call summaries")
 
@@ -298,4 +328,103 @@ var CaptureEventResult = Type("CaptureEventResult", func() {
 	Attribute("success", Boolean, "Whether the event was successfully captured")
 
 	Required("success")
+})
+
+// Metrics types
+
+var ModelUsage = Type("ModelUsage", func() {
+	Description("Model usage statistics")
+
+	Attribute("name", String, "Model name")
+	Attribute("count", Int64, "Number of times used")
+
+	Required("name", "count")
+})
+
+var ToolUsage = Type("ToolUsage", func() {
+	Description("Tool usage statistics")
+
+	Attribute("urn", String, "Tool URN")
+	Attribute("count", Int64, "Total call count")
+	Attribute("success_count", Int64, "Successful calls (2xx status)")
+	Attribute("failure_count", Int64, "Failed calls (4xx/5xx status)")
+
+	Required("urn", "count", "success_count", "failure_count")
+})
+
+var Metrics = Type("Metrics", func() {
+	Description("Aggregated metrics")
+
+	// Token usage
+	Attribute("total_input_tokens", Int64, "Sum of input tokens used")
+	Attribute("total_output_tokens", Int64, "Sum of output tokens used")
+	Attribute("total_tokens", Int64, "Sum of all tokens used")
+	Attribute("avg_tokens_per_request", Float64, "Average tokens per chat request")
+
+	// Chat requests
+	Attribute("total_chat_requests", Int64, "Total number of chat requests")
+	Attribute("avg_chat_duration_ms", Float64, "Average chat request duration in milliseconds")
+
+	// Resolution status (count of each finish reason)
+	Attribute("finish_reason_stop", Int64, "Requests that completed naturally")
+	Attribute("finish_reason_tool_calls", Int64, "Requests that resulted in tool calls")
+
+	// Tool calls
+	Attribute("total_tool_calls", Int64, "Total number of tool calls")
+	Attribute("tool_call_success", Int64, "Successful tool calls (2xx status)")
+	Attribute("tool_call_failure", Int64, "Failed tool calls (4xx/5xx status)")
+	Attribute("avg_tool_duration_ms", Float64, "Average tool call duration in milliseconds")
+
+	// Cardinality (project scope only, 0 for chat scope)
+	Attribute("total_chats", Int64, "Number of unique chat sessions (project scope only)")
+	Attribute("distinct_models", Int64, "Number of distinct models used (project scope only)")
+	Attribute("distinct_providers", Int64, "Number of distinct providers used (project scope only)")
+
+	// Detailed breakdowns
+	Attribute("models", ArrayOf(ModelUsage), "List of models used with call counts")
+	Attribute("tools", ArrayOf(ToolUsage), "List of tools used with success/failure counts")
+
+	Required(
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"avg_tokens_per_request",
+		"total_chat_requests",
+		"avg_chat_duration_ms",
+		"finish_reason_stop",
+		"finish_reason_tool_calls",
+		"total_tool_calls",
+		"tool_call_success",
+		"tool_call_failure",
+		"avg_tool_duration_ms",
+		"total_chats",
+		"distinct_models",
+		"distinct_providers",
+		"models",
+		"tools",
+	)
+})
+
+var GetProjectMetricsSummaryPayload = Type("GetProjectMetricsSummaryPayload", func() {
+	Description("Payload for getting project-level metrics summary")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+
+	Required("from", "to")
+})
+
+var GetMetricsSummaryResult = Type("GetMetricsSummaryResult", func() {
+	Description("Result of metrics summary query")
+
+	Attribute("metrics", Metrics, "Aggregated metrics")
+	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
+
+	Required("metrics", "enabled")
 })

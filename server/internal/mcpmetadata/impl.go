@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/templatefuncs"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -362,7 +363,7 @@ func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 	}
 
 	for _, input := range inputs {
-		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
+		headerKey := toolconfig.ToHTTPHeader(input.SystemName)
 		config.Headers[headerKey] = fmt.Sprintf("{{%s}}", input.DisplayName)
 	}
 
@@ -392,7 +393,7 @@ func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 	}
 
 	for _, input := range inputs {
-		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
+		headerKey := toolconfig.ToHTTPHeader(input.SystemName)
 		config.Headers[headerKey] = fmt.Sprintf("your-%s-value", input.DisplayName)
 	}
 
@@ -802,6 +803,20 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 					SystemName:  fmt.Sprintf("MCP-%s", functionEnvVar.Name),
 					DisplayName: displayName,
 					Sensitive:   true,
+				})
+			}
+		}
+
+		for _, headerDef := range toolsetDetails.ExternalMcpHeaderDefinitions {
+			if !headerDef.Required {
+				continue
+			}
+			if !seen[headerDef.Name] {
+				seen[headerDef.Name] = true
+				inputs = append(inputs, securityInput{
+					SystemName:  fmt.Sprintf("MCP-%s", headerDef.Name),
+					DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(headerDef.Name, "_", "-")),
+					Sensitive:   headerDef.Secret,
 				})
 			}
 		}

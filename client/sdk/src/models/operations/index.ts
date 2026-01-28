@@ -45,6 +45,7 @@ export * from "./getlatestdeployment.js";
 export * from "./getmcpmetadata.js";
 export * from "./getperiodusage.js";
 export * from "./getproject.js";
+export * from "./getprojectmetricssummary.js";
 export * from "./getslackconnection.js";
 export * from "./getsourceenvironment.js";
 export * from "./gettemplate.js";

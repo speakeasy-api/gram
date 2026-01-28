@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -26,16 +25,18 @@ import (
 	"goa.design/goa/v3/security"
 )
 
+const logsDisabledMsg = "logs are not enabled for this organization"
+
 type Service struct {
-	auth          *auth.Auth
-	db            *pgxpool.Pool
-	chConn        clickhouse.Conn
-	chRepo        *repo.Queries
-	featureClient *productfeatures.Client
-	logger        *slog.Logger
-	tracer        trace.Tracer
-	posthog       PosthogClient
-	chatSessions  *chatsessions.Manager
+	auth         *auth.Auth
+	db           *pgxpool.Pool
+	chConn       clickhouse.Conn
+	chRepo       *repo.Queries
+	logger       *slog.Logger
+	tracer       trace.Tracer
+	posthog      PosthogClient
+	chatSessions *chatsessions.Manager
+	logsEnabled  LogsEnabled
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -47,20 +48,21 @@ func NewService(
 	chConn clickhouse.Conn,
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
-	features *productfeatures.Client,
+	logsEnabled LogsEnabled,
 	posthogClient PosthogClient) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
+	chRepo := repo.New(chConn)
 
 	return &Service{
-		auth:          auth.New(logger, db, sessions),
-		db:            db,
-		chConn:        chConn,
-		chRepo:        repo.New(chConn),
-		logger:        logger,
-		featureClient: features,
-		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
-		posthog:       posthogClient,
-		chatSessions:  chatSessions,
+		auth:         auth.New(logger, db, sessions),
+		db:           db,
+		chConn:       chConn,
+		chRepo:       chRepo,
+		logger:       logger,
+		logsEnabled:  logsEnabled,
+		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
+		posthog:      posthogClient,
+		chatSessions: chatSessions,
 	}
 }
 
@@ -229,6 +231,86 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}, nil
 }
 
+// GetProjectMetricsSummary retrieves aggregated metrics for an entire project.
+func (s *Service) GetProjectMetricsSummary(ctx context.Context, payload *telem_gen.GetProjectMetricsSummaryPayload) (res *telem_gen.GetMetricsSummaryResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeForbidden, nil, logsDisabledMsg)
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	metrics, err := s.chRepo.GetMetricsSummary(ctx, repo.GetMetricsSummaryParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving project metrics")
+	}
+
+	return buildMetricsSummaryResult(*metrics), nil
+}
+
+// buildMetricsSummaryResult converts repo metrics to the API response format.
+func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMetricsSummaryResult {
+	// Convert models map to ModelUsage slice
+	models := make([]*telem_gen.ModelUsage, 0, len(metrics.Models))
+	for name, count := range metrics.Models {
+		models = append(models, &telem_gen.ModelUsage{
+			Name:  name,
+			Count: int64(count), //nolint:gosec // Bounded count
+		})
+	}
+
+	// Convert tool maps to ToolUsage slice
+	tools := make([]*telem_gen.ToolUsage, 0, len(metrics.ToolCounts))
+	for urn, count := range metrics.ToolCounts {
+		tools = append(tools, &telem_gen.ToolUsage{
+			Urn:          urn,
+			Count:        int64(count),                          //nolint:gosec // Bounded count
+			SuccessCount: int64(metrics.ToolSuccessCounts[urn]), //nolint:gosec // Bounded count
+			FailureCount: int64(metrics.ToolFailureCounts[urn]), //nolint:gosec // Bounded count
+		})
+	}
+
+	//nolint:gosec // Values are bounded counts that won't overflow int64
+	return &telem_gen.GetMetricsSummaryResult{
+		Metrics: &telem_gen.Metrics{
+			TotalInputTokens:      metrics.TotalInputTokens,
+			TotalOutputTokens:     metrics.TotalOutputTokens,
+			TotalTokens:           metrics.TotalTokens,
+			AvgTokensPerRequest:   metrics.AvgTokensPerReq,
+			TotalChatRequests:     int64(metrics.TotalChatRequests),
+			AvgChatDurationMs:     metrics.AvgChatDurationMs,
+			FinishReasonStop:      int64(metrics.FinishReasonStop),
+			FinishReasonToolCalls: int64(metrics.FinishReasonToolCalls),
+			TotalToolCalls:        int64(metrics.TotalToolCalls),
+			ToolCallSuccess:       int64(metrics.ToolCallSuccess),
+			ToolCallFailure:       int64(metrics.ToolCallFailure),
+			AvgToolDurationMs:     metrics.AvgToolDurationMs,
+			TotalChats:            int64(metrics.TotalChats),
+			DistinctModels:        int64(metrics.DistinctModels),
+			DistinctProviders:     int64(metrics.DistinctProviders),
+			Models:                models,
+			Tools:                 tools,
+		},
+		Enabled: true,
+	}
+}
+
 // searchParams contains common validated parameters for telemetry search endpoints.
 type searchParams struct {
 	projectID string
@@ -247,9 +329,9 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	logsEnabled, err := s.isLogsEnabled(ctx, authCtx.ActiveOrganizationID)
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+		return nil, oops.E(oops.CodeUnexpected, err, "checking if logs enabled")
 	}
 
 	if limit < 1 || limit > 1000 {
@@ -283,16 +365,6 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 		timeStart: timeStart,
 		timeEnd:   timeEnd,
 	}, nil
-}
-
-func (s *Service) isLogsEnabled(ctx context.Context, orgID string) (bool, error) {
-	logsEnabled, err := s.featureClient.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureLogs)
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled").
-			Log(ctx, s.logger, attr.SlogError(err), attr.SlogOrganizationID(orgID))
-	}
-
-	return logsEnabled, nil
 }
 
 // parseTimeRange extracts and parses the time range from a telemetry filter.

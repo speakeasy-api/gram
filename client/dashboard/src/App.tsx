@@ -19,6 +19,7 @@ import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { AppRoute, useRoutes } from "./routes";
+import { usePageTitle } from "./hooks/use-page-title";
 import { Toaster } from "@/components/ui/sonner";
 import CliCallback from "./pages/cli/CliCallback";
 import {
@@ -139,6 +140,9 @@ function AppContent() {
 const RouteProvider = () => {
   const routes = useRoutes();
   const { addActions, removeActions } = useCommandPalette();
+
+  // Update document title based on active route
+  usePageTitle(routes);
 
   // Register global command palette actions
   useEffect(() => {

@@ -11,6 +11,9 @@ type PosthogClient interface {
 	CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]interface{}) error
 }
 
+// LogsEnabled is a function to determine whether logs are enabled or not for a function
+type LogsEnabled func(ctx context.Context, organisationID string) (bool, error)
+
 // ToolInfo represents the minimal tool information needed for logging
 type ToolInfo struct {
 	ID             string

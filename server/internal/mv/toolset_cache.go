@@ -17,6 +17,7 @@ type ToolsetBaseContents struct {
 	SecurityVars    []*types.SecurityVariable
 	ServerVars      []*types.ServerVariable
 	FunctionEnvVars []*types.FunctionEnvironmentVariable
+	ExternalMCPHeaderDefinitions []*types.ExternalMCPHeaderDefinition
 }
 
 var _ cache.CacheableObject[ToolsetBaseContents] = (*ToolsetBaseContents)(nil)

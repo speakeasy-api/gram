@@ -35,7 +35,8 @@ INSERT INTO external_mcp_tool_definitions (
   oauth_authorization_endpoint,
   oauth_token_endpoint,
   oauth_registration_endpoint,
-  oauth_scopes_supported
+  oauth_scopes_supported,
+  header_definitions
 )
 VALUES (
   @external_mcp_attachment_id,
@@ -51,11 +52,12 @@ VALUES (
   @oauth_authorization_endpoint,
   @oauth_token_endpoint,
   @oauth_registration_endpoint,
-  @oauth_scopes_supported
+  @oauth_scopes_supported,
+  @header_definitions
 )
 RETURNING id, external_mcp_attachment_id, tool_urn, type, name, description, schema, remote_url, requires_oauth,
   oauth_version, oauth_authorization_endpoint, oauth_token_endpoint,
-  oauth_registration_endpoint, oauth_scopes_supported, created_at, updated_at;
+  oauth_registration_endpoint, oauth_scopes_supported, header_definitions, created_at, updated_at;
 
 -- name: ListExternalMCPToolDefinitions :many
 SELECT
@@ -74,6 +76,7 @@ SELECT
   t.oauth_token_endpoint,
   t.oauth_registration_endpoint,
   t.oauth_scopes_supported,
+  t.header_definitions,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -114,6 +117,7 @@ SELECT
   t.oauth_token_endpoint,
   t.oauth_registration_endpoint,
   t.oauth_scopes_supported,
+  t.header_definitions,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -144,6 +148,7 @@ SELECT
   t.oauth_token_endpoint,
   t.oauth_registration_endpoint,
   t.oauth_scopes_supported,
+  t.header_definitions,
   t.created_at,
   t.updated_at,
   e.deployment_id,

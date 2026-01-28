@@ -46,6 +46,7 @@ import { useThemeProps } from '@/hooks/useThemeProps'
 import { EASE_OUT_QUINT } from '@/lib/easing'
 import { MODELS } from '@/lib/models'
 import { cn } from '@/lib/utils'
+import { ConnectionStatusIndicatorSafe } from './connection-status-indicator'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import {
   Tooltip,
@@ -86,11 +87,12 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
       <MotionConfig reducedMotion="user">
         <ThreadPrimitive.Root
           className={cn(
-            'aui-root aui-thread-root bg-background @container flex h-full flex-col',
+            'aui-root aui-thread-root bg-background @container relative flex h-full flex-col',
             themeProps.className,
             className
           )}
         >
+          <ConnectionStatusIndicatorSafe />
           <ThreadPrimitive.Viewport
             className={cn(
               'aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!',

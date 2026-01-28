@@ -603,6 +603,25 @@ func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentV
 	return res
 }
 
+// unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition
+// builds a value of type *types.ExternalMCPHeaderDefinition from a value of
+// type *ExternalMCPHeaderDefinitionResponseBody.
+func unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(v *ExternalMCPHeaderDefinitionResponseBody) *types.ExternalMCPHeaderDefinition {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPHeaderDefinition{
+		Name:        *v.Name,
+		HeaderName:  *v.HeaderName,
+		Description: v.Description,
+		Placeholder: v.Placeholder,
+		Required:    *v.Required,
+		Secret:      *v.Secret,
+	}
+
+	return res
+}
+
 // unmarshalInstanceMcpServerResponseBodyToInstancesInstanceMcpServer builds a
 // value of type *instances.InstanceMcpServer from a value of type
 // *InstanceMcpServerResponseBody.
