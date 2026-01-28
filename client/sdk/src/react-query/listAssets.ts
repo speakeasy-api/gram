@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { assetsListAssets } from "../funcs/assetsListAssets.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildListAssetsQuery,
+  ListAssetsQueryData,
+  prefetchListAssets,
+  queryKeyListAssets,
+} from "./listAssets.core.js";
+export {
+  buildListAssetsQuery,
+  type ListAssetsQueryData,
+  prefetchListAssets,
+  queryKeyListAssets,
+};
 
-export type ListAssetsQueryData = components.ListAssetsResult;
+export type ListAssetsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * listAssets assets
@@ -37,8 +61,8 @@ export type ListAssetsQueryData = components.ListAssetsResult;
 export function useListAssets(
   request?: operations.ListAssetsRequest | undefined,
   security?: operations.ListAssetsSecurity | undefined,
-  options?: QueryHookOptions<ListAssetsQueryData>,
-): UseQueryResult<ListAssetsQueryData, Error> {
+  options?: QueryHookOptions<ListAssetsQueryData, ListAssetsQueryError>,
+): UseQueryResult<ListAssetsQueryData, ListAssetsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListAssetsQuery(
@@ -60,8 +84,8 @@ export function useListAssets(
 export function useListAssetsSuspense(
   request?: operations.ListAssetsRequest | undefined,
   security?: operations.ListAssetsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListAssetsQueryData>,
-): UseSuspenseQueryResult<ListAssetsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<ListAssetsQueryData, ListAssetsQueryError>,
+): UseSuspenseQueryResult<ListAssetsQueryData, ListAssetsQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListAssetsQuery(
@@ -71,21 +95,6 @@ export function useListAssetsSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchListAssets(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.ListAssetsRequest | undefined,
-  security?: operations.ListAssetsSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildListAssetsQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -130,48 +139,4 @@ export function invalidateAllListAssets(
     ...filters,
     queryKey: ["@gram/client", "assets", "listAssets"],
   });
-}
-
-export function buildListAssetsQuery(
-  client$: GramCore,
-  request?: operations.ListAssetsRequest | undefined,
-  security?: operations.ListAssetsSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListAssetsQueryData>;
-} {
-  return {
-    queryKey: queryKeyListAssets({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-      gramKey: request?.gramKey,
-    }),
-    queryFn: async function listAssetsQueryFn(
-      ctx,
-    ): Promise<ListAssetsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(assetsListAssets(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyListAssets(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-    gramKey?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "assets", "listAssets", parameters];
 }

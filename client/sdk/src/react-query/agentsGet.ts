@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { agentsGet } from "../funcs/agentsGet.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  AgentsGetQueryData,
+  buildAgentsGetQuery,
+  prefetchAgentsGet,
+  queryKeyAgentsGet,
+} from "./agentsGet.core.js";
+export {
+  type AgentsGetQueryData,
+  buildAgentsGetQuery,
+  prefetchAgentsGet,
+  queryKeyAgentsGet,
+};
 
-export type AgentsGetQueryData = components.AgentResponseOutput;
+export type AgentsGetQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * getResponse agents
@@ -37,8 +61,8 @@ export type AgentsGetQueryData = components.AgentResponseOutput;
 export function useAgentsGet(
   request: operations.GetAgentResponseRequest,
   security?: operations.GetAgentResponseSecurity | undefined,
-  options?: QueryHookOptions<AgentsGetQueryData>,
-): UseQueryResult<AgentsGetQueryData, Error> {
+  options?: QueryHookOptions<AgentsGetQueryData, AgentsGetQueryError>,
+): UseQueryResult<AgentsGetQueryData, AgentsGetQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildAgentsGetQuery(
@@ -60,8 +84,8 @@ export function useAgentsGet(
 export function useAgentsGetSuspense(
   request: operations.GetAgentResponseRequest,
   security?: operations.GetAgentResponseSecurity | undefined,
-  options?: SuspenseQueryHookOptions<AgentsGetQueryData>,
-): UseSuspenseQueryResult<AgentsGetQueryData, Error> {
+  options?: SuspenseQueryHookOptions<AgentsGetQueryData, AgentsGetQueryError>,
+): UseSuspenseQueryResult<AgentsGetQueryData, AgentsGetQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildAgentsGetQuery(
@@ -71,21 +95,6 @@ export function useAgentsGetSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchAgentsGet(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.GetAgentResponseRequest,
-  security?: operations.GetAgentResponseSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildAgentsGetQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -130,46 +139,4 @@ export function invalidateAllAgentsGet(
     ...filters,
     queryKey: ["@gram/client", "agents", "get"],
   });
-}
-
-export function buildAgentsGetQuery(
-  client$: GramCore,
-  request: operations.GetAgentResponseRequest,
-  security?: operations.GetAgentResponseSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<AgentsGetQueryData>;
-} {
-  return {
-    queryKey: queryKeyAgentsGet({
-      responseId: request.responseId,
-      gramKey: request.gramKey,
-      gramProject: request.gramProject,
-    }),
-    queryFn: async function agentsGetQueryFn(ctx): Promise<AgentsGetQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(agentsGet(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyAgentsGet(
-  parameters: {
-    responseId: string;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "agents", "get", parameters];
 }

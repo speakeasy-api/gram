@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { variationsListGlobal } from "../funcs/variationsListGlobal.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildGlobalVariationsQuery,
+  GlobalVariationsQueryData,
+  prefetchGlobalVariations,
+  queryKeyGlobalVariations,
+} from "./globalVariations.core.js";
+export {
+  buildGlobalVariationsQuery,
+  type GlobalVariationsQueryData,
+  prefetchGlobalVariations,
+  queryKeyGlobalVariations,
+};
 
-export type GlobalVariationsQueryData = components.ListVariationsResult;
+export type GlobalVariationsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * listGlobal variations
@@ -37,8 +61,11 @@ export type GlobalVariationsQueryData = components.ListVariationsResult;
 export function useGlobalVariations(
   request?: operations.ListGlobalVariationsRequest | undefined,
   security?: operations.ListGlobalVariationsSecurity | undefined,
-  options?: QueryHookOptions<GlobalVariationsQueryData>,
-): UseQueryResult<GlobalVariationsQueryData, Error> {
+  options?: QueryHookOptions<
+    GlobalVariationsQueryData,
+    GlobalVariationsQueryError
+  >,
+): UseQueryResult<GlobalVariationsQueryData, GlobalVariationsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGlobalVariationsQuery(
@@ -60,8 +87,14 @@ export function useGlobalVariations(
 export function useGlobalVariationsSuspense(
   request?: operations.ListGlobalVariationsRequest | undefined,
   security?: operations.ListGlobalVariationsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GlobalVariationsQueryData>,
-): UseSuspenseQueryResult<GlobalVariationsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GlobalVariationsQueryData,
+    GlobalVariationsQueryError
+  >,
+): UseSuspenseQueryResult<
+  GlobalVariationsQueryData,
+  GlobalVariationsQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGlobalVariationsQuery(
@@ -71,21 +104,6 @@ export function useGlobalVariationsSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchGlobalVariations(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.ListGlobalVariationsRequest | undefined,
-  security?: operations.ListGlobalVariationsSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildGlobalVariationsQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -130,50 +148,4 @@ export function invalidateAllGlobalVariations(
     ...filters,
     queryKey: ["@gram/client", "variations", "listGlobal"],
   });
-}
-
-export function buildGlobalVariationsQuery(
-  client$: GramCore,
-  request?: operations.ListGlobalVariationsRequest | undefined,
-  security?: operations.ListGlobalVariationsSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<GlobalVariationsQueryData>;
-} {
-  return {
-    queryKey: queryKeyGlobalVariations({
-      gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function globalVariationsQueryFn(
-      ctx,
-    ): Promise<GlobalVariationsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(variationsListGlobal(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyGlobalVariations(
-  parameters: {
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "variations", "listGlobal", parameters];
 }

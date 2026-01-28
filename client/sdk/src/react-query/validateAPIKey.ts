@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { keysValidate } from "../funcs/keysValidate.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildValidateAPIKeyQuery,
+  prefetchValidateAPIKey,
+  queryKeyValidateAPIKey,
+  ValidateAPIKeyQueryData,
+} from "./validateAPIKey.core.js";
+export {
+  buildValidateAPIKeyQuery,
+  prefetchValidateAPIKey,
+  queryKeyValidateAPIKey,
+  type ValidateAPIKeyQueryData,
+};
 
-export type ValidateAPIKeyQueryData = components.ValidateKeyResult;
+export type ValidateAPIKeyQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * verifyKey keys
@@ -37,8 +61,8 @@ export type ValidateAPIKeyQueryData = components.ValidateKeyResult;
 export function useValidateAPIKey(
   request?: operations.ValidateAPIKeyRequest | undefined,
   security?: operations.ValidateAPIKeySecurity | undefined,
-  options?: QueryHookOptions<ValidateAPIKeyQueryData>,
-): UseQueryResult<ValidateAPIKeyQueryData, Error> {
+  options?: QueryHookOptions<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError>,
+): UseQueryResult<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildValidateAPIKeyQuery(
@@ -60,8 +84,11 @@ export function useValidateAPIKey(
 export function useValidateAPIKeySuspense(
   request?: operations.ValidateAPIKeyRequest | undefined,
   security?: operations.ValidateAPIKeySecurity | undefined,
-  options?: SuspenseQueryHookOptions<ValidateAPIKeyQueryData>,
-): UseSuspenseQueryResult<ValidateAPIKeyQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ValidateAPIKeyQueryData,
+    ValidateAPIKeyQueryError
+  >,
+): UseSuspenseQueryResult<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildValidateAPIKeyQuery(
@@ -71,21 +98,6 @@ export function useValidateAPIKeySuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchValidateAPIKey(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.ValidateAPIKeyRequest | undefined,
-  security?: operations.ValidateAPIKeySecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildValidateAPIKeyQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -118,40 +130,4 @@ export function invalidateAllValidateAPIKey(
     ...filters,
     queryKey: ["@gram/client", "keys", "validate"],
   });
-}
-
-export function buildValidateAPIKeyQuery(
-  client$: GramCore,
-  request?: operations.ValidateAPIKeyRequest | undefined,
-  security?: operations.ValidateAPIKeySecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ValidateAPIKeyQueryData>;
-} {
-  return {
-    queryKey: queryKeyValidateAPIKey({ gramKey: request?.gramKey }),
-    queryFn: async function validateAPIKeyQueryFn(
-      ctx,
-    ): Promise<ValidateAPIKeyQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(keysValidate(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyValidateAPIKey(
-  parameters: { gramKey?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "keys", "validate", parameters];
 }

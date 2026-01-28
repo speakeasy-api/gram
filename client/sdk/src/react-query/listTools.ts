@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { toolsList } from "../funcs/toolsList.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildListToolsQuery,
+  ListToolsQueryData,
+  prefetchListTools,
+  queryKeyListTools,
+} from "./listTools.core.js";
+export {
+  buildListToolsQuery,
+  type ListToolsQueryData,
+  prefetchListTools,
+  queryKeyListTools,
+};
 
-export type ListToolsQueryData = components.ListToolsResult;
+export type ListToolsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * listTools tools
@@ -37,8 +61,8 @@ export type ListToolsQueryData = components.ListToolsResult;
 export function useListTools(
   request?: operations.ListToolsRequest | undefined,
   security?: operations.ListToolsSecurity | undefined,
-  options?: QueryHookOptions<ListToolsQueryData>,
-): UseQueryResult<ListToolsQueryData, Error> {
+  options?: QueryHookOptions<ListToolsQueryData, ListToolsQueryError>,
+): UseQueryResult<ListToolsQueryData, ListToolsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListToolsQuery(
@@ -60,8 +84,8 @@ export function useListTools(
 export function useListToolsSuspense(
   request?: operations.ListToolsRequest | undefined,
   security?: operations.ListToolsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListToolsQueryData>,
-): UseSuspenseQueryResult<ListToolsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<ListToolsQueryData, ListToolsQueryError>,
+): UseSuspenseQueryResult<ListToolsQueryData, ListToolsQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListToolsQuery(
@@ -71,21 +95,6 @@ export function useListToolsSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchListTools(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.ListToolsRequest | undefined,
-  security?: operations.ListToolsSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildListToolsQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -134,50 +143,4 @@ export function invalidateAllListTools(
     ...filters,
     queryKey: ["@gram/client", "tools", "list"],
   });
-}
-
-export function buildListToolsQuery(
-  client$: GramCore,
-  request?: operations.ListToolsRequest | undefined,
-  security?: operations.ListToolsSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListToolsQueryData>;
-} {
-  return {
-    queryKey: queryKeyListTools({
-      cursor: request?.cursor,
-      limit: request?.limit,
-      deploymentId: request?.deploymentId,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function listToolsQueryFn(ctx): Promise<ListToolsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(toolsList(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyListTools(
-  parameters: {
-    cursor?: string | undefined;
-    limit?: number | undefined;
-    deploymentId?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "tools", "list", parameters];
 }

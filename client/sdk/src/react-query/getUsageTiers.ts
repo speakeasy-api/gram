@@ -5,23 +5,47 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import { unwrapAsync } from "../types/fp.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { useGramContext } from "./_context.js";
 import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
+import {
+  buildGetUsageTiersQuery,
+  GetUsageTiersQueryData,
+  prefetchGetUsageTiers,
+  queryKeyGetUsageTiers,
+} from "./getUsageTiers.core.js";
+export {
+  buildGetUsageTiersQuery,
+  type GetUsageTiersQueryData,
+  prefetchGetUsageTiers,
+  queryKeyGetUsageTiers,
+};
 
-export type GetUsageTiersQueryData = components.UsageTiers;
+export type GetUsageTiersQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * getUsageTiers usage
@@ -30,8 +54,8 @@ export type GetUsageTiersQueryData = components.UsageTiers;
  * Get the usage tiers
  */
 export function useGetUsageTiers(
-  options?: QueryHookOptions<GetUsageTiersQueryData>,
-): UseQueryResult<GetUsageTiersQueryData, Error> {
+  options?: QueryHookOptions<GetUsageTiersQueryData, GetUsageTiersQueryError>,
+): UseQueryResult<GetUsageTiersQueryData, GetUsageTiersQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGetUsageTiersQuery(
@@ -49,8 +73,11 @@ export function useGetUsageTiers(
  * Get the usage tiers
  */
 export function useGetUsageTiersSuspense(
-  options?: SuspenseQueryHookOptions<GetUsageTiersQueryData>,
-): UseSuspenseQueryResult<GetUsageTiersQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetUsageTiersQueryData,
+    GetUsageTiersQueryError
+  >,
+): UseSuspenseQueryResult<GetUsageTiersQueryData, GetUsageTiersQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetUsageTiersQuery(
@@ -58,17 +85,6 @@ export function useGetUsageTiersSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchGetUsageTiers(
-  queryClient: QueryClient,
-  client$: GramCore,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildGetUsageTiersQuery(
-      client$,
-    ),
   });
 }
 
@@ -89,34 +105,4 @@ export function invalidateAllGetUsageTiers(
     ...filters,
     queryKey: ["@gram/client", "usage", "getUsageTiers"],
   });
-}
-
-export function buildGetUsageTiersQuery(
-  client$: GramCore,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<GetUsageTiersQueryData>;
-} {
-  return {
-    queryKey: queryKeyGetUsageTiers(),
-    queryFn: async function getUsageTiersQueryFn(
-      ctx,
-    ): Promise<GetUsageTiersQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(usageGetUsageTiers(
-        client$,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyGetUsageTiers(): QueryKey {
-  return ["@gram/client", "usage", "getUsageTiers"];
 }

@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildGetPeriodUsageQuery,
+  GetPeriodUsageQueryData,
+  prefetchGetPeriodUsage,
+  queryKeyGetPeriodUsage,
+} from "./getPeriodUsage.core.js";
+export {
+  buildGetPeriodUsageQuery,
+  type GetPeriodUsageQueryData,
+  prefetchGetPeriodUsage,
+  queryKeyGetPeriodUsage,
+};
 
-export type GetPeriodUsageQueryData = components.PeriodUsage;
+export type GetPeriodUsageQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * getPeriodUsage usage
@@ -37,8 +61,8 @@ export type GetPeriodUsageQueryData = components.PeriodUsage;
 export function useGetPeriodUsage(
   request?: operations.GetPeriodUsageRequest | undefined,
   security?: operations.GetPeriodUsageSecurity | undefined,
-  options?: QueryHookOptions<GetPeriodUsageQueryData>,
-): UseQueryResult<GetPeriodUsageQueryData, Error> {
+  options?: QueryHookOptions<GetPeriodUsageQueryData, GetPeriodUsageQueryError>,
+): UseQueryResult<GetPeriodUsageQueryData, GetPeriodUsageQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGetPeriodUsageQuery(
@@ -60,8 +84,11 @@ export function useGetPeriodUsage(
 export function useGetPeriodUsageSuspense(
   request?: operations.GetPeriodUsageRequest | undefined,
   security?: operations.GetPeriodUsageSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetPeriodUsageQueryData>,
-): UseSuspenseQueryResult<GetPeriodUsageQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetPeriodUsageQueryData,
+    GetPeriodUsageQueryError
+  >,
+): UseSuspenseQueryResult<GetPeriodUsageQueryData, GetPeriodUsageQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetPeriodUsageQuery(
@@ -71,21 +98,6 @@ export function useGetPeriodUsageSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchGetPeriodUsage(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.GetPeriodUsageRequest | undefined,
-  security?: operations.GetPeriodUsageSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildGetPeriodUsageQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -128,46 +140,4 @@ export function invalidateAllGetPeriodUsage(
     ...filters,
     queryKey: ["@gram/client", "usage", "getPeriodUsage"],
   });
-}
-
-export function buildGetPeriodUsageQuery(
-  client$: GramCore,
-  request?: operations.GetPeriodUsageRequest | undefined,
-  security?: operations.GetPeriodUsageSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<GetPeriodUsageQueryData>;
-} {
-  return {
-    queryKey: queryKeyGetPeriodUsage({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function getPeriodUsageQueryFn(
-      ctx,
-    ): Promise<GetPeriodUsageQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(usageGetPeriodUsage(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyGetPeriodUsage(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "usage", "getPeriodUsage", parameters];
 }

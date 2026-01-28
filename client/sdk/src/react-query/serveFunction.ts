@@ -5,27 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { assetsServeFunction } from "../funcs/assetsServeFunction.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildServeFunctionQuery,
+  prefetchServeFunction,
+  queryKeyServeFunction,
+  ServeFunctionQueryData,
+} from "./serveFunction.core.js";
+export {
+  buildServeFunctionQuery,
+  prefetchServeFunction,
+  queryKeyServeFunction,
+  type ServeFunctionQueryData,
+};
 
-export type ServeFunctionQueryData = operations.ServeFunctionResponse;
+export type ServeFunctionQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * serveFunction assets
@@ -36,8 +61,8 @@ export type ServeFunctionQueryData = operations.ServeFunctionResponse;
 export function useServeFunction(
   request: operations.ServeFunctionRequest,
   security?: operations.ServeFunctionSecurity | undefined,
-  options?: QueryHookOptions<ServeFunctionQueryData>,
-): UseQueryResult<ServeFunctionQueryData, Error> {
+  options?: QueryHookOptions<ServeFunctionQueryData, ServeFunctionQueryError>,
+): UseQueryResult<ServeFunctionQueryData, ServeFunctionQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildServeFunctionQuery(
@@ -59,8 +84,11 @@ export function useServeFunction(
 export function useServeFunctionSuspense(
   request: operations.ServeFunctionRequest,
   security?: operations.ServeFunctionSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ServeFunctionQueryData>,
-): UseSuspenseQueryResult<ServeFunctionQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ServeFunctionQueryData,
+    ServeFunctionQueryError
+  >,
+): UseSuspenseQueryResult<ServeFunctionQueryData, ServeFunctionQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildServeFunctionQuery(
@@ -70,21 +98,6 @@ export function useServeFunctionSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchServeFunction(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.ServeFunctionRequest,
-  security?: operations.ServeFunctionSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildServeFunctionQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -131,50 +144,4 @@ export function invalidateAllServeFunction(
     ...filters,
     queryKey: ["@gram/client", "assets", "serveFunction"],
   });
-}
-
-export function buildServeFunctionQuery(
-  client$: GramCore,
-  request: operations.ServeFunctionRequest,
-  security?: operations.ServeFunctionSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ServeFunctionQueryData>;
-} {
-  return {
-    queryKey: queryKeyServeFunction({
-      id: request.id,
-      projectId: request.projectId,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-    }),
-    queryFn: async function serveFunctionQueryFn(
-      ctx,
-    ): Promise<ServeFunctionQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(assetsServeFunction(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyServeFunction(
-  parameters: {
-    id: string;
-    projectId: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "assets", "serveFunction", parameters];
 }

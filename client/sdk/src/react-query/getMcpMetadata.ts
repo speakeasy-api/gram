@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { mcpMetadataGet } from "../funcs/mcpMetadataGet.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildGetMcpMetadataQuery,
+  GetMcpMetadataQueryData,
+  prefetchGetMcpMetadata,
+  queryKeyGetMcpMetadata,
+} from "./getMcpMetadata.core.js";
+export {
+  buildGetMcpMetadataQuery,
+  type GetMcpMetadataQueryData,
+  prefetchGetMcpMetadata,
+  queryKeyGetMcpMetadata,
+};
 
-export type GetMcpMetadataQueryData = components.GetMcpMetadataResponseBody;
+export type GetMcpMetadataQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * getMcpMetadata mcpMetadata
@@ -37,8 +61,8 @@ export type GetMcpMetadataQueryData = components.GetMcpMetadataResponseBody;
 export function useGetMcpMetadata(
   request: operations.GetMcpMetadataRequest,
   security?: operations.GetMcpMetadataSecurity | undefined,
-  options?: QueryHookOptions<GetMcpMetadataQueryData>,
-): UseQueryResult<GetMcpMetadataQueryData, Error> {
+  options?: QueryHookOptions<GetMcpMetadataQueryData, GetMcpMetadataQueryError>,
+): UseQueryResult<GetMcpMetadataQueryData, GetMcpMetadataQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGetMcpMetadataQuery(
@@ -60,8 +84,11 @@ export function useGetMcpMetadata(
 export function useGetMcpMetadataSuspense(
   request: operations.GetMcpMetadataRequest,
   security?: operations.GetMcpMetadataSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetMcpMetadataQueryData>,
-): UseSuspenseQueryResult<GetMcpMetadataQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetMcpMetadataQueryData,
+    GetMcpMetadataQueryError
+  >,
+): UseSuspenseQueryResult<GetMcpMetadataQueryData, GetMcpMetadataQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetMcpMetadataQuery(
@@ -71,21 +98,6 @@ export function useGetMcpMetadataSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchGetMcpMetadata(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.GetMcpMetadataRequest,
-  security?: operations.GetMcpMetadataSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildGetMcpMetadataQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -130,48 +142,4 @@ export function invalidateAllGetMcpMetadata(
     ...filters,
     queryKey: ["@gram/client", "mcpMetadata", "get"],
   });
-}
-
-export function buildGetMcpMetadataQuery(
-  client$: GramCore,
-  request: operations.GetMcpMetadataRequest,
-  security?: operations.GetMcpMetadataSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<GetMcpMetadataQueryData>;
-} {
-  return {
-    queryKey: queryKeyGetMcpMetadata({
-      toolsetSlug: request.toolsetSlug,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
-    queryFn: async function getMcpMetadataQueryFn(
-      ctx,
-    ): Promise<GetMcpMetadataQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(mcpMetadataGet(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyGetMcpMetadata(
-  parameters: {
-    toolsetSlug: string;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "mcpMetadata", "get", parameters];
 }

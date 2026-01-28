@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { packagesListVersions } from "../funcs/packagesListVersions.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildListVersionsQuery,
+  ListVersionsQueryData,
+  prefetchListVersions,
+  queryKeyListVersions,
+} from "./listVersions.core.js";
+export {
+  buildListVersionsQuery,
+  type ListVersionsQueryData,
+  prefetchListVersions,
+  queryKeyListVersions,
+};
 
-export type ListVersionsQueryData = components.ListVersionsResult;
+export type ListVersionsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * listVersions packages
@@ -37,8 +61,8 @@ export type ListVersionsQueryData = components.ListVersionsResult;
 export function useListVersions(
   request: operations.ListVersionsRequest,
   security?: operations.ListVersionsSecurity | undefined,
-  options?: QueryHookOptions<ListVersionsQueryData>,
-): UseQueryResult<ListVersionsQueryData, Error> {
+  options?: QueryHookOptions<ListVersionsQueryData, ListVersionsQueryError>,
+): UseQueryResult<ListVersionsQueryData, ListVersionsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListVersionsQuery(
@@ -60,8 +84,11 @@ export function useListVersions(
 export function useListVersionsSuspense(
   request: operations.ListVersionsRequest,
   security?: operations.ListVersionsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListVersionsQueryData>,
-): UseSuspenseQueryResult<ListVersionsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ListVersionsQueryData,
+    ListVersionsQueryError
+  >,
+): UseSuspenseQueryResult<ListVersionsQueryData, ListVersionsQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListVersionsQuery(
@@ -71,21 +98,6 @@ export function useListVersionsSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchListVersions(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.ListVersionsRequest,
-  security?: operations.ListVersionsSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildListVersionsQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -132,50 +144,4 @@ export function invalidateAllListVersions(
     ...filters,
     queryKey: ["@gram/client", "packages", "listVersions"],
   });
-}
-
-export function buildListVersionsQuery(
-  client$: GramCore,
-  request: operations.ListVersionsRequest,
-  security?: operations.ListVersionsSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListVersionsQueryData>;
-} {
-  return {
-    queryKey: queryKeyListVersions({
-      name: request.name,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
-    queryFn: async function listVersionsQueryFn(
-      ctx,
-    ): Promise<ListVersionsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(packagesListVersions(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyListVersions(
-  parameters: {
-    name: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "packages", "listVersions", parameters];
 }

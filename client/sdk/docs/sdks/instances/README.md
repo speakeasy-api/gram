@@ -1,5 +1,4 @@
 # Instances
-(*instances*)
 
 ## Overview
 

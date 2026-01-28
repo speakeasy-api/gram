@@ -5,27 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { assetsServeOpenAPIv3 } from "../funcs/assetsServeOpenAPIv3.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildServeOpenAPIv3Query,
+  prefetchServeOpenAPIv3,
+  queryKeyServeOpenAPIv3,
+  ServeOpenAPIv3QueryData,
+} from "./serveOpenAPIv3.core.js";
+export {
+  buildServeOpenAPIv3Query,
+  prefetchServeOpenAPIv3,
+  queryKeyServeOpenAPIv3,
+  type ServeOpenAPIv3QueryData,
+};
 
-export type ServeOpenAPIv3QueryData = operations.ServeOpenAPIv3Response;
+export type ServeOpenAPIv3QueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * serveOpenAPIv3 assets
@@ -36,8 +61,8 @@ export type ServeOpenAPIv3QueryData = operations.ServeOpenAPIv3Response;
 export function useServeOpenAPIv3(
   request: operations.ServeOpenAPIv3Request,
   security?: operations.ServeOpenAPIv3Security | undefined,
-  options?: QueryHookOptions<ServeOpenAPIv3QueryData>,
-): UseQueryResult<ServeOpenAPIv3QueryData, Error> {
+  options?: QueryHookOptions<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError>,
+): UseQueryResult<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildServeOpenAPIv3Query(
@@ -59,8 +84,11 @@ export function useServeOpenAPIv3(
 export function useServeOpenAPIv3Suspense(
   request: operations.ServeOpenAPIv3Request,
   security?: operations.ServeOpenAPIv3Security | undefined,
-  options?: SuspenseQueryHookOptions<ServeOpenAPIv3QueryData>,
-): UseSuspenseQueryResult<ServeOpenAPIv3QueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ServeOpenAPIv3QueryData,
+    ServeOpenAPIv3QueryError
+  >,
+): UseSuspenseQueryResult<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildServeOpenAPIv3Query(
@@ -70,21 +98,6 @@ export function useServeOpenAPIv3Suspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchServeOpenAPIv3(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.ServeOpenAPIv3Request,
-  security?: operations.ServeOpenAPIv3Security | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildServeOpenAPIv3Query(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -131,50 +144,4 @@ export function invalidateAllServeOpenAPIv3(
     ...filters,
     queryKey: ["@gram/client", "assets", "serveOpenAPIv3"],
   });
-}
-
-export function buildServeOpenAPIv3Query(
-  client$: GramCore,
-  request: operations.ServeOpenAPIv3Request,
-  security?: operations.ServeOpenAPIv3Security | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ServeOpenAPIv3QueryData>;
-} {
-  return {
-    queryKey: queryKeyServeOpenAPIv3({
-      id: request.id,
-      projectId: request.projectId,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-    }),
-    queryFn: async function serveOpenAPIv3QueryFn(
-      ctx,
-    ): Promise<ServeOpenAPIv3QueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(assetsServeOpenAPIv3(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyServeOpenAPIv3(
-  parameters: {
-    id: string;
-    projectId: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "assets", "serveOpenAPIv3", parameters];
 }

@@ -1,4 +1,4 @@
-speakeasyVersion: 1.636.3
+speakeasyVersion: 1.700.1
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
@@ -14,7 +14,7 @@ targets:
         sourceRevisionDigest: sha256:9ebe16d5ef573963cce388b568d539550b32c5f6c5dac85be14896e5dc413799
         sourceBlobDigest: sha256:aaf6c0915ac08b3a74be6f4ccc3400dadb4777beb7e77d845952450845d23002
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:d8dc6be70e472db9bb165ba2ea2b70ef204119e6c7596692b743434d66eca77e
+        codeSamplesRevisionDigest: sha256:a9e1603c1bd09aa4337c5961f4032e50d246c4e11e1c016ba8e692c2949c6271
     openrouter:
         source: OpenRouter
 workflow:

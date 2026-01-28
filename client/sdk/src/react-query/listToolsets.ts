@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { toolsetsList } from "../funcs/toolsetsList.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildListToolsetsQuery,
+  ListToolsetsQueryData,
+  prefetchListToolsets,
+  queryKeyListToolsets,
+} from "./listToolsets.core.js";
+export {
+  buildListToolsetsQuery,
+  type ListToolsetsQueryData,
+  prefetchListToolsets,
+  queryKeyListToolsets,
+};
 
-export type ListToolsetsQueryData = components.ListToolsetsResult;
+export type ListToolsetsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * listToolsets toolsets
@@ -37,8 +61,8 @@ export type ListToolsetsQueryData = components.ListToolsetsResult;
 export function useListToolsets(
   request?: operations.ListToolsetsRequest | undefined,
   security?: operations.ListToolsetsSecurity | undefined,
-  options?: QueryHookOptions<ListToolsetsQueryData>,
-): UseQueryResult<ListToolsetsQueryData, Error> {
+  options?: QueryHookOptions<ListToolsetsQueryData, ListToolsetsQueryError>,
+): UseQueryResult<ListToolsetsQueryData, ListToolsetsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListToolsetsQuery(
@@ -60,8 +84,11 @@ export function useListToolsets(
 export function useListToolsetsSuspense(
   request?: operations.ListToolsetsRequest | undefined,
   security?: operations.ListToolsetsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListToolsetsQueryData>,
-): UseSuspenseQueryResult<ListToolsetsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ListToolsetsQueryData,
+    ListToolsetsQueryError
+  >,
+): UseSuspenseQueryResult<ListToolsetsQueryData, ListToolsetsQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListToolsetsQuery(
@@ -71,21 +98,6 @@ export function useListToolsetsSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchListToolsets(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.ListToolsetsRequest | undefined,
-  security?: operations.ListToolsetsSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildListToolsetsQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -130,48 +142,4 @@ export function invalidateAllListToolsets(
     ...filters,
     queryKey: ["@gram/client", "toolsets", "list"],
   });
-}
-
-export function buildListToolsetsQuery(
-  client$: GramCore,
-  request?: operations.ListToolsetsRequest | undefined,
-  security?: operations.ListToolsetsSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListToolsetsQueryData>;
-} {
-  return {
-    queryKey: queryKeyListToolsets({
-      gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function listToolsetsQueryFn(
-      ctx,
-    ): Promise<ListToolsetsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(toolsetsList(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyListToolsets(
-  parameters: {
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "toolsets", "list", parameters];
 }

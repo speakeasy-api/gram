@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { projectsList } from "../funcs/projectsList.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildListProjectsQuery,
+  ListProjectsQueryData,
+  prefetchListProjects,
+  queryKeyListProjects,
+} from "./listProjects.core.js";
+export {
+  buildListProjectsQuery,
+  type ListProjectsQueryData,
+  prefetchListProjects,
+  queryKeyListProjects,
+};
 
-export type ListProjectsQueryData = components.ListProjectsResult;
+export type ListProjectsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * listProjects projects
@@ -37,8 +61,8 @@ export type ListProjectsQueryData = components.ListProjectsResult;
 export function useListProjects(
   request: operations.ListProjectsRequest,
   security?: operations.ListProjectsSecurity | undefined,
-  options?: QueryHookOptions<ListProjectsQueryData>,
-): UseQueryResult<ListProjectsQueryData, Error> {
+  options?: QueryHookOptions<ListProjectsQueryData, ListProjectsQueryError>,
+): UseQueryResult<ListProjectsQueryData, ListProjectsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListProjectsQuery(
@@ -60,8 +84,11 @@ export function useListProjects(
 export function useListProjectsSuspense(
   request: operations.ListProjectsRequest,
   security?: operations.ListProjectsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListProjectsQueryData>,
-): UseSuspenseQueryResult<ListProjectsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ListProjectsQueryData,
+    ListProjectsQueryError
+  >,
+): UseSuspenseQueryResult<ListProjectsQueryData, ListProjectsQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListProjectsQuery(
@@ -71,21 +98,6 @@ export function useListProjectsSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchListProjects(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.ListProjectsRequest,
-  security?: operations.ListProjectsSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildListProjectsQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -130,48 +142,4 @@ export function invalidateAllListProjects(
     ...filters,
     queryKey: ["@gram/client", "projects", "list"],
   });
-}
-
-export function buildListProjectsQuery(
-  client$: GramCore,
-  request: operations.ListProjectsRequest,
-  security?: operations.ListProjectsSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListProjectsQueryData>;
-} {
-  return {
-    queryKey: queryKeyListProjects({
-      organizationId: request.organizationId,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-    }),
-    queryFn: async function listProjectsQueryFn(
-      ctx,
-    ): Promise<ListProjectsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(projectsList(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyListProjects(
-  parameters: {
-    organizationId: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "projects", "list", parameters];
 }

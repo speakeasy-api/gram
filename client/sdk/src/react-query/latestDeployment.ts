@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { deploymentsLatest } from "../funcs/deploymentsLatest.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildLatestDeploymentQuery,
+  LatestDeploymentQueryData,
+  prefetchLatestDeployment,
+  queryKeyLatestDeployment,
+} from "./latestDeployment.core.js";
+export {
+  buildLatestDeploymentQuery,
+  type LatestDeploymentQueryData,
+  prefetchLatestDeployment,
+  queryKeyLatestDeployment,
+};
 
-export type LatestDeploymentQueryData = components.GetLatestDeploymentResult;
+export type LatestDeploymentQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * getLatestDeployment deployments
@@ -37,8 +61,11 @@ export type LatestDeploymentQueryData = components.GetLatestDeploymentResult;
 export function useLatestDeployment(
   request?: operations.GetLatestDeploymentRequest | undefined,
   security?: operations.GetLatestDeploymentSecurity | undefined,
-  options?: QueryHookOptions<LatestDeploymentQueryData>,
-): UseQueryResult<LatestDeploymentQueryData, Error> {
+  options?: QueryHookOptions<
+    LatestDeploymentQueryData,
+    LatestDeploymentQueryError
+  >,
+): UseQueryResult<LatestDeploymentQueryData, LatestDeploymentQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildLatestDeploymentQuery(
@@ -60,8 +87,14 @@ export function useLatestDeployment(
 export function useLatestDeploymentSuspense(
   request?: operations.GetLatestDeploymentRequest | undefined,
   security?: operations.GetLatestDeploymentSecurity | undefined,
-  options?: SuspenseQueryHookOptions<LatestDeploymentQueryData>,
-): UseSuspenseQueryResult<LatestDeploymentQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    LatestDeploymentQueryData,
+    LatestDeploymentQueryError
+  >,
+): UseSuspenseQueryResult<
+  LatestDeploymentQueryData,
+  LatestDeploymentQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildLatestDeploymentQuery(
@@ -71,21 +104,6 @@ export function useLatestDeploymentSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchLatestDeployment(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.GetLatestDeploymentRequest | undefined,
-  security?: operations.GetLatestDeploymentSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildLatestDeploymentQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -130,50 +148,4 @@ export function invalidateAllLatestDeployment(
     ...filters,
     queryKey: ["@gram/client", "deployments", "latest"],
   });
-}
-
-export function buildLatestDeploymentQuery(
-  client$: GramCore,
-  request?: operations.GetLatestDeploymentRequest | undefined,
-  security?: operations.GetLatestDeploymentSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<LatestDeploymentQueryData>;
-} {
-  return {
-    queryKey: queryKeyLatestDeployment({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function latestDeploymentQueryFn(
-      ctx,
-    ): Promise<LatestDeploymentQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(deploymentsLatest(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyLatestDeployment(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "deployments", "latest", parameters];
 }

@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { projectsRead } from "../funcs/projectsRead.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildProjectQuery,
+  prefetchProject,
+  ProjectQueryData,
+  queryKeyProject,
+} from "./project.core.js";
+export {
+  buildProjectQuery,
+  prefetchProject,
+  type ProjectQueryData,
+  queryKeyProject,
+};
 
-export type ProjectQueryData = components.GetProjectResult;
+export type ProjectQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * getProject projects
@@ -37,8 +61,8 @@ export type ProjectQueryData = components.GetProjectResult;
 export function useProject(
   request: operations.GetProjectRequest,
   security?: operations.GetProjectSecurity | undefined,
-  options?: QueryHookOptions<ProjectQueryData>,
-): UseQueryResult<ProjectQueryData, Error> {
+  options?: QueryHookOptions<ProjectQueryData, ProjectQueryError>,
+): UseQueryResult<ProjectQueryData, ProjectQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildProjectQuery(
@@ -60,8 +84,8 @@ export function useProject(
 export function useProjectSuspense(
   request: operations.GetProjectRequest,
   security?: operations.GetProjectSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ProjectQueryData>,
-): UseSuspenseQueryResult<ProjectQueryData, Error> {
+  options?: SuspenseQueryHookOptions<ProjectQueryData, ProjectQueryError>,
+): UseSuspenseQueryResult<ProjectQueryData, ProjectQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildProjectQuery(
@@ -71,21 +95,6 @@ export function useProjectSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchProject(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.GetProjectRequest,
-  security?: operations.GetProjectSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildProjectQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -130,46 +139,4 @@ export function invalidateAllProject(
     ...filters,
     queryKey: ["@gram/client", "projects", "read"],
   });
-}
-
-export function buildProjectQuery(
-  client$: GramCore,
-  request: operations.GetProjectRequest,
-  security?: operations.GetProjectSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ProjectQueryData>;
-} {
-  return {
-    queryKey: queryKeyProject({
-      slug: request.slug,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-    }),
-    queryFn: async function projectQueryFn(ctx): Promise<ProjectQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(projectsRead(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyProject(
-  parameters: {
-    slug: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "projects", "read", parameters];
 }

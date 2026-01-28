@@ -11,6 +11,17 @@ import { GramCore } from "../core.js";
 import { usageCreateCheckout } from "../funcs/usageCreateCheckout.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -24,6 +35,17 @@ export type CreateCheckoutMutationVariables = {
 
 export type CreateCheckoutMutationData = string;
 
+export type CreateCheckoutMutationError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * createCheckout usage
  *
@@ -33,12 +55,12 @@ export type CreateCheckoutMutationData = string;
 export function useCreateCheckoutMutation(
   options?: MutationHookOptions<
     CreateCheckoutMutationData,
-    Error,
+    CreateCheckoutMutationError,
     CreateCheckoutMutationVariables
   >,
 ): UseMutationResult<
   CreateCheckoutMutationData,
-  Error,
+  CreateCheckoutMutationError,
   CreateCheckoutMutationVariables
 > {
   const client = useGramContext();

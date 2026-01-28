@@ -1,5 +1,4 @@
 # Variations
-(*variations*)
 
 ## Overview
 

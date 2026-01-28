@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { environmentsList } from "../funcs/environmentsList.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildListEnvironmentsQuery,
+  ListEnvironmentsQueryData,
+  prefetchListEnvironments,
+  queryKeyListEnvironments,
+} from "./listEnvironments.core.js";
+export {
+  buildListEnvironmentsQuery,
+  type ListEnvironmentsQueryData,
+  prefetchListEnvironments,
+  queryKeyListEnvironments,
+};
 
-export type ListEnvironmentsQueryData = components.ListEnvironmentsResult;
+export type ListEnvironmentsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * listEnvironments environments
@@ -37,8 +61,11 @@ export type ListEnvironmentsQueryData = components.ListEnvironmentsResult;
 export function useListEnvironments(
   request?: operations.ListEnvironmentsRequest | undefined,
   security?: operations.ListEnvironmentsSecurity | undefined,
-  options?: QueryHookOptions<ListEnvironmentsQueryData>,
-): UseQueryResult<ListEnvironmentsQueryData, Error> {
+  options?: QueryHookOptions<
+    ListEnvironmentsQueryData,
+    ListEnvironmentsQueryError
+  >,
+): UseQueryResult<ListEnvironmentsQueryData, ListEnvironmentsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListEnvironmentsQuery(
@@ -60,8 +87,14 @@ export function useListEnvironments(
 export function useListEnvironmentsSuspense(
   request?: operations.ListEnvironmentsRequest | undefined,
   security?: operations.ListEnvironmentsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListEnvironmentsQueryData>,
-): UseSuspenseQueryResult<ListEnvironmentsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ListEnvironmentsQueryData,
+    ListEnvironmentsQueryError
+  >,
+): UseSuspenseQueryResult<
+  ListEnvironmentsQueryData,
+  ListEnvironmentsQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListEnvironmentsQuery(
@@ -71,21 +104,6 @@ export function useListEnvironmentsSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchListEnvironments(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.ListEnvironmentsRequest | undefined,
-  security?: operations.ListEnvironmentsSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildListEnvironmentsQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -128,48 +146,4 @@ export function invalidateAllListEnvironments(
     ...filters,
     queryKey: ["@gram/client", "environments", "list"],
   });
-}
-
-export function buildListEnvironmentsQuery(
-  client$: GramCore,
-  request?: operations.ListEnvironmentsRequest | undefined,
-  security?: operations.ListEnvironmentsSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<ListEnvironmentsQueryData>;
-} {
-  return {
-    queryKey: queryKeyListEnvironments({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function listEnvironmentsQueryFn(
-      ctx,
-    ): Promise<ListEnvironmentsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(environmentsList(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyListEnvironments(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "environments", "list", parameters];
 }

@@ -5,27 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { assetsServeImage } from "../funcs/assetsServeImage.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildServeImageQuery,
+  prefetchServeImage,
+  queryKeyServeImage,
+  ServeImageQueryData,
+} from "./serveImage.core.js";
+export {
+  buildServeImageQuery,
+  prefetchServeImage,
+  queryKeyServeImage,
+  type ServeImageQueryData,
+};
 
-export type ServeImageQueryData = operations.ServeImageResponse;
+export type ServeImageQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * serveImage assets
@@ -35,8 +60,8 @@ export type ServeImageQueryData = operations.ServeImageResponse;
  */
 export function useServeImage(
   request: operations.ServeImageRequest,
-  options?: QueryHookOptions<ServeImageQueryData>,
-): UseQueryResult<ServeImageQueryData, Error> {
+  options?: QueryHookOptions<ServeImageQueryData, ServeImageQueryError>,
+): UseQueryResult<ServeImageQueryData, ServeImageQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildServeImageQuery(
@@ -56,8 +81,8 @@ export function useServeImage(
  */
 export function useServeImageSuspense(
   request: operations.ServeImageRequest,
-  options?: SuspenseQueryHookOptions<ServeImageQueryData>,
-): UseSuspenseQueryResult<ServeImageQueryData, Error> {
+  options?: SuspenseQueryHookOptions<ServeImageQueryData, ServeImageQueryError>,
+): UseSuspenseQueryResult<ServeImageQueryData, ServeImageQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildServeImageQuery(
@@ -66,19 +91,6 @@ export function useServeImageSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchServeImage(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.ServeImageRequest,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildServeImageQuery(
-      client$,
-      request,
-    ),
   });
 }
 
@@ -111,36 +123,4 @@ export function invalidateAllServeImage(
     ...filters,
     queryKey: ["@gram/client", "assets", "serveImage"],
   });
-}
-
-export function buildServeImageQuery(
-  client$: GramCore,
-  request: operations.ServeImageRequest,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ServeImageQueryData>;
-} {
-  return {
-    queryKey: queryKeyServeImage({ id: request.id }),
-    queryFn: async function serveImageQueryFn(
-      ctx,
-    ): Promise<ServeImageQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(assetsServeImage(
-        client$,
-        request,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyServeImage(parameters: { id: string }): QueryKey {
-  return ["@gram/client", "assets", "serveImage", parameters];
 }

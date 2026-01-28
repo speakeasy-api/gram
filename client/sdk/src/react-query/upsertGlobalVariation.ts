@@ -12,6 +12,17 @@ import { variationsUpsertGlobal } from "../funcs/variationsUpsertGlobal.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -26,6 +37,17 @@ export type UpsertGlobalVariationMutationVariables = {
 export type UpsertGlobalVariationMutationData =
   components.UpsertGlobalToolVariationResult;
 
+export type UpsertGlobalVariationMutationError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * upsertGlobal variations
  *
@@ -35,12 +57,12 @@ export type UpsertGlobalVariationMutationData =
 export function useUpsertGlobalVariationMutation(
   options?: MutationHookOptions<
     UpsertGlobalVariationMutationData,
-    Error,
+    UpsertGlobalVariationMutationError,
     UpsertGlobalVariationMutationVariables
   >,
 ): UseMutationResult<
   UpsertGlobalVariationMutationData,
-  Error,
+  UpsertGlobalVariationMutationError,
   UpsertGlobalVariationMutationVariables
 > {
   const client = useGramContext();

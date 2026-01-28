@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildGetCreditUsageQuery,
+  GetCreditUsageQueryData,
+  prefetchGetCreditUsage,
+  queryKeyGetCreditUsage,
+} from "./getCreditUsage.core.js";
+export {
+  buildGetCreditUsageQuery,
+  type GetCreditUsageQueryData,
+  prefetchGetCreditUsage,
+  queryKeyGetCreditUsage,
+};
 
-export type GetCreditUsageQueryData = components.CreditUsageResponseBody;
+export type GetCreditUsageQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * creditUsage chat
@@ -37,8 +61,8 @@ export type GetCreditUsageQueryData = components.CreditUsageResponseBody;
 export function useGetCreditUsage(
   request?: operations.CreditUsageRequest | undefined,
   security?: operations.CreditUsageSecurity | undefined,
-  options?: QueryHookOptions<GetCreditUsageQueryData>,
-): UseQueryResult<GetCreditUsageQueryData, Error> {
+  options?: QueryHookOptions<GetCreditUsageQueryData, GetCreditUsageQueryError>,
+): UseQueryResult<GetCreditUsageQueryData, GetCreditUsageQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGetCreditUsageQuery(
@@ -60,8 +84,11 @@ export function useGetCreditUsage(
 export function useGetCreditUsageSuspense(
   request?: operations.CreditUsageRequest | undefined,
   security?: operations.CreditUsageSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetCreditUsageQueryData>,
-): UseSuspenseQueryResult<GetCreditUsageQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetCreditUsageQueryData,
+    GetCreditUsageQueryError
+  >,
+): UseSuspenseQueryResult<GetCreditUsageQueryData, GetCreditUsageQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetCreditUsageQuery(
@@ -71,21 +98,6 @@ export function useGetCreditUsageSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchGetCreditUsage(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.CreditUsageRequest | undefined,
-  security?: operations.CreditUsageSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildGetCreditUsageQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -130,48 +142,4 @@ export function invalidateAllGetCreditUsage(
     ...filters,
     queryKey: ["@gram/client", "chat", "creditUsage"],
   });
-}
-
-export function buildGetCreditUsageQuery(
-  client$: GramCore,
-  request?: operations.CreditUsageRequest | undefined,
-  security?: operations.CreditUsageSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<GetCreditUsageQueryData>;
-} {
-  return {
-    queryKey: queryKeyGetCreditUsage({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-      gramChatSession: request?.gramChatSession,
-    }),
-    queryFn: async function getCreditUsageQueryFn(
-      ctx,
-    ): Promise<GetCreditUsageQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(chatCreditUsage(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyGetCreditUsage(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-    gramChatSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "chat", "creditUsage", parameters];
 }

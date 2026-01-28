@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { integrationsList } from "../funcs/integrationsList.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildListIntegrationsQuery,
+  ListIntegrationsQueryData,
+  prefetchListIntegrations,
+  queryKeyListIntegrations,
+} from "./listIntegrations.core.js";
+export {
+  buildListIntegrationsQuery,
+  type ListIntegrationsQueryData,
+  prefetchListIntegrations,
+  queryKeyListIntegrations,
+};
 
-export type ListIntegrationsQueryData = components.ListIntegrationsResult;
+export type ListIntegrationsQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * list integrations
@@ -37,8 +61,11 @@ export type ListIntegrationsQueryData = components.ListIntegrationsResult;
 export function useListIntegrations(
   request?: operations.ListIntegrationsRequest | undefined,
   security?: operations.ListIntegrationsSecurity | undefined,
-  options?: QueryHookOptions<ListIntegrationsQueryData>,
-): UseQueryResult<ListIntegrationsQueryData, Error> {
+  options?: QueryHookOptions<
+    ListIntegrationsQueryData,
+    ListIntegrationsQueryError
+  >,
+): UseQueryResult<ListIntegrationsQueryData, ListIntegrationsQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListIntegrationsQuery(
@@ -60,8 +87,14 @@ export function useListIntegrations(
 export function useListIntegrationsSuspense(
   request?: operations.ListIntegrationsRequest | undefined,
   security?: operations.ListIntegrationsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListIntegrationsQueryData>,
-): UseSuspenseQueryResult<ListIntegrationsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ListIntegrationsQueryData,
+    ListIntegrationsQueryError
+  >,
+): UseSuspenseQueryResult<
+  ListIntegrationsQueryData,
+  ListIntegrationsQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListIntegrationsQuery(
@@ -71,21 +104,6 @@ export function useListIntegrationsSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchListIntegrations(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.ListIntegrationsRequest | undefined,
-  security?: operations.ListIntegrationsSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildListIntegrationsQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -130,50 +148,4 @@ export function invalidateAllListIntegrations(
     ...filters,
     queryKey: ["@gram/client", "integrations", "list"],
   });
-}
-
-export function buildListIntegrationsQuery(
-  client$: GramCore,
-  request?: operations.ListIntegrationsRequest | undefined,
-  security?: operations.ListIntegrationsSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<ListIntegrationsQueryData>;
-} {
-  return {
-    queryKey: queryKeyListIntegrations({
-      keywords: request?.keywords,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function listIntegrationsQueryFn(
-      ctx,
-    ): Promise<ListIntegrationsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(integrationsList(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyListIntegrations(
-  parameters: {
-    keywords?: Array<string> | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "integrations", "list", parameters];
 }

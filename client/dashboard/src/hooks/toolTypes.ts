@@ -11,14 +11,17 @@ import {
 import { QueryHookOptions } from "@gram/client/react-query";
 import {
   LatestDeploymentQueryData,
+  LatestDeploymentQueryError,
   useLatestDeployment as useLatestDeploymentQuery,
 } from "@gram/client/react-query/latestDeployment.js";
 import {
   ListResourcesQueryData,
+  ListResourcesQueryError,
   useListResources as useListResourcesQuery,
 } from "@gram/client/react-query/listResources.js";
 import {
   ListToolsQueryData,
+  ListToolsQueryError,
   useListTools as useListToolsQuery,
 } from "@gram/client/react-query/listTools.js";
 import { useToolset as useToolsetQuery } from "@gram/client/react-query/toolset.js";
@@ -59,7 +62,7 @@ export function useToolset(toolsetSlug: string | undefined) {
 export function useListTools(
   request?: ListToolsRequest,
   security?: ListToolsSecurity,
-  options?: QueryHookOptions<ListToolsQueryData>,
+  options?: QueryHookOptions<ListToolsQueryData, ListToolsQueryError>,
 ) {
   const result = useListToolsQuery(request, security, options);
 
@@ -77,7 +80,7 @@ export function useListTools(
 export function useListResources(
   request?: ListResourcesRequest,
   security?: ListResourcesSecurity,
-  options?: QueryHookOptions<ListResourcesQueryData>,
+  options?: QueryHookOptions<ListResourcesQueryData, ListResourcesQueryError>,
 ) {
   const result = useListResourcesQuery(request, security, options);
 
@@ -98,7 +101,10 @@ export function useListResources(
  * immediately fresh (e.g., asset lists, function metadata).
  */
 export function useLatestDeployment(
-  options?: QueryHookOptions<LatestDeploymentQueryData>,
+  options?: QueryHookOptions<
+    LatestDeploymentQueryData,
+    LatestDeploymentQueryError
+  >,
 ) {
   return useLatestDeploymentQuery(undefined, undefined, {
     staleTime: 1000 * 60 * 60, // 1 hour

@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { environmentsGetBySource } from "../funcs/environmentsGetBySource.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildGetSourceEnvironmentQuery,
+  GetSourceEnvironmentQueryData,
+  prefetchGetSourceEnvironment,
+  queryKeyGetSourceEnvironment,
+} from "./getSourceEnvironment.core.js";
+export {
+  buildGetSourceEnvironmentQuery,
+  type GetSourceEnvironmentQueryData,
+  prefetchGetSourceEnvironment,
+  queryKeyGetSourceEnvironment,
+};
 
-export type GetSourceEnvironmentQueryData = components.Environment;
+export type GetSourceEnvironmentQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * getSourceEnvironment environments
@@ -37,8 +61,14 @@ export type GetSourceEnvironmentQueryData = components.Environment;
 export function useGetSourceEnvironment(
   request: operations.GetSourceEnvironmentRequest,
   security?: operations.GetSourceEnvironmentSecurity | undefined,
-  options?: QueryHookOptions<GetSourceEnvironmentQueryData>,
-): UseQueryResult<GetSourceEnvironmentQueryData, Error> {
+  options?: QueryHookOptions<
+    GetSourceEnvironmentQueryData,
+    GetSourceEnvironmentQueryError
+  >,
+): UseQueryResult<
+  GetSourceEnvironmentQueryData,
+  GetSourceEnvironmentQueryError
+> {
   const client = useGramContext();
   return useQuery({
     ...buildGetSourceEnvironmentQuery(
@@ -60,8 +90,14 @@ export function useGetSourceEnvironment(
 export function useGetSourceEnvironmentSuspense(
   request: operations.GetSourceEnvironmentRequest,
   security?: operations.GetSourceEnvironmentSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetSourceEnvironmentQueryData>,
-): UseSuspenseQueryResult<GetSourceEnvironmentQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetSourceEnvironmentQueryData,
+    GetSourceEnvironmentQueryError
+  >,
+): UseSuspenseQueryResult<
+  GetSourceEnvironmentQueryData,
+  GetSourceEnvironmentQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetSourceEnvironmentQuery(
@@ -71,21 +107,6 @@ export function useGetSourceEnvironmentSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchGetSourceEnvironment(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.GetSourceEnvironmentRequest,
-  security?: operations.GetSourceEnvironmentSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildGetSourceEnvironmentQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -132,52 +153,4 @@ export function invalidateAllGetSourceEnvironment(
     ...filters,
     queryKey: ["@gram/client", "environments", "getBySource"],
   });
-}
-
-export function buildGetSourceEnvironmentQuery(
-  client$: GramCore,
-  request: operations.GetSourceEnvironmentRequest,
-  security?: operations.GetSourceEnvironmentSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<GetSourceEnvironmentQueryData>;
-} {
-  return {
-    queryKey: queryKeyGetSourceEnvironment({
-      sourceKind: request.sourceKind,
-      sourceSlug: request.sourceSlug,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
-    queryFn: async function getSourceEnvironmentQueryFn(
-      ctx,
-    ): Promise<GetSourceEnvironmentQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(environmentsGetBySource(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyGetSourceEnvironment(
-  parameters: {
-    sourceKind: operations.QueryParamSourceKind;
-    sourceSlug: string;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "environments", "getBySource", parameters];
 }

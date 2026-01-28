@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { mcpRegistriesListCatalog } from "../funcs/mcpRegistriesListCatalog.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildListMCPCatalogQuery,
+  ListMCPCatalogQueryData,
+  prefetchListMCPCatalog,
+  queryKeyListMCPCatalog,
+} from "./listMCPCatalog.core.js";
+export {
+  buildListMCPCatalogQuery,
+  type ListMCPCatalogQueryData,
+  prefetchListMCPCatalog,
+  queryKeyListMCPCatalog,
+};
 
-export type ListMCPCatalogQueryData = components.ListCatalogResponseBody;
+export type ListMCPCatalogQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * listCatalog mcpRegistries
@@ -37,8 +61,8 @@ export type ListMCPCatalogQueryData = components.ListCatalogResponseBody;
 export function useListMCPCatalog(
   request?: operations.ListMCPCatalogRequest | undefined,
   security?: operations.ListMCPCatalogSecurity | undefined,
-  options?: QueryHookOptions<ListMCPCatalogQueryData>,
-): UseQueryResult<ListMCPCatalogQueryData, Error> {
+  options?: QueryHookOptions<ListMCPCatalogQueryData, ListMCPCatalogQueryError>,
+): UseQueryResult<ListMCPCatalogQueryData, ListMCPCatalogQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildListMCPCatalogQuery(
@@ -60,8 +84,11 @@ export function useListMCPCatalog(
 export function useListMCPCatalogSuspense(
   request?: operations.ListMCPCatalogRequest | undefined,
   security?: operations.ListMCPCatalogSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListMCPCatalogQueryData>,
-): UseSuspenseQueryResult<ListMCPCatalogQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ListMCPCatalogQueryData,
+    ListMCPCatalogQueryError
+  >,
+): UseSuspenseQueryResult<ListMCPCatalogQueryData, ListMCPCatalogQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListMCPCatalogQuery(
@@ -71,21 +98,6 @@ export function useListMCPCatalogSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchListMCPCatalog(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildListMCPCatalogQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -136,54 +148,4 @@ export function invalidateAllListMCPCatalog(
     ...filters,
     queryKey: ["@gram/client", "mcpRegistries", "listCatalog"],
   });
-}
-
-export function buildListMCPCatalogQuery(
-  client$: GramCore,
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ListMCPCatalogQueryData>;
-} {
-  return {
-    queryKey: queryKeyListMCPCatalog({
-      registryId: request?.registryId,
-      search: request?.search,
-      cursor: request?.cursor,
-      gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function listMCPCatalogQueryFn(
-      ctx,
-    ): Promise<ListMCPCatalogQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(mcpRegistriesListCatalog(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyListMCPCatalog(
-  parameters: {
-    registryId?: string | undefined;
-    search?: string | undefined;
-    cursor?: string | undefined;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "mcpRegistries", "listCatalog", parameters];
 }

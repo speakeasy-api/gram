@@ -5,29 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { integrationsIntegrationsNumberGet } from "../funcs/integrationsIntegrationsNumberGet.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildIntegrationsIntegrationsNumberGetQuery,
+  IntegrationsIntegrationsNumberGetQueryData,
+  prefetchIntegrationsIntegrationsNumberGet,
+  queryKeyIntegrationsIntegrationsNumberGet,
+} from "./integrationsIntegrationsNumberGet.core.js";
+export {
+  buildIntegrationsIntegrationsNumberGetQuery,
+  type IntegrationsIntegrationsNumberGetQueryData,
+  prefetchIntegrationsIntegrationsNumberGet,
+  queryKeyIntegrationsIntegrationsNumberGet,
+};
 
-export type IntegrationsIntegrationsNumberGetQueryData =
-  components.GetIntegrationResult;
+export type IntegrationsIntegrationsNumberGetQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * get integrations
@@ -38,8 +61,14 @@ export type IntegrationsIntegrationsNumberGetQueryData =
 export function useIntegrationsIntegrationsNumberGet(
   request?: operations.IntegrationsNumberGetRequest | undefined,
   security?: operations.IntegrationsNumberGetSecurity | undefined,
-  options?: QueryHookOptions<IntegrationsIntegrationsNumberGetQueryData>,
-): UseQueryResult<IntegrationsIntegrationsNumberGetQueryData, Error> {
+  options?: QueryHookOptions<
+    IntegrationsIntegrationsNumberGetQueryData,
+    IntegrationsIntegrationsNumberGetQueryError
+  >,
+): UseQueryResult<
+  IntegrationsIntegrationsNumberGetQueryData,
+  IntegrationsIntegrationsNumberGetQueryError
+> {
   const client = useGramContext();
   return useQuery({
     ...buildIntegrationsIntegrationsNumberGetQuery(
@@ -62,9 +91,13 @@ export function useIntegrationsIntegrationsNumberGetSuspense(
   request?: operations.IntegrationsNumberGetRequest | undefined,
   security?: operations.IntegrationsNumberGetSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    IntegrationsIntegrationsNumberGetQueryData
+    IntegrationsIntegrationsNumberGetQueryData,
+    IntegrationsIntegrationsNumberGetQueryError
   >,
-): UseSuspenseQueryResult<IntegrationsIntegrationsNumberGetQueryData, Error> {
+): UseSuspenseQueryResult<
+  IntegrationsIntegrationsNumberGetQueryData,
+  IntegrationsIntegrationsNumberGetQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildIntegrationsIntegrationsNumberGetQuery(
@@ -74,21 +107,6 @@ export function useIntegrationsIntegrationsNumberGetSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchIntegrationsIntegrationsNumberGet(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.IntegrationsNumberGetRequest | undefined,
-  security?: operations.IntegrationsNumberGetSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildIntegrationsIntegrationsNumberGetQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -143,52 +161,4 @@ export function invalidateAllIntegrationsIntegrationsNumberGet(
     ...filters,
     queryKey: ["@gram/client", "integrations", "integrationsNumberGet"],
   });
-}
-
-export function buildIntegrationsIntegrationsNumberGetQuery(
-  client$: GramCore,
-  request?: operations.IntegrationsNumberGetRequest | undefined,
-  security?: operations.IntegrationsNumberGetSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<IntegrationsIntegrationsNumberGetQueryData>;
-} {
-  return {
-    queryKey: queryKeyIntegrationsIntegrationsNumberGet({
-      id: request?.id,
-      name: request?.name,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
-    queryFn: async function integrationsIntegrationsNumberGetQueryFn(
-      ctx,
-    ): Promise<IntegrationsIntegrationsNumberGetQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(integrationsIntegrationsNumberGet(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyIntegrationsIntegrationsNumberGet(
-  parameters: {
-    id?: string | undefined;
-    name?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "integrations", "integrationsNumberGet", parameters];
 }

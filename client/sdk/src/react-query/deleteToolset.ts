@@ -11,6 +11,17 @@ import { GramCore } from "../core.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -24,6 +35,17 @@ export type DeleteToolsetMutationVariables = {
 
 export type DeleteToolsetMutationData = void;
 
+export type DeleteToolsetMutationError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * deleteToolset toolsets
  *
@@ -33,12 +55,12 @@ export type DeleteToolsetMutationData = void;
 export function useDeleteToolsetMutation(
   options?: MutationHookOptions<
     DeleteToolsetMutationData,
-    Error,
+    DeleteToolsetMutationError,
     DeleteToolsetMutationVariables
   >,
 ): UseMutationResult<
   DeleteToolsetMutationData,
-  Error,
+  DeleteToolsetMutationError,
   DeleteToolsetMutationVariables
 > {
   const client = useGramContext();

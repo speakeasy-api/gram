@@ -5,28 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { templatesRenderByID } from "../funcs/templatesRenderByID.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildRenderTemplateByIDQuery,
+  prefetchRenderTemplateByID,
+  queryKeyRenderTemplateByID,
+  RenderTemplateByIDQueryData,
+} from "./renderTemplateByID.core.js";
+export {
+  buildRenderTemplateByIDQuery,
+  prefetchRenderTemplateByID,
+  queryKeyRenderTemplateByID,
+  type RenderTemplateByIDQueryData,
+};
 
-export type RenderTemplateByIDQueryData = components.RenderTemplateResult;
+export type RenderTemplateByIDQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * renderTemplateByID templates
@@ -37,8 +61,11 @@ export type RenderTemplateByIDQueryData = components.RenderTemplateResult;
 export function useRenderTemplateByID(
   request: operations.RenderTemplateByIDRequest,
   security?: operations.RenderTemplateByIDSecurity | undefined,
-  options?: QueryHookOptions<RenderTemplateByIDQueryData>,
-): UseQueryResult<RenderTemplateByIDQueryData, Error> {
+  options?: QueryHookOptions<
+    RenderTemplateByIDQueryData,
+    RenderTemplateByIDQueryError
+  >,
+): UseQueryResult<RenderTemplateByIDQueryData, RenderTemplateByIDQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildRenderTemplateByIDQuery(
@@ -60,8 +87,14 @@ export function useRenderTemplateByID(
 export function useRenderTemplateByIDSuspense(
   request: operations.RenderTemplateByIDRequest,
   security?: operations.RenderTemplateByIDSecurity | undefined,
-  options?: SuspenseQueryHookOptions<RenderTemplateByIDQueryData>,
-): UseSuspenseQueryResult<RenderTemplateByIDQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    RenderTemplateByIDQueryData,
+    RenderTemplateByIDQueryError
+  >,
+): UseSuspenseQueryResult<
+  RenderTemplateByIDQueryData,
+  RenderTemplateByIDQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildRenderTemplateByIDQuery(
@@ -71,21 +104,6 @@ export function useRenderTemplateByIDSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchRenderTemplateByID(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request: operations.RenderTemplateByIDRequest,
-  security?: operations.RenderTemplateByIDSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildRenderTemplateByIDQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -132,52 +150,4 @@ export function invalidateAllRenderTemplateByID(
     ...filters,
     queryKey: ["@gram/client", "templates", "renderByID"],
   });
-}
-
-export function buildRenderTemplateByIDQuery(
-  client$: GramCore,
-  request: operations.RenderTemplateByIDRequest,
-  security?: operations.RenderTemplateByIDSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<RenderTemplateByIDQueryData>;
-} {
-  return {
-    queryKey: queryKeyRenderTemplateByID({
-      id: request.id,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
-    queryFn: async function renderTemplateByIDQueryFn(
-      ctx,
-    ): Promise<RenderTemplateByIDQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(templatesRenderByID(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyRenderTemplateByID(
-  parameters: {
-    id: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "templates", "renderByID", parameters];
 }

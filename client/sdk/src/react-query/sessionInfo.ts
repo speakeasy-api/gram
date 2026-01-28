@@ -5,27 +5,52 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { authInfo } from "../funcs/authInfo.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildSessionInfoQuery,
+  prefetchSessionInfo,
+  queryKeySessionInfo,
+  SessionInfoQueryData,
+} from "./sessionInfo.core.js";
+export {
+  buildSessionInfoQuery,
+  prefetchSessionInfo,
+  queryKeySessionInfo,
+  type SessionInfoQueryData,
+};
 
-export type SessionInfoQueryData = operations.SessionInfoResponse;
+export type SessionInfoQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * info auth
@@ -36,8 +61,8 @@ export type SessionInfoQueryData = operations.SessionInfoResponse;
 export function useSessionInfo(
   request?: operations.SessionInfoRequest | undefined,
   security?: operations.SessionInfoSecurity | undefined,
-  options?: QueryHookOptions<SessionInfoQueryData>,
-): UseQueryResult<SessionInfoQueryData, Error> {
+  options?: QueryHookOptions<SessionInfoQueryData, SessionInfoQueryError>,
+): UseQueryResult<SessionInfoQueryData, SessionInfoQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildSessionInfoQuery(
@@ -59,8 +84,11 @@ export function useSessionInfo(
 export function useSessionInfoSuspense(
   request?: operations.SessionInfoRequest | undefined,
   security?: operations.SessionInfoSecurity | undefined,
-  options?: SuspenseQueryHookOptions<SessionInfoQueryData>,
-): UseSuspenseQueryResult<SessionInfoQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    SessionInfoQueryData,
+    SessionInfoQueryError
+  >,
+): UseSuspenseQueryResult<SessionInfoQueryData, SessionInfoQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildSessionInfoQuery(
@@ -70,21 +98,6 @@ export function useSessionInfoSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchSessionInfo(
-  queryClient: QueryClient,
-  client$: GramCore,
-  request?: operations.SessionInfoRequest | undefined,
-  security?: operations.SessionInfoSecurity | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildSessionInfoQuery(
-      client$,
-      request,
-      security,
-    ),
   });
 }
 
@@ -119,40 +132,4 @@ export function invalidateAllSessionInfo(
     ...filters,
     queryKey: ["@gram/client", "auth", "info"],
   });
-}
-
-export function buildSessionInfoQuery(
-  client$: GramCore,
-  request?: operations.SessionInfoRequest | undefined,
-  security?: operations.SessionInfoSecurity | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<SessionInfoQueryData>;
-} {
-  return {
-    queryKey: queryKeySessionInfo({ gramSession: request?.gramSession }),
-    queryFn: async function sessionInfoQueryFn(
-      ctx,
-    ): Promise<SessionInfoQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(authInfo(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeySessionInfo(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "auth", "info", parameters];
 }
