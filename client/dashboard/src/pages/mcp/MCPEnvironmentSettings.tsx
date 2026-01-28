@@ -469,9 +469,9 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     return false;
   };
 
-  // Check if there are any actual user edits (for UI indicator and save button)
-  const hasAnyUserEdits = useMemo(() => {
-    return envVars.some(hasUserEdits);
+  // Check if there are any unsaved changes (including unmapped required vars and user edits)
+  const hasAnyUnsavedChanges = useMemo(() => {
+    return envVars.some(hasUnsavedChanges);
   }, [envVars, editingState, environmentConfigs, selectedEnvironmentView]);
 
   // Save all variables with unsaved changes
@@ -698,7 +698,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 toolset.defaultEnvironmentSlug || "default"
               }
               requiredVars={requiredVars}
-              hasAnyUserEdits={hasAnyUserEdits}
+              hasAnyUserEdits={hasAnyUnsavedChanges}
               hasExistingConfigs={environmentConfigs.length > 0}
               onEnvironmentSelect={setSelectedEnvironmentView}
               onSaveAll={handleSaveAll}
@@ -720,7 +720,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 environmentConfigs={environmentConfigs}
                 editingState={editingState}
                 editingHeaderId={editingHeaderId}
-                hasUnsavedChanges={hasUserEdits(envVar)}
+                hasUnsavedChanges={hasUnsavedChanges(envVar)}
                 onStateChange={handleStateChange}
                 onValueChange={handleValueChange}
                 onEditHeaderName={setEditingHeaderId}
