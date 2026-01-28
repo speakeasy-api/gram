@@ -8873,11 +8873,11 @@ paths:
                     description: The deployment ID. If unset, latest deployment will be used.
                     type: string
                 - allowEmptyValue: true
-                  description: Filter tools by source slug (e.g. 'kitchen-sink' to get tools with URN prefix 'tools:http:kitchen-sink:')
+                  description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
                   in: query
-                  name: source_slug
+                  name: urn_prefix
                   schema:
-                    description: Filter tools by source slug (e.g. 'kitchen-sink' to get tools with URN prefix 'tools:http:kitchen-sink:')
+                    description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
                     type: string
                 - allowEmptyValue: true
                   description: Session header

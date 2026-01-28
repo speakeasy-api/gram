@@ -910,7 +910,7 @@ func TestToolsService_ListTools_WithDeploymentIDAndFunctionTools(t *testing.T) {
 	require.GreaterOrEqual(t, functionToolCount, 1, "should have at least one function tool")
 }
 
-func TestToolsService_ListTools_WithSourceSlugFilter(t *testing.T) {
+func TestToolsService_ListTools_WithUrnPrefixFilter(t *testing.T) {
 	t.Parallel()
 
 	assetStorage := assetstest.NewTestBlobStore(t)
@@ -971,7 +971,7 @@ func TestToolsService_ListTools_WithSourceSlugFilter(t *testing.T) {
 		DeploymentID:     nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SourceSlug:       nil,
+		UrnPrefix:        nil,
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list all tools")
@@ -994,14 +994,14 @@ func TestToolsService_ListTools_WithSourceSlugFilter(t *testing.T) {
 	require.GreaterOrEqual(t, todoCount, 1, "should have at least one todo tool")
 	totalHTTPTools := petstoreCount + todoCount
 
-	// List tools filtered by petstore-api source slug
-	petstoreSlug := "petstore-api"
+	// List tools filtered by petstore-api URN prefix
+	petstorePrefix := "tools:http:petstore-api"
 	petstoreResult, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
 		Cursor:           nil,
 		DeploymentID:     nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SourceSlug:       &petstoreSlug,
+		UrnPrefix:        &petstorePrefix,
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list petstore tools")
@@ -1017,14 +1017,14 @@ func TestToolsService_ListTools_WithSourceSlugFilter(t *testing.T) {
 	}
 	require.Equal(t, petstoreCount, petstoreFilteredCount, "filtered count should match original petstore count")
 
-	// List tools filtered by todo-api source slug
-	todoSlug := "todo-api"
+	// List tools filtered by todo-api URN prefix
+	todoPrefix := "tools:http:todo-api"
 	todoResult, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
 		Cursor:           nil,
 		DeploymentID:     nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SourceSlug:       &todoSlug,
+		UrnPrefix:        &todoPrefix,
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list todo tools")
@@ -1043,14 +1043,14 @@ func TestToolsService_ListTools_WithSourceSlugFilter(t *testing.T) {
 	// Verify the sum equals total
 	require.Equal(t, totalHTTPTools, petstoreFilteredCount+todoFilteredCount, "sum of filtered tools should equal total HTTP tools")
 
-	// Test with non-existent source slug returns no HTTP tools
-	nonExistentSlug := "non-existent-source"
+	// Test with non-existent URN prefix returns no tools
+	nonExistentPrefix := "tools:http:non-existent-source"
 	emptyResult, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
 		Cursor:           nil,
 		DeploymentID:     nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SourceSlug:       &nonExistentSlug,
+		UrnPrefix:        &nonExistentPrefix,
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list tools with non-existent source")

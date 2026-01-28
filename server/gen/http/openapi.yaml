@@ -7289,9 +7289,9 @@ paths:
                   name: deployment_id
                   required: false
                   type: string
-                - description: Filter tools by source slug (e.g. 'kitchen-sink' to get tools with URN prefix 'tools:http:kitchen-sink:')
+                - description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
                   in: query
-                  name: source_slug
+                  name: urn_prefix
                   required: false
                   type: string
                 - description: Session header

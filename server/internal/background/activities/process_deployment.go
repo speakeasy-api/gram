@@ -124,7 +124,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		DeploymentID: uuid.NullUUID{UUID: deploymentID, Valid: true},
 		ProjectID:    projectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
-		SourceSlug:   pgtype.Text{String: "", Valid: false},
+		UrnPrefix:    pgtype.Text{String: "", Valid: false},
 		Limit:        1,
 	})
 	if err != nil {
@@ -139,6 +139,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		DeploymentID: uuid.NullUUID{UUID: deploymentID, Valid: true},
 		ProjectID:    projectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		UrnPrefix:    pgtype.Text{String: "", Valid: false},
 		Limit:        1,
 	})
 	if err != nil {

@@ -53,9 +53,9 @@ type ListToolsPayload struct {
 	Cursor *string
 	// The number of tools to return per page
 	Limit *int32
-	// Filter tools by source slug (e.g. 'kitchen-sink' to get tools with URN
-	// prefix 'tools:http:kitchen-sink:')
-	SourceSlug *string
+	// Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all
+	// tools starting with that prefix)
+	UrnPrefix *string
 }
 
 // ListToolsResult is the result type of the tools service listTools method.

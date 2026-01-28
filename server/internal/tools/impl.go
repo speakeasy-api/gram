@@ -83,7 +83,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		ProjectID:    *authCtx.ProjectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
-		SourceSlug:   pgtype.Text{String: "", Valid: false},
+		UrnPrefix:    pgtype.Text{String: "", Valid: false},
 		Limit:        limit + 1,
 	}
 
@@ -103,11 +103,11 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		toolParams.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
 	}
 
-	if payload.SourceSlug != nil {
-		// Escape LIKE wildcards to treat source_slug as a literal value
-		escaped := strings.ReplaceAll(*payload.SourceSlug, "%", "\\%")
+	if payload.UrnPrefix != nil {
+		// Escape LIKE wildcards to treat urn_prefix as a literal value
+		escaped := strings.ReplaceAll(*payload.UrnPrefix, "%", "\\%")
 		escaped = strings.ReplaceAll(escaped, "_", "\\_")
-		toolParams.SourceSlug = pgtype.Text{String: escaped, Valid: true}
+		toolParams.UrnPrefix = pgtype.Text{String: escaped, Valid: true}
 	}
 
 	tools, err := s.repo.ListHttpTools(ctx, toolParams)
@@ -119,6 +119,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		ProjectID:    *authCtx.ProjectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		UrnPrefix:    toolParams.UrnPrefix,
 		Limit:        limit + 1,
 	})
 	if err != nil {

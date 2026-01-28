@@ -20,7 +20,7 @@ var _ = Service("tools", func() {
 			Attribute("deployment_id", String, "The deployment ID. If unset, latest deployment will be used.")
 			Attribute("cursor", String, "The cursor to fetch results from")
 			Attribute("limit", Int32, "The number of tools to return per page")
-			Attribute("source_slug", String, "Filter tools by source slug (e.g. 'kitchen-sink' to get tools with URN prefix 'tools:http:kitchen-sink:')")
+			Attribute("urn_prefix", String, "Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)")
 		})
 
 		Result(ListToolsResult)
@@ -30,7 +30,7 @@ var _ = Service("tools", func() {
 			Param("cursor")
 			Param("limit")
 			Param("deployment_id")
-			Param("source_slug")
+			Param("urn_prefix")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)

@@ -470,11 +470,11 @@ WITH deployment AS (
     SELECT d.id
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
-    WHERE d.project_id = $3
-      AND ($4::uuid IS NOT NULL OR ds.status = 'completed')
+    WHERE d.project_id = $4
+      AND ($5::uuid IS NOT NULL OR ds.status = 'completed')
       AND (
-        $4::uuid IS NULL
-        OR d.id = $4::uuid
+        $5::uuid IS NULL
+        OR d.id = $5::uuid
       )
     ORDER BY d.seq DESC
     LIMIT 1
@@ -500,6 +500,7 @@ WHERE
   ftd.deployment_id = (SELECT id FROM deployment)
   AND ftd.deleted IS FALSE
   AND ($2::uuid IS NULL OR ftd.id < $2)
+  AND ($3::text IS NULL OR ftd.tool_urn LIKE $3 || '%' ESCAPE '\')
 ORDER BY ftd.id DESC
 LIMIT $1
 `
@@ -507,6 +508,7 @@ LIMIT $1
 type ListFunctionToolsParams struct {
 	Limit        int32
 	Cursor       uuid.NullUUID
+	UrnPrefix    pgtype.Text
 	ProjectID    uuid.UUID
 	DeploymentID uuid.NullUUID
 }
@@ -535,6 +537,7 @@ func (q *Queries) ListFunctionTools(ctx context.Context, arg ListFunctionToolsPa
 	rows, err := q.db.Query(ctx, listFunctionTools,
 		arg.Limit,
 		arg.Cursor,
+		arg.UrnPrefix,
 		arg.ProjectID,
 		arg.DeploymentID,
 	)
@@ -628,7 +631,7 @@ WHERE
   htd.deployment_id IN (SELECT id FROM all_deployment_ids)
   AND htd.deleted IS FALSE
   AND ($3::uuid IS NULL OR htd.id < $3)
-  AND ($4::text IS NULL OR htd.tool_urn LIKE 'tools:http:' || $4 || ':%' ESCAPE '\')
+  AND ($4::text IS NULL OR htd.tool_urn LIKE $4 || '%' ESCAPE '\')
 ORDER BY htd.id DESC
 LIMIT $1
 `
@@ -637,7 +640,7 @@ type ListHttpToolsParams struct {
 	Limit        int32
 	ProjectID    uuid.UUID
 	Cursor       uuid.NullUUID
-	SourceSlug   pgtype.Text
+	UrnPrefix    pgtype.Text
 	DeploymentID uuid.NullUUID
 }
 
@@ -675,7 +678,7 @@ func (q *Queries) ListHttpTools(ctx context.Context, arg ListHttpToolsParams) ([
 		arg.Limit,
 		arg.ProjectID,
 		arg.Cursor,
-		arg.SourceSlug,
+		arg.UrnPrefix,
 		arg.DeploymentID,
 	)
 	if err != nil {

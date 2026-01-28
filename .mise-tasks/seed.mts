@@ -344,10 +344,10 @@ async function upsertToolset(init: {
   const { gram, serverURL, sessionId, projectSlug, assetSlug, mcpPublic } =
     init;
 
-  // Fetch tools filtered by source slug
+  // Fetch tools filtered by URN prefix
   const toolRes = await toolsList(
     gram,
-    { sourceSlug: assetSlug },
+    { urnPrefix: `tools:http:${assetSlug}` },
     {
       projectSlugHeaderGramProject: projectSlug,
       sessionHeaderGramSession: sessionId,
@@ -356,7 +356,7 @@ async function upsertToolset(init: {
   if (!toolRes.ok) {
     abort(`Failed to list tools for project \`${projectSlug}\``, toolRes.error);
   }
-  // Only include HTTP tools (source_slug filter only applies to HTTP tools)
+  // Only include HTTP tools (client-side filter for safety)
   const toolUrns = toolRes.value.tools
     .filter((t) => t.httpToolDefinition)
     .map((t) => t.httpToolDefinition!.toolUrn);

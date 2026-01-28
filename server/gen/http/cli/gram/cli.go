@@ -632,7 +632,7 @@ func ParseEndpoint(
 		toolsListToolsCursorFlag           = toolsListToolsFlags.String("cursor", "", "")
 		toolsListToolsLimitFlag            = toolsListToolsFlags.String("limit", "", "")
 		toolsListToolsDeploymentIDFlag     = toolsListToolsFlags.String("deployment-id", "", "")
-		toolsListToolsSourceSlugFlag       = toolsListToolsFlags.String("source-slug", "", "")
+		toolsListToolsUrnPrefixFlag        = toolsListToolsFlags.String("urn-prefix", "", "")
 		toolsListToolsSessionTokenFlag     = toolsListToolsFlags.String("session-token", "", "")
 		toolsListToolsProjectSlugInputFlag = toolsListToolsFlags.String("project-slug-input", "", "")
 
@@ -1809,7 +1809,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-tools":
 				endpoint = c.ListTools()
-				data, err = toolsc.BuildListToolsPayload(*toolsListToolsCursorFlag, *toolsListToolsLimitFlag, *toolsListToolsDeploymentIDFlag, *toolsListToolsSourceSlugFlag, *toolsListToolsSessionTokenFlag, *toolsListToolsProjectSlugInputFlag)
+				data, err = toolsc.BuildListToolsPayload(*toolsListToolsCursorFlag, *toolsListToolsLimitFlag, *toolsListToolsDeploymentIDFlag, *toolsListToolsUrnPrefixFlag, *toolsListToolsSessionTokenFlag, *toolsListToolsProjectSlugInputFlag)
 			}
 		case "toolsets":
 			c := toolsetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4250,7 +4250,7 @@ func toolsListToolsUsage() {
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT32")
 	fmt.Fprint(os.Stderr, " -deployment-id STRING")
-	fmt.Fprint(os.Stderr, " -source-slug STRING")
+	fmt.Fprint(os.Stderr, " -urn-prefix STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
@@ -4263,13 +4263,13 @@ func toolsListToolsUsage() {
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT32: `)
 	fmt.Fprintln(os.Stderr, `    -deployment-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -source-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -urn-prefix STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tools list-tools --cursor \"Nobis fugit rerum aliquam.\" --limit 1702447149 --deployment-id \"Voluptatum eos ut explicabo et aut maiores.\" --source-slug \"Occaecati doloremque reprehenderit est.\" --session-token \"Ducimus ipsum.\" --project-slug-input \"Assumenda et.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tools list-tools --cursor \"Nobis fugit rerum aliquam.\" --limit 1702447149 --deployment-id \"Voluptatum eos ut explicabo et aut maiores.\" --urn-prefix \"Occaecati doloremque reprehenderit est.\" --session-token \"Ducimus ipsum.\" --project-slug-input \"Assumenda et.\"")
 }
 
 // toolsetsUsage displays the usage of the toolsets command and its subcommands.
