@@ -237,7 +237,7 @@ function ExportJsonModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+      <Dialog.Content className="min-w-[80vw] h-[90vh] overflow-hidden flex flex-col">
         <Dialog.Header className="shrink-0">
           <Dialog.Title>Export MCP Configuration</Dialog.Title>
           <Dialog.Description>
