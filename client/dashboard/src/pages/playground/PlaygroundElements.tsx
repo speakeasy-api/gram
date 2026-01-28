@@ -70,11 +70,11 @@ export function PlaygroundElements({
   const authStatus =
     toolset && environmentData
       ? getAuthStatus(toolset, {
-        entries: environmentData.entries?.map((e) => ({
-          name: e.name,
-          value: e.value,
-        })),
-      })
+          entries: environmentData.entries?.map((e) => ({
+            name: e.name,
+            value: e.value,
+          })),
+        })
       : null;
 
   // Create getSession function using SDK mutation with session auth
