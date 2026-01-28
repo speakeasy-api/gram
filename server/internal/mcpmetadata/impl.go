@@ -313,7 +313,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	}
 
 	// Build install configs
-	installConfigs := s.buildInstallConfigs(toolset.Name, mcpURL, securityInputs)
+	installConfigs := s.buildInstallConfigs(toolset.McpSlug.String, mcpURL, securityInputs)
 
 	return &types.McpExport{
 		Name:             toolset.Name,
@@ -380,7 +380,7 @@ func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.To
 	return tools
 }
 
-func (s *Service) buildInstallConfigs(toolsetName, mcpURL string, inputs []securityInput) *types.McpExportInstallConfigs {
+func (s *Service) buildInstallConfigs(mcpSlug, mcpURL string, inputs []securityInput) *types.McpExportInstallConfigs {
 	// Build args for stdio-based clients (Claude Desktop, Cursor)
 	args := []string{"mcp-remote@0.1.25", mcpURL}
 	env := make(map[string]string)
@@ -400,8 +400,13 @@ func (s *Service) buildInstallConfigs(toolsetName, mcpURL string, inputs []secur
 		httpHeaders[headerKey] = fmt.Sprintf("${%s}", envVarName)
 	}
 
-	// Build Claude Code CLI command
-	claudeCodeCmd := fmt.Sprintf("claude mcp add %s --transport sse %s", toolsetName, mcpURL)
+	// Build Claude Code CLI command (matches install page format)
+	claudeCodeCmd := fmt.Sprintf("claude mcp add --transport http %q %q", mcpSlug, mcpURL)
+	for _, input := range inputs {
+		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
+		envVarName := templatefuncs.AsPosixName(input.DisplayName)
+		claudeCodeCmd += fmt.Sprintf(" --header '%s:${%s}'", headerKey, envVarName)
+	}
 
 	return &types.McpExportInstallConfigs{
 		ClaudeDesktop: &types.McpExportStdioConfig{

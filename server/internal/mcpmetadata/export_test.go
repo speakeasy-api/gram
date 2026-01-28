@@ -63,6 +63,10 @@ func TestService_ExportMcpMetadata_Success(t *testing.T) {
 	require.Equal(t, "http", result.InstallConfigs.Vscode.Type, "vscode type should be http")
 	require.Contains(t, result.InstallConfigs.Vscode.URL, toolset.McpSlug.String, "vscode URL should contain MCP slug")
 
+	// Verify Claude Code command format matches install page
+	require.Contains(t, result.InstallConfigs.ClaudeCode, "--transport http", "claude code should use http transport")
+	require.Contains(t, result.InstallConfigs.ClaudeCode, toolset.McpSlug.String, "claude code should contain MCP slug")
+
 	// Verify authentication info
 	require.NotNil(t, result.Authentication, "authentication should not be nil")
 
