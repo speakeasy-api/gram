@@ -692,6 +692,7 @@ Message:
 			nil,
 			nil,
 			suggestionsModel,
+			billing.ModelUsageSourceChat,
 		)
 		if err == nil {
 			response := strings.ToLower(strings.TrimSpace(openrouter.GetText(*checkResult)))
@@ -757,6 +758,7 @@ Rules:
 		nil, // no tools
 		nil, // default temperature
 		suggestionsModel,
+		billing.ModelUsageSourceChat,
 	)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to generate follow-on suggestions", attr.SlogError(err))
