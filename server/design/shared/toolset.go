@@ -37,6 +37,18 @@ var FunctionEnvironmentVariable = Type("FunctionEnvironmentVariable", func() {
 	Required("name")
 })
 
+var ExternalMCPHeaderDefinition = Type("ExternalMCPHeaderDefinition", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("name", String, "The prefixed environment variable name (e.g., SLACK_X_API_KEY)")
+	Attribute("header_name", String, "The actual HTTP header name to send (e.g., X-Api-Key)")
+	Attribute("description", String, "Description of the header")
+	Attribute("placeholder", String, "Placeholder value for the header")
+	Attribute("required", Boolean, "Whether the header is required")
+	Attribute("secret", Boolean, "Whether the header value is secret")
+	Required("name", "header_name", "required", "secret")
+})
+
 var OAuthEnablementMetadata = Type("OAuthEnablementMetadata", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -58,6 +70,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("security_variables", ArrayOf(SecurityVariable), "The security variables that are relevant to the toolset")
 	Attribute("server_variables", ArrayOf(ServerVariable), "The server variables that are relevant to the toolset")
 	Attribute("function_environment_variables", ArrayOf(FunctionEnvironmentVariable), "The function environment variables that are relevant to the toolset")
+	Attribute("external_mcp_header_definitions", ArrayOf(ExternalMCPHeaderDefinition), "The external MCP header definitions that are relevant to the toolset")
 	Attribute("oauth_enablement_metadata", OAuthEnablementMetadata, "The metadata surrounding oauth enabled tools within this server")
 	Attribute("tools", ArrayOf(Tool), "The tools in this toolset")
 	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
@@ -97,6 +110,7 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("security_variables", ArrayOf(SecurityVariable), "The security variables that are relevant to the toolset")
 	Attribute("server_variables", ArrayOf(ServerVariable), "The server variables that are relevant to the toolset")
 	Attribute("function_environment_variables", ArrayOf(FunctionEnvironmentVariable), "The function environment variables that are relevant to the toolset")
+	Attribute("external_mcp_header_definitions", ArrayOf(ExternalMCPHeaderDefinition), "The external MCP header definitions that are relevant to the toolset")
 	Attribute("tools", ArrayOf(ToolEntry), "The tools in this toolset")
 	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
 	Attribute("resources", ArrayOf(ResourceEntry), "The resources in this toolset")

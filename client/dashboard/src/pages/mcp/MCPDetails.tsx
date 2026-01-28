@@ -2,12 +2,16 @@ import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ConfigForm } from "@/components/mcp_install_page/config_form";
+import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
+import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
+import { ToolList } from "@/components/tool-list";
 import { BigToggle } from "@/components/ui/big-toggle";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
 import {
@@ -20,32 +24,44 @@ import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
+import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
-import { isHttpTool, Toolset } from "@/lib/toolTypes";
+import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
+import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { Confirm, ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
-  invalidateGetMcpMetadata,
+  invalidateTemplate,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
   useGetMcpMetadata,
+  useLatestDeployment,
+  useListEnvironments,
   useRemoveOAuthServerMutation,
-  useUpdateSecurityVariableDisplayNameMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
-import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
-import { Badge, Button, Grid, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Globe, Pencil, Trash2, X } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircleIcon,
+  Globe,
+  LockIcon,
+  Play,
+  Trash2,
+  XCircleIcon,
+} from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { onboardingStepStorageKeys } from "../home/Home";
-import { ToolsetCard } from "../toolsets/ToolsetCard";
+import { AddToolsDialog } from "../toolsets/AddToolsDialog";
+import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
+import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -53,8 +69,28 @@ export function MCPDetailsRoot() {
 
 export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
+  const routes = useRoutes();
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
 
   const { data: toolset, isLoading } = useToolset(toolsetSlug);
+  const { data: deploymentResult, refetch: refetchDeployment } =
+    useLatestDeployment();
+  const deployment = deploymentResult?.deployment;
+
+  // Call hooks before any conditional returns
+  const { url: mcpUrl } = useMcpUrl(toolset);
+  const { data: environmentsData } = useListEnvironments();
+  const environments = environmentsData?.environments ?? [];
+
+  // Fetch MCP metadata early to use in useMissingRequiredEnvVars
+  const { data: mcpMetadataData } = useGetMcpMetadata(
+    { toolsetSlug: toolset?.slug || "" },
+    undefined,
+    { enabled: !!toolset?.slug, throwOnError: false },
+  );
+  const mcpMetadataForBadge = mcpMetadataData?.metadata;
 
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
@@ -63,9 +99,113 @@ export function MCPDetailPage() {
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
 
+  // Tab state controlled by URL hash - initialize directly from hash
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const hash = window.location.hash.slice(1); // Remove the '#'
+    const validTabs = ["overview", "tools", "settings", "authentication"];
+    return hash && validTabs.includes(hash) ? hash : "overview";
+  });
+
+  // Update URL hash when tab changes
+  useEffect(() => {
+    if (activeTab) {
+      window.location.hash = activeTab;
+    }
+  }, [activeTab]);
+
+  // Listen for hash changes (e.g., browser back/forward)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.slice(1);
+      const validTabs = ["overview", "tools", "settings", "authentication"];
+      if (hash && validTabs.includes(hash)) {
+        setActiveTab(hash);
+      }
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  const handleDeleteMcpServer = async () => {
+    if (!toolset) return;
+
+    if (
+      !confirm(
+        "Are you sure you want to delete this MCP server? This action cannot be undone.",
+      )
+    ) {
+      return;
+    }
+
+    // Navigate immediately, show loading toast
+    routes.mcp.goTo();
+    const toastId = toast.loading("Deleting MCP server...");
+
+    console.log(
+      "Deleting toolset:",
+      toolset.slug,
+      "toolUrns:",
+      toolset.toolUrns,
+    );
+
+    try {
+      // Check if this toolset uses an external MCP from the catalog
+      const externalMcpUrn = toolset.toolUrns?.find((urn) =>
+        urn.includes(":externalmcp:"),
+      );
+
+      if (externalMcpUrn && deployment) {
+        // Extract the external MCP slug from the URN (format: tools:externalmcp:{slug}:proxy)
+        const parts = externalMcpUrn.split(":");
+        const externalMcpSlug = parts[2];
+
+        if (externalMcpSlug) {
+          // Remove the external MCP from the deployment
+          await client.deployments.evolveDeployment({
+            evolveForm: {
+              deploymentId: deployment.id,
+              excludeExternalMcps: [externalMcpSlug],
+            },
+          });
+        }
+      }
+
+      // Delete the toolset
+      await client.toolsets.deleteBySlug({ slug: toolset.slug });
+
+      telemetry.capture("mcp_event", {
+        action: "mcp_server_deleted",
+        slug: toolset.slug,
+      });
+
+      invalidateAllToolset(queryClient);
+      invalidateAllGetPeriodUsage(queryClient);
+      refetchDeployment();
+
+      console.log("Successfully deleted toolset:", toolset.slug);
+      toast.success("MCP server deleted", { id: toastId });
+    } catch (error) {
+      console.error("Failed to delete MCP server:", error);
+      toast.error(
+        `Failed to delete: ${error instanceof Error ? error.message : "Unknown error"}`,
+        { id: toastId },
+      );
+    }
+  };
+
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
   }, []);
+
+  // Calculate if there are missing required env vars for the tab indicator
+  // Must be before early return to avoid hooks order issues
+  const missingRequiredEnvVars = useMissingRequiredEnvVars(
+    toolset,
+    environments,
+    toolset?.defaultEnvironmentSlug || "default",
+    mcpMetadataForBadge,
+  );
 
   // TODO: better loading state
   if (isLoading || !toolset) {
@@ -75,79 +215,258 @@ export function MCPDetailPage() {
   const availableOAuthAuthCode =
     toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
 
+  let statusBadge = null;
+  if (!toolset.mcpEnabled) {
+    statusBadge = (
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <XCircleIcon className="w-3 h-3" />
+        </Badge.LeftIcon>
+        <Badge.Text>Disabled</Badge.Text>
+      </Badge>
+    );
+  } else if (toolset.mcpIsPublic) {
+    statusBadge = (
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <CheckCircleIcon className="w-3 h-3 text-green-600" />
+        </Badge.LeftIcon>
+        <Badge.Text>Public</Badge.Text>
+      </Badge>
+    );
+  } else {
+    statusBadge = (
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <LockIcon className="w-3 h-3" />
+        </Badge.LeftIcon>
+        <Badge.Text>Private</Badge.Text>
+      </Badge>
+    );
+  }
+
   return (
-    <Stack>
-      <Stack
-        direction="horizontal"
-        align="center"
-        className="mb-8 justify-between"
-      >
-        <Heading variant="h2">MCP Details</Heading>
-        <Stack direction="horizontal" gap={2}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {!toolset?.mcpEnabled ||
-              (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
-                <span className="inline-block">
-                  <Button variant="secondary" size="md" disabled={true}>
-                    {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body fullWidth noPadding>
+        {/* Hero Header with Animation - full width */}
+        <div className="relative w-full h-64 overflow-hidden">
+          <MCPHeroIllustration
+            toolsetSlug={toolset.slug}
+            className="saturate-[.3]"
+          />
+
+          {/* Overlay for text readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 via-foreground/20 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
+            <div className="flex items-end justify-between">
+              <Stack gap={2}>
+                <div className="flex items-center gap-3 ml-1">
+                  <Heading variant="h1" className="text-background">
+                    {toolset.name}
+                  </Heading>
+                  {statusBadge}
+                </div>
+                <div className="flex items-center gap-2 ml-1">
+                  <Type className="max-w-2xl truncate !text-background/70">
+                    {mcpUrl}
+                  </Type>
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => {
+                      if (mcpUrl) {
+                        navigator.clipboard.writeText(mcpUrl);
+                        toast.success("URL copied to clipboard");
+                      }
+                    }}
+                    className="shrink-0 text-background/70 hover:text-background"
+                  >
+                    <Button.LeftIcon>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect
+                          width="14"
+                          height="14"
+                          x="8"
+                          y="8"
+                          rx="2"
+                          ry="2"
+                        />
+                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                      </svg>
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Copy URL</Button.Text>
                   </Button>
-                </span>
-              ) : (
+                </div>
+              </Stack>
+              <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
                 <Button
                   variant="secondary"
                   size="md"
-                  onClick={() =>
-                    isOAuthConnected
-                      ? setIsOAuthDetailsModalOpen(true)
-                      : toolset.mcpIsPublic
-                        ? setIsOAuthModalOpen(true)
-                        : setIsGramOAuthModalOpen(true)
-                  }
+                  className="bg-background/10 hover:bg-background/20 text-background border-background/20"
                 >
-                  {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
+                  <Button.LeftIcon>
+                    <Play className="w-4 h-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Playground</Button.Text>
                 </Button>
-              )}
-            </TooltipTrigger>
-            {(!toolset?.mcpEnabled ||
-              (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
-              <TooltipContent>
-                {!toolset?.mcpEnabled
-                  ? "Enable server to configure OAuth"
-                  : "This MCP server does not require the OAuth authorization code flow"}
-              </TooltipContent>
-            )}
-          </Tooltip>
-          <MCPEnableButton toolset={toolset} />
-        </Stack>
-      </Stack>
-      <PageSection
-        heading="Source Toolset"
-        description="MCP servers expose the contents of a single toolset. To change the
-          tools or prompts exposed by this MCP server, update the source toolset
-          below."
-        className="max-w-2xl"
-      >
-        <ToolsetCard toolset={toolset} />
-      </PageSection>
-      <MCPDetails toolset={toolset} />
-      <ConnectOAuthModal
-        isOpen={isOAuthModalOpen}
-        onClose={() => setIsOAuthModalOpen(false)}
-        toolsetSlug={toolset.slug}
-        toolset={toolset}
-      />
-      <GramOAuthProxyModal
-        isOpen={isGramOAuthModalOpen}
-        onClose={() => setIsGramOAuthModalOpen(false)}
-        toolset={toolset}
-      />
-      <OAuthDetailsModal
-        isOpen={isOAuthDetailsModalOpen}
-        onClose={() => setIsOAuthDetailsModalOpen(false)}
-        toolset={toolset}
-      />
-    </Stack>
+              </routes.playground.Link>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
+            <Stack direction="horizontal" gap={2} className="justify-end">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {!toolset?.mcpEnabled ||
+                  (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
+                    <span className="inline-block">
+                      <Button variant="secondary" size="md" disabled={true}>
+                        {isOAuthConnected
+                          ? "OAuth Connected"
+                          : "Configure OAuth"}
+                      </Button>
+                    </span>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() =>
+                        isOAuthConnected
+                          ? setIsOAuthDetailsModalOpen(true)
+                          : toolset.mcpIsPublic
+                            ? setIsOAuthModalOpen(true)
+                            : setIsGramOAuthModalOpen(true)
+                      }
+                    >
+                      {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
+                    </Button>
+                  )}
+                </TooltipTrigger>
+                {(!toolset?.mcpEnabled ||
+                  (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
+                  <TooltipContent>
+                    {!toolset?.mcpEnabled
+                      ? "Enable server to configure OAuth"
+                      : "This MCP server does not require the OAuth authorization code flow"}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+              <MCPEnableButton toolset={toolset} />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={handleDeleteMcpServer}
+                  >
+                    <Button.LeftIcon>
+                      <Trash2 className="w-4 h-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">
+                      Delete MCP server
+                    </Button.Text>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Delete MCP server</TooltipContent>
+              </Tooltip>
+            </Stack>
+          </div>
+        </div>
+
+        {/* Sub-navigation tabs */}
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="w-full flex-1 flex flex-col"
+        >
+          <div className="border-b">
+            <div className="max-w-[1270px] mx-auto px-8">
+              <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
+                <TabsTrigger
+                  value="overview"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger
+                  value="tools"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Tools
+                </TabsTrigger>
+                <TabsTrigger
+                  value="settings"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Settings
+                </TabsTrigger>
+                <TabsTrigger
+                  value="authentication"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  <span className="flex items-center gap-1.5">
+                    Authentication
+                    {missingRequiredEnvVars > 0 && (
+                      <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+                    )}
+                  </span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
+
+          {/* Tab Content */}
+          <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+            <TabsContent value="overview" className="mt-0 w-full">
+              <MCPOverviewTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="tools" className="mt-0 w-full">
+              <MCPToolsTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="settings" className="mt-0 w-full">
+              <MCPSettingsTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="authentication" className="mt-0 w-full">
+              <MCPAuthenticationTab toolset={toolset} />
+            </TabsContent>
+          </div>
+        </Tabs>
+
+        <ConnectOAuthModal
+          isOpen={isOAuthModalOpen}
+          onClose={() => setIsOAuthModalOpen(false)}
+          toolsetSlug={toolset.slug}
+          toolset={toolset}
+        />
+        <GramOAuthProxyModal
+          isOpen={isGramOAuthModalOpen}
+          onClose={() => setIsGramOAuthModalOpen(false)}
+          toolset={toolset}
+        />
+        <OAuthDetailsModal
+          isOpen={isOAuthDetailsModalOpen}
+          onClose={() => setIsOAuthDetailsModalOpen(false)}
+          toolset={toolset}
+        />
+      </Page.Body>
+    </Page>
   );
 }
 
@@ -201,7 +520,262 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
   );
 }
 
-export function MCPDetails({ toolset }: { toolset: Toolset }) {
+/**
+ * Overview Tab - Hosted URL and Installation instructions
+ */
+function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
+  const { url: mcpUrl } = useMcpUrl(toolset);
+
+  return (
+    <Stack className="mb-4">
+      <PageSection
+        heading="Hosted URL"
+        description="The URL you or your users will use to access this MCP server."
+      >
+        <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
+      </PageSection>
+
+      <PageSection
+        heading="Install Page"
+        description="Share this page with your users to give simple instructions for getting started with your MCP in their client like Cursor or Claude Desktop."
+      >
+        {!toolset.mcpIsPublic && (
+          <Type small italic destructive>
+            Your server is private. To share with external users, you must make
+            it public.
+          </Type>
+        )}
+        <Stack className="mt-2" gap={1}>
+          <ConfigForm toolset={toolset} />
+        </Stack>
+      </PageSection>
+    </Stack>
+  );
+}
+
+/**
+ * Tools Tab - Manage tools in the MCP server
+ */
+function MCPToolsTab({ toolset }: { toolset: Toolset }) {
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
+  const client = useSdkClient();
+  const routes = useRoutes();
+  const { data: fullToolset, refetch } = useToolset(toolset.slug);
+
+  const [addToolsDialogOpen, setAddToolsDialogOpen] = useState(false);
+
+  const tools = fullToolset?.tools ?? [];
+
+  // Check if we have orphaned tool URNs (URNs exist but tools were deleted)
+  const hasOrphanedTools =
+    (fullToolset?.toolUrns?.length ?? 0) > 0 && tools.length === 0;
+
+  const updateToolsetMutation = useUpdateToolsetMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "toolset_updated" });
+      refetch();
+      invalidateAllToolset(queryClient);
+    },
+    onError: (error) => {
+      telemetry.capture("toolset_event", {
+        action: "toolset_update_failed",
+        error: error.message,
+      });
+    },
+  });
+
+  const handleToolUpdate = async (
+    tool: Tool,
+    updates: { name?: string; description?: string },
+  ) => {
+    if (tool.type === "prompt") {
+      await client.templates.update({
+        updatePromptTemplateForm: {
+          ...tool,
+          ...updates,
+        },
+      });
+      invalidateTemplate(queryClient, [{ name: tool.name }]);
+    } else {
+      await client.variations.upsertGlobal({
+        upsertGlobalToolVariationForm: {
+          ...tool.variation,
+          confirm: tool.variation?.confirm as Confirm,
+          ...updates,
+          srcToolName: tool.canonicalName,
+          srcToolUrn: tool.toolUrn,
+        },
+      });
+    }
+
+    telemetry.capture("toolset_event", {
+      action: "tool_variation_updated",
+      tool_name: tool.name,
+      overridden_fields: Object.keys(updates).join(", "),
+    });
+
+    refetch();
+  };
+
+  const handleToolsRemove = useCallback(
+    (removedUrns: string[]) => {
+      const currentUrns = fullToolset?.toolUrns || [];
+      const updatedUrns = currentUrns.filter(
+        (urn) => !removedUrns.includes(urn),
+      );
+
+      updateToolsetMutation.mutate(
+        {
+          request: {
+            slug: toolset.slug,
+            updateToolsetRequestBody: {
+              toolUrns: updatedUrns,
+            },
+          },
+        },
+        {
+          onSuccess: () => {
+            telemetry.capture("toolset_event", {
+              action: "tools_removed",
+              count: removedUrns.length,
+            });
+            toast.success(
+              `Removed ${removedUrns.length} tool${removedUrns.length !== 1 ? "s" : ""}`,
+            );
+          },
+        },
+      );
+    },
+    [fullToolset?.toolUrns, toolset.slug],
+  );
+
+  const handleTestInPlayground = useCallback(() => {
+    routes.playground.goTo(toolset.slug);
+  }, [toolset.slug]);
+
+  // Group filtering
+  const grouped = useGroupedTools(tools);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(
+    grouped.map((group) => group.key),
+  );
+
+  // Update selected groups when grouped changes
+  useEffect(() => {
+    setSelectedGroups(grouped.map((group) => group.key));
+  }, [grouped.length]);
+
+  const groupFilterItems = grouped.map((group) => ({
+    label: group.key,
+    value: group.key,
+  }));
+
+  // Filter tools based on selected groups
+  const groupedToolNames = new Set(
+    grouped
+      .filter((group) => selectedGroups.includes(group.key))
+      .flatMap((group) => group.tools.map((t) => t.name)),
+  );
+
+  let toolsToDisplay = tools.filter((tool) => groupedToolNames.has(tool.name));
+  if (toolsToDisplay.length === 0) {
+    toolsToDisplay = tools;
+  }
+
+  return (
+    <Stack className="mb-4">
+      {/* Header with Add Tools button */}
+      <Stack
+        direction="horizontal"
+        justify="space-between"
+        align="center"
+        className="mb-4"
+      >
+        <Heading variant="h3">Tools</Heading>
+        <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
+          <Button.LeftIcon>
+            <Icon name="plus" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Add Tools</Button.Text>
+        </Button>
+      </Stack>
+
+      {/* Group filter */}
+      {groupFilterItems.length > 1 && (
+        <MultiSelect
+          options={groupFilterItems}
+          defaultValue={groupFilterItems.map((group) => group.value)}
+          onValueChange={setSelectedGroups}
+          placeholder="Filter tools"
+          className="w-fit mb-4 capitalize"
+        />
+      )}
+
+      {/* Tools list or empty state */}
+      {hasOrphanedTools ? (
+        <Stack gap={4} align="center" className="py-12">
+          <div className="text-center max-w-md">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-warning" />
+            <Heading variant="h3" className="mb-2">
+              Tools Source Deleted
+            </Heading>
+            <Type muted>
+              This MCP server has tool references, but the underlying source has
+              been deleted. Re-adding the source will reinstate the tools.
+            </Type>
+          </div>
+        </Stack>
+      ) : toolsToDisplay.length > 0 ? (
+        <ToolList
+          tools={toolsToDisplay}
+          toolset={fullToolset}
+          onToolUpdate={handleToolUpdate}
+          onToolsRemove={handleToolsRemove}
+          onTestInPlayground={handleTestInPlayground}
+        />
+      ) : (
+        <ToolsetEmptyState
+          toolsetSlug={toolset.slug}
+          onAddTools={() => setAddToolsDialogOpen(true)}
+        />
+      )}
+
+      {/* Add Tools Dialog */}
+      {fullToolset && (
+        <AddToolsDialog
+          open={addToolsDialogOpen}
+          onOpenChange={setAddToolsDialogOpen}
+          toolset={fullToolset}
+          onAddTools={async (toolUrns) => {
+            const currentUrns = fullToolset.toolUrns || [];
+            const newUrns = [...new Set([...currentUrns, ...toolUrns])];
+
+            await client.toolsets.updateBySlug({
+              slug: toolset.slug,
+              updateToolsetRequestBody: {
+                toolUrns: newUrns,
+              },
+            });
+
+            toast.success(
+              `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
+            );
+
+            await refetch();
+            invalidateAllToolset(queryClient);
+          }}
+        />
+      )}
+    </Stack>
+  );
+}
+
+/**
+
+/**
+ * Settings Tab - Visibility, Slug, Custom Domain, Tool Selection Mode
+ */
+function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
   const session = useSession();
@@ -242,7 +816,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
 
   const mcpSlugError = useMcpSlugValidation(mcpSlug, toolset.mcpSlug);
 
-  const { url: mcpUrl, customServerURL } = useMcpUrl(toolset);
+  const { url: _mcpUrl, customServerURL } = useMcpUrl(toolset);
 
   const handleMcpSlugChange = (value: string) => {
     value = value.slice(0, 40);
@@ -406,18 +980,19 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   };
 
   return (
-    <Stack
-      className={cn(
-        "mb-4",
-        !toolset.mcpEnabled && "blur-[2px] pointer-events-none",
-      )}
-    >
+    <Stack className="mb-4">
       <PageSection
-        heading="Hosted URL"
-        description="The URL you or your users will use to access this MCP server."
+        heading="Visibility"
+        description="Make your MCP server visible to the world, or protected behind a Gram key."
       >
-        <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
-        <Block label="Custom Slug" error={mcpSlugError} className="p-0">
+        <PublicToggle isPublic={mcpIsPublic ?? false} />
+      </PageSection>
+
+      <PageSection
+        heading="Custom Slug"
+        description="Customize the URL path for your MCP server."
+      >
+        <Block label="Slug" error={mcpSlugError} className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type
@@ -461,7 +1036,13 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
             </Stack>
           </BlockInner>
         </Block>
-        <Block label="Custom Domain" className="p-0">
+      </PageSection>
+
+      <PageSection
+        heading="Custom Domain"
+        description="Host your MCP server at your own domain."
+      >
+        <Block label="Domain" className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type mono small>
@@ -481,30 +1062,6 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       </PageSection>
 
       <PageSection
-        heading="Visibility"
-        description="Make your MCP server visible to the world, or protected behind a Gram key."
-      >
-        <PublicToggle isPublic={mcpIsPublic ?? false} />
-      </PageSection>
-
-      <PageSection
-        heading="MCP Installation"
-        description="Share this page with your users to give simple instructions
-          for gettings started with your MCP to their client like Cursor or
-          Claude Desktop."
-      >
-        {!toolset.mcpIsPublic && (
-          <Type small italic destructive>
-            Your server is private. To share with external users, you must make
-            it public.
-          </Type>
-        )}
-        <Stack className="mt-2" gap={1}>
-          <ConfigForm toolset={toolset} />
-        </Stack>
-      </PageSection>
-
-      <PageSection
         heading="Tool Selection Mode"
         featureType="experimental"
         description="Change how this server's tools will be presented to the LLM. Can have drastic effects on context management, especially for larger toolsets. Use with care."
@@ -513,10 +1070,6 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           toolSelectionMode={toolset.toolSelectionMode ?? "static"}
         />
       </PageSection>
-
-      {toolset.securityVariables && toolset.securityVariables.length > 0 && (
-        <AuthorizationHeadersSection toolset={toolset} />
-      )}
 
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
@@ -540,6 +1093,11 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       />
     </Stack>
   );
+}
+
+// Keep the old MCPDetails for backward compatibility (can be removed later)
+export function MCPDetails({ toolset }: { toolset: Toolset }) {
+  return <MCPSettingsTab toolset={toolset} />;
 }
 
 function PageSection({
@@ -571,192 +1129,6 @@ function PageSection({
       </Type>
       {children}
     </Stack>
-  );
-}
-
-function AuthorizationHeadersSection({ toolset }: { toolset: Toolset }) {
-  const queryClient = useQueryClient();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-
-  // Fetch MCP metadata to get saved header display names
-  // Use throwOnError: false since metadata may not exist for all toolsets
-  const { data: mcpMetadata } = useGetMcpMetadata(
-    { toolsetSlug: toolset.slug },
-    undefined,
-    { enabled: !!toolset.slug, throwOnError: false },
-  );
-
-  // Get the saved display names map from metadata
-  const headerDisplayNames = mcpMetadata?.metadata?.headerDisplayNames ?? {};
-
-  const updateDisplayNameMutation =
-    useUpdateSecurityVariableDisplayNameMutation({
-      onSuccess: () => {
-        invalidateAllToolset(queryClient);
-        invalidateGetMcpMetadata(queryClient, [{ toolsetSlug: toolset.slug }]);
-        toast.success("Header display name updated");
-        setEditingId(null);
-        setEditValue("");
-      },
-      onError: (error) => {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update display name",
-        );
-      },
-    });
-
-  const handleEditStart = (
-    id: string,
-    currentDisplayName: string | undefined,
-    name: string,
-  ) => {
-    setEditingId(id);
-    setEditValue(currentDisplayName || name);
-  };
-
-  const handleEditCancel = () => {
-    setEditingId(null);
-    setEditValue("");
-  };
-
-  const handleEditSave = (securityKey: string) => {
-    updateDisplayNameMutation.mutate({
-      request: {
-        updateSecurityVariableDisplayNameRequestBody: {
-          displayName: editValue.trim(),
-          securityKey: securityKey,
-          toolsetSlug: toolset.slug,
-        },
-      },
-    });
-  };
-
-  // Flatten security variables to show one row per environment variable
-  // This handles cases like basic auth where one securityVariable has multiple envVariables
-  const envVarEntries = toolset.securityVariables?.flatMap((secVar) => {
-    // Filter out token_url env vars as they're not user-facing
-    const filteredEnvVars = secVar.envVariables.filter(
-      (envVar) => !envVar.toLowerCase().includes("token_url"),
-    );
-
-    // If no env vars after filtering, show the security variable itself
-    if (filteredEnvVars.length === 0) {
-      return [
-        {
-          id: secVar.id,
-          envVar: secVar.name,
-          securityVariableId: secVar.id,
-          displayName: headerDisplayNames[secVar.name] || secVar.displayName,
-        },
-      ];
-    }
-
-    // Create one entry per env var, looking up display name from metadata
-    return filteredEnvVars.map((envVar, index) => ({
-      id: `${secVar.id}-${index}`,
-      envVar: envVar,
-      securityVariableId: secVar.id,
-      // Look up the saved display name from headerDisplayNames map
-      displayName: headerDisplayNames[envVar] as string | undefined,
-    }));
-  });
-
-  return (
-    <PageSection
-      heading="Authorization Headers"
-      description="Customize how authorization headers are displayed to users. These friendly names will appear in MCP clients while the actual header names are used internally."
-    >
-      <Stack gap={2} className="max-w-2xl">
-        {envVarEntries?.map((entry) => (
-          <div
-            key={entry.id}
-            className="bg-stone-100 dark:bg-stone-900 p-1 rounded-md"
-          >
-            <BlockInner>
-              <Stack direction="horizontal" align="center" className="w-full">
-                <Stack className="flex-1 min-w-0">
-                  <Type small muted className="text-xs">
-                    Header: <span className="font-mono">{entry.envVar}</span>
-                  </Type>
-                  {editingId === entry.id ? (
-                    <Stack
-                      direction="horizontal"
-                      align="center"
-                      gap={2}
-                      className="mt-1"
-                    >
-                      <Input
-                        value={editValue}
-                        onChange={setEditValue}
-                        placeholder="Enter display name"
-                        className="flex-1"
-                        autoFocus
-                        onKeyDown={(e: React.KeyboardEvent) => {
-                          if (e.key === "Enter") {
-                            handleEditSave(entry.envVar);
-                          } else if (e.key === "Escape") {
-                            handleEditCancel();
-                          }
-                        }}
-                      />
-                      <Button
-                        variant="tertiary"
-                        size="sm"
-                        onClick={() => handleEditSave(entry.envVar)}
-                        disabled={updateDisplayNameMutation.isPending}
-                      >
-                        <Check className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="tertiary"
-                        size="sm"
-                        onClick={handleEditCancel}
-                        disabled={updateDisplayNameMutation.isPending}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </Stack>
-                  ) : (
-                    <Stack direction="horizontal" align="center" gap={2}>
-                      <Type className="font-medium">
-                        {entry.displayName ||
-                          entry.envVar.replace(/_/g, "-") ||
-                          "Unknown"}
-                      </Type>
-                      {entry.displayName &&
-                        entry.displayName !==
-                          entry.envVar.replace(/_/g, "-") && (
-                          <Badge variant="neutral" className="text-xs">
-                            renamed
-                          </Badge>
-                        )}
-                    </Stack>
-                  )}
-                </Stack>
-                {editingId !== entry.id && (
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={() =>
-                      handleEditStart(
-                        entry.id,
-                        entry.displayName,
-                        entry.envVar.replace(/_/g, "-"),
-                      )
-                    }
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                )}
-              </Stack>
-            </BlockInner>
-          </div>
-        ))}
-      </Stack>
-    </PageSection>
   );
 }
 
@@ -1144,9 +1516,10 @@ function OAuthDetailsModal({
                       })
                     }
                   >
-                    <Button.Icon>
+                    <Button.LeftIcon>
                       <Trash2 className="w-4 h-4" />
-                    </Button.Icon>
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Remove OAuth</Button.Text>
                   </Button>
                 </div>
                 <Stack gap={2} className="pl-4">

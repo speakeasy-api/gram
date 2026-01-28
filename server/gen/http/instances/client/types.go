@@ -30,6 +30,8 @@ type GetInstanceResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The external MCP header definitions that are relevant to the toolset
+	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The MCP servers that are relevant to the toolset
 	McpServers []*InstanceMcpServerResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 }
@@ -549,6 +551,23 @@ type FunctionEnvironmentVariableResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
+// ExternalMCPHeaderDefinitionResponseBody is used to define fields on response
+// body types.
+type ExternalMCPHeaderDefinitionResponseBody struct {
+	// The prefixed environment variable name (e.g., SLACK_X_API_KEY)
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The actual HTTP header name to send (e.g., X-Api-Key)
+	HeaderName *string `form:"header_name,omitempty" json:"header_name,omitempty" xml:"header_name,omitempty"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Placeholder value for the header
+	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
+	// Whether the header is required
+	Required *bool `form:"required,omitempty" json:"required,omitempty" xml:"required,omitempty"`
+	// Whether the header value is secret
+	Secret *bool `form:"secret,omitempty" json:"secret,omitempty" xml:"secret,omitempty"`
+}
+
 // InstanceMcpServerResponseBody is used to define fields on response body
 // types.
 type InstanceMcpServerResponseBody struct {
@@ -609,6 +628,16 @@ func NewGetInstanceResultOK(body *GetInstanceResponseBody) *instances.GetInstanc
 				continue
 			}
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
+		}
+	}
+	if body.ExternalMcpHeaderDefinitions != nil {
+		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
+		for i, val := range body.ExternalMcpHeaderDefinitions {
+			if val == nil {
+				v.ExternalMcpHeaderDefinitions[i] = nil
+				continue
+			}
+			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	v.McpServers = make([]*instances.InstanceMcpServer, len(body.McpServers))
@@ -816,6 +845,13 @@ func ValidateGetInstanceResponseBody(body *GetInstanceResponseBody) (err error) 
 	for _, e := range body.FunctionEnvironmentVariables {
 		if e != nil {
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ExternalMcpHeaderDefinitions {
+		if e != nil {
+			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -1484,6 +1520,24 @@ func ValidateServerVariableResponseBody(body *ServerVariableResponseBody) (err e
 func ValidateFunctionEnvironmentVariableResponseBody(body *FunctionEnvironmentVariableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateExternalMCPHeaderDefinitionResponseBody runs the validations defined
+// on ExternalMCPHeaderDefinitionResponseBody
+func ValidateExternalMCPHeaderDefinitionResponseBody(body *ExternalMCPHeaderDefinitionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.HeaderName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("header_name", "body"))
+	}
+	if body.Required == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required", "body"))
+	}
+	if body.Secret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("secret", "body"))
 	}
 	return
 }

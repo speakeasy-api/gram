@@ -11,25 +11,28 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments/repo"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 // EnvironmentEntries should be directly accessed through this interface to handle encryption and redaction.
 type EnvironmentEntries struct {
-	logger *slog.Logger
-	repo   *repo.Queries
-	enc    *encryption.Client
+	logger          *slog.Logger
+	repo            *repo.Queries
+	enc             *encryption.Client
+	mcpMetadataRepo *mcpmetadata_repo.Queries
 }
 
-func NewEnvironmentEntries(logger *slog.Logger, db repo.DBTX, enc *encryption.Client) *EnvironmentEntries {
+func NewEnvironmentEntries(logger *slog.Logger, db repo.DBTX, enc *encryption.Client, mcpMetadataRepo *mcpmetadata_repo.Queries) *EnvironmentEntries {
 	return &EnvironmentEntries{
-		logger: logger,
-		repo:   repo.New(db),
-		enc:    enc,
+		logger:          logger,
+		repo:            repo.New(db),
+		enc:             enc,
+		mcpMetadataRepo: mcpMetadataRepo,
 	}
 }
 
-func (e *EnvironmentEntries) Load(ctx context.Context, projectID uuid.UUID, envIDOrSlug gateway.SlugOrID) (map[string]string, error) {
+func (e *EnvironmentEntries) Load(ctx context.Context, projectID uuid.UUID, envIDOrSlug toolconfig.SlugOrID) (map[string]string, error) {
 	environmentID := envIDOrSlug.ID
 	if envIDOrSlug.IsEmpty() {
 		return nil, fmt.Errorf("environment id or slug is required")
@@ -42,7 +45,7 @@ func (e *EnvironmentEntries) Load(ctx context.Context, projectID uuid.UUID, envI
 		})
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return nil, gateway.ErrNotFound
+			return nil, toolconfig.ErrNotFound
 		case err != nil:
 			return nil, fmt.Errorf("get environment by slug: %w", err)
 		}
@@ -98,7 +101,7 @@ func (e *EnvironmentEntries) LoadToolsetEnv(ctx context.Context, projectID uuid.
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return map[string]string{}, nil
+			return nil, nil
 		}
 		return nil, fmt.Errorf("get environment for toolset: %w", err)
 	}
@@ -115,28 +118,85 @@ func (e *EnvironmentEntries) LoadToolsetEnv(ctx context.Context, projectID uuid.
 	return envMap, nil
 }
 
-// LoadSystemEnv loads and merges source and toolset environments.
-// Merges in order: source env (base) -> toolset env (override).
-// Returns empty map if neither environment exists.
-func (e *EnvironmentEntries) LoadSystemEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, sourceKind string, sourceSlug string) (*gateway.CaseInsensitiveEnv, error) {
-	// Load source environment (tool-specific)
+// LoadMCPAttachedEnvironment loads the environment variables that are attached to the MCP.
+// It uses the mcp_environment_entries table to determine which variables to load from the default environment.
+func (e *EnvironmentEntries) LoadMCPAttachedEnvironment(
+	ctx context.Context,
+	projectID uuid.UUID,
+	toolsetID uuid.UUID,
+) (map[string]string, error) {
+	mcpMetadata, err := e.mcpMetadataRepo.GetMetadataForToolset(ctx, toolsetID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return map[string]string{}, nil
+		}
+		return nil, fmt.Errorf("get metadata for toolset: %w", err)
+	}
+
+	// Get the list of variables configured for this MCP
+	mcpEnvConfigs, err := e.mcpMetadataRepo.ListEnvironmentConfigs(ctx, mcpMetadata.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list mcp environment configs: %w", err)
+	}
+
+	// If no default environment is set, or no entries are configured, return empty map
+	if !mcpMetadata.DefaultEnvironmentID.Valid || len(mcpEnvConfigs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	// Load the actual environment variable values from the default environment
+	entries, err := e.ListEnvironmentEntries(ctx, projectID, mcpMetadata.DefaultEnvironmentID.UUID, false)
+	if err != nil {
+		return nil, fmt.Errorf("list environment entries: %w", err)
+	}
+
+	// Create a set of variable names that should be included
+	includeVars := make(map[string]bool, len(mcpEnvConfigs))
+	for _, mcpConfig := range mcpEnvConfigs {
+		if mcpConfig.ProvidedBy == "system" {
+			includeVars[mcpConfig.VariableName] = true
+		}
+	}
+
+	// Build the environment map with only the variables configured for this MCP
+	envMap := make(map[string]string)
+	for _, entry := range entries {
+		if includeVars[entry.Name] {
+			envMap[entry.Name] = entry.Value
+		}
+	}
+
+	return envMap, nil
+}
+
+// LoadSystemEnv loads and merges source, toolset, and attached environments.
+// Merges in order: source env (base) -> toolset env -> attached env (highest priority).
+// Returns empty map if no environments exist.
+func (e *EnvironmentEntries) LoadSystemEnv(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, sourceKind string, sourceSlug string) (*toolconfig.CaseInsensitiveEnv, error) {
 	sourceEnv, err := e.LoadSourceEnv(ctx, projectID, sourceKind, sourceSlug)
 	if err != nil {
 		return nil, fmt.Errorf("load source environment: %w", err)
 	}
 
-	// Load toolset environment
 	toolsetEnv, err := e.LoadToolsetEnv(ctx, projectID, toolsetID)
 	if err != nil {
 		return nil, fmt.Errorf("load toolset environment: %w", err)
 	}
 
-	// Merge: source env (base) + toolset env (override)
-	systemEnv := gateway.NewCaseInsensitiveEnv()
+	attachedEnv, err := e.LoadMCPAttachedEnvironment(ctx, projectID, toolsetID)
+	if err != nil {
+		return nil, fmt.Errorf("load attached environment: %w", err)
+	}
+
+	// Merge: source env (base) + toolset env + attached env (highest priority)
+	systemEnv := toolconfig.NewCaseInsensitiveEnv()
 	for k, v := range sourceEnv {
 		systemEnv.Set(k, v)
 	}
 	for k, v := range toolsetEnv {
+		systemEnv.Set(k, v)
+	}
+	for k, v := range attachedEnv {
 		systemEnv.Set(k, v)
 	}
 

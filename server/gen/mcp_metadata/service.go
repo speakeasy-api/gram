@@ -71,9 +71,13 @@ type SetMcpMetadataPayload struct {
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string
 	// Server instructions returned in the MCP initialize response
-	Instructions     *string
-	SessionToken     *string
-	ProjectSlugInput *string
+	Instructions *string
+	// The default environment to load variables from
+	DefaultEnvironmentID *string
+	// The list of environment variables to configure for this MCP
+	EnvironmentConfigs []*types.McpEnvironmentConfigInput
+	SessionToken       *string
+	ProjectSlugInput   *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

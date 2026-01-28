@@ -111,8 +111,18 @@ type serverJSON struct {
 }
 
 type serverRemoteBasic struct {
-	URL  string `json:"url"`
-	Type string `json:"type"`
+	URL     string         `json:"url"`
+	Type    string         `json:"type"`
+	Headers []RemoteHeader `json:"headers"`
+}
+
+// RemoteHeader represents a header requirement from the registry.
+type RemoteHeader struct {
+	Name        string  `json:"name"`
+	IsSecret    bool    `json:"isSecret"`
+	IsRequired  bool    `json:"isRequired"`
+	Description *string `json:"description,omitempty"`
+	Placeholder *string `json:"placeholder,omitempty"`
 }
 
 type serverRemoteMeta struct {
@@ -228,6 +238,7 @@ type ServerDetails struct {
 	RemoteURL     string
 	TransportType externalmcptypes.TransportType
 	Tools         []serverTool
+	Headers       []RemoteHeader
 }
 
 // GetServerDetails fetches server details including the remote URL from the registry.
@@ -280,16 +291,19 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	var remoteURL string
 	var transportType externalmcptypes.TransportType
 	var tools []serverTool
+	var headers []RemoteHeader
 	var remoteIndex int
 	for i, remote := range serverResp.Server.Remotes {
 		if remote.Type == "streamable-http" {
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeStreamableHTTP
+			headers = remote.Headers
 			remoteIndex = i
 			break
 		} else if remote.Type == "sse" {
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeSSE
+			headers = remote.Headers
 			remoteIndex = i
 		}
 	}
@@ -315,5 +329,6 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		RemoteURL:     remoteURL,
 		TransportType: transportType,
 		Tools:         tools,
+		Headers:       headers,
 	}, nil
 }

@@ -3,6 +3,9 @@ import {
   ExternalMCPServerCard,
   ExternalMCPServerCardLoading,
 } from "@/components/sources/ExternalMCPServerCard";
+import { InfoField } from "@/components/sources/InfoField";
+import { ExternalMCPIllustration } from "@/components/sources/SourceCardIllustrations";
+import { useCatalogIconMap } from "@/components/sources/Sources";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
@@ -10,7 +13,8 @@ import {
   useLatestDeployment,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge, Stack } from "@speakeasy-api/moonshine";
+import { FileCode, Package, Server, Tag } from "lucide-react";
 import { useMemo } from "react";
 import { Navigate, useParams } from "react-router";
 
@@ -19,6 +23,7 @@ export default function ExternalMCPDetails() {
     sourceSlug: string;
   }>();
   const routes = useRoutes();
+  const catalogIconMap = useCatalogIconMap();
 
   const { data: deployment, isLoading: isLoadingDeployment } =
     useLatestDeployment();
@@ -57,74 +62,109 @@ export default function ExternalMCPDetails() {
         />
       </Page.Header>
 
-      <Page.Body>
-        {/* Header Section with Title and Actions */}
-        <div className="flex items-center justify-between mb-4 h-10">
-          <div className="flex items-center gap-2">
-            <Heading variant="h2" className="normal-case">
-              {source?.name || sourceSlug}
-            </Heading>
-            <Badge variant="neutral">External MCP</Badge>
+      <Page.Body fullWidth noPadding>
+        {/* Hero Header with Illustration - full width */}
+        <div className="relative w-full h-64 overflow-hidden">
+          <ExternalMCPIllustration
+            logoUrl={catalogIconMap.get(source?.registryServerSpecifier || "")}
+            name={source?.name}
+            className="scale-200"
+          />
+
+          {/* Overlay for text readability */}
+          <div className="absolute inset-0 bg-linear-to-t from-foreground/50 via-foreground/20 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
+            <Stack gap={2}>
+              <div className="flex items-center gap-3 ml-1">
+                <Heading variant="h1" className="text-background">
+                  {source?.name || sourceSlug}
+                </Heading>
+                <Badge variant="neutral">
+                  <Badge.Text>External MCP</Badge.Text>
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2 ml-1">
+                <Type className="max-w-2xl truncate text-background/70!">
+                  {source?.slug}
+                </Type>
+              </div>
+            </Stack>
           </div>
         </div>
 
-        <div className="space-y-6">
-          {/* Source Metadata Card */}
-          <div className="rounded-lg border bg-card p-6">
-            <Type as="h2" className="text-lg font-semibold mb-4">
-              Source Information
-            </Type>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">Name</Type>
-                <Type className="font-medium">{source?.name}</Type>
-              </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">Slug</Type>
-                <Type className="font-medium">{source?.slug}</Type>
-              </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">Type</Type>
-                <Type className="font-medium">External MCP</Type>
-              </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">
-                  Registry ID
-                </Type>
-                <Type className="font-medium">{source?.registryId}</Type>
-              </div>
-              <div className="col-span-2">
-                <Type className="text-sm text-muted-foreground mb-1">
-                  Server Specifier
-                </Type>
-                <Type className="font-medium">
-                  {source?.registryServerSpecifier}
+        {/* Content Section */}
+        <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+          <div className="space-y-6">
+            {/* Source Metadata Card */}
+            <div className="rounded-lg border bg-card overflow-hidden">
+              <div className="border-b bg-surface-secondary/30 px-6 py-4">
+                <Type as="h2" className="text-lg flex items-center gap-2">
+                  <FileCode className="h-5 w-5 text-muted-foreground" />
+                  Source Information
                 </Type>
               </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">
-                  Deployment
-                </Type>
-                {deployment?.deployment?.id ? (
-                  <routes.deployments.deployment.Link
-                    params={[deployment.deployment.id]}
-                    className="font-medium hover:underline"
-                  >
-                    {deployment.deployment.id.slice(0, 8)}
-                  </routes.deployments.deployment.Link>
-                ) : (
-                  <Type className="font-medium">None</Type>
-                )}
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <InfoField icon={Tag} label="Name" value={source?.name} />
+
+                  <InfoField
+                    icon={Tag}
+                    label="Slug"
+                    value={
+                      <Type className="font-mono text-sm">{source?.slug}</Type>
+                    }
+                  />
+
+                  <InfoField icon={Package} label="Type" value="External MCP" />
+
+                  <InfoField
+                    icon={Server}
+                    label="Registry ID"
+                    value={
+                      <Type className="font-mono text-sm">
+                        {source?.registryId}
+                      </Type>
+                    }
+                  />
+
+                  <InfoField
+                    icon={Server}
+                    label="Server Specifier"
+                    value={
+                      <Type className="font-mono text-sm break-all">
+                        {source?.registryServerSpecifier}
+                      </Type>
+                    }
+                    className="md:col-span-2"
+                  />
+
+                  <InfoField
+                    icon={Package}
+                    label="Deployment"
+                    value={
+                      deployment?.deployment?.id ? (
+                        <routes.deployments.deployment.Link
+                          params={[deployment.deployment.id]}
+                          className="hover:underline text-primary"
+                        >
+                          {deployment.deployment.id.slice(0, 8)}
+                        </routes.deployments.deployment.Link>
+                      ) : (
+                        <Type className="text-muted-foreground">None</Type>
+                      )
+                    }
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* MCP Server Relationship Card */}
-          {isLoadingToolsets ? (
-            <ExternalMCPServerCardLoading />
-          ) : associatedToolset !== undefined ? (
-            <ExternalMCPServerCard toolset={associatedToolset} />
-          ) : null}
+            {/* MCP Server Relationship Card */}
+            {isLoadingToolsets ? (
+              <ExternalMCPServerCardLoading />
+            ) : associatedToolset !== undefined ? (
+              <ExternalMCPServerCard toolset={associatedToolset} />
+            ) : null}
+          </div>
         </div>
       </Page.Body>
     </Page>

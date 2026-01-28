@@ -3,26 +3,45 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
+import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
 import { getServerURL } from "@/lib/utils";
+import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import {
   ExternalMCPToolDefinition,
-  Toolset,
+  Tool as GeneratedTool,
 } from "@gram/client/models/components";
+import {
+  useGetMcpMetadata,
+  useListEnvironments,
+} from "@gram/client/react-query";
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  environmentHasValue,
+  getValueForEnvironment,
+} from "../mcp/environmentVariableUtils";
+import { useEnvironmentVariables } from "../mcp/useEnvironmentVariables";
+
+interface PlaygroundAuthProps {
+  toolset: Toolset;
+  onUserProvidedHeadersChange?: (headers: Record<string, string>) => void;
+}
+
+const SECRET_FIELD_INDICATORS = ["SECRET", "KEY", "TOKEN", "PASSWORD"] as const;
+const PASSWORD_MASK = "••••••••";
 
 /**
  * Extract OAuth configuration from external MCP tools in the toolset.
  * Returns the first external MCP tool that requires OAuth, or undefined.
  */
 export function getExternalMcpOAuthConfig(
-  toolset: Toolset,
+  rawTools: GeneratedTool[],
 ): ExternalMCPToolDefinition | undefined {
-  for (const tool of toolset.tools ?? []) {
+  for (const tool of rawTools) {
     if (
       tool.externalMcpToolDefinition?.requiresOauth &&
       tool.externalMcpToolDefinition.oauthVersion !== "none"
@@ -33,21 +52,13 @@ export function getExternalMcpOAuthConfig(
   return undefined;
 }
 
-interface PlaygroundAuthProps {
-  toolset: Toolset;
-  environment?: {
-    slug: string;
-    entries?: Array<{ name: string; value: string }>;
-  };
-}
-
-const SECRET_FIELD_INDICATORS = ["SECRET", "KEY", "TOKEN", "PASSWORD"] as const;
-const PASSWORD_MASK = "••••••••";
-
 export function getAuthStatus(
   toolset: Pick<
     Toolset,
-    "securityVariables" | "serverVariables" | "functionEnvironmentVariables"
+    | "securityVariables"
+    | "serverVariables"
+    | "functionEnvironmentVariables"
+    | "externalMcpHeaderDefinitions"
   >,
   environment?: { entries?: Array<{ name: string; value: string }> },
 ): { hasMissingAuth: boolean; missingCount: number } {
@@ -62,6 +73,9 @@ export function getAuthStatus(
     ) ?? []),
     ...(toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ??
       []),
+    ...(toolset?.externalMcpHeaderDefinitions?.map(
+      (headerDef) => headerDef.name,
+    ) ?? []),
   ];
 
   const missingCount = relevantEnvVars.filter((varName) => {
@@ -80,10 +94,10 @@ export function getAuthStatus(
  * This handles OAuth 2.1 with Dynamic Client Registration (DCR).
  */
 function ExternalMcpOAuthConnection({
-  toolset,
+  toolsetId,
   mcpOAuthConfig,
 }: {
-  toolset: Toolset;
+  toolsetId: string;
   mcpOAuthConfig: ExternalMCPToolDefinition;
 }) {
   const queryClient = useQueryClient();
@@ -101,12 +115,12 @@ function ExternalMcpOAuthConnection({
     isLoading: statusLoading,
     refetch: refetchStatus,
   } = useQuery({
-    queryKey: ["mcpOauthStatus", toolset.id, mcpOAuthConfig.slug],
+    queryKey: ["mcpOauthStatus", toolsetId, mcpOAuthConfig.slug],
     queryFn: async () => {
       if (!issuer) return { status: "needs_auth" as const };
 
       const params = new URLSearchParams({
-        toolset_id: toolset.id,
+        toolset_id: toolsetId,
         issuer: issuer,
       });
 
@@ -144,7 +158,7 @@ function ExternalMcpOAuthConnection({
       if (!issuer) throw new Error("No issuer configured");
 
       const params = new URLSearchParams({
-        toolset_id: toolset.id,
+        toolset_id: toolsetId,
         issuer: issuer,
       });
 
@@ -165,7 +179,7 @@ function ExternalMcpOAuthConnection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["mcpOauthStatus", toolset.id, mcpOAuthConfig.slug],
+        queryKey: ["mcpOauthStatus", toolsetId, mcpOAuthConfig.slug],
       });
       toast.success(
         `Disconnected from ${mcpOAuthConfig.name || mcpOAuthConfig.slug}`,
@@ -181,7 +195,7 @@ function ExternalMcpOAuthConnection({
     if (!mcpOAuthConfig.oauthAuthorizationEndpoint) return;
 
     const params = new URLSearchParams({
-      toolset_id: toolset.id,
+      toolset_id: toolsetId,
       external_mcp_slug: mcpOAuthConfig.slug,
       redirect_uri: window.location.href.split("?")[0],
       // Pass session token for popup windows that don't share cookies
@@ -277,7 +291,13 @@ function ExternalMcpOAuthConnection({
 /**
  * OAuth connection status component for external OAuth servers (legacy path)
  */
-function OAuthConnection({ toolset }: { toolset: Toolset }) {
+function OAuthConnection({
+  toolsetId,
+  toolset,
+}: {
+  toolsetId: string;
+  toolset: Toolset;
+}) {
   const session = useSession();
   const queryClient = useQueryClient();
   const apiUrl = getServerURL();
@@ -292,12 +312,12 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
 
   // Query OAuth status
   const { data: oauthStatus, isLoading: statusLoading } = useQuery({
-    queryKey: ["oauthStatus", toolset.id, issuer],
+    queryKey: ["oauthStatus", toolsetId, issuer],
     queryFn: async () => {
       if (!issuer) return null;
 
       const params = new URLSearchParams({
-        toolset_id: toolset.id,
+        toolset_id: toolsetId,
         issuer: issuer,
       });
 
@@ -334,7 +354,7 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
       if (!issuer) throw new Error("No issuer configured");
 
       const params = new URLSearchParams({
-        toolset_id: toolset.id,
+        toolset_id: toolsetId,
         issuer: issuer,
       });
 
@@ -354,7 +374,7 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["oauthStatus", toolset.id, issuer],
+        queryKey: ["oauthStatus", toolsetId, issuer],
       });
       toast.success("Disconnected from OAuth provider");
     },
@@ -368,7 +388,7 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
     if (!issuer) return;
 
     const params = new URLSearchParams({
-      toolset_id: toolset.id,
+      toolset_id: toolsetId,
       issuer: issuer,
       redirect_uri: window.location.href.split("?")[0],
     });
@@ -393,7 +413,7 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
       if (popup.closed) {
         clearInterval(pollTimer);
         queryClient.invalidateQueries({
-          queryKey: ["oauthStatus", toolset.id, issuer],
+          queryKey: ["oauthStatus", toolsetId, issuer],
         });
       }
     }, 500);
@@ -461,7 +481,10 @@ function OAuthConnection({ toolset }: { toolset: Toolset }) {
   );
 }
 
-export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
+export function PlaygroundAuth({
+  toolset,
+  onUserProvidedHeadersChange,
+}: PlaygroundAuthProps) {
   const routes = useRoutes();
 
   // Check if toolset has external OAuth configured (legacy path)
@@ -469,35 +492,63 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
 
   // Check if toolset has external MCP tools that require OAuth (MCP protocol discovery)
   const mcpOAuthConfig = useMemo(
-    () => getExternalMcpOAuthConfig(toolset),
-    [toolset],
+    () => getExternalMcpOAuthConfig(toolset.rawTools),
+    [toolset.rawTools],
   );
   const hasExternalMcpOAuth = !!mcpOAuthConfig;
 
-  const relevantEnvVars = useMemo(() => {
-    const securityVars =
-      toolset?.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
-      [];
-    // In playground, always filter out server_url variables since they can't be configured here
-    const serverVars =
-      toolset?.serverVariables?.flatMap((serverVar) =>
-        serverVar.envVariables.filter(
-          (v) => !v.toLowerCase().includes("server_url"),
-        ),
-      ) ?? [];
-    const functionEnvVars =
-      toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? [];
+  // Use the same environment data fetching as MCPAuthenticationTab
+  const { data: environmentsData } = useListEnvironments();
+  const environments = environmentsData?.environments ?? [];
 
-    return [...securityVars, ...serverVars, ...functionEnvVars];
-  }, [
-    toolset?.securityVariables,
-    toolset?.serverVariables,
-    toolset.functionEnvironmentVariables,
-  ]);
+  const { data: mcpMetadataData } = useGetMcpMetadata(
+    { toolsetSlug: toolset.slug },
+    undefined,
+    {
+      throwOnError: false,
+      retry: false,
+    },
+  );
+  const mcpMetadata = mcpMetadataData?.metadata;
+  const defaultEnvironmentSlug =
+    environments.find((env) => env.id === mcpMetadata?.defaultEnvironmentId)
+      ?.slug ?? "default";
+
+  // Load environment variables using the same hook as MCPAuthenticationTab
+  const envVars = useEnvironmentVariables(toolset, environments, mcpMetadata);
+
+  // Track user-provided header values
+  const [userProvidedValues, setUserProvidedValues] = useState<
+    Record<string, string>
+  >({});
+
+  // Calculate missing required variables using the same hook as MCPAuthenticationTab
+  const missingRequiredCount = useMissingRequiredEnvVars(
+    toolset,
+    environments,
+    defaultEnvironmentSlug,
+    mcpMetadata,
+  );
+
+  // Notify parent component when user-provided values change
+  useEffect(() => {
+    if (onUserProvidedHeadersChange) {
+      // Build headers object with MCP- prefix and proper header names
+      const headers: Record<string, string> = {};
+      Object.entries(userProvidedValues).forEach(([varKey, value]) => {
+        if (value.trim()) {
+          // Use MCP- prefix with the header name
+          const headerKey = `MCP-${varKey.replace(/\s+/g, "-").replace(/_/g, "-")}`;
+          headers[headerKey] = value;
+        }
+      });
+      onUserProvidedHeadersChange(headers);
+    }
+  }, [userProvidedValues, onUserProvidedHeadersChange, mcpMetadata]);
 
   // Show "no auth required" only if there are no env vars AND no OAuth of any kind
   if (
-    relevantEnvVars.length === 0 &&
+    envVars.length === 0 &&
     !hasExternalOAuth &&
     !hasExternalMcpOAuth
   ) {
@@ -515,61 +566,96 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
       {/* External MCP OAuth Connection UI (discovered via MCP protocol) */}
       {hasExternalMcpOAuth && mcpOAuthConfig && (
         <ExternalMcpOAuthConnection
-          toolset={toolset}
+          toolsetId={toolset.id}
           mcpOAuthConfig={mcpOAuthConfig}
         />
       )}
 
       {/* External OAuth Connection UI (legacy path) */}
       {hasExternalOAuth && !hasExternalMcpOAuth && (
-        <OAuthConnection toolset={toolset} />
+        <OAuthConnection toolsetId={toolset.id} toolset={toolset} />
       )}
 
       {/* Environment Variables */}
-      {relevantEnvVars.map((varName) => {
-        const entry =
-          environment?.entries?.find((e) => e.name === varName) ?? null;
-        const isSecret = SECRET_FIELD_INDICATORS.some((indicator) =>
-          varName.toUpperCase().includes(indicator),
+      {envVars.map((envVar) => {
+        // Use the same utilities as MCPAuthenticationTab to get values
+        const hasValue = environmentHasValue(envVar, defaultEnvironmentSlug);
+        const value = getValueForEnvironment(envVar, defaultEnvironmentSlug);
+
+        // Get header display name override if it exists
+        const envConfig = mcpMetadata?.environmentConfigs?.find(
+          (config) => config.variableName === envVar.key,
         );
-        const hasExistingValue =
-          entry?.value != null && entry.value.trim() !== "";
-        const displayValue = hasExistingValue
-          ? isSecret
-            ? PASSWORD_MASK
-            : entry.value
-          : "";
+        const displayName = envConfig?.headerDisplayName || envVar.key;
+
+        // Determine if this is a secret field
+        const isSecret = SECRET_FIELD_INDICATORS.some((indicator) =>
+          envVar.key.toUpperCase().includes(indicator),
+        );
+
+        // Determine display value and editability based on state
+        let displayValue = "";
+        let placeholder = "Not set";
+        let isEditable = false;
+
+        if (envVar.state === "user-provided") {
+          displayValue = userProvidedValues[envVar.key] || "";
+          placeholder = "Enter value here";
+          isEditable = true;
+        } else if (envVar.state === "omitted") {
+          displayValue = "";
+          placeholder = "Omitted";
+          isEditable = false;
+        } else if (envVar.state === "system" && hasValue && value) {
+          displayValue = isSecret ? PASSWORD_MASK : value;
+          placeholder = "Configured";
+          isEditable = false;
+        }
 
         return (
-          <div key={varName} className="space-y-1.5">
-            <Label htmlFor={`auth-${varName}`} className="text-xs font-medium">
-              {varName}
+          <div key={envVar.id} className="space-y-1.5">
+            <Label
+              htmlFor={`auth-${envVar.id}`}
+              className="text-xs font-medium"
+            >
+              {displayName}
             </Label>
             <Input
-              id={`auth-${varName}`}
+              id={`auth-${envVar.id}`}
               value={displayValue}
-              placeholder={hasExistingValue ? "Configured" : "Not set"}
+              onChange={(newValue) => {
+                if (isEditable) {
+                  setUserProvidedValues((prev) => ({
+                    ...prev,
+                    [envVar.key]: newValue,
+                  }));
+                }
+              }}
+              placeholder={placeholder}
               type={isSecret ? "password" : "text"}
               className="font-mono text-xs h-7"
-              readOnly
-              disabled
+              readOnly={!isEditable}
+              disabled={!isEditable}
             />
           </div>
         );
       })}
-
-      {relevantEnvVars.length > 0 && (
-        <Type variant="small" className="text-muted-foreground pt-2">
-          Configure auth in the{" "}
-          <routes.toolsets.toolset.Link
-            params={[toolset.slug]}
-            hash="auth"
-            className="underline hover:text-foreground"
-          >
-            toolset settings
-          </routes.toolsets.toolset.Link>
+      {missingRequiredCount > 0 && (
+        <Type variant="small" className="text-warning pt-2">
+          {missingRequiredCount} required variable
+          {missingRequiredCount !== 1 ? "s" : ""} not configured
         </Type>
       )}
+      <Type variant="small" className="text-muted-foreground pt-2">
+        Configure auth in the{" "}
+        <routes.mcp.details.Link
+          params={[toolset.slug]}
+          hash="authentication"
+          className="underline hover:text-foreground"
+        >
+          MCP settings
+        </routes.mcp.details.Link>
+      </Type>
     </div>
   );
 }

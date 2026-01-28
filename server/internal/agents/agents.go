@@ -26,6 +26,7 @@ import (
 	env_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -540,14 +541,15 @@ func (s *Service) ExecuteTool(
 		statusCode: http.StatusOK,
 	}
 
-	ciEnv := gateway.NewCaseInsensitiveEnv()
+	ciEnv := toolconfig.NewCaseInsensitiveEnv()
 	for _, entry := range environmentEntries {
 		ciEnv.Set(entry.Name, entry.Value)
 	}
 
-	err = s.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), gateway.ToolCallEnv{
-		SystemEnv:  gateway.CIEnvFrom(systemConfig),
+	err = s.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.CIEnvFrom(systemConfig),
 		UserConfig: ciEnv,
+		OAuthToken: "", // Agents do not support OAuth tokens for external MCP
 	}, plan, tm.HTTPLogAttributes{})
 	if err != nil {
 		return "", fmt.Errorf("tool proxy error: %w", err)

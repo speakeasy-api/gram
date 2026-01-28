@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -96,7 +97,8 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	enc := testenv.NewEncryptionClient(t)
-	env := environments.NewEnvironmentEntries(logger, conn, enc)
+	mcpMetadataRepo := mcpmetadata_repo.New(conn)
+	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	guardianPolicy := guardian.NewDefaultPolicy()
@@ -186,7 +188,8 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	require.NoError(t, err)
 
 	enc := testenv.NewEncryptionClient(t)
-	env := environments.NewEnvironmentEntries(logger, conn, enc)
+	mcpMetadataRepo := mcpmetadata_repo.New(conn)
+	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	guardianPolicy := guardian.NewDefaultPolicy()

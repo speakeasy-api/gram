@@ -474,16 +474,54 @@ func marshalTypesMcpMetadataToMcpMetadataResponseBody(v *types.McpMetadata) *Mcp
 		LogoAssetID:              v.LogoAssetID,
 		ExternalDocumentationURL: v.ExternalDocumentationURL,
 		Instructions:             v.Instructions,
+		DefaultEnvironmentID:     v.DefaultEnvironmentID,
 		CreatedAt:                v.CreatedAt,
 		UpdatedAt:                v.UpdatedAt,
 	}
-	if v.HeaderDisplayNames != nil {
-		res.HeaderDisplayNames = make(map[string]string, len(v.HeaderDisplayNames))
-		for key, val := range v.HeaderDisplayNames {
-			tk := key
-			tv := val
-			res.HeaderDisplayNames[tk] = tv
+	if v.EnvironmentConfigs != nil {
+		res.EnvironmentConfigs = make([]*McpEnvironmentConfigResponseBody, len(v.EnvironmentConfigs))
+		for i, val := range v.EnvironmentConfigs {
+			if val == nil {
+				res.EnvironmentConfigs[i] = nil
+				continue
+			}
+			res.EnvironmentConfigs[i] = marshalTypesMcpEnvironmentConfigToMcpEnvironmentConfigResponseBody(val)
 		}
+	}
+
+	return res
+}
+
+// marshalTypesMcpEnvironmentConfigToMcpEnvironmentConfigResponseBody builds a
+// value of type *McpEnvironmentConfigResponseBody from a value of type
+// *types.McpEnvironmentConfig.
+func marshalTypesMcpEnvironmentConfigToMcpEnvironmentConfigResponseBody(v *types.McpEnvironmentConfig) *McpEnvironmentConfigResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &McpEnvironmentConfigResponseBody{
+		ID:                v.ID,
+		VariableName:      v.VariableName,
+		HeaderDisplayName: v.HeaderDisplayName,
+		ProvidedBy:        v.ProvidedBy,
+		CreatedAt:         v.CreatedAt,
+		UpdatedAt:         v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput
+// builds a value of type *types.McpEnvironmentConfigInput from a value of type
+// *McpEnvironmentConfigInputRequestBody.
+func unmarshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput(v *McpEnvironmentConfigInputRequestBody) *types.McpEnvironmentConfigInput {
+	if v == nil {
+		return nil
+	}
+	res := &types.McpEnvironmentConfigInput{
+		VariableName:      *v.VariableName,
+		HeaderDisplayName: v.HeaderDisplayName,
+		ProvidedBy:        *v.ProvidedBy,
 	}
 
 	return res

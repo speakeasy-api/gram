@@ -13,7 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -53,7 +53,7 @@ func (p *CustomProvider) ExchangeToken(
 
 	// Fallback to environment if credentials are missing and environment is specified
 	if (clientID == "" || clientSecret == "") && secrets["environment_slug"] != "" {
-		envMap, err := p.environments.Load(ctx, toolset.ProjectID, gateway.Slug(secrets["environment_slug"]))
+		envMap, err := p.environments.Load(ctx, toolset.ProjectID, toolconfig.Slug(secrets["environment_slug"]))
 		if err != nil {
 			p.logger.ErrorContext(ctx, "failed to load environment",
 				attr.SlogOAuthProvider(provider.Slug),

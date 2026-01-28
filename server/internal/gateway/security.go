@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 func processSecurity(
@@ -29,12 +30,12 @@ func processSecurity(
 	tool *ToolDescriptor,
 	plan *HTTPToolCallPlan,
 	cacheImpl cache.Cache,
-	env ToolCallEnv,
+	env toolconfig.ToolCallEnv,
 	serverURL string,
 	attrRecorder tm.HTTPLogAttributes,
 ) bool {
 	// Merge: system env is base, user config overrides
-	mergedEnv := NewCaseInsensitiveEnv()
+	mergedEnv := toolconfig.NewCaseInsensitiveEnv()
 	for k, v := range env.SystemEnv.All() {
 		mergedEnv.Set(k, v)
 	}
@@ -241,7 +242,7 @@ type clientCredentialsTokenResponseCamelCase struct {
 	ExpiresIn   int    `json:"expiresIn"`
 }
 
-func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, mergedEnv *CaseInsensitiveEnv, serverURL string) (string, error) {
+func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, mergedEnv *toolconfig.CaseInsensitiveEnv, serverURL string) (string, error) {
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { toolsetsUpdateSecurityVariableDisplayName } from "../funcs/toolsetsUpdateSecurityVariableDisplayName.js";
+import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -28,16 +28,16 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type UpdateSecurityVariableDisplayNameMutationVariables = {
-  request: operations.UpdateSecurityVariableDisplayNameRequest;
-  security?: operations.UpdateSecurityVariableDisplayNameSecurity | undefined;
+export type GetProjectMetricsSummaryMutationVariables = {
+  request: operations.GetProjectMetricsSummaryRequest;
+  security?: operations.GetProjectMetricsSummarySecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpdateSecurityVariableDisplayNameMutationData =
-  components.SecurityVariable;
+export type GetProjectMetricsSummaryMutationData =
+  components.GetMetricsSummaryResult;
 
-export type UpdateSecurityVariableDisplayNameMutationError =
+export type GetProjectMetricsSummaryMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -49,49 +49,49 @@ export type UpdateSecurityVariableDisplayNameMutationError =
   | SDKValidationError;
 
 /**
- * updateSecurityVariableDisplayName toolsets
+ * getProjectMetricsSummary telemetry
  *
  * @remarks
- * Update the display name of a security variable for user-friendly presentation
+ * Get aggregated metrics summary for an entire project
  */
-export function useUpdateSecurityVariableDisplayNameMutation(
+export function useGetProjectMetricsSummaryMutation(
   options?: MutationHookOptions<
-    UpdateSecurityVariableDisplayNameMutationData,
-    UpdateSecurityVariableDisplayNameMutationError,
-    UpdateSecurityVariableDisplayNameMutationVariables
+    GetProjectMetricsSummaryMutationData,
+    GetProjectMetricsSummaryMutationError,
+    GetProjectMetricsSummaryMutationVariables
   >,
 ): UseMutationResult<
-  UpdateSecurityVariableDisplayNameMutationData,
-  UpdateSecurityVariableDisplayNameMutationError,
-  UpdateSecurityVariableDisplayNameMutationVariables
+  GetProjectMetricsSummaryMutationData,
+  GetProjectMetricsSummaryMutationError,
+  GetProjectMetricsSummaryMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildUpdateSecurityVariableDisplayNameMutation(client, options),
+    ...buildGetProjectMetricsSummaryMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyUpdateSecurityVariableDisplayName(): MutationKey {
-  return ["@gram/client", "toolsets", "updateSecurityVariableDisplayName"];
+export function mutationKeyGetProjectMetricsSummary(): MutationKey {
+  return ["@gram/client", "telemetry", "getProjectMetricsSummary"];
 }
 
-export function buildUpdateSecurityVariableDisplayNameMutation(
+export function buildGetProjectMetricsSummaryMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: UpdateSecurityVariableDisplayNameMutationVariables,
-  ) => Promise<UpdateSecurityVariableDisplayNameMutationData>;
+    variables: GetProjectMetricsSummaryMutationVariables,
+  ) => Promise<GetProjectMetricsSummaryMutationData>;
 } {
   return {
-    mutationKey: mutationKeyUpdateSecurityVariableDisplayName(),
-    mutationFn: function updateSecurityVariableDisplayNameMutationFn({
+    mutationKey: mutationKeyGetProjectMetricsSummary(),
+    mutationFn: function getProjectMetricsSummaryMutationFn({
       request,
       security,
       options,
-    }): Promise<UpdateSecurityVariableDisplayNameMutationData> {
+    }): Promise<GetProjectMetricsSummaryMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -104,7 +104,7 @@ export function buildUpdateSecurityVariableDisplayNameMutation(
           ),
         },
       };
-      return unwrapAsync(toolsetsUpdateSecurityVariableDisplayName(
+      return unwrapAsync(telemetryGetProjectMetricsSummary(
         client$,
         request,
         security,

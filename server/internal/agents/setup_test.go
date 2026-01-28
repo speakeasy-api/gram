@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -111,7 +112,8 @@ func newTestAgentsService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	// Create environment entries
-	env := environments.NewEnvironmentEntries(logger, conn, enc)
+	mcpMetadataRepo := mcpmetadata_repo.New(conn)
+	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 
 	// Create cache
 	cacheImpl := cache.NewRedisCacheAdapter(redisClient)

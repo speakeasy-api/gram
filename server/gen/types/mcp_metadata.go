@@ -20,8 +20,10 @@ type McpMetadata struct {
 	ExternalDocumentationURL *string
 	// Server instructions returned in the MCP initialize response
 	Instructions *string
-	// Maps security scheme keys to user-friendly display names
-	HeaderDisplayNames map[string]string
+	// The default environment to load variables from
+	DefaultEnvironmentID *string
+	// The list of environment variables configured for this MCP
+	EnvironmentConfigs []*McpEnvironmentConfig
 	// When the metadata entry was created
 	CreatedAt string
 	// When the metadata entry was last updated

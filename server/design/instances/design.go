@@ -64,6 +64,7 @@ var GetInstanceResult = Type("GetInstanceResult", func() {
 	Attribute("security_variables", ArrayOf(shared.SecurityVariable), "The security variables that are relevant to the toolset")
 	Attribute("server_variables", ArrayOf(shared.ServerVariable), "The server variables that are relevant to the toolset")
 	Attribute("function_environment_variables", ArrayOf(shared.FunctionEnvironmentVariable), "The function environment variables that are relevant to the toolset")
+	Attribute("external_mcp_header_definitions", ArrayOf(shared.ExternalMCPHeaderDefinition), "The external MCP header definitions that are relevant to the toolset")
 	Attribute("mcp_servers", ArrayOf(InstanceMcpServer), "The MCP servers that are relevant to the toolset")
 	Required("name", "tools", "mcp_servers")
 })

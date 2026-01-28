@@ -17,6 +17,20 @@ interface ServerMeta {
     publishedAt?: string;
     updatedAt?: string;
     isLatest?: boolean;
+    "remotes[0]"?: {
+      tools?: Array<{
+        name: string;
+        description?: string;
+        annotations?: {
+          title?: string;
+          readOnlyHint?: boolean;
+          destructiveHint?: boolean;
+        };
+      }>;
+      auth?: {
+        type?: string;
+      };
+    };
   };
 }
 
@@ -52,5 +66,6 @@ export function useInfiniteListMCPCatalog(
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
+    staleTime: 5 * 60 * 1000, // 5 minutes - won't refetch if data is fresh
   });
 }

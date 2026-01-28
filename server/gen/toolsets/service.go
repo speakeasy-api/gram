@@ -37,8 +37,6 @@ type Service interface {
 	RemoveOAuthServer(context.Context, *RemoveOAuthServerPayload) (res *types.Toolset, err error)
 	// Associate an OAuth proxy server with a toolset (admin only)
 	AddOAuthProxyServer(context.Context, *AddOAuthProxyServerPayload) (res *types.Toolset, err error)
-	// Update the display name of a security variable for user-friendly presentation
-	UpdateSecurityVariableDisplayName(context.Context, *UpdateSecurityVariableDisplayNamePayload) (res *types.SecurityVariable, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -61,7 +59,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateSecurityVariableDisplayName"}
+var MethodNames = [10]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -167,22 +165,6 @@ type RemoveOAuthServerPayload struct {
 	Slug             types.Slug
 	SessionToken     *string
 	ApikeyToken      *string
-	ProjectSlugInput *string
-}
-
-// UpdateSecurityVariableDisplayNamePayload is the payload type of the toolsets
-// service updateSecurityVariableDisplayName method.
-type UpdateSecurityVariableDisplayNamePayload struct {
-	SessionToken *string
-	ApikeyToken  *string
-	// The slug of the toolset containing the security variable
-	ToolsetSlug types.Slug
-	// The security scheme key (e.g., 'BearerAuth', 'ApiKeyAuth') from the OpenAPI
-	// spec
-	SecurityKey string
-	// The user-friendly display name. Set to empty string to clear and use the
-	// original name.
-	DisplayName      string
 	ProjectSlugInput *string
 }
 

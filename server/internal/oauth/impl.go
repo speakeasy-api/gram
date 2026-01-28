@@ -33,7 +33,7 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/providers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -288,7 +288,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 		// Fallback to environment if client_id is missing and environment is specified
 		if clientID == "" && secrets["environment_slug"] != "" {
-			envMap, err := s.environments.Load(ctx, toolset.ProjectID, gateway.Slug(secrets["environment_slug"]))
+			envMap, err := s.environments.Load(ctx, toolset.ProjectID, toolconfig.Slug(secrets["environment_slug"]))
 			if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
 			}

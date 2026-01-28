@@ -3,6 +3,7 @@
  */
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
+import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -23,6 +24,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CaptureEventResult> {
     return unwrapAsync(telemetryCaptureEvent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getProjectMetricsSummary telemetry
+   *
+   * @remarks
+   * Get aggregated metrics summary for an entire project
+   */
+  async getProjectMetricsSummary(
+    request: operations.GetProjectMetricsSummaryRequest,
+    security?: operations.GetProjectMetricsSummarySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetMetricsSummaryResult> {
+    return unwrapAsync(telemetryGetProjectMetricsSummary(
       this,
       request,
       security,

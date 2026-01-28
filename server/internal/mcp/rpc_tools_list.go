@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -12,11 +13,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	temporal_client "go.temporal.io/sdk/client"
 )
 
@@ -35,6 +39,7 @@ func handleToolsList(
 	ctx context.Context,
 	logger *slog.Logger,
 	db *pgxpool.Pool,
+	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
 	req *rawRequest,
 	productMetrics *posthog.Posthog,
@@ -77,15 +82,9 @@ func handleToolsList(
 	case ToolModeStatic:
 		fallthrough
 	default:
-		tools = buildToolListEntries(toolset.Tools)
-
-		// Unfold proxy tools from external MCP servers
-		unfoldedTools, err := unfoldExternalMCPTools(ctx, logger, toolset.Tools, payload.oauthTokenInputs)
+		tools, err = buildToolListEntries(ctx, logger, db, env, payload, toolset)
 		if err != nil {
-			logger.WarnContext(ctx, "failed to unfold external MCP tools", attr.SlogError(err))
-			// Continue with regular tools even if unfolding fails
-		} else {
-			tools = append(tools, unfoldedTools...)
+			return nil, err
 		}
 	}
 
@@ -104,65 +103,74 @@ func handleToolsList(
 	return bs, nil
 }
 
-func buildToolListEntries(tools []*types.Tool) []*toolListEntry {
-	result := make([]*toolListEntry, 0, len(tools))
-	for _, tool := range tools {
-		if entry := toolToListEntry(tool); entry != nil {
-			result = append(result, entry)
-		}
-	}
-	return result
-}
+func buildToolListEntries(
+	ctx context.Context,
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	envLoader toolconfig.EnvironmentLoader,
+	payload *mcpInputs,
+	toolset *types.Toolset,
+) ([]*toolListEntry, error) {
+	toolsetHelpers := toolsets.NewToolsets(db)
 
-func unfoldExternalMCPTools(ctx context.Context, logger *slog.Logger, tools []*types.Tool, tokenInputs []oauthTokenInputs) ([]*toolListEntry, error) {
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").Log(ctx, logger)
+	}
+
+	userConfig := toolconfig.CIEnvFrom(payload.mcpEnvVariables)
+
+	// Extract OAuth token for external MCP servers (token with no security keys = general token)
 	var oauthToken string
-	for _, t := range tokenInputs {
+	for _, t := range payload.oauthTokenInputs {
 		if len(t.securityKeys) == 0 && t.Token != "" {
 			oauthToken = t.Token
 			break
 		}
 	}
 
-	var result []*toolListEntry
+	var tools []*toolListEntry
 
-	for _, tool := range tools {
-		if !conv.IsProxyTool(tool) {
-			continue
-		}
-
-		externalMcpTool := tool.ExternalMcpToolDefinition
-
-		var opts *externalmcp.ClientOptions
-		if externalMcpTool.RequiresOauth && oauthToken != "" {
-			opts = &externalmcp.ClientOptions{
-				Authorization: "Bearer " + oauthToken,
-				TransportType: externalmcptypes.TransportType(externalMcpTool.TransportType),
+	executor := externalmcp.BuildProxyToolExecutor(logger, toolset.Tools)
+	if executor.HasEntries() {
+		resolve := func(ctx context.Context, toolURN urn.Tool, projectID uuid.UUID) (*externalmcp.ToolCallPlan, error) {
+			plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, projectID)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool call plan by URN")
 			}
+			if plan.Kind != gateway.ToolKindExternalMCP || plan.ExternalMCP == nil {
+				return nil, oops.E(oops.CodeUnexpected, nil, "expected external MCP plan for proxy tool")
+			}
+			return plan.ExternalMCP, nil
 		}
 
-		mcpClient, err := externalmcp.NewClient(ctx, logger, externalMcpTool.RemoteURL, externalmcptypes.TransportType(externalMcpTool.TransportType), opts)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP").Log(ctx, logger)
-		}
-		externalTools, err := mcpClient.ListTools(ctx)
-		if closeErr := mcpClient.Close(); closeErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, closeErr, "failed to close external MCP client").Log(ctx, logger)
-		}
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools from external MCP").Log(ctx, logger)
+		loadSystemEnv := func(ctx context.Context, toolURN urn.Tool) (*toolconfig.CaseInsensitiveEnv, error) {
+			return envLoader.LoadSystemEnv(ctx, payload.projectID, toolsetID, string(toolURN.Kind), toolURN.Source)
 		}
 
-		for _, extTool := range externalTools {
-			result = append(result, &toolListEntry{
-				Name:        externalMcpTool.Slug + "--" + extTool.Name,
+		proxyTools, err := executor.DoList(ctx, payload.projectID, userConfig, oauthToken, loadSystemEnv, resolve)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list proxy tools").Log(ctx, logger)
+		}
+
+		for _, extTool := range proxyTools {
+			tools = append(tools, &toolListEntry{
+				Name:        extTool.Name,
 				Description: extTool.Description,
 				InputSchema: extTool.Schema,
 				Meta:        nil,
 			})
 		}
 	}
+	for _, tool := range toolset.Tools {
+		if !conv.IsProxyTool(tool) {
+			if entry := toolToListEntry(tool); entry != nil {
+				tools = append(tools, entry)
+			}
+		}
+	}
 
-	return result, nil
+	return tools, nil
 }
 
 func toolToListEntry(tool *types.Tool) *toolListEntry {
@@ -170,7 +178,6 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 		return nil
 	}
 
-	// Skip proxy tools - they are handled separately via unfoldExternalMCPTools
 	if conv.IsProxyTool(tool) {
 		return nil
 	}

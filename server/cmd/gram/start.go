@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
@@ -449,7 +450,8 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create encryption client: %w", err)
 			}
 
-			env := environments.NewEnvironmentEntries(logger, db, encryptionClient)
+			mcpMetadataRepo := mcpmetadata_repo.New(db)
+			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
 			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
 			if err != nil {

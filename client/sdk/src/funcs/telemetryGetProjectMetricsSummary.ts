@@ -27,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * updateSecurityVariableDisplayName toolsets
+ * getProjectMetricsSummary telemetry
  *
  * @remarks
- * Update the display name of a security variable for user-friendly presentation
+ * Get aggregated metrics summary for an entire project
  */
-export function toolsetsUpdateSecurityVariableDisplayName(
+export function telemetryGetProjectMetricsSummary(
   client: GramCore,
-  request: operations.UpdateSecurityVariableDisplayNameRequest,
-  security?: operations.UpdateSecurityVariableDisplayNameSecurity | undefined,
+  request: operations.GetProjectMetricsSummaryRequest,
+  security?: operations.GetProjectMetricsSummarySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.SecurityVariable,
+    components.GetMetricsSummaryResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +61,13 @@ export function toolsetsUpdateSecurityVariableDisplayName(
 
 async function $do(
   client: GramCore,
-  request: operations.UpdateSecurityVariableDisplayNameRequest,
-  security?: operations.UpdateSecurityVariableDisplayNameSecurity | undefined,
+  request: operations.GetProjectMetricsSummaryRequest,
+  security?: operations.GetProjectMetricsSummarySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.SecurityVariable,
+      components.GetMetricsSummaryResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -84,22 +84,18 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      operations.UpdateSecurityVariableDisplayNameRequest$outboundSchema.parse(
-        value,
-      ),
+      operations.GetProjectMetricsSummaryRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON(
-    "body",
-    payload.UpdateSecurityVariableDisplayNameRequestBody,
-    { explode: true },
-  );
+  const body = encodeJSON("body", payload.GetProjectMetricsSummaryPayload, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/toolsets.updateSecurityVariableDisplayName")();
+  const path = pathToFunc("/rpc/telemetry.getProjectMetricsSummary")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -121,14 +117,14 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.option1?.apikeyHeaderGramKey,
+      },
+      {
         fieldName: "Gram-Project",
         type: "apiKey:header",
         value: security?.option1?.projectSlugHeaderGramProject,
-      },
-      {
-        fieldName: "Gram-Session",
-        type: "apiKey:header",
-        value: security?.option1?.sessionHeaderGramSession,
       },
     ],
     [
@@ -143,12 +139,24 @@ async function $do(
         value: security?.option2?.projectSlugHeaderGramProject,
       },
     ],
+    [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option3?.projectSlugHeaderGramProject,
+      },
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.option3?.sessionHeaderGramSession,
+      },
+    ],
   );
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "updateSecurityVariableDisplayName",
+    operationID: "getProjectMetricsSummary",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -203,7 +211,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.SecurityVariable,
+    components.GetMetricsSummaryResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -214,7 +222,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.SecurityVariable$inboundSchema),
+    M.json(200, components.GetMetricsSummaryResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

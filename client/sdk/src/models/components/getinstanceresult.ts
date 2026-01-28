@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ExternalMCPHeaderDefinition,
+  ExternalMCPHeaderDefinition$inboundSchema,
+} from "./externalmcpheaderdefinition.js";
+import {
   FunctionEnvironmentVariable,
   FunctionEnvironmentVariable$inboundSchema,
 } from "./functionenvironmentvariable.js";
@@ -34,6 +38,10 @@ export type GetInstanceResult = {
    * The description of the toolset
    */
   description?: string | undefined;
+  /**
+   * The external MCP header definitions that are relevant to the toolset
+   */
+  externalMcpHeaderDefinitions?: Array<ExternalMCPHeaderDefinition> | undefined;
   /**
    * The function environment variables that are relevant to the toolset
    */
@@ -71,6 +79,9 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   description: z.string().optional(),
+  external_mcp_header_definitions: z.array(
+    ExternalMCPHeaderDefinition$inboundSchema,
+  ).optional(),
   function_environment_variables: z.array(
     FunctionEnvironmentVariable$inboundSchema,
   ).optional(),
@@ -82,6 +93,7 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
   tools: z.array(Tool$inboundSchema),
 }).transform((v) => {
   return remap$(v, {
+    "external_mcp_header_definitions": "externalMcpHeaderDefinitions",
     "function_environment_variables": "functionEnvironmentVariables",
     "mcp_servers": "mcpServers",
     "prompt_templates": "promptTemplates",

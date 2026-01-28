@@ -45,6 +45,7 @@ import (
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -70,7 +71,7 @@ type Service struct {
 	mcpMetadataRepo     *metadata_repo.Queries
 	orgsRepo            *organizations_repo.Queries
 	auth                *auth.Auth
-	env                 gateway.EnvironmentLoader
+	env                 toolconfig.EnvironmentLoader
 	serverURL           *url.URL
 	posthog             *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	toolProxy           *gateway.ToolProxy
@@ -119,7 +120,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	chatSessionsManager *chatsessions.Manager,
-	env gateway.EnvironmentLoader,
+	env toolconfig.EnvironmentLoader,
 	posthog *posthog.Posthog,
 	serverURL *url.URL,
 	enc *encryption.Client,
@@ -839,9 +840,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
+		return handleToolsList(ctx, s.logger, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemetryService, s.features, s.vectorToolStore, s.temporal)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemetryService, s.features, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":

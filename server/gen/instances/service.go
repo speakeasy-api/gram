@@ -74,6 +74,8 @@ type GetInstanceResult struct {
 	ServerVariables []*types.ServerVariable
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*types.FunctionEnvironmentVariable
+	// The external MCP header definitions that are relevant to the toolset
+	ExternalMcpHeaderDefinitions []*types.ExternalMCPHeaderDefinition
 	// The MCP servers that are relevant to the toolset
 	McpServers []*InstanceMcpServer
 }
