@@ -122,8 +122,6 @@ function groupTools(
   const customTools: Tool[] = [];
   const higherOrderTools: Tool[] = [];
 
-  console.log("tools", tools);
-
   tools.forEach((tool) => {
     if (tool.type === "http") {
       let groupKey: string | undefined;
@@ -228,8 +226,6 @@ function groupTools(
       tools: higherOrderTools,
     });
   }
-
-  console.log("groups", groups);
 
   return groups;
 }
