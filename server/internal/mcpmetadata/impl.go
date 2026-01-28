@@ -499,7 +499,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		} else {
 			// Build maps of header display names and omitted variables
 			for _, config := range metadata.EnvironmentConfigs {
-				if config.ProvidedBy == "none" {
+				if config.ProvidedBy != "user" {
 					// Mark as omitted - should not appear in install page
 					omittedVariables[config.VariableName] = true
 				} else if config.HeaderDisplayName != nil {
