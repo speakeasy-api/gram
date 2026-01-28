@@ -205,9 +205,9 @@ var _ = Service("mcpMetadata", func() {
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Attribute("toolset_slug", shared.Slug, "The slug of the toolset to export")
+			Attribute("mcp_slug", shared.Slug, "The MCP server slug (from the install URL)")
 
-			Required("toolset_slug")
+			Required("mcp_slug")
 
 			security.ByKeyPayload()
 			security.SessionPayload()

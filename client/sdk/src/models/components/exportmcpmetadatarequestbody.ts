@@ -7,14 +7,14 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type ExportMcpMetadataRequestBody = {
   /**
-   * The slug of the toolset to export
+   * The MCP server slug (from the install URL)
    */
-  toolsetSlug: string;
+  mcpSlug: string;
 };
 
 /** @internal */
 export type ExportMcpMetadataRequestBody$Outbound = {
-  toolset_slug: string;
+  mcp_slug: string;
 };
 
 /** @internal */
@@ -23,10 +23,10 @@ export const ExportMcpMetadataRequestBody$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ExportMcpMetadataRequestBody
 > = z.object({
-  toolsetSlug: z.string(),
+  mcpSlug: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    toolsetSlug: "toolset_slug",
+    mcpSlug: "mcp_slug",
   });
 });
 

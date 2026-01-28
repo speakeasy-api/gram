@@ -50,8 +50,8 @@ var MethodNames = [3]string{"getMcpMetadata", "setMcpMetadata", "exportMcpMetada
 // ExportMcpMetadataPayload is the payload type of the mcpMetadata service
 // exportMcpMetadata method.
 type ExportMcpMetadataPayload struct {
-	// The slug of the toolset to export
-	ToolsetSlug      types.Slug
+	// The MCP server slug (from the install URL)
+	McpSlug          types.Slug
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string

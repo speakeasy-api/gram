@@ -35,8 +35,8 @@ type SetMcpMetadataRequestBody struct {
 // ExportMcpMetadataRequestBody is the type of the "mcpMetadata" service
 // "exportMcpMetadata" endpoint HTTP request body.
 type ExportMcpMetadataRequestBody struct {
-	// The slug of the toolset to export
-	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
+	// The MCP server slug (from the install URL)
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 }
 
 // GetMcpMetadataResponseBody is the type of the "mcpMetadata" service
@@ -1271,7 +1271,7 @@ func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, apikeyToken *stri
 // endpoint payload.
 func NewExportMcpMetadataPayload(body *ExportMcpMetadataRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *mcpmetadata.ExportMcpMetadataPayload {
 	v := &mcpmetadata.ExportMcpMetadataPayload{
-		ToolsetSlug: types.Slug(*body.ToolsetSlug),
+		McpSlug: types.Slug(*body.McpSlug),
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1310,15 +1310,15 @@ func ValidateSetMcpMetadataRequestBody(body *SetMcpMetadataRequestBody) (err err
 // ValidateExportMcpMetadataRequestBody runs the validations defined on
 // ExportMcpMetadataRequestBody
 func ValidateExportMcpMetadataRequestBody(body *ExportMcpMetadataRequestBody) (err error) {
-	if body.ToolsetSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
+	if body.McpSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_slug", "body"))
 	}
-	if body.ToolsetSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", *body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
+	if body.McpSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 	}
-	if body.ToolsetSlug != nil {
-		if utf8.RuneCountInString(*body.ToolsetSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", *body.ToolsetSlug, utf8.RuneCountInString(*body.ToolsetSlug), 40, false))
+	if body.McpSlug != nil {
+		if utf8.RuneCountInString(*body.McpSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
 	}
 	return

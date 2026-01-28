@@ -4520,7 +4520,7 @@ paths:
                   schema:
                     $ref: '#/definitions/McpMetadataExportMcpMetadataRequestBody'
                     required:
-                        - toolset_slug
+                        - mcp_slug
             responses:
                 "200":
                     description: OK response.
@@ -44031,16 +44031,16 @@ definitions:
         title: McpMetadataExportMcpMetadataRequestBody
         type: object
         properties:
-            toolset_slug:
+            mcp_slug:
                 type: string
-                description: The slug of the toolset to export
+                description: The MCP server slug (from the install URL)
                 example: 3mb
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
-            toolset_slug: 3i4
+            mcp_slug: 3i4
         required:
-            - toolset_slug
+            - mcp_slug
     McpMetadataExportMcpMetadataUnauthorizedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object

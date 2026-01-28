@@ -33,8 +33,8 @@ type SetMcpMetadataRequestBody struct {
 // ExportMcpMetadataRequestBody is the type of the "mcpMetadata" service
 // "exportMcpMetadata" endpoint HTTP request body.
 type ExportMcpMetadataRequestBody struct {
-	// The slug of the toolset to export
-	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
+	// The MCP server slug (from the install URL)
+	McpSlug string `form:"mcp_slug" json:"mcp_slug" xml:"mcp_slug"`
 }
 
 // GetMcpMetadataResponseBody is the type of the "mcpMetadata" service
@@ -757,7 +757,7 @@ func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpM
 // payload of the "exportMcpMetadata" endpoint of the "mcpMetadata" service.
 func NewExportMcpMetadataRequestBody(p *mcpmetadata.ExportMcpMetadataPayload) *ExportMcpMetadataRequestBody {
 	body := &ExportMcpMetadataRequestBody{
-		ToolsetSlug: string(p.ToolsetSlug),
+		McpSlug: string(p.McpSlug),
 	}
 	return body
 }

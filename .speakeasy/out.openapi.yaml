@@ -12470,13 +12470,13 @@ components:
     ExportMcpMetadataRequestBody:
       type: object
       properties:
-        toolset_slug:
+        mcp_slug:
           type: string
-          description: The slug of the toolset to export
+          description: The MCP server slug (from the install URL)
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
       required:
-        - toolset_slug
+        - mcp_slug
     ExternalMCPHeaderDefinition:
       type: object
       properties:

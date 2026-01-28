@@ -274,15 +274,18 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	toolset, err := s.toolsetRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
-		Slug:      conv.ToLower(payload.ToolsetSlug),
-		ProjectID: *authCtx.ProjectID,
-	})
+	mcpSlug := conv.ToLower(payload.McpSlug)
+	toolset, err := s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
+	}
+
+	// Verify the toolset belongs to the user's project
+	if toolset.ProjectID != *authCtx.ProjectID {
+		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
 	}
 
 	if !toolset.McpEnabled {

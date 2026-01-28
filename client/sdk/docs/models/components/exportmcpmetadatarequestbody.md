@@ -6,12 +6,12 @@
 import { ExportMcpMetadataRequestBody } from "@gram/client/models/components";
 
 let value: ExportMcpMetadataRequestBody = {
-  toolsetSlug: "<value>",
+  mcpSlug: "<value>",
 };
 ```
 
 ## Fields
 
-| Field                             | Type                              | Required                          | Description                       |
-| --------------------------------- | --------------------------------- | --------------------------------- | --------------------------------- |
-| `toolsetSlug`                     | *string*                          | :heavy_check_mark:                | The slug of the toolset to export |
+| Field                                      | Type                                       | Required                                   | Description                                |
+| ------------------------------------------ | ------------------------------------------ | ------------------------------------------ | ------------------------------------------ |
+| `mcpSlug`                                  | *string*                                   | :heavy_check_mark:                         | The MCP server slug (from the install URL) |

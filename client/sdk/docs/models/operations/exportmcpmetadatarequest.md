@@ -7,7 +7,7 @@ import { ExportMcpMetadataRequest } from "@gram/client/models/operations";
 
 let value: ExportMcpMetadataRequest = {
   exportMcpMetadataRequestBody: {
-    toolsetSlug: "<value>",
+    mcpSlug: "<value>",
   },
 };
 ```

@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 02e4deadbf929a5e6046592d2c86f5f3
+  docChecksum: 455ac6f41f60ac3e27eb7e08ff0bbb1e
   docVersion: 0.0.1
   speakeasyVersion: 1.700.1
   generationVersion: 2.801.0
-  releaseVersion: 0.26.5
-  configChecksum: e04ebe84f5a81d2b6d7edfe5b47b4a17
+  releaseVersion: 0.26.6
+  configChecksum: b29b125a081f93f7a95d631074ff134e
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -297,7 +297,7 @@ trackedFiles:
     last_write_checksum: sha1:86dc8cfc34fd1a3843865ccdf8afe94461c08058
     pristine_git_object: 9f7a67db3cb9a81074c3d8129dff1d62d5e9d7e7
   docs/models/components/exportmcpmetadatarequestbody.md:
-    last_write_checksum: sha1:62d7de328010d5c2dbe92f027d8b95a02f6c6d3b
+    last_write_checksum: sha1:40e4d7ae27440bfd5a593b31a6e25cc5a7a4f7ad
   docs/models/components/externalmcpheaderdefinition.md:
     last_write_checksum: sha1:da0a881710691ca1f0cc1c45d1f2bf3daad3c4e3
   docs/models/components/externalmcpserver.md:
@@ -1257,7 +1257,7 @@ trackedFiles:
     last_write_checksum: sha1:9950d93ec80ffbf287ee7de0d77f4e31e4f21d3e
     pristine_git_object: 497f81d9acd003cdffd7b86bff191fd81398b324
   docs/models/operations/exportmcpmetadatarequest.md:
-    last_write_checksum: sha1:779fb798aa7f8f2b37c4102b9f866ba60186983b
+    last_write_checksum: sha1:78b55b3a76bbf72bc5a43b3ac20d57136d2db2d1
   docs/models/operations/exportmcpmetadatasecurity.md:
     last_write_checksum: sha1:705cf264575a29cfe5060f6190e5f9117b3a0273
   docs/models/operations/exportmcpmetadatasecurityoption1.md:
@@ -2300,7 +2300,7 @@ trackedFiles:
     pristine_git_object: ce69a8d3baef7c1cae7a225f4a32ce1d12c65527
   docs/sdks/mcpmetadata/README.md:
     id: d6207aba55ac
-    last_write_checksum: sha1:df2493ce50b2426d5ab7a946c7cf210f18581f8c
+    last_write_checksum: sha1:c6b5740a3f5a951130dc2f63d5de659165147e50
     pristine_git_object: be6b781aa81f5d34fe2d2c6acdcb1a74a6ca06ae
   docs/sdks/mcpregistries/README.md:
     id: 2aeb2604b128
@@ -2368,11 +2368,11 @@ trackedFiles:
     pristine_git_object: 8a33dbb4b9cb9cefaa43e10ddf535cbcd13c9e72
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:d553dde730957a82fc0957439209b139db1411ea
+    last_write_checksum: sha1:8dc1a8e72455f5e0d85388a69a88a459028d7232
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:3d13b94d06b1531b9f96c937ff7eac81c0470517
+    last_write_checksum: sha1:a83e7dd15b53254fcc8a9600da06c6bf24ce5a0c
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2824,7 +2824,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:5756f479663e8632b3aff9df9fac35cc56da680b
+    last_write_checksum: sha1:fc4348b67588207683bd431a5c6c9803a96124c5
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3087,7 +3087,7 @@ trackedFiles:
     last_write_checksum: sha1:cca5b76430c00400688aca02b9e8646ccb591db3
     pristine_git_object: 13be4fd873c70891c53c299cc9058a1a580ccc39
   src/models/components/exportmcpmetadatarequestbody.ts:
-    last_write_checksum: sha1:83959612a48caa0122f7c364b2ffe24f5d6bbe14
+    last_write_checksum: sha1:eb0d6de17f7c119e3905222a72a83394f20e57c9
   src/models/components/externalmcpheaderdefinition.ts:
     last_write_checksum: sha1:0f70c763a85fe8fa0a9bbea5cfaaed70af6644fc
   src/models/components/externalmcpserver.ts:
@@ -6003,7 +6003,7 @@ examples:
   exportMcpMetadata:
     speakeasy-default-export-mcp-metadata:
       requestBody:
-        application/json: {"toolset_slug": "<value>"}
+        application/json: {"mcp_slug": "<value>"}
       responses:
         "200":
           application/json: {"authentication": {"headers": [{"display_name": "Arden_Friesen", "name": "<value>"}], "required": false}, "name": "<value>", "server_url": "https://musty-technician.biz/", "slug": "<value>", "tools": [{"description": "blank disk where zowie", "input_schema": "<value>", "name": "<value>"}]}

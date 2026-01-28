@@ -25,7 +25,7 @@ const gram = new Gram();
 async function run() {
   const result = await gram.mcpMetadata.export({
     exportMcpMetadataRequestBody: {
-      toolsetSlug: "<value>",
+      mcpSlug: "<value>",
     },
   });
 
@@ -50,7 +50,7 @@ const gram = new GramCore();
 async function run() {
   const res = await mcpMetadataExport(gram, {
     exportMcpMetadataRequestBody: {
-      toolsetSlug: "<value>",
+      mcpSlug: "<value>",
     },
   });
   if (res.ok) {

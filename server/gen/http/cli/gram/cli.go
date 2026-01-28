@@ -3467,7 +3467,7 @@ func mcpMetadataExportMcpMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"toolset_slug\": \"gfk\"\n   }' --apikey-token \"Voluptatem sequi.\" --session-token \"Fugiat accusantium distinctio.\" --project-slug-input \"Dolore et tenetur vero recusandae ducimus.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"gfk\"\n   }' --apikey-token \"Voluptatem sequi.\" --session-token \"Fugiat accusantium distinctio.\" --project-slug-input \"Dolore et tenetur vero recusandae ducimus.\"")
 }
 
 // packagesUsage displays the usage of the packages command and its subcommands.

@@ -130,11 +130,11 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 	{
 		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"toolset_slug\": \"gfk\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"gfk\"\n   }'")
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", body.ToolsetSlug, utf8.RuneCountInString(body.ToolsetSlug), 40, false))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", body.McpSlug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(body.McpSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", body.McpSlug, utf8.RuneCountInString(body.McpSlug), 40, false))
 		}
 		if err != nil {
 			return nil, err
@@ -159,7 +159,7 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 		}
 	}
 	v := &mcpmetadata.ExportMcpMetadataPayload{
-		ToolsetSlug: types.Slug(body.ToolsetSlug),
+		McpSlug: types.Slug(body.McpSlug),
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
