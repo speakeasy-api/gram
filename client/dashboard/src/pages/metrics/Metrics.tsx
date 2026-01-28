@@ -81,7 +81,7 @@ export default function MetricsPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-semibold">Project Metrics</h1>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500">
                     Experimental
                   </span>
                 </div>
