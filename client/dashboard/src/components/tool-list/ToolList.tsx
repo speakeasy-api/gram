@@ -47,11 +47,11 @@ interface ToolListProps {
 interface ToolGroup {
   type: "package" | "function" | "custom" | "higher_order" | "external-mcp";
   icon:
-  | "file-code"
-  | "square-function"
-  | "square-stack"
-  | "pencil-ruler"
-  | "mcp";
+    | "file-code"
+    | "square-function"
+    | "square-stack"
+    | "pencil-ruler"
+    | "mcp";
   title: string;
   tools: Tool[];
   packageName?: string;
@@ -314,22 +314,22 @@ function ToolRow({
     },
     ...(onTestInPlayground
       ? [
-        {
-          label: "Test in Playground",
-          onClick: onTestInPlayground,
-          icon: "message-circle" as const,
-        },
-      ]
+          {
+            label: "Test in Playground",
+            onClick: onTestInPlayground,
+            icon: "message-circle" as const,
+          },
+        ]
       : []),
     ...(onRemove
       ? [
-        {
-          label: "Remove",
-          onClick: onRemove,
-          icon: "trash" as const,
-          destructive: true,
-        },
-      ]
+          {
+            label: "Remove",
+            onClick: onRemove,
+            icon: "trash" as const,
+            destructive: true,
+          },
+        ]
       : []),
   ];
 
@@ -436,7 +436,7 @@ function ToolRow({
                 />
                 {tool.variation?.description &&
                   tool.variation?.description !==
-                  tool.canonical?.description && (
+                    tool.canonical?.description && (
                     <Stack className="p-2 border rounded-md border-border/70">
                       <Type small muted className="inline font-medium">
                         <Icon
@@ -704,35 +704,35 @@ export function ToolList({
     const actions = [
       ...(onAddToToolset
         ? [
-          {
-            id: "add-to-toolset",
-            label: "Add to toolset",
-            icon: "plus",
-            group: "Tool Actions",
-            onSelect: () => {
-              setSelectedForRemoval((current) => {
-                onAddToToolset(Array.from(current));
-                return new Set();
-              });
+            {
+              id: "add-to-toolset",
+              label: "Add to toolset",
+              icon: "plus",
+              group: "Tool Actions",
+              onSelect: () => {
+                setSelectedForRemoval((current) => {
+                  onAddToToolset(Array.from(current));
+                  return new Set();
+                });
+              },
             },
-          },
-        ]
+          ]
         : []),
       ...(onCreateToolset
         ? [
-          {
-            id: "create-toolset",
-            label: "Create toolset",
-            icon: "copy",
-            group: "Tool Actions",
-            onSelect: () => {
-              setSelectedForRemoval((current) => {
-                onCreateToolset(Array.from(current));
-                return new Set();
-              });
+            {
+              id: "create-toolset",
+              label: "Create toolset",
+              icon: "copy",
+              group: "Tool Actions",
+              onSelect: () => {
+                setSelectedForRemoval((current) => {
+                  onCreateToolset(Array.from(current));
+                  return new Set();
+                });
+              },
             },
-          },
-        ]
+          ]
         : []),
       {
         id: "remove-tools",

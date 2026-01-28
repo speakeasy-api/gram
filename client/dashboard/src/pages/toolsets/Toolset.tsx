@@ -336,14 +336,14 @@ export function ToolsetView({
       // Only show "Add tools" for default toolsets
       ...(toolset.kind !== "external-mcp-proxy"
         ? [
-          {
-            id: "toolset-add-tools",
-            label: "Add tools",
-            icon: "plus",
-            onSelect: () => setAddToolsDialogOpen(true),
-            group: "Toolset",
-          },
-        ]
+            {
+              id: "toolset-add-tools",
+              label: "Add tools",
+              icon: "plus",
+              onSelect: () => setAddToolsDialogOpen(true),
+              group: "Toolset",
+            },
+          ]
         : []),
       {
         id: "toolset-go-to-playground",

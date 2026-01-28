@@ -70,7 +70,9 @@ export default function Home() {
 
   const hasEnabledMcpWithTools = useMemo(() => {
     if (!toolsetsResult?.toolsets) return false;
-    return toolsetsResult.toolsets.some((t) => t.mcpEnabled && t.toolUrns.length > 0);
+    return toolsetsResult.toolsets.some(
+      (t) => t.mcpEnabled && t.toolUrns.length > 0,
+    );
   }, [toolsetsResult]);
 
   // Get the first public MCP toolset slug to pass to elements page
@@ -87,11 +89,14 @@ export default function Home() {
   const hasDeployedChatFlag =
     typeof window !== "undefined" &&
     localStorage.getItem(onboardingStepStorageKeys.configure) === "true";
-  const hasDeployedChat = hasSource && hasEnabledMcpWithTools && hasDeployedChatFlag;
+  const hasDeployedChat =
+    hasSource && hasEnabledMcpWithTools && hasDeployedChatFlag;
 
-  const completedSteps = [hasSource, hasEnabledMcpWithTools, hasDeployedChat].filter(
-    Boolean,
-  ).length;
+  const completedSteps = [
+    hasSource,
+    hasEnabledMcpWithTools,
+    hasDeployedChat,
+  ].filter(Boolean).length;
   const isSetupComplete = completedSteps === 3;
   const isSetupDataLoading = isDeploymentLoading || isToolsetsLoading;
 
@@ -386,8 +391,9 @@ function SetupStep({
 
   const content = (
     <div
-      className={`group relative flex flex-row items-start gap-3 py-5 pr-8 transition-all h-full flex-1 ${bgColor} ${isActive ? "hover:bg-primary/15" : ""
-        } ${!enabled ? "opacity-60" : ""}`}
+      className={`group relative flex flex-row items-start gap-3 py-5 pr-8 transition-all h-full flex-1 ${bgColor} ${
+        isActive ? "hover:bg-primary/15" : ""
+      } ${!enabled ? "opacity-60" : ""}`}
       style={{
         clipPath:
           position === "first"
@@ -400,8 +406,9 @@ function SetupStep({
       }}
     >
       <div
-        className={`flex items-center justify-center w-7 h-7 rounded-full shrink-0 border ${isActive ? "bg-white dark:bg-white border-primary" : "bg-background"
-          }`}
+        className={`flex items-center justify-center w-7 h-7 rounded-full shrink-0 border ${
+          isActive ? "bg-white dark:bg-white border-primary" : "bg-background"
+        }`}
       >
         {completed ? (
           <CheckCircle className="h-4 w-4 text-emerald-500" strokeWidth={2} />

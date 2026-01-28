@@ -29,6 +29,7 @@ import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
+import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
 import { Confirm, ToolsetEntry } from "@gram/client/models/components";
 import {
@@ -380,7 +381,7 @@ export function MCPDetailPage() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   {!toolset?.mcpEnabled ||
-                    (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
+                  (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
                     <span className="inline-block">
                       <Button variant="secondary" size="md" disabled={true}>
                         {isOAuthConnected
@@ -406,12 +407,12 @@ export function MCPDetailPage() {
                 </TooltipTrigger>
                 {(!toolset?.mcpEnabled ||
                   (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
-                    <TooltipContent>
-                      {!toolset?.mcpEnabled
-                        ? "Enable server to configure OAuth"
-                        : "This MCP server does not require the OAuth authorization code flow"}
-                    </TooltipContent>
-                  )}
+                  <TooltipContent>
+                    {!toolset?.mcpEnabled
+                      ? "Enable server to configure OAuth"
+                      : "This MCP server does not require the OAuth authorization code flow"}
+                  </TooltipContent>
+                )}
               </Tooltip>
               <MCPEnableButton toolset={toolset} />
               <Tooltip>
@@ -615,9 +616,18 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
   const tools = fullToolset?.tools ?? [];
 
+  // Check if this is an external MCP proxy server
+  const isExternalMcpProxy = fullToolset?.kind === "external-mcp-proxy";
+
+  // For external MCP proxy servers, show the server info instead of tools list
+  if (isExternalMcpProxy && fullToolset) {
+    return <ServerTabContent toolset={fullToolset} />;
+  }
+
   // Check if we have orphaned tool URNs (URNs exist but tools were deleted)
   const hasOrphanedTools =
-    (fullToolset?.toolUrns?.length ?? 0) > 0 && tools.length === 0;
+    (fullToolset?.toolUrns?.length ?? 0) > 0 &&
+    fullToolset?.rawTools.length === 0;
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -708,11 +718,11 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     grouped.map((group) => group.key),
   );
 
-  // Set initial selected groups when the tool list resolves
   const groupKeys = grouped.map((group) => group.key);
+  // Set initial selected groups when the tool list resolves
   useEffect(() => {
     setSelectedGroups(groupKeys);
-  }, groupKeys);
+  }, [groupKeys.join(",")]);
 
   const groupFilterItems = grouped.map((group) => ({
     label: group.key,
@@ -733,33 +743,32 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
   return (
     <Stack className="mb-4">
-      <Stack
-        direction="horizontal"
-        justify="space-between"
-        align="center"
-        className="mb-4"
-      >
-        <Heading variant="h3">Tools</Heading>
+      {!isExternalMcpProxy && (
         <Stack
           direction="horizontal"
-          gap={2}
+          justify="space-between"
+          align="center"
+          className="mb-4"
         >
-          <routes.customTools.Link>
-            <Button variant="secondary" size="sm">
-              <Button.Text>Custom Tools</Button.Text>
+          <Heading variant="h3">Tools</Heading>
+          <Stack direction="horizontal" gap={2}>
+            <routes.customTools.Link>
+              <Button variant="secondary" size="sm">
+                <Button.Text>Custom Tools</Button.Text>
+              </Button>
+            </routes.customTools.Link>
+            <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Tools</Button.Text>
             </Button>
-          </routes.customTools.Link>
-          <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
-            <Button.LeftIcon>
-              <Icon name="plus" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Add Tools</Button.Text>
-          </Button>
+          </Stack>
         </Stack>
-      </Stack>
+      )}
 
       {/* Group filter */}
-      {groupFilterItems.length > 1 && (
+      {!isExternalMcpProxy && groupFilterItems.length > 1 && (
         <MultiSelect
           options={groupFilterItems}
           selectedValues={selectedGroups}
@@ -775,7 +784,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
           <div className="text-center max-w-md">
             <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-warning" />
             <Heading variant="h3" className="mb-2">
-              Tools Source Deleted
+              Tool Source Deleted
             </Heading>
             <Type muted>
               This MCP server has tool references, but the underlying source has
@@ -799,7 +808,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
       )}
 
       {/* Add Tools Dialog */}
-      {fullToolset && (
+      {fullToolset && !isExternalMcpProxy && (
         <AddToolsDialog
           open={addToolsDialogOpen}
           onOpenChange={setAddToolsDialogOpen}
@@ -1310,13 +1319,14 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
       .replace(/-/g, "")
       .replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
-      "args": ${argsStringIndented}${!toolset.mcpIsPublic
-      ? `,
+      "args": ${argsStringIndented}${
+        !toolset.mcpIsPublic
+          ? `,
       "env": {
         "GRAM_KEY": "Bearer <your-key-here>"
       }`
-      : ""
-    }
+          : ""
+      }
     }
   }
 }`;
@@ -1439,18 +1449,18 @@ function OAuthDetailsModal({
                   </Type>
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
                     ?.environmentSlug && (
-                      <div>
-                        <Type small className="font-medium text-muted-foreground">
-                          Environment:
-                        </Type>
-                        <CodeBlock className="mt-1">
-                          {
-                            toolset.oauthProxyServer.oauthProxyProviders[0]
-                              .environmentSlug
-                          }
-                        </CodeBlock>
-                      </div>
-                    )}
+                    <div>
+                      <Type small className="font-medium text-muted-foreground">
+                        Environment:
+                      </Type>
+                      <CodeBlock className="mt-1">
+                        {
+                          toolset.oauthProxyServer.oauthProxyProviders[0]
+                            .environmentSlug
+                        }
+                      </CodeBlock>
+                    </div>
+                  )}
                 </Stack>
               </>
             )}
@@ -1513,7 +1523,7 @@ function OAuthDetailsModal({
                       </div>
                       {provider.tokenEndpointAuthMethodsSupported &&
                         provider.tokenEndpointAuthMethodsSupported.length >
-                        0 && (
+                          0 && (
                           <div>
                             <Type
                               small
@@ -1594,9 +1604,11 @@ function OAuthDetailsModal({
                     </Type>
                     <CodeBlock className="mt-1">
                       {mcpUrl
-                        ? `${new URL(mcpUrl).origin
-                        }/.well-known/oauth-authorization-server/mcp/${toolset.mcpSlug
-                        }`
+                        ? `${
+                            new URL(mcpUrl).origin
+                          }/.well-known/oauth-authorization-server/mcp/${
+                            toolset.mcpSlug
+                          }`
                         : ""}
                     </CodeBlock>
                   </div>
