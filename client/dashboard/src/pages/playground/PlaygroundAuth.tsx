@@ -547,11 +547,7 @@ export function PlaygroundAuth({
   }, [userProvidedValues, onUserProvidedHeadersChange, mcpMetadata]);
 
   // Show "no auth required" only if there are no env vars AND no OAuth of any kind
-  if (
-    envVars.length === 0 &&
-    !hasExternalOAuth &&
-    !hasExternalMcpOAuth
-  ) {
+  if (envVars.length === 0 && !hasExternalOAuth && !hasExternalMcpOAuth) {
     return (
       <div className="text-center py-4">
         <Type variant="small" className="text-muted-foreground">
