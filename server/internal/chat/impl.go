@@ -678,14 +678,16 @@ func (s *Service) GenerateFollowOnSuggestions(ctx context.Context, payload *gen.
 	}
 	conversation := conversationBuilder.String()
 
-	systemPrompt := fmt.Sprintf(`Generate exactly %d follow-up questions based on the conversation.
+	systemPrompt := fmt.Sprintf(`Generate exactly %d follow-up questions that the USER would ask the ASSISTANT.
+
+These are questions the user might want to ask next to learn more. Write from the user's perspective, asking the assistant.
 
 Rules:
-- Questions only, no statements or preambles
-- Do not start with phrases like "That's interesting!", "I've heard that", "Could you", etc.
-- Start directly with the question word (What, How, Why, Where, When, Which, Can, Is, Are, Do, Does, Will, Would)
-- Keep each question concise (under 15 words ideally)
-- Make questions diverse, exploring different aspects
+- Questions the user would ask to get more information from the assistant
+- Do NOT generate questions the assistant would ask the user
+- No preambles like "That's interesting!" or "I've heard that"
+- Keep each question concise (under 15 words)
+- Make questions diverse, exploring different aspects of the topic
 - No numbering or bullet points
 - One question per line, nothing else`, count)
 
