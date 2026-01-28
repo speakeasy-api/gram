@@ -250,83 +250,81 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
   }
 
   return (
-  <Stack direction="horizontal" align="center" gap={2}>
-    <CodeBlock
-      className="flex-grow overflow-hidden pr-10"
-      preClassName="whitespace-nowrap overflow-auto"
-      copyable={true}
-    >
-      {installPageUrl}
-    </CodeBlock>
-    <Link external to={installPageUrl} noIcon>
-      <Button variant="secondary" className="px-4">
-        <Button.Text>View</Button.Text>
-        <Button.RightIcon>
-          <Icon name="external-link" className="w-4 h-4" />
-        </Button.RightIcon>
-      </Button>
-    </Link>
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger asChild>
-        <Button variant="secondary">
-          <Button.Text>Edit</Button.Text>
+    <Stack direction="horizontal" align="center" gap={2}>
+      <CodeBlock
+        className="flex-grow overflow-hidden pr-10"
+        preClassName="whitespace-nowrap overflow-auto"
+        copyable={true}
+      >
+        {installPageUrl}
+      </CodeBlock>
+      <Link external to={installPageUrl} noIcon>
+        <Button variant="secondary" className="px-4">
+          <Button.Text>View</Button.Text>
           <Button.RightIcon>
-            <Icon name="settings" />
+            <Icon name="external-link" className="w-4 h-4" />
           </Button.RightIcon>
         </Button>
-      </Dialog.Trigger>
-      <Dialog.Content className="min-w-2xl max-w-3xl">
-        <Dialog.Header>
-          <Dialog.Title>Install Page Configuration</Dialog.Title>
-        </Dialog.Header>
-        <Stack className={cn("gap-4", isLoading && "animate-pulse")}>
-          <div>
-            <Heading> MCP Logo </Heading>
-            <Type muted small className="max-w-2xl">
-              The logo presented on this page
-            </Type>
-          </div>
-          <div className="inline-block">
-            <CompactUpload
-              allowedExtensions={["png", "jpg", "jpeg"]}
-              onUpload={form.logoUploadHandlers.onUpload}
-              renderFilePreview={
-                form.logoUploadHandlers.renderFilePreview
-              }
-              className="w-full max-h-[200px]"
-            />
-          </div>
-          <div>
-            <Heading> Documentation Link </Heading>
-            <Type muted small className="max-w-2xl">
-              A link to your own MCP documentation that will be featured
-              at the top of the page
-            </Type>
-          </div>
-          <div className="relative">
-            <Input
-              type="text"
-              placeholder="https://my-documentation.link"
-              className="w-full"
-              {...form.urlInputHandlers}
-            />
-            {form.valid.message && (
-              <span className="absolute -bottom-4 left-0 text-xs text-destructive">
-                {form.valid.message}
-              </span>
-            )}
-          </div>
-          <div>
-            <Heading> Server Instructions </Heading>
-            <Type muted small className="max-w-2xl">
-              Instructions returned to LLMs when they connect to your MCP
-              server. Use this to provide context about your tools, usage
-              patterns, and any important constraints.
-            </Type>
-          </div>
-          <div>
-            <Textarea
-              placeholder={`[Server Name] - [One-line purpose]
+      </Link>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog.Trigger asChild>
+          <Button variant="secondary">
+            <Button.Text>Edit</Button.Text>
+            <Button.RightIcon>
+              <Icon name="settings" />
+            </Button.RightIcon>
+          </Button>
+        </Dialog.Trigger>
+        <Dialog.Content className="min-w-2xl max-w-3xl">
+          <Dialog.Header>
+            <Dialog.Title>Install Page Configuration</Dialog.Title>
+          </Dialog.Header>
+          <Stack className={cn("gap-4", isLoading && "animate-pulse")}>
+            <div>
+              <Heading> MCP Logo </Heading>
+              <Type muted small className="max-w-2xl">
+                The logo presented on this page
+              </Type>
+            </div>
+            <div className="inline-block">
+              <CompactUpload
+                allowedExtensions={["png", "jpg", "jpeg"]}
+                onUpload={form.logoUploadHandlers.onUpload}
+                renderFilePreview={form.logoUploadHandlers.renderFilePreview}
+                className="w-full max-h-[200px]"
+              />
+            </div>
+            <div>
+              <Heading> Documentation Link </Heading>
+              <Type muted small className="max-w-2xl">
+                A link to your own MCP documentation that will be featured at
+                the top of the page
+              </Type>
+            </div>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="https://my-documentation.link"
+                className="w-full"
+                {...form.urlInputHandlers}
+              />
+              {form.valid.message && (
+                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                  {form.valid.message}
+                </span>
+              )}
+            </div>
+            <div>
+              <Heading> Server Instructions </Heading>
+              <Type muted small className="max-w-2xl">
+                Instructions returned to LLMs when they connect to your MCP
+                server. Use this to provide context about your tools, usage
+                patterns, and any important constraints.
+              </Type>
+            </div>
+            <div>
+              <Textarea
+                placeholder={`[Server Name] - [One-line purpose]
 
 ## Key Capabilities
 
@@ -343,31 +341,31 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
 ## Performance
 
 [Expected behavior, timing, limits]`}
-              className="w-full min-h-[120px]"
-              {...form.instructionsHandlers}
-            />
-          </div>
-        </Stack>
-        <Dialog.Footer>
-          <Button
-            variant="tertiary"
-            disabled={!form.dirty}
-            onClick={form.reset}
-          >
-            <Button.Text>Discard</Button.Text>
-          </Button>
-          <Button
-            onClick={() => {
-              form.save();
-              setOpen(false);
-            }}
-            disabled={isLoading || !form.valid.valid || !form.dirty}
-          >
-            <Button.Text>Save</Button.Text>
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  </Stack> 
-  ); 
+                className="w-full min-h-[120px]"
+                {...form.instructionsHandlers}
+              />
+            </div>
+          </Stack>
+          <Dialog.Footer>
+            <Button
+              variant="tertiary"
+              disabled={!form.dirty}
+              onClick={form.reset}
+            >
+              <Button.Text>Discard</Button.Text>
+            </Button>
+            <Button
+              onClick={() => {
+                form.save();
+                setOpen(false);
+              }}
+              disabled={isLoading || !form.valid.valid || !form.dirty}
+            >
+              <Button.Text>Save</Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </Stack>
+  );
 }

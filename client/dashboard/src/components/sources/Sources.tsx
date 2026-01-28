@@ -3,9 +3,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
-import {
-  useInfiniteListMCPCatalog
-} from "@/pages/catalog/hooks";
+import { useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
 import { useRoutes } from "@/routes";
 import {

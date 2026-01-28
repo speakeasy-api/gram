@@ -95,77 +95,75 @@ export default function ExternalMCPDetails() {
         {/* Content Section */}
         <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
           <div className="space-y-6">
-          {/* Source Metadata Card */}
-          <div className="rounded-lg border bg-card overflow-hidden">
-            <div className="border-b bg-surface-secondary/30 px-6 py-4">
-              <Type as="h2" className="text-lg flex items-center gap-2">
-                <FileCode className="h-5 w-5 text-muted-foreground" />
-                Source Information
-              </Type>
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <InfoField
-                  icon={Tag}
-                  label="Name"
-                  value={source?.name}
-                />
+            {/* Source Metadata Card */}
+            <div className="rounded-lg border bg-card overflow-hidden">
+              <div className="border-b bg-surface-secondary/30 px-6 py-4">
+                <Type as="h2" className="text-lg flex items-center gap-2">
+                  <FileCode className="h-5 w-5 text-muted-foreground" />
+                  Source Information
+                </Type>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <InfoField icon={Tag} label="Name" value={source?.name} />
 
-                <InfoField
-                  icon={Tag}
-                  label="Slug"
-                  value={<Type className="font-mono text-sm">{source?.slug}</Type>}
-                />
+                  <InfoField
+                    icon={Tag}
+                    label="Slug"
+                    value={
+                      <Type className="font-mono text-sm">{source?.slug}</Type>
+                    }
+                  />
 
-                <InfoField
-                  icon={Package}
-                  label="Type"
-                  value="External MCP"
-                />
+                  <InfoField icon={Package} label="Type" value="External MCP" />
 
-                <InfoField
-                  icon={Server}
-                  label="Registry ID"
-                  value={<Type className="font-mono text-sm">{source?.registryId}</Type>}
-                />
+                  <InfoField
+                    icon={Server}
+                    label="Registry ID"
+                    value={
+                      <Type className="font-mono text-sm">
+                        {source?.registryId}
+                      </Type>
+                    }
+                  />
 
-                <InfoField
-                  icon={Server}
-                  label="Server Specifier"
-                  value={
-                    <Type className="font-mono text-sm break-all">
-                      {source?.registryServerSpecifier}
-                    </Type>
-                  }
-                  className="md:col-span-2"
-                />
+                  <InfoField
+                    icon={Server}
+                    label="Server Specifier"
+                    value={
+                      <Type className="font-mono text-sm break-all">
+                        {source?.registryServerSpecifier}
+                      </Type>
+                    }
+                    className="md:col-span-2"
+                  />
 
-                <InfoField
-                  icon={Package}
-                  label="Deployment"
-                  value={
-                    deployment?.deployment?.id ? (
-                      <routes.deployments.deployment.Link
-                        params={[deployment.deployment.id]}
-                        className="hover:underline text-primary"
-                      >
-                        {deployment.deployment.id.slice(0, 8)}
-                      </routes.deployments.deployment.Link>
-                    ) : (
-                      <Type className="text-muted-foreground">None</Type>
-                    )
-                  }
-                />
+                  <InfoField
+                    icon={Package}
+                    label="Deployment"
+                    value={
+                      deployment?.deployment?.id ? (
+                        <routes.deployments.deployment.Link
+                          params={[deployment.deployment.id]}
+                          className="hover:underline text-primary"
+                        >
+                          {deployment.deployment.id.slice(0, 8)}
+                        </routes.deployments.deployment.Link>
+                      ) : (
+                        <Type className="text-muted-foreground">None</Type>
+                      )
+                    }
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* MCP Server Relationship Card */}
-          {isLoadingToolsets ? (
-            <ExternalMCPServerCardLoading />
-          ) : associatedToolset !== undefined ? (
-            <ExternalMCPServerCard toolset={associatedToolset} />
-          ) : null}
+            {/* MCP Server Relationship Card */}
+            {isLoadingToolsets ? (
+              <ExternalMCPServerCardLoading />
+            ) : associatedToolset !== undefined ? (
+              <ExternalMCPServerCard toolset={associatedToolset} />
+            ) : null}
           </div>
         </div>
       </Page.Body>

@@ -232,7 +232,8 @@ export function EnvironmentVariableRow({
             <SelectContent>
               {MODE_OPTIONS.map((option) => {
                 const isUserProvidedOption = option.value === "user-provided";
-                const shouldDisable = isUserProvidedOption && !envVar.isRequired;
+                const shouldDisable =
+                  isUserProvidedOption && !envVar.isRequired;
                 const description = shouldDisable
                   ? "Only available for required variables"
                   : option.description;

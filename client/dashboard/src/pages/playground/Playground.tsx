@@ -18,7 +18,7 @@ import {
   queryKeyInstance,
   queryKeyListToolsets,
   useListToolsets,
-  useUpdateToolsetMutation
+  useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { ResizablePanel } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -183,7 +183,7 @@ export function ToolsetPanel({
 
   const selectedToolset = configRef.current.toolsetSlug;
 
-  const {data: toolset} = useToolset(selectedToolset ?? undefined); 
+  const { data: toolset } = useToolset(selectedToolset ?? undefined);
 
   const { data: deployment } = useLatestDeployment();
 

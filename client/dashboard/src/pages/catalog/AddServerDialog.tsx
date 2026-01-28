@@ -41,9 +41,11 @@ export function useAddServerMutation() {
       toolsetName: string;
     }) => {
       const slug = generateSlug(server.registrySpecifier);
-      let toolUrns  = [`tools:externalmcp:${slug}:proxy`];
+      let toolUrns = [`tools:externalmcp:${slug}:proxy`];
       if (server.tools) {
-        toolUrns = server.tools.map((t) => `tools:externalmcp:${slug}:${t.name}`);
+        toolUrns = server.tools.map(
+          (t) => `tools:externalmcp:${slug}:${t.name}`,
+        );
       }
 
       await client.deployments.evolveDeployment({
@@ -76,7 +78,6 @@ export function useAddServerMutation() {
           mcpIsPublic: true,
         },
       });
-      
 
       // Fetch the toolset to get the generated mcpSlug
       const updatedToolset = await client.toolsets.getBySlug({

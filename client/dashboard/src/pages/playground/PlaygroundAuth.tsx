@@ -80,7 +80,8 @@ export function PlaygroundAuth({
   );
   const mcpMetadata = mcpMetadataData?.metadata;
   const defaultEnvironmentSlug =
-    environments.find((env) => env.id === mcpMetadata?.defaultEnvironmentId)?.slug ?? "default";
+    environments.find((env) => env.id === mcpMetadata?.defaultEnvironmentId)
+      ?.slug ?? "default";
 
   // Load environment variables using the same hook as MCPAuthenticationTab
   const envVars = useEnvironmentVariables(toolset, environments, mcpMetadata);

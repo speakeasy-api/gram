@@ -31,7 +31,13 @@ export function useMCPTools({
   )
 
   const queryResult = useQuery({
-    queryKey: ['mcpTools', mcp, gramEnvironment, ...envQueryKey, ...authQueryKey],
+    queryKey: [
+      'mcpTools',
+      mcp,
+      gramEnvironment,
+      ...envQueryKey,
+      ...authQueryKey,
+    ],
     queryFn: async () => {
       assert(!auth.isLoading, 'No auth found')
       assert(mcp, 'No MCP URL found')

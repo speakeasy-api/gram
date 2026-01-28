@@ -28,7 +28,7 @@ import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
 import {
   EnvVarState,
   EnvironmentVariable,
-  getValueForEnvironment
+  getValueForEnvironment,
 } from "./environmentVariableUtils";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
@@ -325,7 +325,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       state: newState,
     });
   };
-
 
   // Separate required and custom variables, sort omitted to the bottom
   const requiredVars = envVars
@@ -747,9 +746,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
         {/* Manage Environments Link */}
         <div className="flex justify-end">
-          <routes.environments.Link
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
+          <routes.environments.Link className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Manage environments →
           </routes.environments.Link>
         </div>

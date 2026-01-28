@@ -118,7 +118,6 @@ export function PlaygroundElements({
     );
   }
 
-
   return (
     <GramElementsProvider
       config={{

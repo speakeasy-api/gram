@@ -14,7 +14,7 @@ import {
 // Define minimal types for badge components
 type ToolsetForBadge = Pick<ToolsetEntry, "name" | "slug" | "promptTemplates">;
 
-export const  ToolsetPromptsBadge = ({
+export const ToolsetPromptsBadge = ({
   toolset,
   variant = "neutral",
 }: {
