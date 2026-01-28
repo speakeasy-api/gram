@@ -21,15 +21,6 @@ type GenerateTitleRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
-// GenerateFollowOnSuggestionsRequestBody is the type of the "chat" service
-// "generateFollowOnSuggestions" endpoint HTTP request body.
-type GenerateFollowOnSuggestionsRequestBody struct {
-	// The conversation messages to analyze
-	Messages []*SuggestionMessageRequestBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
-	// Number of suggestions to generate (default 3)
-	Count *int `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
-}
-
 // ListChatsResponseBody is the type of the "chat" service "listChats" endpoint
 // HTTP response body.
 type ListChatsResponseBody struct {
@@ -63,13 +54,6 @@ type LoadChatResponseBody struct {
 type GenerateTitleResponseBody struct {
 	// The generated title
 	Title string `form:"title" json:"title" xml:"title"`
-}
-
-// GenerateFollowOnSuggestionsResponseBody is the type of the "chat" service
-// "generateFollowOnSuggestions" endpoint HTTP response body.
-type GenerateFollowOnSuggestionsResponseBody struct {
-	// The generated follow-on suggestions
-	Suggestions []string `form:"suggestions" json:"suggestions" xml:"suggestions"`
 }
 
 // CreditUsageResponseBody is the type of the "chat" service "creditUsage"
@@ -623,196 +607,6 @@ type GenerateTitleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GenerateFollowOnSuggestionsUnauthorizedResponseBody is the type of the
-// "chat" service "generateFollowOnSuggestions" endpoint HTTP response body for
-// the "unauthorized" error.
-type GenerateFollowOnSuggestionsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GenerateFollowOnSuggestionsForbiddenResponseBody is the type of the "chat"
-// service "generateFollowOnSuggestions" endpoint HTTP response body for the
-// "forbidden" error.
-type GenerateFollowOnSuggestionsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GenerateFollowOnSuggestionsBadRequestResponseBody is the type of the "chat"
-// service "generateFollowOnSuggestions" endpoint HTTP response body for the
-// "bad_request" error.
-type GenerateFollowOnSuggestionsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GenerateFollowOnSuggestionsNotFoundResponseBody is the type of the "chat"
-// service "generateFollowOnSuggestions" endpoint HTTP response body for the
-// "not_found" error.
-type GenerateFollowOnSuggestionsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GenerateFollowOnSuggestionsConflictResponseBody is the type of the "chat"
-// service "generateFollowOnSuggestions" endpoint HTTP response body for the
-// "conflict" error.
-type GenerateFollowOnSuggestionsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GenerateFollowOnSuggestionsUnsupportedMediaResponseBody is the type of the
-// "chat" service "generateFollowOnSuggestions" endpoint HTTP response body for
-// the "unsupported_media" error.
-type GenerateFollowOnSuggestionsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GenerateFollowOnSuggestionsInvalidResponseBody is the type of the "chat"
-// service "generateFollowOnSuggestions" endpoint HTTP response body for the
-// "invalid" error.
-type GenerateFollowOnSuggestionsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GenerateFollowOnSuggestionsInvariantViolationResponseBody is the type of the
-// "chat" service "generateFollowOnSuggestions" endpoint HTTP response body for
-// the "invariant_violation" error.
-type GenerateFollowOnSuggestionsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GenerateFollowOnSuggestionsUnexpectedResponseBody is the type of the "chat"
-// service "generateFollowOnSuggestions" endpoint HTTP response body for the
-// "unexpected" error.
-type GenerateFollowOnSuggestionsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GenerateFollowOnSuggestionsGatewayErrorResponseBody is the type of the
-// "chat" service "generateFollowOnSuggestions" endpoint HTTP response body for
-// the "gateway_error" error.
-type GenerateFollowOnSuggestionsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CreditUsageUnauthorizedResponseBody is the type of the "chat" service
 // "creditUsage" endpoint HTTP response body for the "unauthorized" error.
 type CreditUsageUnauthorizedResponseBody struct {
@@ -1036,14 +830,6 @@ type ChatMessageResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
-// SuggestionMessageRequestBody is used to define fields on request body types.
-type SuggestionMessageRequestBody struct {
-	// The role of the message (user or assistant)
-	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
-	// The text content of the message
-	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
-}
-
 // NewListChatsResponseBody builds the HTTP response body from the result of
 // the "listChats" endpoint of the "chat" service.
 func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody {
@@ -1095,22 +881,6 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 func NewGenerateTitleResponseBody(res *chat.GenerateTitleResult) *GenerateTitleResponseBody {
 	body := &GenerateTitleResponseBody{
 		Title: res.Title,
-	}
-	return body
-}
-
-// NewGenerateFollowOnSuggestionsResponseBody builds the HTTP response body
-// from the result of the "generateFollowOnSuggestions" endpoint of the "chat"
-// service.
-func NewGenerateFollowOnSuggestionsResponseBody(res *chat.GenerateFollowOnSuggestionsResult) *GenerateFollowOnSuggestionsResponseBody {
-	body := &GenerateFollowOnSuggestionsResponseBody{}
-	if res.Suggestions != nil {
-		body.Suggestions = make([]string, len(res.Suggestions))
-		for i, val := range res.Suggestions {
-			body.Suggestions[i] = val
-		}
-	} else {
-		body.Suggestions = []string{}
 	}
 	return body
 }
@@ -1545,156 +1315,6 @@ func NewGenerateTitleGatewayErrorResponseBody(res *goa.ServiceError) *GenerateTi
 	return body
 }
 
-// NewGenerateFollowOnSuggestionsUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "generateFollowOnSuggestions" endpoint
-// of the "chat" service.
-func NewGenerateFollowOnSuggestionsUnauthorizedResponseBody(res *goa.ServiceError) *GenerateFollowOnSuggestionsUnauthorizedResponseBody {
-	body := &GenerateFollowOnSuggestionsUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGenerateFollowOnSuggestionsForbiddenResponseBody builds the HTTP response
-// body from the result of the "generateFollowOnSuggestions" endpoint of the
-// "chat" service.
-func NewGenerateFollowOnSuggestionsForbiddenResponseBody(res *goa.ServiceError) *GenerateFollowOnSuggestionsForbiddenResponseBody {
-	body := &GenerateFollowOnSuggestionsForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGenerateFollowOnSuggestionsBadRequestResponseBody builds the HTTP
-// response body from the result of the "generateFollowOnSuggestions" endpoint
-// of the "chat" service.
-func NewGenerateFollowOnSuggestionsBadRequestResponseBody(res *goa.ServiceError) *GenerateFollowOnSuggestionsBadRequestResponseBody {
-	body := &GenerateFollowOnSuggestionsBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGenerateFollowOnSuggestionsNotFoundResponseBody builds the HTTP response
-// body from the result of the "generateFollowOnSuggestions" endpoint of the
-// "chat" service.
-func NewGenerateFollowOnSuggestionsNotFoundResponseBody(res *goa.ServiceError) *GenerateFollowOnSuggestionsNotFoundResponseBody {
-	body := &GenerateFollowOnSuggestionsNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGenerateFollowOnSuggestionsConflictResponseBody builds the HTTP response
-// body from the result of the "generateFollowOnSuggestions" endpoint of the
-// "chat" service.
-func NewGenerateFollowOnSuggestionsConflictResponseBody(res *goa.ServiceError) *GenerateFollowOnSuggestionsConflictResponseBody {
-	body := &GenerateFollowOnSuggestionsConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGenerateFollowOnSuggestionsUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "generateFollowOnSuggestions" endpoint
-// of the "chat" service.
-func NewGenerateFollowOnSuggestionsUnsupportedMediaResponseBody(res *goa.ServiceError) *GenerateFollowOnSuggestionsUnsupportedMediaResponseBody {
-	body := &GenerateFollowOnSuggestionsUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGenerateFollowOnSuggestionsInvalidResponseBody builds the HTTP response
-// body from the result of the "generateFollowOnSuggestions" endpoint of the
-// "chat" service.
-func NewGenerateFollowOnSuggestionsInvalidResponseBody(res *goa.ServiceError) *GenerateFollowOnSuggestionsInvalidResponseBody {
-	body := &GenerateFollowOnSuggestionsInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGenerateFollowOnSuggestionsInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "generateFollowOnSuggestions" endpoint
-// of the "chat" service.
-func NewGenerateFollowOnSuggestionsInvariantViolationResponseBody(res *goa.ServiceError) *GenerateFollowOnSuggestionsInvariantViolationResponseBody {
-	body := &GenerateFollowOnSuggestionsInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGenerateFollowOnSuggestionsUnexpectedResponseBody builds the HTTP
-// response body from the result of the "generateFollowOnSuggestions" endpoint
-// of the "chat" service.
-func NewGenerateFollowOnSuggestionsUnexpectedResponseBody(res *goa.ServiceError) *GenerateFollowOnSuggestionsUnexpectedResponseBody {
-	body := &GenerateFollowOnSuggestionsUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGenerateFollowOnSuggestionsGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "generateFollowOnSuggestions" endpoint
-// of the "chat" service.
-func NewGenerateFollowOnSuggestionsGatewayErrorResponseBody(res *goa.ServiceError) *GenerateFollowOnSuggestionsGatewayErrorResponseBody {
-	body := &GenerateFollowOnSuggestionsGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCreditUsageUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "creditUsage" endpoint of the "chat" service.
 func NewCreditUsageUnauthorizedResponseBody(res *goa.ServiceError) *CreditUsageUnauthorizedResponseBody {
@@ -1868,31 +1488,6 @@ func NewGenerateTitlePayload(body *GenerateTitleRequestBody, sessionToken *strin
 	return v
 }
 
-// NewGenerateFollowOnSuggestionsPayload builds a chat service
-// generateFollowOnSuggestions endpoint payload.
-func NewGenerateFollowOnSuggestionsPayload(body *GenerateFollowOnSuggestionsRequestBody, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.GenerateFollowOnSuggestionsPayload {
-	v := &chat.GenerateFollowOnSuggestionsPayload{}
-	if body.Count != nil {
-		v.Count = *body.Count
-	}
-	v.Messages = make([]*chat.SuggestionMessage, len(body.Messages))
-	for i, val := range body.Messages {
-		if val == nil {
-			v.Messages[i] = nil
-			continue
-		}
-		v.Messages[i] = unmarshalSuggestionMessageRequestBodyToChatSuggestionMessage(val)
-	}
-	if body.Count == nil {
-		v.Count = 3
-	}
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-	v.ChatSessionsToken = chatSessionsToken
-
-	return v
-}
-
 // NewCreditUsagePayload builds a chat service creditUsage endpoint payload.
 func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.CreditUsagePayload {
 	v := &chat.CreditUsagePayload{}
@@ -1908,44 +1503,6 @@ func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string, chatS
 func ValidateGenerateTitleRequestBody(body *GenerateTitleRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	return
-}
-
-// ValidateGenerateFollowOnSuggestionsRequestBody runs the validations defined
-// on GenerateFollowOnSuggestionsRequestBody
-func ValidateGenerateFollowOnSuggestionsRequestBody(body *GenerateFollowOnSuggestionsRequestBody) (err error) {
-	if body.Messages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
-	}
-	for _, e := range body.Messages {
-		if e != nil {
-			if err2 := ValidateSuggestionMessageRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	if body.Count != nil {
-		if *body.Count < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", *body.Count, 1, true))
-		}
-	}
-	if body.Count != nil {
-		if *body.Count > 10 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", *body.Count, 10, false))
-		}
-	}
-	return
-}
-
-// ValidateSuggestionMessageRequestBody runs the validations defined on
-// SuggestionMessageRequestBody
-func ValidateSuggestionMessageRequestBody(body *SuggestionMessageRequestBody) (err error) {
-	if body.Role == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role", "body"))
-	}
-	if body.Content == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
 	}
 	return
 }

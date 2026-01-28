@@ -15,21 +15,19 @@ import (
 
 // Client is the "chat" service client.
 type Client struct {
-	ListChatsEndpoint                   goa.Endpoint
-	LoadChatEndpoint                    goa.Endpoint
-	GenerateTitleEndpoint               goa.Endpoint
-	GenerateFollowOnSuggestionsEndpoint goa.Endpoint
-	CreditUsageEndpoint                 goa.Endpoint
+	ListChatsEndpoint     goa.Endpoint
+	LoadChatEndpoint      goa.Endpoint
+	GenerateTitleEndpoint goa.Endpoint
+	CreditUsageEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "chat" service client given the endpoints.
-func NewClient(listChats, loadChat, generateTitle, generateFollowOnSuggestions, creditUsage goa.Endpoint) *Client {
+func NewClient(listChats, loadChat, generateTitle, creditUsage goa.Endpoint) *Client {
 	return &Client{
-		ListChatsEndpoint:                   listChats,
-		LoadChatEndpoint:                    loadChat,
-		GenerateTitleEndpoint:               generateTitle,
-		GenerateFollowOnSuggestionsEndpoint: generateFollowOnSuggestions,
-		CreditUsageEndpoint:                 creditUsage,
+		ListChatsEndpoint:     listChats,
+		LoadChatEndpoint:      loadChat,
+		GenerateTitleEndpoint: generateTitle,
+		CreditUsageEndpoint:   creditUsage,
 	}
 }
 
@@ -97,29 +95,6 @@ func (c *Client) GenerateTitle(ctx context.Context, p *GenerateTitlePayload) (re
 		return
 	}
 	return ires.(*GenerateTitleResult), nil
-}
-
-// GenerateFollowOnSuggestions calls the "generateFollowOnSuggestions" endpoint
-// of the "chat" service.
-// GenerateFollowOnSuggestions may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) GenerateFollowOnSuggestions(ctx context.Context, p *GenerateFollowOnSuggestionsPayload) (res *GenerateFollowOnSuggestionsResult, err error) {
-	var ires any
-	ires, err = c.GenerateFollowOnSuggestionsEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*GenerateFollowOnSuggestionsResult), nil
 }
 
 // CreditUsage calls the "creditUsage" endpoint of the "chat" service.

@@ -110,8 +110,6 @@ type CreateToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -179,8 +177,6 @@ type UpdateToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -241,8 +237,6 @@ type GetToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -303,8 +297,6 @@ type CloneToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -365,8 +357,6 @@ type AddExternalOAuthServerResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -427,8 +417,6 @@ type RemoveOAuthServerResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -489,8 +477,6 @@ type AddOAuthProxyServerResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -2632,23 +2618,6 @@ type FunctionEnvironmentVariableResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
-// ExternalMCPHeaderDefinitionResponseBody is used to define fields on response
-// body types.
-type ExternalMCPHeaderDefinitionResponseBody struct {
-	// The prefixed environment variable name (e.g., SLACK_X_API_KEY)
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The actual HTTP header name to send (e.g., X-Api-Key)
-	HeaderName *string `form:"header_name,omitempty" json:"header_name,omitempty" xml:"header_name,omitempty"`
-	// Description of the header
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Placeholder value for the header
-	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
-	// Whether the header is required
-	Required *bool `form:"required,omitempty" json:"required,omitempty" xml:"required,omitempty"`
-	// Whether the header value is secret
-	Secret *bool `form:"secret,omitempty" json:"secret,omitempty" xml:"secret,omitempty"`
-}
-
 // OAuthEnablementMetadataResponseBody is used to define fields on response
 // body types.
 type OAuthEnablementMetadataResponseBody struct {
@@ -3068,8 +3037,6 @@ type ToolsetEntryResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolEntryResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -3313,16 +3280,6 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 				continue
 			}
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
@@ -3741,16 +3698,6 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
-		}
-	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
@@ -4149,16 +4096,6 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 				continue
 			}
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
@@ -4561,16 +4498,6 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
-		}
-	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
@@ -4819,16 +4746,6 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 				continue
 			}
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
@@ -5081,16 +4998,6 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
-		}
-	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
@@ -5339,16 +5246,6 @@ func NewAddOAuthProxyServerToolsetOK(body *AddOAuthProxyServerResponseBody) *typ
 				continue
 			}
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
@@ -5810,13 +5707,6 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 			}
 		}
 	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.OauthEnablementMetadata != nil {
 		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -5974,13 +5864,6 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 			}
 		}
 	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.OauthEnablementMetadata != nil {
 		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -6118,13 +6001,6 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	for _, e := range body.FunctionEnvironmentVariables {
 		if e != nil {
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -6270,13 +6146,6 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 			}
 		}
 	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.OauthEnablementMetadata != nil {
 		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -6414,13 +6283,6 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 	for _, e := range body.FunctionEnvironmentVariables {
 		if e != nil {
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -6566,13 +6428,6 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 			}
 		}
 	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.OauthEnablementMetadata != nil {
 		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -6710,13 +6565,6 @@ func ValidateAddOAuthProxyServerResponseBody(body *AddOAuthProxyServerResponseBo
 	for _, e := range body.FunctionEnvironmentVariables {
 		if e != nil {
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -9490,24 +9338,6 @@ func ValidateFunctionEnvironmentVariableResponseBody(body *FunctionEnvironmentVa
 	return
 }
 
-// ValidateExternalMCPHeaderDefinitionResponseBody runs the validations defined
-// on ExternalMCPHeaderDefinitionResponseBody
-func ValidateExternalMCPHeaderDefinitionResponseBody(body *ExternalMCPHeaderDefinitionResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.HeaderName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("header_name", "body"))
-	}
-	if body.Required == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("required", "body"))
-	}
-	if body.Secret == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("secret", "body"))
-	}
-	return
-}
-
 // ValidateOAuthEnablementMetadataResponseBody runs the validations defined on
 // OAuthEnablementMetadataResponseBody
 func ValidateOAuthEnablementMetadataResponseBody(body *OAuthEnablementMetadataResponseBody) (err error) {
@@ -10158,13 +9988,6 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 	for _, e := range body.FunctionEnvironmentVariables {
 		if e != nil {
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}

@@ -624,25 +624,6 @@ func marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableRespons
 	return res
 }
 
-// marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody
-// builds a value of type *ExternalMCPHeaderDefinitionResponseBody from a value
-// of type *types.ExternalMCPHeaderDefinition.
-func marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(v *types.ExternalMCPHeaderDefinition) *ExternalMCPHeaderDefinitionResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &ExternalMCPHeaderDefinitionResponseBody{
-		Name:        v.Name,
-		HeaderName:  v.HeaderName,
-		Description: v.Description,
-		Placeholder: v.Placeholder,
-		Required:    v.Required,
-		Secret:      v.Secret,
-	}
-
-	return res
-}
-
 // marshalInstancesInstanceMcpServerToInstanceMcpServerResponseBody builds a
 // value of type *InstanceMcpServerResponseBody from a value of type
 // *instances.InstanceMcpServer.

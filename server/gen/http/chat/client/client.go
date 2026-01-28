@@ -29,10 +29,6 @@ type Client struct {
 	// generateTitle endpoint.
 	GenerateTitleDoer goahttp.Doer
 
-	// GenerateFollowOnSuggestions Doer is the HTTP client used to make requests to
-	// the generateFollowOnSuggestions endpoint.
-	GenerateFollowOnSuggestionsDoer goahttp.Doer
-
 	// CreditUsage Doer is the HTTP client used to make requests to the creditUsage
 	// endpoint.
 	CreditUsageDoer goahttp.Doer
@@ -57,16 +53,15 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListChatsDoer:                   doer,
-		LoadChatDoer:                    doer,
-		GenerateTitleDoer:               doer,
-		GenerateFollowOnSuggestionsDoer: doer,
-		CreditUsageDoer:                 doer,
-		RestoreResponseBody:             restoreBody,
-		scheme:                          scheme,
-		host:                            host,
-		decoder:                         dec,
-		encoder:                         enc,
+		ListChatsDoer:       doer,
+		LoadChatDoer:        doer,
+		GenerateTitleDoer:   doer,
+		CreditUsageDoer:     doer,
+		RestoreResponseBody: restoreBody,
+		scheme:              scheme,
+		host:                host,
+		decoder:             dec,
+		encoder:             enc,
 	}
 }
 
@@ -137,30 +132,6 @@ func (c *Client) GenerateTitle() goa.Endpoint {
 		resp, err := c.GenerateTitleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "generateTitle", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GenerateFollowOnSuggestions returns an endpoint that makes HTTP requests to
-// the chat service generateFollowOnSuggestions server.
-func (c *Client) GenerateFollowOnSuggestions() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGenerateFollowOnSuggestionsRequest(c.encoder)
-		decodeResponse = DecodeGenerateFollowOnSuggestionsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGenerateFollowOnSuggestionsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GenerateFollowOnSuggestionsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("chat", "generateFollowOnSuggestions", err)
 		}
 		return decodeResponse(resp)
 	}

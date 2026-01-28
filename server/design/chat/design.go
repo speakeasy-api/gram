@@ -93,39 +93,6 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "generateTitle")
 	})
 
-	Method("generateFollowOnSuggestions", func() {
-		Description("Generate follow-on message suggestions based on conversation context")
-
-		Payload(func() {
-			security.SessionPayload()
-			security.ProjectPayload()
-			security.ChatSessionsTokenPayload()
-			Attribute("messages", ArrayOf(SuggestionMessage), "The conversation messages to analyze")
-			Attribute("count", Int, "Number of suggestions to generate (default 3)", func() {
-				Default(3)
-				Minimum(1)
-				Maximum(10)
-			})
-			Required("messages")
-		})
-
-		Result(func() {
-			Attribute("suggestions", ArrayOf(String), "The generated follow-on suggestions")
-			Required("suggestions")
-		})
-
-		HTTP(func() {
-			POST("/rpc/chat.generateFollowOnSuggestions")
-			security.SessionHeader()
-			security.ProjectHeader()
-			security.ChatSessionsTokenHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "generateFollowOnSuggestions")
-		Meta("openapi:extension:x-speakeasy-name-override", "generateFollowOnSuggestions")
-	})
-
 	Method("creditUsage", func() {
 		Description("Load a chat by its ID")
 
@@ -203,11 +170,4 @@ var ChatMessage = Type("ChatMessage", func() {
 	})
 
 	Required("id", "role", "model", "created_at")
-})
-
-var SuggestionMessage = Type("SuggestionMessage", func() {
-	Description("A simplified message format for generating suggestions")
-	Attribute("role", String, "The role of the message (user or assistant)")
-	Attribute("content", String, "The text content of the message")
-	Required("role", "content")
 })

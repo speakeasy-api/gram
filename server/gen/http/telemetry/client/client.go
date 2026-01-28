@@ -29,10 +29,6 @@ type Client struct {
 	// captureEvent endpoint.
 	CaptureEventDoer goahttp.Doer
 
-	// GetProjectMetricsSummary Doer is the HTTP client used to make requests to
-	// the getProjectMetricsSummary endpoint.
-	GetProjectMetricsSummaryDoer goahttp.Doer
-
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -53,15 +49,14 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		SearchLogsDoer:               doer,
-		SearchToolCallsDoer:          doer,
-		CaptureEventDoer:             doer,
-		GetProjectMetricsSummaryDoer: doer,
-		RestoreResponseBody:          restoreBody,
-		scheme:                       scheme,
-		host:                         host,
-		decoder:                      dec,
-		encoder:                      enc,
+		SearchLogsDoer:      doer,
+		SearchToolCallsDoer: doer,
+		CaptureEventDoer:    doer,
+		RestoreResponseBody: restoreBody,
+		scheme:              scheme,
+		host:                host,
+		decoder:             dec,
+		encoder:             enc,
 	}
 }
 
@@ -132,30 +127,6 @@ func (c *Client) CaptureEvent() goa.Endpoint {
 		resp, err := c.CaptureEventDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "captureEvent", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetProjectMetricsSummary returns an endpoint that makes HTTP requests to the
-// telemetry service getProjectMetricsSummary server.
-func (c *Client) GetProjectMetricsSummary() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetProjectMetricsSummaryRequest(c.encoder)
-		decodeResponse = DecodeGetProjectMetricsSummaryResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetProjectMetricsSummaryRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetProjectMetricsSummaryDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("telemetry", "getProjectMetricsSummary", err)
 		}
 		return decodeResponse(resp)
 	}
