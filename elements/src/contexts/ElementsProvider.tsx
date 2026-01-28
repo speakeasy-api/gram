@@ -404,6 +404,8 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     [
       config.languageModel,
       config.tools?.toolsRequiringApproval,
+      config.agents?.enabled,
+      config.gramEnvironment,
       model,
       systemPrompt,
       mcpTools,
