@@ -277,9 +277,7 @@ function ExportJsonModal({
               </Type>
             </div>
           ) : exportData ? (
-            <CodeBlock language="json">
-              {exportData}
-            </CodeBlock>
+            <CodeBlock language="json">{exportData}</CodeBlock>
           ) : null}
         </div>
         <Dialog.Footer className="mt-4 shrink-0">
