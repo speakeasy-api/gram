@@ -35,6 +35,8 @@ interface PlaygroundElementsProps {
   model: string;
   /** Additional action buttons to render alongside the share button */
   additionalActions?: React.ReactNode;
+  /** User-provided auth headers for user-provided variables */
+  userProvidedHeaders?: Record<string, string>;
 }
 
 export function PlaygroundElements({
@@ -42,6 +44,7 @@ export function PlaygroundElements({
   environmentSlug,
   model,
   additionalActions,
+  userProvidedHeaders = {},
 }: PlaygroundElementsProps) {
   const session = useSession();
   const project = useProject();
@@ -124,6 +127,7 @@ export function PlaygroundElements({
           sessionFn: getSession,
           headers: {
             "X-Gram-Source": "playground",
+            ...userProvidedHeaders,
           },
         },
         history: {
@@ -139,9 +143,9 @@ export function PlaygroundElements({
           showModelPicker: false,
         },
         welcome: {
-          title: "Test Your Toolset",
+          title: "Test Your MCP Server",
           subtitle:
-            "This chat has access to the selected toolset. Use it to test your tools.",
+            "This chat has access to the selected MCP server. Use it to test your tools.",
           suggestions: [],
         },
         composer: {
@@ -156,6 +160,7 @@ export function PlaygroundElements({
           ThreadWelcome: GramThreadWelcome,
           Composer: GramComposer,
         },
+        environment: userProvidedHeaders,
       }}
     >
       <PlaygroundAuthWarningContext.Provider

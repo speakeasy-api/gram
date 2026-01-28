@@ -10144,111 +10144,6 @@ paths:
       x-speakeasy-name-override: updateBySlug
       x-speakeasy-react-hook:
         name: UpdateToolset
-  /rpc/toolsets.updateSecurityVariableDisplayName:
-    post:
-      description: Update the display name of a security variable for user-friendly presentation
-      operationId: updateSecurityVariableDisplayName
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateSecurityVariableDisplayNameRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SecurityVariable'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: updateSecurityVariableDisplayName toolsets
-      tags:
-        - toolsets
-      x-speakeasy-name-override: updateSecurityVariableDisplayName
-      x-speakeasy-react-hook:
-        name: UpdateSecurityVariableDisplayName
   /rpc/usage.createCheckout:
     post:
       description: Create a checkout link for upgrading to the business plan
@@ -12338,10 +12233,14 @@ components:
         value:
           type: string
           description: Redacted values of the environment variable
+        value_hash:
+          type: string
+          description: Hash of the value to identify matching values across environments without exposing the actual value
       description: A single environment entry
       required:
         - name
         - value
+        - value_hash
         - created_at
         - updated_at
     EnvironmentEntryInput:
@@ -13671,6 +13570,52 @@ components:
       required:
         - package
         - versions
+    McpEnvironmentConfig:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the config was created
+          format: date-time
+        header_display_name:
+          type: string
+          description: Custom display name for the variable in MCP headers
+        id:
+          type: string
+          description: The ID of the environment config
+        provided_by:
+          type: string
+          description: 'How the variable is provided: ''user'', ''system'', or ''none'''
+        updated_at:
+          type: string
+          description: When the config was last updated
+          format: date-time
+        variable_name:
+          type: string
+          description: The name of the environment variable
+      description: Represents an environment variable configured for an MCP server.
+      required:
+        - id
+        - variable_name
+        - provided_by
+        - created_at
+        - updated_at
+    McpEnvironmentConfigInput:
+      type: object
+      properties:
+        header_display_name:
+          type: string
+          description: Custom display name for the variable in MCP headers
+        provided_by:
+          type: string
+          description: 'How the variable is provided: ''user'', ''system'', or ''none'''
+        variable_name:
+          type: string
+          description: The name of the environment variable
+      description: Input for configuring an environment variable for an MCP server.
+      required:
+        - variable_name
+        - provided_by
     McpMetadata:
       type: object
       properties:
@@ -13678,15 +13623,19 @@ components:
           type: string
           description: When the metadata entry was created
           format: date-time
+        default_environment_id:
+          type: string
+          description: The default environment to load variables from
+          format: uuid
+        environment_configs:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpEnvironmentConfig'
+          description: The list of environment variables configured for this MCP
         external_documentation_url:
           type: string
           description: A link to external documentation for the MCP install page
           format: uri
-        header_display_names:
-          type: object
-          description: Maps security scheme keys to user-friendly display names
-          additionalProperties:
-            type: string
         id:
           type: string
           description: The ID of the metadata record
@@ -14826,6 +14775,15 @@ components:
     SetMcpMetadataRequestBody:
       type: object
       properties:
+        default_environment_id:
+          type: string
+          description: The default environment to load variables from
+          format: uuid
+        environment_configs:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpEnvironmentConfigInput'
+          description: The list of environment variables to configure for this MCP
         external_documentation_url:
           type: string
           description: A link to external documentation for the MCP install page
@@ -15601,26 +15559,6 @@ components:
         toolset_slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - toolset_slug
-        - security_key
-        - display_name
-    UpdateSecurityVariableDisplayNameRequestBody:
-      type: object
-      properties:
-        display_name:
-          type: string
-          description: The user-friendly display name. Set to empty string to clear and use the original name.
-          maxLength: 120
-        security_key:
-          type: string
-          description: The security scheme key (e.g., 'BearerAuth', 'ApiKeyAuth') from the OpenAPI spec
-          maxLength: 60
-        toolset_slug:
-          type: string
-          description: The slug of the toolset containing the security variable
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
       required:

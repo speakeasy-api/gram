@@ -56,8 +56,3 @@ func RemoveOAuthServerToolsetsPath() string {
 func AddOAuthProxyServerToolsetsPath() string {
 	return "/rpc/toolsets.addOAuthProxyServer"
 }
-
-// UpdateSecurityVariableDisplayNameToolsetsPath returns the URL path to the toolsets service updateSecurityVariableDisplayName HTTP endpoint.
-func UpdateSecurityVariableDisplayNameToolsetsPath() string {
-	return "/rpc/toolsets.updateSecurityVariableDisplayName"
-}

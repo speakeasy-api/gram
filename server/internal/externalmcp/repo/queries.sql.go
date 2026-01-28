@@ -180,6 +180,15 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 }
 
 const getExternalMCPToolDefinitionByURN = `-- name: GetExternalMCPToolDefinitionByURN :one
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = $2
+    AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+)
 SELECT
   t.id,
   t.external_mcp_attachment_id,
@@ -207,9 +216,15 @@ SELECT
 FROM external_mcp_tool_definitions t
 JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
 WHERE t.tool_urn = $1
+  AND e.deployment_id = (SELECT id FROM deployment)
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE
 `
+
+type GetExternalMCPToolDefinitionByURNParams struct {
+	ToolUrn   string
+	ProjectID uuid.UUID
+}
 
 type GetExternalMCPToolDefinitionByURNRow struct {
 	ID                         uuid.UUID
@@ -237,8 +252,8 @@ type GetExternalMCPToolDefinitionByURNRow struct {
 	RegistryServerSpecifier    string
 }
 
-func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, toolUrn string) (GetExternalMCPToolDefinitionByURNRow, error) {
-	row := q.db.QueryRow(ctx, getExternalMCPToolDefinitionByURN, toolUrn)
+func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, arg GetExternalMCPToolDefinitionByURNParams) (GetExternalMCPToolDefinitionByURNRow, error) {
+	row := q.db.QueryRow(ctx, getExternalMCPToolDefinitionByURN, arg.ToolUrn, arg.ProjectID)
 	var i GetExternalMCPToolDefinitionByURNRow
 	err := row.Scan(
 		&i.ID,

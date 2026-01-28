@@ -6,6 +6,37 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
+var McpEnvironmentConfigInput = Type("McpEnvironmentConfigInput", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Input for configuring an environment variable for an MCP server.")
+
+	Attribute("variable_name", String, "The name of the environment variable")
+	Attribute("header_display_name", String, "Custom display name for the variable in MCP headers")
+	Attribute("provided_by", String, "How the variable is provided: 'user', 'system', or 'none'")
+
+	Required("variable_name", "provided_by")
+})
+
+var McpEnvironmentConfig = Type("McpEnvironmentConfig", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Represents an environment variable configured for an MCP server.")
+
+	Attribute("id", String, "The ID of the environment config")
+	Attribute("variable_name", String, "The name of the environment variable")
+	Attribute("header_display_name", String, "Custom display name for the variable in MCP headers")
+	Attribute("provided_by", String, "How the variable is provided: 'user', 'system', or 'none'")
+	Attribute("created_at", String, "When the config was created", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "When the config was last updated", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "variable_name", "provided_by", "created_at", "updated_at")
+})
+
 var McpMetadata = Type("McpMetadata", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -22,7 +53,11 @@ var McpMetadata = Type("McpMetadata", func() {
 		Format(FormatURI)
 	})
 	Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
-	Attribute("header_display_names", MapOf(String, String), "Maps security scheme keys to user-friendly display names")
+	Attribute("default_environment_id", String, "The default environment to load variables from", func() {
+		Format(FormatUUID)
+	})
+	Attribute("environment_configs", ArrayOf(McpEnvironmentConfig), "The list of environment variables configured for this MCP")
+
 	Attribute("created_at", String, "When the metadata entry was created", func() {
 		Format(FormatDateTime)
 	})
@@ -76,6 +111,10 @@ var _ = Service("mcpMetadata", func() {
 			Attribute("logo_asset_id", String, "The asset ID for the MCP install page logo")
 			Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page")
 			Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
+			Attribute("default_environment_id", String, "The default environment to load variables from", func() {
+				Format(FormatUUID)
+			})
+			Attribute("environment_configs", ArrayOf(McpEnvironmentConfigInput), "The list of environment variables to configure for this MCP")
 
 			Required("toolset_slug")
 

@@ -1,12 +1,14 @@
 import { zip } from "./fflate.js";
 
-
 async function fileExtensionFromResponse(response) {
   const contentType = response.headers.get("content-type");
   if (contentType) {
     if (contentType.includes("image/png")) {
       return "png";
-    } else if (contentType.includes("image/jpeg") || contentType.includes("image/jpg")) {
+    } else if (
+      contentType.includes("image/jpeg") ||
+      contentType.includes("image/jpg")
+    ) {
       return "jpg";
     } else if (contentType.includes("image/svg")) {
       return "svg";
@@ -20,7 +22,7 @@ async function downloadDxtHandler(event) {
   if (manifestElement) {
     const manifestContent = manifestElement.textContent;
     let manifest = JSON.parse(manifestContent);
-    let files = {}
+    let files = {};
 
     // Get logo image and fetch its binary data
     const logoImg = document.getElementById("logo");
@@ -28,7 +30,7 @@ async function downloadDxtHandler(event) {
       try {
         const response = await fetch(logoImg.src);
         const arrayBuffer = await response.arrayBuffer();
-        const extension = await fileExtensionFromResponse(response)
+        const extension = await fileExtensionFromResponse(response);
 
         files[`icon.${extension}`] = new Uint8Array(arrayBuffer);
         manifest.icon = `icon.${extension}`;
@@ -37,25 +39,26 @@ async function downloadDxtHandler(event) {
       }
     }
 
-    files['manifest.json'] = new TextEncoder().encode(JSON.stringify(manifest)),
+    ((files["manifest.json"] = new TextEncoder().encode(
+      JSON.stringify(manifest),
+    )),
+      zip(files, (err, data) => {
+        if (err) {
+          console.error("Error creating zip:", err);
+          return;
+        }
 
-    zip(files, (err, data) => {
-      if (err) {
-        console.error("Error creating zip:", err);
-        return;
-      }
-
-      const blob = new Blob([data], { type: "application/zip" });
-      const url = URL.createObjectURL(blob);
-      const ourEl = document.querySelector(".install-targets");
-      const a = document.createElement("a");
-      a.href = url;
-      ourEl.appendChild(a);
-      a.download = `${manifest.name}.mcpb`;
-      a.click();
-      ourEl.removeChild(a);
-      URL.revokeObjectURL(url);
-    });
+        const blob = new Blob([data], { type: "application/zip" });
+        const url = URL.createObjectURL(blob);
+        const ourEl = document.querySelector(".install-targets");
+        const a = document.createElement("a");
+        a.href = url;
+        ourEl.appendChild(a);
+        a.download = `${manifest.name}.mcpb`;
+        a.click();
+        ourEl.removeChild(a);
+        URL.revokeObjectURL(url);
+      }));
   }
 }
 
@@ -182,6 +185,19 @@ function registerCenterOffsetUpdaters(el) {
   });
 }
 
+async function copyToClipboard(url, button, originalText) {
+  try {
+    await navigator.clipboard.writeText(url);
+    button.innerHTML =
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+    setTimeout(() => {
+      button.innerHTML = originalText;
+    }, 2000);
+  } catch (err) {
+    console.error("Failed to copy URL:", err);
+  }
+}
+
 function initializeHandlers() {
   document
     .querySelector(".action-button")
@@ -205,6 +221,30 @@ function initializeHandlers() {
     );
 
   registerCenterOffsetUpdaters(document.querySelector(".gram-brand-badge"));
+
+  document
+    .getElementById("share-button")
+    .addEventListener("click", async function () {
+      const url = window.location.href;
+      const button = this;
+      const originalText = button.innerHTML;
+
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: "{{ .MCPName }} - MCP Server",
+            text: "Install {{ .MCPName }} MCP server by {{ .OrganizationName }}",
+            url: url,
+          });
+        } catch (err) {
+          if (err.name !== "AbortError") {
+            await copyToClipboard(url, button, originalText);
+          }
+        }
+      } else {
+        await copyToClipboard(url, button, originalText);
+      }
+    });
 }
 
 document.addEventListener("DOMContentLoaded", () => {

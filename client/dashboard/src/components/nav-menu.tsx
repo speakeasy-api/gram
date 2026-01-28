@@ -37,6 +37,7 @@ function NavMenuButton({ item }: { item: AppRoute }) {
       href={item.href()}
       active={item.active}
       Icon={item.Icon}
+      target={item.external ? "_blank" : undefined}
     />
   );
 }

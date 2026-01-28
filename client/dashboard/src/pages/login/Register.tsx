@@ -14,7 +14,7 @@ export default function Register() {
     if (redirect) {
       window.location.href = redirect;
     } else {
-      routes.toolsets.goTo();
+      routes.mcp.goTo();
     }
   }
 

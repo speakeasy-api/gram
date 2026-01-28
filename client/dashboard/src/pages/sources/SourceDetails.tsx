@@ -1,11 +1,5 @@
 import { Page } from "@/components/page-layout";
-import {
-  Button,
-  Badge,
-  Dialog,
-  Combobox,
-  Icon,
-} from "@speakeasy-api/moonshine";
+import { Button, Badge, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
 import { Heading } from "@/components/ui/heading";
 import { useProject } from "@/contexts/Auth";
@@ -13,30 +7,19 @@ import { getServerURL } from "@/lib/utils";
 import {
   useLatestDeployment,
   useListAssets,
-  useListTools,
-  useListToolsets,
-  useListEnvironments,
-  useGetSourceEnvironment,
-  useSetSourceEnvironmentLinkMutation,
-  useDeleteSourceEnvironmentLinkMutation,
 } from "@gram/client/react-query/index.js";
 import { useParams, Navigate } from "react-router";
 import { useRoutes } from "@/routes";
-import {
-  FileCode,
-  SquareFunction,
-  Download,
-  Calendar,
-  Eye,
-  TriangleAlertIcon,
-} from "lucide-react";
+import { Download, Eye, FileCode, Tag, Package, Clock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useMemo, useState, useEffect } from "react";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { toast } from "sonner";
-import { SourceToolsetsCard } from "@/components/sources/SourceToolsetsCard";
+import { useMemo, useState } from "react";
 import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogContent";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
+import {
+  OpenAPIIllustration,
+  FunctionIllustration,
+} from "@/components/sources/SourceCardIllustrations";
+import { InfoField } from "@/components/sources/InfoField";
 
 export default function SourceDetails() {
   const { sourceKind, sourceSlug } = useParams<{
@@ -48,110 +31,8 @@ export default function SourceDetails() {
   const { data: deployment, isLoading: isLoadingDeployment } =
     useLatestDeployment();
   const { data: assetsData } = useListAssets();
-  const { data: toolsData } = useListTools({
-    deploymentId: deployment?.deployment?.id,
-  });
-  const { data: toolsetsData } = useListToolsets();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Environment management state and hooks
-  const environments = useListEnvironments();
-  const sourceEnvironment = useGetSourceEnvironment(
-    {
-      sourceKind: (sourceKind === "openapi" ? "http" : sourceKind) as
-        | "http"
-        | "function",
-      sourceSlug: sourceSlug || "",
-    },
-    undefined,
-    {
-      retry: (_, err) => {
-        if (err instanceof GramError && err.statusCode === 404) {
-          return false;
-        }
-        return true;
-      },
-      throwOnError: false,
-      enabled: !!sourceKind && !!sourceSlug,
-    },
-  );
-
-  const [activeEnvironmentId, setActiveEnvironmentId] = useState<
-    string | undefined
-  >(undefined);
-
-  const [initialEnvironmentId, setInitialEnvironmentId] = useState<
-    string | undefined
-  >(undefined);
-
-  useEffect(() => {
-    setActiveEnvironmentId(sourceEnvironment.data?.id);
-    setInitialEnvironmentId(sourceEnvironment.data?.id);
-  }, [sourceEnvironment.data?.id]);
-
-  const isDirty = activeEnvironmentId !== initialEnvironmentId;
-
-  const setSourceEnvironmentMutation = useSetSourceEnvironmentLinkMutation({
-    onSuccess: () => {
-      toast.success("Environment attached successfully");
-      setInitialEnvironmentId(activeEnvironmentId);
-    },
-    onError: (error) => {
-      toast.error("Failed to attach environment. Please try again.");
-      console.error("Failed to attach environment:", error);
-    },
-    onSettled: () => {
-      sourceEnvironment.refetch();
-    },
-  });
-
-  const deleteSourceEnvironmentMutation =
-    useDeleteSourceEnvironmentLinkMutation({
-      onSuccess: () => {
-        toast.success("Environment detached successfully");
-        setInitialEnvironmentId(undefined);
-      },
-      onError: (error) => {
-        toast.error("Failed to detach environment. Please try again.");
-        console.error("Failed to detach environment:", error);
-      },
-      onSettled: () => {
-        sourceEnvironment.refetch();
-      },
-    });
-
-  const handleSaveEnvironment = () => {
-    if (!activeEnvironmentId && isDirty && sourceSlug) {
-      deleteSourceEnvironmentMutation.mutate({
-        request: {
-          sourceKind: (sourceKind === "openapi" ? "http" : sourceKind) as
-            | "http"
-            | "function",
-          sourceSlug: sourceSlug,
-        },
-      });
-      return;
-    }
-
-    if (!activeEnvironmentId || !sourceSlug) return;
-
-    setSourceEnvironmentMutation.mutate({
-      request: {
-        setSourceEnvironmentLinkRequestBody: {
-          sourceKind: (sourceKind === "openapi" ? "http" : sourceKind) as
-            | "http"
-            | "function",
-          sourceSlug: sourceSlug,
-          environmentId: activeEnvironmentId,
-        },
-      },
-    });
-  };
-
-  const selectedEnvironment = environments.data?.environments?.find(
-    (env) => env.id === activeEnvironmentId,
-  );
 
   // Find the specific source from the deployment
   const source = useMemo(() => {
@@ -177,43 +58,6 @@ export default function SourceDetails() {
 
   const isOpenAPI = sourceKind === "http" || sourceKind === "openapi";
   const sourceType = isOpenAPI ? "OpenAPI" : "Function";
-
-  // Get tools generated by this source
-  // The API returns polymorphic Tool objects with httpToolDefinition or functionToolDefinition
-  const sourceTools = useMemo(() => {
-    if (!source || !toolsData) {
-      return [];
-    }
-
-    const isOpenAPISource = sourceKind === "http" || sourceKind === "openapi";
-
-    // Extract HTTP tools or function tools based on source type
-    if (isOpenAPISource) {
-      return toolsData.tools
-        .filter((tool) => tool.httpToolDefinition?.assetId === source.assetId)
-        .map((tool) => tool.httpToolDefinition!);
-    } else {
-      return toolsData.tools
-        .filter(
-          (tool) => tool.functionToolDefinition?.assetId === source.assetId,
-        )
-        .map((tool) => tool.functionToolDefinition!);
-    }
-  }, [source, toolsData, sourceKind]);
-
-  // Get tool URNs for this source
-  const sourceToolUrns = useMemo(() => {
-    return new Set(sourceTools.map((tool) => tool.toolUrn));
-  }, [sourceTools]);
-
-  // Find toolsets that use tools from this source
-  const toolsetsUsingSource = useMemo(() => {
-    if (!toolsetsData || sourceToolUrns.size === 0) return [];
-
-    return toolsetsData.toolsets.filter((toolset) =>
-      toolset.toolUrns?.some((urn) => sourceToolUrns.has(urn)),
-    );
-  }, [toolsetsData, sourceToolUrns]);
 
   // Download functionality
   const handleDownload = () => {
@@ -260,235 +104,119 @@ export default function SourceDetails() {
         />
       </Page.Header>
 
-      <Page.Body>
-        {/* Header Section with Title and Actions */}
-        <div className="flex items-center justify-between mb-4 h-10">
-          <div className="flex items-center gap-2">
-            <Heading variant="h2" className="normal-case">
-              {source?.name || sourceSlug}
-            </Heading>
-            <Badge variant="neutral">{sourceType}</Badge>
+      <Page.Body fullWidth noPadding>
+        {/* Hero Header with Illustration - full width */}
+        <div className="relative w-full h-64 overflow-hidden">
+          {isOpenAPI ? (
+            <OpenAPIIllustration className="saturate-[.3]" />
+          ) : (
+            <FunctionIllustration className="saturate-[.3]" />
+          )}
+
+          {/* Overlay for text readability */}
+          <div className="absolute inset-0 bg-linear-to-t from-foreground/50 via-foreground/20 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
+            <Stack gap={2}>
+              <div className="flex items-center gap-3 ml-1">
+                <Heading variant="h1" className="text-background">
+                  {source?.name || sourceSlug}
+                </Heading>
+                <Badge variant="neutral">
+                  <Badge.Text>{sourceType}</Badge.Text>
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2 ml-1">
+                <Type className="max-w-2xl truncate text-background/70!">
+                  {source?.slug}
+                </Type>
+              </div>
+            </Stack>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setIsModalOpen(true)}
-            >
-              <Eye className="h-4 w-4" />
-              View {isOpenAPI ? "Spec" : "Manifest"}
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleDownload}>
-              <Download className="h-4 w-4" />
-              Download
-            </Button>
+
+          {/* Action buttons */}
+          <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
+            <Stack direction="horizontal" gap={2} className="justify-end">
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setIsModalOpen(true)}
+              >
+                <Button.LeftIcon>
+                  <Eye className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>
+                  View {isOpenAPI ? "Spec" : "Manifest"}
+                </Button.Text>
+              </Button>
+              <Button variant="secondary" size="md" onClick={handleDownload}>
+                <Button.LeftIcon>
+                  <Download className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Download</Button.Text>
+              </Button>
+            </Stack>
           </div>
         </div>
 
-        <div className="space-y-6">
-          {/* Source Metadata Card */}
-          <div className="rounded-lg border bg-card p-6">
-            <Type as="h2" className="text-lg font-semibold mb-4">
-              Source Information
-            </Type>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">Name</Type>
-                <Type className="font-medium">{source?.name}</Type>
-              </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">Slug</Type>
-                <Type className="font-medium">{source?.slug}</Type>
-              </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">Type</Type>
-                <Type className="font-medium">{sourceType}</Type>
-              </div>
-              {!isOpenAPI && source && "runtime" in source && (
-                <div>
-                  <Type className="text-sm text-muted-foreground mb-1">
-                    Runtime
-                  </Type>
-                  <Type className="font-medium">{String(source.runtime)}</Type>
-                </div>
-              )}
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">
-                  Last Updated
+        {/* Content Section */}
+        <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+          <div className="space-y-6">
+            {/* Source Metadata Card */}
+            <div className="rounded-lg border bg-card overflow-hidden">
+              <div className="border-b bg-surface-secondary/30 px-6 py-4">
+                <Type as="h2" className="text-lg flex items-center gap-2">
+                  <FileCode className="h-5 w-5 text-muted-foreground" />
+                  Source Information
                 </Type>
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <Type className="font-medium">{lastUpdated}</Type>
-                </div>
               </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">
-                  Environment
-                </Type>
-                {selectedEnvironment ? (
-                  <routes.environments.environment.Link
-                    params={[selectedEnvironment.slug]}
-                    className="font-medium hover:underline"
-                  >
-                    {selectedEnvironment.name}
-                  </routes.environments.environment.Link>
-                ) : (
-                  <Type className="font-medium">Unattached</Type>
-                )}
-              </div>
-              <div>
-                <Type className="text-sm text-muted-foreground mb-1">
-                  Deployment
-                </Type>
-                {deployment?.deployment?.id ? (
-                  <routes.deployments.deployment.Link
-                    params={[deployment.deployment.id]}
-                    className="font-medium hover:underline"
-                  >
-                    {deployment.deployment.id.slice(0, 8)}
-                  </routes.deployments.deployment.Link>
-                ) : (
-                  <Type className="font-medium">None</Type>
-                )}
-              </div>
-            </div>
-          </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <InfoField icon={Tag} label="Name" value={source?.name} />
 
-          {/* Attached Environment Section */}
-          <div className="rounded-lg border bg-card p-6">
-            <Type as="h2" className="text-lg font-semibold mb-4">
-              Attached Environment
-            </Type>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <p className="text-warning text-sm flex items-center gap-2">
-                  <TriangleAlertIcon className="w-4 h-4" />
-                  Environments attached here will apply to all users of tools
-                  from this source in both public and private servers
-                </p>
-                {isOpenAPI ? (
-                  <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                    Values set here will be forwarded to{" "}
-                    <span className="inline-flex items-center gap-1 bg-secondary px-1.5 py-0.5 rounded">
-                      <FileCode className="w-3 h-3" /> {source?.name}
-                    </span>
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                    You will be able to access values set here on{" "}
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                      process.env
-                    </code>{" "}
-                    in{" "}
-                    <span className="inline-flex items-center gap-1 bg-secondary px-1.5 py-0.5 rounded">
-                      <SquareFunction className="w-3 h-3" /> {source?.name}
-                    </span>
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">Environment</p>
-                  {selectedEnvironment ? (
-                    <routes.environments.environment.Link
-                      params={[selectedEnvironment.slug]}
-                    >
-                      <Button
-                        variant="tertiary"
-                        size="sm"
-                        aria-label="View environment"
-                      >
-                        <Icon name="eye" /> view
-                      </Button>
-                    </routes.environments.environment.Link>
-                  ) : (
-                    <Button
-                      variant="tertiary"
-                      size="sm"
-                      aria-label="View environment"
-                      disabled
-                    >
-                      <Icon name="eye" /> view
-                    </Button>
-                  )}
-                </div>
-                <div className="flex gap-2 items-center w-full">
-                  <div className="flex-1">
-                    <Combobox
-                      value={activeEnvironmentId ?? ""}
-                      placeholder="select environment"
-                      options={(environments.data?.environments ?? []).map(
-                        (env) => ({
-                          value: env.id,
-                          label: env.name,
-                        }),
-                      )}
-                      onValueChange={setActiveEnvironmentId}
-                      loading={
-                        environments.isLoading || sourceEnvironment.isLoading
-                      }
-                    />
-                  </div>
-                  {activeEnvironmentId && (
-                    <Button
-                      onClick={() => setActiveEnvironmentId(undefined)}
-                      variant="tertiary"
-                      size="sm"
-                      aria-label="Clear environment"
-                    >
-                      <Icon name="x" /> clear
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2 min-h-10">
-                {selectedEnvironment && (
-                  <div className="flex flex-wrap gap-2 items-center">
-                    {selectedEnvironment.entries.length > 0 ? (
-                      selectedEnvironment.entries.map((entry) => (
-                        <Badge key={entry.name}>{entry.name}</Badge>
-                      ))
-                    ) : (
-                      <div className="text-sm text-muted-foreground">
-                        Empty...
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {isDirty && (
-                <div className="flex gap-2 justify-end pt-2 border-t">
-                  <Button
-                    onClick={() => setActiveEnvironmentId(initialEnvironmentId)}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleSaveEnvironment}
-                    variant="primary"
-                    size="sm"
-                    disabled={
-                      setSourceEnvironmentMutation.isPending ||
-                      deleteSourceEnvironmentMutation.isPending
+                  <InfoField
+                    icon={Tag}
+                    label="Slug"
+                    value={
+                      <Type className="font-mono text-sm">{source?.slug}</Type>
                     }
-                  >
-                    Save Changes
-                  </Button>
+                  />
+
+                  <InfoField icon={Package} label="Type" value={sourceType} />
+
+                  {!isOpenAPI && source && "runtime" in source && (
+                    <InfoField
+                      icon={Package}
+                      label="Runtime"
+                      value={String(source.runtime)}
+                    />
+                  )}
+
+                  <InfoField
+                    icon={Clock}
+                    label="Last Updated"
+                    value={lastUpdated}
+                  />
+
+                  <InfoField
+                    icon={Package}
+                    label="Deployment"
+                    value={
+                      deployment?.deployment?.id ? (
+                        <routes.deployments.deployment.Link
+                          params={[deployment.deployment.id]}
+                          className="hover:underline text-primary"
+                        >
+                          {deployment.deployment.id.slice(0, 8)}
+                        </routes.deployments.deployment.Link>
+                      ) : (
+                        <Type className="text-muted-foreground">None</Type>
+                      )
+                    }
+                  />
                 </div>
-              )}
+              </div>
             </div>
           </div>
-
-          {/* Toolsets Using This Source */}
-          <SourceToolsetsCard
-            toolsetsUsingSource={toolsetsUsingSource}
-            sourceToolUrns={sourceToolUrns}
-          />
         </div>
 
         {/* View Spec/Source Modal */}

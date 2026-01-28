@@ -175,8 +175,13 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP install page metadata").Log(ctx, s.logger)
 	}
 
+	metadata, err := ToMCPMetadata(ctx, s.repo, record)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to convert metadata").Log(ctx, s.logger)
+	}
+
 	return &gen.GetMcpMetadataResult{
-		Metadata: toMcpMetadata(record),
+		Metadata: metadata,
 	}, nil
 }
 
@@ -220,29 +225,119 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		instructions = conv.ToPGText(*payload.Instructions)
 	}
 
+	var defaultEnvironmentID uuid.NullUUID
+	if payload.DefaultEnvironmentID != nil {
+		parsedDefaultEnvironmentID, err := uuid.Parse(*payload.DefaultEnvironmentID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").Log(ctx, s.logger)
+		}
+		defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
+	}
+
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
 		ToolsetID:                toolset.ID,
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: externalDocURL,
 		LogoID:                   logoID,
 		Instructions:             instructions,
+		DefaultEnvironmentID:     defaultEnvironmentID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
 	}
 
-	return toMcpMetadata(result), nil
+	// Update environment entries
+	if payload.EnvironmentConfigs != nil {
+		// Delete all existing entries
+		if err := s.repo.DeleteAllEnvironmentConfigs(ctx, result.ID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete existing environment configs").Log(ctx, s.logger)
+		}
+
+		// Insert new entries
+		for _, config := range payload.EnvironmentConfigs {
+			var headerDisplayName pgtype.Text
+			if config.HeaderDisplayName != nil {
+				headerDisplayName = conv.ToPGText(*config.HeaderDisplayName)
+			}
+
+			_, err := s.repo.UpsertEnvironmentConfig(ctx, repo.UpsertEnvironmentConfigParams{
+				ProjectID:         *authCtx.ProjectID,
+				McpMetadataID:     result.ID,
+				VariableName:      config.VariableName,
+				HeaderDisplayName: headerDisplayName,
+				ProvidedBy:        config.ProvidedBy,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert environment config").Log(ctx, s.logger)
+			}
+		}
+	}
+
+	return ToMCPMetadata(ctx, s.repo, result)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
-	// Parse header display names from JSONB
+func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMetadatum) (*types.McpMetadata, error) {
+	// Parse header display names from JSONB (deprecated field)
 	headerDisplayNames := make(map[string]string)
 	if len(record.HeaderDisplayNames) > 0 {
 		_ = json.Unmarshal(record.HeaderDisplayNames, &headerDisplayNames)
+	}
+
+	// Fetch environment entries from the new table
+	envEntries, err := queries.ListEnvironmentConfigs(ctx, record.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list environment entries: %w", err)
+	}
+
+	// Create a map of existing entries by variable name
+	existingEntries := make(map[string]repo.McpEnvironmentConfig)
+	for _, entry := range envEntries {
+		existingEntries[entry.VariableName] = entry
+	}
+
+	// Merge: start with entries from the new table, then add any from deprecated column that don't exist
+	environmentConfigs := make([]*types.McpEnvironmentConfig, 0, len(envEntries)+len(headerDisplayNames))
+
+	// Add all entries from the new table
+	for _, entry := range envEntries {
+		// Use header_display_name from the new table if set, otherwise check deprecated column
+		var headerDisplayName *string
+		if displayName := conv.FromPGText[string](entry.HeaderDisplayName); displayName != nil {
+			headerDisplayName = displayName
+		} else if deprecatedName, ok := headerDisplayNames[entry.VariableName]; ok {
+			headerDisplayName = &deprecatedName
+		}
+
+		apiEntry := &types.McpEnvironmentConfig{
+			ID:                entry.ID.String(),
+			VariableName:      entry.VariableName,
+			HeaderDisplayName: headerDisplayName,
+			ProvidedBy:        entry.ProvidedBy,
+			CreatedAt:         entry.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:         entry.UpdatedAt.Time.Format(time.RFC3339),
+		}
+
+		environmentConfigs = append(environmentConfigs, apiEntry)
+	}
+
+	// Add entries that only exist in the deprecated column (for backwards compatibility)
+	for varName, displayName := range headerDisplayNames {
+		if _, exists := existingEntries[varName]; !exists {
+			// Create a synthetic entry for backwards compatibility
+			apiEntry := &types.McpEnvironmentConfig{
+				ID:                uuid.Nil.String(), // No ID since it's not in the new table
+				VariableName:      varName,
+				HeaderDisplayName: &displayName,
+				ProvidedBy:        "user", // Default to user-provided
+				CreatedAt:         record.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:         record.UpdatedAt.Time.Format(time.RFC3339),
+			}
+			environmentConfigs = append(environmentConfigs, apiEntry)
+		}
 	}
 
 	metadata := &types.McpMetadata{
@@ -253,9 +348,10 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 		ExternalDocumentationURL: conv.FromPGText[string](record.ExternalDocumentationUrl),
 		LogoAssetID:              conv.FromNullableUUID(record.LogoID),
 		Instructions:             conv.FromPGText[string](record.Instructions),
-		HeaderDisplayNames:       headerDisplayNames,
+		DefaultEnvironmentID:     conv.FromNullableUUID(record.DefaultEnvironmentID),
+		EnvironmentConfigs:       environmentConfigs,
 	}
-	return metadata
+	return metadata, nil
 }
 
 func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
@@ -375,6 +471,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	var docsURL string
 	var instructions string
 	headerDisplayNames := make(map[string]string)
+	omittedVariables := make(map[string]bool)
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
 	if metadataErr != nil {
 		if !errors.Is(metadataErr, pgx.ErrNoRows) {
@@ -395,13 +492,27 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		if inst := conv.FromPGText[string](metadataRecord.Instructions); inst != nil {
 			instructions = strings.TrimSpace(*inst)
 		}
-		if len(metadataRecord.HeaderDisplayNames) > 0 {
-			_ = json.Unmarshal(metadataRecord.HeaderDisplayNames, &headerDisplayNames)
+
+		// Load header display names from environment entries table and deprecated column
+		metadata, err := ToMCPMetadata(ctx, s.repo, metadataRecord)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to convert metadata to get header display names", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
+		} else {
+			// Build maps of header display names and omitted variables
+			for _, config := range metadata.EnvironmentConfigs {
+				if config.ProvidedBy != "user" {
+					// Mark as omitted - should not appear in install page
+					omittedVariables[config.VariableName] = true
+				} else if config.HeaderDisplayName != nil {
+					// User-provided with custom display name
+					headerDisplayNames[config.VariableName] = *config.HeaderDisplayName
+				}
+			}
 		}
 	}
 
 	securityMode := s.resolveSecurityMode(toolset)
-	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames)
+	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, omittedVariables)
 
 	toolNames := []string{}
 
@@ -615,7 +726,8 @@ func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset) securityMo
 
 // collectEnvironmentVariables returns security inputs based on the security mode.
 // headerDisplayNames maps env var names to their custom display names (from MCP metadata).
-func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails *types.Toolset, headerDisplayNames map[string]string) []securityInput {
+// omittedVariables maps env var names to whether they should be omitted (provided_by: "gram").
+func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails *types.Toolset, headerDisplayNames map[string]string, omittedVariables map[string]bool) []securityInput {
 	switch mode {
 	case securityModeGram:
 		return []securityInput{
@@ -647,6 +759,10 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 					continue
 				}
 
+				if omittedVariables[envVar] {
+					continue
+				}
+
 				if !seen[envVar] {
 					seen[envVar] = true
 
@@ -671,6 +787,9 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 			if !seen[functionEnvVar.Name] {
 				seen[functionEnvVar.Name] = true
 				if isOAuthEnabled && functionEnvVar.AuthInputType != nil && *functionEnvVar.AuthInputType == "oauth2" {
+					continue
+				}
+				if omittedVariables[functionEnvVar.Name] {
 					continue
 				}
 

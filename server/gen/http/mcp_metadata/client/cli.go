@@ -60,11 +60,14 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Veniam voluptatem sed nisi nostrum pariatur assumenda.\",\n      \"instructions\": \"Expedita veniam dolores amet incidunt.\",\n      \"logo_asset_id\": \"Molestiae enim magnam ea repellendus.\",\n      \"toolset_slug\": \"ic1\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"19906197-b0f0-4bd2-9f53-6ede4b69fd6b\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Est reiciendis asperiores ut ut velit commodi.\",\n            \"provided_by\": \"Dolorum aut esse.\",\n            \"variable_name\": \"Corporis voluptate ab saepe voluptas ut.\"\n         },\n         {\n            \"header_display_name\": \"Est reiciendis asperiores ut ut velit commodi.\",\n            \"provided_by\": \"Dolorum aut esse.\",\n            \"variable_name\": \"Corporis voluptate ab saepe voluptas ut.\"\n         },\n         {\n            \"header_display_name\": \"Est reiciendis asperiores ut ut velit commodi.\",\n            \"provided_by\": \"Dolorum aut esse.\",\n            \"variable_name\": \"Corporis voluptate ab saepe voluptas ut.\"\n         },\n         {\n            \"header_display_name\": \"Est reiciendis asperiores ut ut velit commodi.\",\n            \"provided_by\": \"Dolorum aut esse.\",\n            \"variable_name\": \"Corporis voluptate ab saepe voluptas ut.\"\n         }\n      ],\n      \"external_documentation_url\": \"Explicabo cupiditate similique et.\",\n      \"instructions\": \"Rerum voluptatibus omnis quasi reprehenderit facere.\",\n      \"logo_asset_id\": \"Culpa impedit exercitationem omnis.\",\n      \"toolset_slug\": \"2kd\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", body.ToolsetSlug, utf8.RuneCountInString(body.ToolsetSlug), 40, false))
+		}
+		if body.DefaultEnvironmentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -87,6 +90,17 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
+		DefaultEnvironmentID:     body.DefaultEnvironmentID,
+	}
+	if body.EnvironmentConfigs != nil {
+		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfigInput, len(body.EnvironmentConfigs))
+		for i, val := range body.EnvironmentConfigs {
+			if val == nil {
+				v.EnvironmentConfigs[i] = nil
+				continue
+			}
+			v.EnvironmentConfigs[i] = marshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput(val)
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

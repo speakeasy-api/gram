@@ -13,6 +13,9 @@ type EnvironmentEntry struct {
 	Name string
 	// Redacted values of the environment variable
 	Value string
+	// Hash of the value to identify matching values across environments without
+	// exposing the actual value
+	ValueHash string
 	// The creation date of the environment entry
 	CreatedAt string
 	// When the environment entry was last updated

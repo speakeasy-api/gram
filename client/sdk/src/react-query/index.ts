@@ -97,7 +97,6 @@ export * from "./templates.js";
 export * from "./toolset.js";
 export * from "./updateEnvironment.js";
 export * from "./updatePackage.js";
-export * from "./updateSecurityVariableDisplayName.js";
 export * from "./updateSlackConnection.js";
 export * from "./updateTemplate.js";
 export * from "./updateToolset.js";

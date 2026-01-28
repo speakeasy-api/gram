@@ -23,9 +23,9 @@ type EnvironmentLoader interface {
 	//   * `error`: when an unrecognized error occurs.
 	Load(ctx context.Context, projectID uuid.UUID, environmentID SlugOrID) (map[string]string, error)
 
-	// LoadSystemEnv loads and merges source and toolset environments.
-	// Merges in order: source env (base) -> toolset env (override).
-	// Returns empty map if neither environment exists.
+	// LoadSystemEnv loads and merges source, toolset, and attached environments.
+	// Merges in order: source env (base) -> toolset env -> attached env (highest priority).
+	// Returns empty map if no environments exist.
 	//
 	// # Errors
 	//   * `error`: when an unrecognized error occurs.
@@ -109,6 +109,20 @@ func (c *CaseInsensitiveEnv) All() map[string]string {
 		result[k] = v
 	}
 	return result
+}
+
+// Delete removes a key from the environment (case-insensitive).
+func (c *CaseInsensitiveEnv) Delete(key string) {
+	delete(c.data, strings.ToLower(key))
+}
+
+// Keys returns all keys in the environment.
+func (c *CaseInsensitiveEnv) Keys() []string {
+	keys := make([]string, 0, len(c.data))
+	for k := range c.data {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // ToolCallEnv holds the environment configuration for a tool call.

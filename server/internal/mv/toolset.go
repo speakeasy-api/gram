@@ -211,7 +211,10 @@ func DescribeToolsetEntry(
 			}
 		}
 		for _, toolUrn := range externalMCPUrns {
-			externalMCPTool, err := externalmcpRepo.GetExternalMCPToolDefinitionByURN(ctx, toolUrn)
+			externalMCPTool, err := externalmcpRepo.GetExternalMCPToolDefinitionByURN(ctx, externalmcpR.GetExternalMCPToolDefinitionByURNParams{
+				ToolUrn:   toolUrn,
+				ProjectID: pid,
+			})
 			if err != nil {
 				continue // Skip if not found
 			}
