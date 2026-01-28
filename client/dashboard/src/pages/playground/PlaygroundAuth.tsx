@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
-import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
+import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import {

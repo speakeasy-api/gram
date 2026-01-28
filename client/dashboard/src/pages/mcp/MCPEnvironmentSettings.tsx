@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
+import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components";

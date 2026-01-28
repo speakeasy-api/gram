@@ -24,7 +24,7 @@ import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
-import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
+import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
