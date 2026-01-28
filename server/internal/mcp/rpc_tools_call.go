@@ -388,17 +388,6 @@ func resolveUserConfiguration(
 		}
 	}
 
-	// Process external MCP OAuth tokens
-	if plan != nil && plan.Kind == gateway.ToolKindExternalMCP {
-		for _, token := range payload.oauthTokenInputs {
-			for _, security := range plan.ExternalMCP.Security {
-				if slices.Contains(security.OAuthTypes, "authorization_code") {
-					userConfig.Set(security.EnvVariables[0], token.Token)
-				}
-			}
-		}
-	}
-
 	return userConfig, nil
 }
 
