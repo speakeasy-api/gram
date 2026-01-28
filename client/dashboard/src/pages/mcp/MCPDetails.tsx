@@ -237,14 +237,14 @@ function ExportJsonModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content className="max-w-3xl">
-        <Dialog.Header>
+      <Dialog.Content className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        <Dialog.Header className="shrink-0">
           <Dialog.Title>Export MCP Configuration</Dialog.Title>
           <Dialog.Description>
             JSON export of your MCP server for documentation and integration.
           </Dialog.Description>
         </Dialog.Header>
-        <div className="mt-4">
+        <div className="flex-1 overflow-auto mt-4 min-h-0">
           {exportMutation.isPending ? (
             <div className="flex items-center justify-center py-8">
               <Type variant="body" color="secondary">
@@ -258,12 +258,12 @@ function ExportJsonModal({
               </Type>
             </div>
           ) : exportData ? (
-            <CodeBlock language="json" className="max-h-96 overflow-auto">
+            <CodeBlock language="json">
               {exportData}
             </CodeBlock>
           ) : null}
         </div>
-        <Dialog.Footer className="mt-4">
+        <Dialog.Footer className="mt-4 shrink-0">
           <Stack direction="horizontal" gap={2} className="w-full justify-end">
             <Button variant="tertiary" onClick={onClose}>
               Close
