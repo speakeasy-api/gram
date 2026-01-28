@@ -3,15 +3,28 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useElements } from './useElements'
 import { getApiUrl } from '@/lib/api'
 import { useAuth } from './useAuth'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { generateObject } from 'ai'
+import { z } from 'zod'
 
 export interface FollowOnSuggestion {
   id: string
   prompt: string
 }
 
-interface GenerateFollowOnSuggestionsResponse {
-  suggestions: string[]
-}
+const suggestionsSchema = z.object({
+  suggestions: z.array(z.string()).describe('Array of follow-up questions'),
+})
+
+const questionCheckSchema = z.object({
+  isQuestion: z
+    .boolean()
+    .describe(
+      'Whether the message ends by asking the user a question that requires their input or response'
+    ),
+})
+
+const SUGGESTIONS_MODEL = 'openai/gpt-4o-mini'
 
 /**
  * Hook to fetch follow-on suggestions after the assistant finishes responding.
@@ -65,6 +78,16 @@ export function useFollowOnSuggestions(): {
 
     if (recentMessages.length === 0) return
 
+    // Find the last assistant message
+    let lastAssistantMessage = ''
+    for (let i = recentMessages.length - 1; i >= 0; i--) {
+      const msg = recentMessages[i]
+      if (msg.role === 'assistant') {
+        lastAssistantMessage = msg.content
+        break
+      }
+    }
+
     // Cancel any in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
@@ -76,37 +99,79 @@ export function useFollowOnSuggestions(): {
     setIsLoading(true)
 
     try {
-      const response = await fetch(
-        `${apiUrl}/rpc/chat.generateFollowOnSuggestions`,
-        {
-          method: 'POST',
-          headers: {
-            ...auth.headers,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: recentMessages,
-            count: 3,
-          }),
-          signal: controller.signal,
-        }
-      )
+      // Create OpenRouter client
+      const openRouter = createOpenRouter({
+        baseURL: apiUrl,
+        apiKey: 'unused, but must be set',
+        headers: auth.headers,
+      })
 
-      if (!response.ok) {
-        console.error('Failed to fetch follow-on suggestions:', response.status)
-        if (abortControllerRef.current === controller) {
-          setSuggestions([])
+      const model = openRouter.chat(SUGGESTIONS_MODEL)
+
+      // Check if the assistant is asking a question
+      if (lastAssistantMessage) {
+        try {
+          const checkResult = await generateObject({
+            model,
+            schema: questionCheckSchema,
+            prompt: `Does this message end by asking the user a question that requires their input or response?
+
+Message:
+${lastAssistantMessage}`,
+            abortSignal: controller.signal,
+          })
+
+          if (checkResult.object.isQuestion) {
+            // Don't generate suggestions if assistant is asking a question
+            if (abortControllerRef.current === controller) {
+              setSuggestions([])
+              setIsLoading(false)
+              abortControllerRef.current = null
+            }
+            return
+          }
+        } catch (error) {
+          // If check fails, continue with generating suggestions
+          console.warn('Failed to check if message is a question:', error)
         }
-        return
       }
 
-      const data =
-        (await response.json()) as GenerateFollowOnSuggestionsResponse
+      // Build conversation context
+      const conversation = recentMessages
+        .map((msg) => `${msg.role}: ${msg.content}`)
+        .join('\n')
+
+      const count = 3
+      const systemPrompt = `Generate exactly ${count} follow-up questions the user could ask to learn MORE from the assistant.
+
+The user wants to dig deeper into what the assistant just explained. Generate questions that ask the assistant to elaborate, compare, or provide more details.
+
+Good examples:
+- "How does X compare to Y?"
+- "Can you explain more about Z?"
+- "What are the pros and cons of X?"
+
+Rules:
+- Focus on the informational content the assistant provided
+- Ask for elaboration, comparisons, or deeper explanations
+- Keep each question concise (under 12 words)
+- No numbering or bullet points
+- One question per line, nothing else`
+
+      const result = await generateObject({
+        model,
+        schema: suggestionsSchema,
+        prompt: `${systemPrompt}
+
+Conversation:
+${conversation}`,
+        abortSignal: controller.signal,
+      })
 
       // Only update state if this request is still the current one
       if (abortControllerRef.current === controller) {
         setSuggestions(
-          data.suggestions.map((prompt) => ({
+          result.object.suggestions.slice(0, count).map((prompt) => ({
             id: crypto.randomUUID(),
             prompt,
           }))
@@ -117,7 +182,7 @@ export function useFollowOnSuggestions(): {
         // Request was aborted, ignore
         return
       }
-      console.error('Error fetching follow-on suggestions:', error)
+      console.error('Error generating follow-on suggestions:', error)
       if (abortControllerRef.current === controller) {
         setSuggestions([])
       }
