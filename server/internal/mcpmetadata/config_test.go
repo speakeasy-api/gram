@@ -143,34 +143,45 @@ func TestBuildInstallConfigs_AllClients(t *testing.T) {
 
 	configs := svc.buildInstallConfigs("test-mcp", "https://example.com/mcp/test-mcp", inputs)
 
-	// Verify Claude Desktop config
-	require.NotNil(t, configs.ClaudeDesktop, "ClaudeDesktop config should not be nil")
-	require.Equal(t, "npx", configs.ClaudeDesktop.Command)
-	require.Contains(t, configs.ClaudeDesktop.Args, "mcp-remote@0.1.25")
-	require.Contains(t, configs.ClaudeDesktop.Args, "https://example.com/mcp/test-mcp")
-	require.Contains(t, configs.ClaudeDesktop.Args, "--header")
-	require.Contains(t, configs.ClaudeDesktop.Args, "Authorization:${API_KEY}")
-	require.Equal(t, "<your-value-here>", configs.ClaudeDesktop.Env["API_KEY"])
+	t.Run("ClaudeDesktop", func(t *testing.T) {
+		t.Parallel()
+		require.NotNil(t, configs.ClaudeDesktop, "config should not be nil")
+		require.Equal(t, "npx", configs.ClaudeDesktop.Command)
+		require.Contains(t, configs.ClaudeDesktop.Args, "mcp-remote@0.1.25")
+		require.Contains(t, configs.ClaudeDesktop.Args, "https://example.com/mcp/test-mcp")
+		require.Contains(t, configs.ClaudeDesktop.Args, "--header")
+		require.Contains(t, configs.ClaudeDesktop.Args, "Authorization:${API_KEY}")
+		require.Equal(t, "<your-value-here>", configs.ClaudeDesktop.Env["API_KEY"])
+	})
 
-	// Verify Cursor config (should match Claude Desktop)
-	require.NotNil(t, configs.Cursor, "Cursor config should not be nil")
-	require.Equal(t, configs.ClaudeDesktop.Command, configs.Cursor.Command)
-	require.Equal(t, configs.ClaudeDesktop.Args, configs.Cursor.Args)
-	require.Equal(t, configs.ClaudeDesktop.Env, configs.Cursor.Env)
+	t.Run("Cursor", func(t *testing.T) {
+		t.Parallel()
+		require.NotNil(t, configs.Cursor, "config should not be nil")
+		require.Equal(t, "npx", configs.Cursor.Command)
+		require.Contains(t, configs.Cursor.Args, "mcp-remote@0.1.25")
+		require.Contains(t, configs.Cursor.Args, "https://example.com/mcp/test-mcp")
+		require.Contains(t, configs.Cursor.Args, "--header")
+		require.Contains(t, configs.Cursor.Args, "Authorization:${API_KEY}")
+		require.Equal(t, "<your-value-here>", configs.Cursor.Env["API_KEY"])
+	})
 
-	// Verify VS Code config (HTTP-based)
-	require.NotNil(t, configs.Vscode, "Vscode config should not be nil")
-	require.Equal(t, "http", configs.Vscode.Type)
-	require.Equal(t, "https://example.com/mcp/test-mcp", configs.Vscode.URL)
-	require.Equal(t, "${API_KEY}", configs.Vscode.Headers["Authorization"])
+	t.Run("VSCode", func(t *testing.T) {
+		t.Parallel()
+		require.NotNil(t, configs.Vscode, "config should not be nil")
+		require.Equal(t, "http", configs.Vscode.Type)
+		require.Equal(t, "https://example.com/mcp/test-mcp", configs.Vscode.URL)
+		require.Equal(t, "${API_KEY}", configs.Vscode.Headers["Authorization"])
+	})
 
-	// Verify Claude Code CLI command
-	require.NotEmpty(t, configs.ClaudeCode, "ClaudeCode command should not be empty")
-	require.Contains(t, configs.ClaudeCode, "claude mcp add")
-	require.Contains(t, configs.ClaudeCode, "--transport http")
-	require.Contains(t, configs.ClaudeCode, `"test-mcp"`)
-	require.Contains(t, configs.ClaudeCode, `"https://example.com/mcp/test-mcp"`)
-	require.Contains(t, configs.ClaudeCode, "--header 'Authorization:${API_KEY}'")
+	t.Run("ClaudeCode", func(t *testing.T) {
+		t.Parallel()
+		require.NotEmpty(t, configs.ClaudeCode, "command should not be empty")
+		require.Contains(t, configs.ClaudeCode, "claude mcp add")
+		require.Contains(t, configs.ClaudeCode, "--transport http")
+		require.Contains(t, configs.ClaudeCode, `"test-mcp"`)
+		require.Contains(t, configs.ClaudeCode, `"https://example.com/mcp/test-mcp"`)
+		require.Contains(t, configs.ClaudeCode, "--header 'Authorization:${API_KEY}'")
+	})
 }
 
 // TestBuildInstallConfigs_NoSharedReferences verifies that ClaudeDesktop and Cursor
