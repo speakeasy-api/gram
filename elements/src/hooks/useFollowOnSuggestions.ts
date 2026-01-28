@@ -94,29 +94,39 @@ export function useFollowOnSuggestions(): {
 
       if (!response.ok) {
         console.error('Failed to fetch follow-on suggestions:', response.status)
-        setSuggestions([])
+        if (abortControllerRef.current === controller) {
+          setSuggestions([])
+        }
         return
       }
 
       const data =
         (await response.json()) as GenerateFollowOnSuggestionsResponse
 
-      setSuggestions(
-        data.suggestions.map((prompt) => ({
-          id: crypto.randomUUID(),
-          prompt,
-        }))
-      )
+      // Only update state if this request is still the current one
+      if (abortControllerRef.current === controller) {
+        setSuggestions(
+          data.suggestions.map((prompt) => ({
+            id: crypto.randomUUID(),
+            prompt,
+          }))
+        )
+      }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         // Request was aborted, ignore
         return
       }
       console.error('Error fetching follow-on suggestions:', error)
-      setSuggestions([])
+      if (abortControllerRef.current === controller) {
+        setSuggestions([])
+      }
     } finally {
-      setIsLoading(false)
-      abortControllerRef.current = null
+      // Only clear state if this request is still the current one
+      if (abortControllerRef.current === controller) {
+        setIsLoading(false)
+        abortControllerRef.current = null
+      }
     }
   }, [isEnabled, apiUrl, auth.headers, auth.isLoading, messages])
 
