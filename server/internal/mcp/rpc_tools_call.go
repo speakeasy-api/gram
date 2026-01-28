@@ -189,10 +189,19 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
+	// Extract OAuth token for external MCP servers (token with no security keys = general token)
+	var oauthToken string
+	for _, t := range payload.oauthTokenInputs {
+		if len(t.securityKeys) == 0 && t.Token != "" {
+			oauthToken = t.Token
+			break
+		}
+	}
+
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
-		OAuthToken: "",
+		OAuthToken: oauthToken,
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
@@ -375,6 +384,17 @@ func resolveUserConfiguration(
 		for _, token := range payload.oauthTokenInputs {
 			if plan.Function.AuthInput.Type == "oauth2" {
 				userConfig.Set(plan.Function.AuthInput.Variable, token.Token)
+			}
+		}
+	}
+
+	// Process external MCP OAuth tokens
+	if plan != nil && plan.Kind == gateway.ToolKindExternalMCP {
+		for _, token := range payload.oauthTokenInputs {
+			for _, security := range plan.ExternalMCP.Security {
+				if slices.Contains(security.OAuthTypes, "authorization_code") {
+					userConfig.Set(security.EnvVariables[0], token.Token)
+				}
 			}
 		}
 	}
