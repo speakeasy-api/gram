@@ -236,12 +236,8 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 
 func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpMetadataPayload) (*types.McpExport, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeForbidden)
 	}
 
 	toolset, err := s.toolsetRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
