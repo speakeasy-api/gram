@@ -1,4 +1,4 @@
-import { NavButton, NavMenu } from "@/components/nav-menu";
+import { NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -6,7 +6,6 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useSession } from "@/contexts/Auth";
 import { AppRoute, useRoutes } from "@/routes";
@@ -31,7 +30,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
     build: [routes.elements, routes.mcp],
-    observe: [routes.logs],
+    observe: [routes.logs, routes.metrics],
     settings: [routes.settings, routes.billing, routes.docs] as AppRoute[],
   };
 
@@ -47,17 +46,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
             <SidebarGroupContent>
-              <NavMenu items={items}>
-                {label === "observe" && (
-                  <SidebarMenuItem>
-                    <NavButton
-                      title="Metrics"
-                      Icon={ChartNoAxesCombinedIcon}
-                      onClick={() => setMetricsModalOpen(true)}
-                    />
-                  </SidebarMenuItem>
-                )}
-              </NavMenu>
+              <NavMenu items={items} />
             </SidebarGroupContent>
           </SidebarGroup>
         ))}

@@ -257,6 +257,12 @@ const ROUTE_STRUCTURE = {
     icon: "activity",
     component: Logs,
   },
+  metrics: {
+    title: "Metrics",
+    url: "metrics",
+    icon: "chart-no-axes-combined",
+    component: Metrics,
+  },
   sdks: {
     title: "SDKs",
     url: "sdks",
