@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -250,7 +251,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
 	}
@@ -411,13 +412,13 @@ func (s *Service) buildInstallConfigs(mcpSlug, mcpURL string, inputs []securityI
 	return &types.McpExportInstallConfigs{
 		ClaudeDesktop: &types.McpExportStdioConfig{
 			Command: "npx",
-			Args:    args,
-			Env:     env,
+			Args:    append([]string(nil), args...),
+			Env:     maps.Clone(env),
 		},
 		Cursor: &types.McpExportStdioConfig{
 			Command: "npx",
-			Args:    args,
-			Env:     env,
+			Args:    append([]string(nil), args...),
+			Env:     maps.Clone(env),
 		},
 		Vscode: &types.McpExportHTTPConfig{
 			Type:    "http",

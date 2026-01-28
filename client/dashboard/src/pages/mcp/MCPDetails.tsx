@@ -190,6 +190,7 @@ function ExportJsonModal({
   const exportMutation = useExportMcpMetadataMutation();
   const [exportData, setExportData] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (isOpen && !exportData && !exportMutation.isPending) {
@@ -206,17 +207,35 @@ function ExportJsonModal({
 
   useEffect(() => {
     if (!isOpen) {
+      // Clear timeout on close to prevent setState on unmounted component
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+        copyTimeoutRef.current = null;
+      }
       setExportData(null);
       setCopied(false);
     }
   }, [isOpen]);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleCopy = async () => {
     if (exportData) {
-      await navigator.clipboard.writeText(exportData);
-      setCopied(true);
-      toast.success("Copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
+      try {
+        await navigator.clipboard.writeText(exportData);
+        setCopied(true);
+        toast.success("Copied to clipboard");
+        copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+      } catch {
+        toast.error("Failed to copy to clipboard");
+      }
     }
   };
 
