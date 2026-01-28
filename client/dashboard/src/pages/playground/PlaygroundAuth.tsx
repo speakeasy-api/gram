@@ -19,7 +19,10 @@ const PASSWORD_MASK = "••••••••";
 export function getAuthStatus(
   toolset: Pick<
     Toolset,
-    "securityVariables" | "serverVariables" | "functionEnvironmentVariables"
+    | "securityVariables"
+    | "serverVariables"
+    | "functionEnvironmentVariables"
+    | "externalMcpHeaderDefinitions"
   >,
   environment?: { entries?: Array<{ name: string; value: string }> },
 ): { hasMissingAuth: boolean; missingCount: number } {
