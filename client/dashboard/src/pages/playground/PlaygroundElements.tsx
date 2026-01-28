@@ -119,7 +119,6 @@ export function PlaygroundElements({
   }
 
 
-  console.log("userProvidedHeaders", userProvidedHeaders);
   return (
     <GramElementsProvider
       config={{
@@ -138,7 +137,7 @@ export function PlaygroundElements({
           initialThreadId,
         },
         mcp: mcpUrl,
-        // gramEnvironment: environmentSlug ?? undefined,
+        gramEnvironment: environmentSlug ?? undefined,
         variant: "standalone",
         model: {
           defaultModel: model as Model,
