@@ -37,42 +37,6 @@ var McpExportAuthentication = Type("McpExportAuthentication", func() {
 	Required("required", "headers")
 })
 
-var McpExportStdioConfig = Type("McpExportStdioConfig", func() {
-	Meta("struct:pkg:path", "types")
-	Description("Stdio-based MCP client configuration (Claude Desktop, Cursor)")
-
-	Attribute("command", String, "The command to run")
-	Attribute("args", ArrayOf(String), "Command arguments")
-	Attribute("env", MapOf(String, String), "Environment variables")
-
-	Required("command", "args")
-})
-
-var McpExportHttpConfig = Type("McpExportHttpConfig", func() {
-	Meta("struct:pkg:path", "types")
-	Description("HTTP-based MCP client configuration (VS Code)")
-
-	Attribute("type", String, "Transport type (always 'http')")
-	Attribute("url", String, "The MCP server URL")
-	Attribute("headers", MapOf(String, String), "HTTP headers with environment variable placeholders")
-
-	Required("type", "url")
-})
-
-var McpExportInstallConfigs = Type("McpExportInstallConfigs", func() {
-	Meta("struct:pkg:path", "types")
-	Description("Installation configurations for different MCP clients")
-
-	Attribute("claude_desktop", McpExportStdioConfig, "Configuration for Claude Desktop")
-	Attribute("cursor", McpExportStdioConfig, "Configuration for Cursor")
-	Attribute("vscode", McpExportHttpConfig, "Configuration for VS Code")
-	Attribute("claude_code", String, "CLI command for Claude Code")
-	Attribute("gemini_cli", String, "CLI command for Gemini CLI")
-	Attribute("codex_cli", String, "TOML configuration for Codex CLI")
-
-	Required("claude_desktop", "cursor", "vscode", "claude_code", "gemini_cli", "codex_cli")
-})
-
 var McpExport = Type("McpExport", func() {
 	Meta("struct:pkg:path", "types")
 	Description("Complete MCP server export for documentation and integration")
@@ -86,9 +50,8 @@ var McpExport = Type("McpExport", func() {
 	Attribute("instructions", String, "Server instructions for users")
 	Attribute("tools", ArrayOf(McpExportTool), "Available tools on this MCP server")
 	Attribute("authentication", McpExportAuthentication, "Authentication requirements")
-	Attribute("install_configs", McpExportInstallConfigs, "Client installation configurations")
 
-	Required("name", "slug", "server_url", "tools", "authentication", "install_configs")
+	Required("name", "slug", "server_url", "tools", "authentication")
 })
 
 var McpMetadata = Type("McpMetadata", func() {

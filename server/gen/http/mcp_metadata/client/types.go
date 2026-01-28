@@ -82,8 +82,6 @@ type ExportMcpMetadataResponseBody struct {
 	Tools []*McpExportToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// Authentication requirements
 	Authentication *McpExportAuthenticationResponseBody `form:"authentication,omitempty" json:"authentication,omitempty" xml:"authentication,omitempty"`
-	// Client installation configurations
-	InstallConfigs *McpExportInstallConfigsResponseBody `form:"install_configs,omitempty" json:"install_configs,omitempty" xml:"install_configs,omitempty"`
 }
 
 // GetMcpMetadataUnauthorizedResponseBody is the type of the "mcpMetadata"
@@ -696,45 +694,6 @@ type McpExportAuthHeaderResponseBody struct {
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 }
 
-// McpExportInstallConfigsResponseBody is used to define fields on response
-// body types.
-type McpExportInstallConfigsResponseBody struct {
-	// Configuration for Claude Desktop
-	ClaudeDesktop *McpExportStdioConfigResponseBody `form:"claude_desktop,omitempty" json:"claude_desktop,omitempty" xml:"claude_desktop,omitempty"`
-	// Configuration for Cursor
-	Cursor *McpExportStdioConfigResponseBody `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
-	// Configuration for VS Code
-	Vscode *McpExportHTTPConfigResponseBody `form:"vscode,omitempty" json:"vscode,omitempty" xml:"vscode,omitempty"`
-	// CLI command for Claude Code
-	ClaudeCode *string `form:"claude_code,omitempty" json:"claude_code,omitempty" xml:"claude_code,omitempty"`
-	// CLI command for Gemini CLI
-	GeminiCli *string `form:"gemini_cli,omitempty" json:"gemini_cli,omitempty" xml:"gemini_cli,omitempty"`
-	// TOML configuration for Codex CLI
-	CodexCli *string `form:"codex_cli,omitempty" json:"codex_cli,omitempty" xml:"codex_cli,omitempty"`
-}
-
-// McpExportStdioConfigResponseBody is used to define fields on response body
-// types.
-type McpExportStdioConfigResponseBody struct {
-	// The command to run
-	Command *string `form:"command,omitempty" json:"command,omitempty" xml:"command,omitempty"`
-	// Command arguments
-	Args []string `form:"args,omitempty" json:"args,omitempty" xml:"args,omitempty"`
-	// Environment variables
-	Env map[string]string `form:"env,omitempty" json:"env,omitempty" xml:"env,omitempty"`
-}
-
-// McpExportHTTPConfigResponseBody is used to define fields on response body
-// types.
-type McpExportHTTPConfigResponseBody struct {
-	// Transport type (always 'http')
-	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// The MCP server URL
-	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
-	// HTTP headers with environment variable placeholders
-	Headers map[string]string `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
-}
-
 // NewSetMcpMetadataRequestBody builds the HTTP request body from the payload
 // of the "setMcpMetadata" endpoint of the "mcpMetadata" service.
 func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpMetadataRequestBody {
@@ -1112,7 +1071,6 @@ func NewExportMcpMetadataMcpExportOK(body *ExportMcpMetadataResponseBody) *types
 		v.Tools[i] = unmarshalMcpExportToolResponseBodyToTypesMcpExportTool(val)
 	}
 	v.Authentication = unmarshalMcpExportAuthenticationResponseBodyToTypesMcpExportAuthentication(body.Authentication)
-	v.InstallConfigs = unmarshalMcpExportInstallConfigsResponseBodyToTypesMcpExportInstallConfigs(body.InstallConfigs)
 
 	return v
 }
@@ -1329,9 +1287,6 @@ func ValidateExportMcpMetadataResponseBody(body *ExportMcpMetadataResponseBody) 
 	if body.Authentication == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authentication", "body"))
 	}
-	if body.InstallConfigs == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("install_configs", "body"))
-	}
 	for _, e := range body.Tools {
 		if e != nil {
 			if err2 := ValidateMcpExportToolResponseBody(e); err2 != nil {
@@ -1341,11 +1296,6 @@ func ValidateExportMcpMetadataResponseBody(body *ExportMcpMetadataResponseBody) 
 	}
 	if body.Authentication != nil {
 		if err2 := ValidateMcpExportAuthenticationResponseBody(body.Authentication); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	if body.InstallConfigs != nil {
-		if err2 := ValidateMcpExportInstallConfigsResponseBody(body.InstallConfigs); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -2147,69 +2097,6 @@ func ValidateMcpExportAuthHeaderResponseBody(body *McpExportAuthHeaderResponseBo
 	}
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
-	}
-	return
-}
-
-// ValidateMcpExportInstallConfigsResponseBody runs the validations defined on
-// McpExportInstallConfigsResponseBody
-func ValidateMcpExportInstallConfigsResponseBody(body *McpExportInstallConfigsResponseBody) (err error) {
-	if body.ClaudeDesktop == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("claude_desktop", "body"))
-	}
-	if body.Cursor == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("cursor", "body"))
-	}
-	if body.Vscode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("vscode", "body"))
-	}
-	if body.ClaudeCode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("claude_code", "body"))
-	}
-	if body.GeminiCli == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("gemini_cli", "body"))
-	}
-	if body.CodexCli == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("codex_cli", "body"))
-	}
-	if body.ClaudeDesktop != nil {
-		if err2 := ValidateMcpExportStdioConfigResponseBody(body.ClaudeDesktop); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	if body.Cursor != nil {
-		if err2 := ValidateMcpExportStdioConfigResponseBody(body.Cursor); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	if body.Vscode != nil {
-		if err2 := ValidateMcpExportHTTPConfigResponseBody(body.Vscode); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	return
-}
-
-// ValidateMcpExportStdioConfigResponseBody runs the validations defined on
-// McpExportStdioConfigResponseBody
-func ValidateMcpExportStdioConfigResponseBody(body *McpExportStdioConfigResponseBody) (err error) {
-	if body.Command == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("command", "body"))
-	}
-	if body.Args == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("args", "body"))
-	}
-	return
-}
-
-// ValidateMcpExportHTTPConfigResponseBody runs the validations defined on
-// McpExportHttpConfigResponseBody
-func ValidateMcpExportHTTPConfigResponseBody(body *McpExportHTTPConfigResponseBody) (err error) {
-	if body.Type == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
-	}
-	if body.URL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
 	}
 	return
 }

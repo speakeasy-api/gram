@@ -1,0 +1,13 @@
+{
+  "command": "npx",
+  "args": [
+    "mcp-remote@0.1.25",
+    "{{ .MCPURL }}"{{- range .SecurityInputs }},
+    "--header",
+    "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}
+  ]{{- if (gt (len .SecurityInputs) 0) }},
+  "env": {
+    {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
+    "{{ $input.DisplayName | asPosixName }}": "<your-value-here>"{{- end }}
+  }{{- end }}
+}

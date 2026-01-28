@@ -24,7 +24,7 @@ func BuildSearchLogsPayload(telemetrySearchLogsBody string, telemetrySearchLogsA
 	{
 		err = json.Unmarshal([]byte(telemetrySearchLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Sapiente accusamus exercitationem nam provident tempora assumenda.\",\n      \"filter\": {\n         \"deployment_id\": \"1a2d1621-6b7b-4818-92f1-dbb682253659\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"eaaba0cb-02c8-49cb-ac64-0ed9512b9e22\",\n         \"gram_urn\": \"Non praesentium eos.\",\n         \"gram_urns\": [\n            \"Nesciunt soluta quia velit impedit ea.\",\n            \"Alias sit autem est quaerat eaque dolor.\",\n            \"Qui omnis exercitationem culpa.\",\n            \"Suscipit earum doloremque.\"\n         ],\n         \"http_method\": \"PATCH\",\n         \"http_route\": \"Rem consequatur omnis atque optio doloribus.\",\n         \"http_status_code\": 809513406,\n         \"service_name\": \"Id facilis dicta.\",\n         \"severity_text\": \"FATAL\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"507afce13d91b64abf828efe2ccb2b2c\"\n      },\n      \"limit\": 324,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Impedit ea error alias sit.\",\n      \"filter\": {\n         \"deployment_id\": \"43a19c06-2aa7-46c8-9ef0-3fa3762fea52\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"d120e303-c0e4-4d18-9bf7-6f38677fb969\",\n         \"gram_urn\": \"Dicta qui sunt nesciunt soluta quia.\",\n         \"gram_urns\": [\n            \"Dignissimos quasi deserunt et illum quaerat unde.\",\n            \"Incidunt et eius voluptates officiis nostrum.\",\n            \"Ratione vel.\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"Accusamus rerum mollitia et.\",\n         \"http_status_code\": 518883473,\n         \"service_name\": \"Nisi doloremque aut omnis.\",\n         \"severity_text\": \"FATAL\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"a6a80d3df7945d8a672f5a472b7fa2e2\"\n      },\n      \"limit\": 517,\n      \"sort\": \"asc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -80,7 +80,7 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	{
 		err = json.Unmarshal([]byte(telemetrySearchToolCallsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Distinctio alias doloribus consequatur.\",\n      \"filter\": {\n         \"deployment_id\": \"598fde82-3487-4961-ba24-ec20e169b568\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"6f4111e5-6d57-46e0-95cd-31cf84e144ed\",\n         \"gram_urn\": \"Enim voluptatum.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 919,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Dolorum iure.\",\n      \"filter\": {\n         \"deployment_id\": \"2536a485-41d1-4214-a537-ed1aaccd33f7\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"1f038d2a-9ade-4ba5-bf00-bb1408836e66\",\n         \"gram_urn\": \"Aperiam maiores rerum.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 51,\n      \"sort\": \"asc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -136,7 +136,7 @@ func BuildCaptureEventPayload(telemetryCaptureEventBody string, telemetryCapture
 	{
 		err = json.Unmarshal([]byte(telemetryCaptureEventBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"distinct_id\": \"Est et natus.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"distinct_id\": \"Et nihil recusandae animi modi totam dolor.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }'")
 		}
 		if utf8.RuneCountInString(body.Event) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", body.Event, utf8.RuneCountInString(body.Event), 1, true))
@@ -188,6 +188,51 @@ func BuildCaptureEventPayload(telemetryCaptureEventBody string, telemetryCapture
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildGetProjectMetricsSummaryPayload builds the payload for the telemetry
+// getProjectMetricsSummary endpoint from CLI flags.
+func BuildGetProjectMetricsSummaryPayload(telemetryGetProjectMetricsSummaryBody string, telemetryGetProjectMetricsSummaryApikeyToken string, telemetryGetProjectMetricsSummarySessionToken string, telemetryGetProjectMetricsSummaryProjectSlugInput string) (*telemetry.GetProjectMetricsSummaryPayload, error) {
+	var err error
+	var body GetProjectMetricsSummaryRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetProjectMetricsSummaryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetProjectMetricsSummaryApikeyToken != "" {
+			apikeyToken = &telemetryGetProjectMetricsSummaryApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetProjectMetricsSummarySessionToken != "" {
+			sessionToken = &telemetryGetProjectMetricsSummarySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetProjectMetricsSummaryProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetProjectMetricsSummaryProjectSlugInput
+		}
+	}
+	v := &telemetry.GetProjectMetricsSummaryPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

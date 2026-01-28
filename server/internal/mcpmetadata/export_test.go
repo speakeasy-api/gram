@@ -48,25 +48,6 @@ func TestService_ExportMcpMetadata_Success(t *testing.T) {
 	require.Equal(t, toolset.Slug, result.Slug, "slug should match")
 	require.Contains(t, result.ServerURL, toolset.McpSlug.String, "server URL should contain MCP slug")
 
-	// Verify install configs
-	require.NotNil(t, result.InstallConfigs, "install configs should not be nil")
-	require.NotNil(t, result.InstallConfigs.ClaudeDesktop, "claude desktop config should not be nil")
-	require.NotNil(t, result.InstallConfigs.Cursor, "cursor config should not be nil")
-	require.NotNil(t, result.InstallConfigs.Vscode, "vscode config should not be nil")
-	require.NotEmpty(t, result.InstallConfigs.ClaudeCode, "claude code command should not be empty")
-
-	// Verify stdio configs have correct structure
-	require.Equal(t, "npx", result.InstallConfigs.ClaudeDesktop.Command, "command should be npx")
-	require.Contains(t, result.InstallConfigs.ClaudeDesktop.Args, "mcp-remote@0.1.25", "args should contain mcp-remote")
-
-	// Verify HTTP config has correct structure
-	require.Equal(t, "http", result.InstallConfigs.Vscode.Type, "vscode type should be http")
-	require.Contains(t, result.InstallConfigs.Vscode.URL, toolset.McpSlug.String, "vscode URL should contain MCP slug")
-
-	// Verify Claude Code command format matches install page
-	require.Contains(t, result.InstallConfigs.ClaudeCode, "--transport http", "claude code should use http transport")
-	require.Contains(t, result.InstallConfigs.ClaudeCode, toolset.McpSlug.String, "claude code should contain MCP slug")
-
 	// Verify authentication info
 	require.NotNil(t, result.Authentication, "authentication should not be nil")
 

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
-	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -63,6 +62,9 @@ type Service struct {
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
+//go:embed config_snippet.json.tmpl
+var configSnippetTmplData string
+
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
@@ -89,14 +91,6 @@ type IDEInstallLinkConfig struct {
 	Name *string `json:"name,omitempty"`
 	// Required for vscode ("http" only)
 	Type *string `json:"type,omitempty"`
-}
-
-// stdioConfigJSON is used for JSON serialization of stdio configs on the install page.
-// The generated types.McpExportStdioConfig doesn't have JSON tags.
-type stdioConfigJSON struct {
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
-	Env     map[string]string `json:"env,omitempty"`
 }
 
 type jsonSnippetData struct {
@@ -313,13 +307,10 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	authHeaders := make([]*types.McpExportAuthHeader, 0, len(securityInputs))
 	for _, input := range securityInputs {
 		authHeaders = append(authHeaders, &types.McpExportAuthHeader{
-			Name:        templatefuncs.AsHTTPHeader(input.SystemName),
+			Name:        toolconfig.ToHTTPHeader(input.SystemName),
 			DisplayName: input.DisplayName,
 		})
 	}
-
-	// Build install configs
-	installConfigs := s.buildInstallConfigs(toolset.McpSlug.String, mcpURL, securityInputs)
 
 	return &types.McpExport{
 		Name:             toolset.Name,
@@ -334,7 +325,6 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 			Required: authRequired,
 			Headers:  authHeaders,
 		},
-		InstallConfigs: installConfigs,
 	}, nil
 }
 
@@ -384,91 +374,6 @@ func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.To
 	}
 
 	return tools
-}
-
-// buildStdioConfig creates a stdio config for MCP clients (Claude Desktop, Cursor).
-// This is the single source of truth for stdio config generation, used by both
-// the export API and the install page.
-func buildStdioConfig(mcpURL string, inputs []securityInput) *types.McpExportStdioConfig {
-	args := []string{"mcp-remote@0.1.25", mcpURL}
-	env := make(map[string]string)
-
-	for _, input := range inputs {
-		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
-		envVarName := templatefuncs.AsPosixName(input.DisplayName)
-		args = append(args, "--header", fmt.Sprintf("%s:${%s}", headerKey, envVarName))
-		env[envVarName] = "<your-value-here>"
-	}
-
-	return &types.McpExportStdioConfig{
-		Command: "npx",
-		Args:    args,
-		Env:     env,
-	}
-}
-
-func (s *Service) buildInstallConfigs(mcpSlug, mcpURL string, inputs []securityInput) *types.McpExportInstallConfigs {
-	stdioConfig := buildStdioConfig(mcpURL, inputs)
-
-	// Build headers for HTTP-based clients (VS Code)
-	httpHeaders := make(map[string]string)
-	for _, input := range inputs {
-		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
-		envVarName := templatefuncs.AsPosixName(input.DisplayName)
-		httpHeaders[headerKey] = fmt.Sprintf("${%s}", envVarName)
-	}
-
-	// Build Claude Code CLI command (matches install page format)
-	claudeCodeCmd := fmt.Sprintf("claude mcp add --transport http %q %q", mcpSlug, mcpURL)
-	for _, input := range inputs {
-		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
-		envVarName := templatefuncs.AsPosixName(input.DisplayName)
-		claudeCodeCmd += fmt.Sprintf(" --header '%s:${%s}'", headerKey, envVarName)
-	}
-
-	// Build Gemini CLI command (same format as Claude Code)
-	geminiCmd := fmt.Sprintf("gemini mcp add --transport http %q %q", mcpSlug, mcpURL)
-	for _, input := range inputs {
-		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
-		envVarName := templatefuncs.AsPosixName(input.DisplayName)
-		geminiCmd += fmt.Sprintf(" --header '%s:${%s}'", headerKey, envVarName)
-	}
-
-	// Build Codex CLI TOML config
-	codexConfig := fmt.Sprintf("[mcp_servers.%s]\nurl = %q\n", mcpSlug, mcpURL)
-	if len(inputs) > 0 {
-		codexConfig += "http_headers = { "
-		for i, input := range inputs {
-			if i > 0 {
-				codexConfig += ", "
-			}
-			headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
-			envVarName := templatefuncs.AsPosixName(input.DisplayName)
-			codexConfig += fmt.Sprintf("%q = \"your-%s-value\"", headerKey, envVarName)
-		}
-		codexConfig += " }"
-	}
-
-	return &types.McpExportInstallConfigs{
-		ClaudeDesktop: &types.McpExportStdioConfig{
-			Command: stdioConfig.Command,
-			Args:    append([]string(nil), stdioConfig.Args...),
-			Env:     maps.Clone(stdioConfig.Env),
-		},
-		Cursor: &types.McpExportStdioConfig{
-			Command: stdioConfig.Command,
-			Args:    append([]string(nil), stdioConfig.Args...),
-			Env:     maps.Clone(stdioConfig.Env),
-		},
-		Vscode: &types.McpExportHTTPConfig{
-			Type:    "http",
-			URL:     mcpURL,
-			Headers: httpHeaders,
-		},
-		ClaudeCode: claudeCodeCmd,
-		GeminiCli:  geminiCmd,
-		CodexCli:   codexConfig,
-	}
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -671,18 +576,15 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		ToolNames:      toolNames,
 	}
 
-	// Use the shared buildStdioConfig function to generate the config snippet
-	stdioConfig := buildStdioConfig(MCPURL, securityInputs)
-	configForJSON := stdioConfigJSON{
-		Command: stdioConfig.Command,
-		Args:    stdioConfig.Args,
-		Env:     stdioConfig.Env,
-	}
-	configBytes, err := json.MarshalIndent(configForJSON, "", "  ")
+	configSnippetTmpl, err := template.New("config_snippet").Funcs(templatefuncs.FuncMap()).Parse(configSnippetTmplData)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal config snippet").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to parse config snippet template").Log(ctx, s.logger)
 	}
-	configSnippet := string(configBytes)
+
+	var configSnippet bytes.Buffer
+	if err := configSnippetTmpl.Execute(&configSnippet, configSnippetData); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template").Log(ctx, s.logger)
+	}
 
 	cursorURL, err := buildCursorInstallURL(toolset.Name, MCPURL, securityInputs)
 	if err != nil {
@@ -706,7 +608,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 
 	data := hostedPageData{
 		jsonSnippetData:   configSnippetData,
-		MCPConfig:         configSnippet,
+		MCPConfig:         configSnippet.String(),
 		CursorInstallLink: safeCursorURL,
 		VSCodeInstallLink: safeVsCodeURL,
 		OrganizationName:  organization.Name,

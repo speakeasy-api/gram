@@ -28,6 +28,4 @@ type McpExport struct {
 	Tools []*McpExportTool
 	// Authentication requirements
 	Authentication *McpExportAuthentication
-	// Client installation configurations
-	InstallConfigs *McpExportInstallConfigs
 }

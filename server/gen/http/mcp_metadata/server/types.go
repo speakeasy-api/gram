@@ -84,8 +84,6 @@ type ExportMcpMetadataResponseBody struct {
 	Tools []*McpExportToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// Authentication requirements
 	Authentication *McpExportAuthenticationResponseBody `form:"authentication" json:"authentication" xml:"authentication"`
-	// Client installation configurations
-	InstallConfigs *McpExportInstallConfigsResponseBody `form:"install_configs" json:"install_configs" xml:"install_configs"`
 }
 
 // GetMcpMetadataUnauthorizedResponseBody is the type of the "mcpMetadata"
@@ -698,45 +696,6 @@ type McpExportAuthHeaderResponseBody struct {
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
 }
 
-// McpExportInstallConfigsResponseBody is used to define fields on response
-// body types.
-type McpExportInstallConfigsResponseBody struct {
-	// Configuration for Claude Desktop
-	ClaudeDesktop *McpExportStdioConfigResponseBody `form:"claude_desktop" json:"claude_desktop" xml:"claude_desktop"`
-	// Configuration for Cursor
-	Cursor *McpExportStdioConfigResponseBody `form:"cursor" json:"cursor" xml:"cursor"`
-	// Configuration for VS Code
-	Vscode *McpExportHTTPConfigResponseBody `form:"vscode" json:"vscode" xml:"vscode"`
-	// CLI command for Claude Code
-	ClaudeCode string `form:"claude_code" json:"claude_code" xml:"claude_code"`
-	// CLI command for Gemini CLI
-	GeminiCli string `form:"gemini_cli" json:"gemini_cli" xml:"gemini_cli"`
-	// TOML configuration for Codex CLI
-	CodexCli string `form:"codex_cli" json:"codex_cli" xml:"codex_cli"`
-}
-
-// McpExportStdioConfigResponseBody is used to define fields on response body
-// types.
-type McpExportStdioConfigResponseBody struct {
-	// The command to run
-	Command string `form:"command" json:"command" xml:"command"`
-	// Command arguments
-	Args []string `form:"args" json:"args" xml:"args"`
-	// Environment variables
-	Env map[string]string `form:"env,omitempty" json:"env,omitempty" xml:"env,omitempty"`
-}
-
-// McpExportHTTPConfigResponseBody is used to define fields on response body
-// types.
-type McpExportHTTPConfigResponseBody struct {
-	// Transport type (always 'http')
-	Type string `form:"type" json:"type" xml:"type"`
-	// The MCP server URL
-	URL string `form:"url" json:"url" xml:"url"`
-	// HTTP headers with environment variable placeholders
-	Headers map[string]string `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
-}
-
 // NewGetMcpMetadataResponseBody builds the HTTP response body from the result
 // of the "getMcpMetadata" endpoint of the "mcpMetadata" service.
 func NewGetMcpMetadataResponseBody(res *mcpmetadata.GetMcpMetadataResult) *GetMcpMetadataResponseBody {
@@ -796,9 +755,6 @@ func NewExportMcpMetadataResponseBody(res *types.McpExport) *ExportMcpMetadataRe
 	}
 	if res.Authentication != nil {
 		body.Authentication = marshalTypesMcpExportAuthenticationToMcpExportAuthenticationResponseBody(res.Authentication)
-	}
-	if res.InstallConfigs != nil {
-		body.InstallConfigs = marshalTypesMcpExportInstallConfigsToMcpExportInstallConfigsResponseBody(res.InstallConfigs)
 	}
 	return body
 }
