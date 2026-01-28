@@ -84,17 +84,25 @@ var McpMetadata = Type("McpMetadata", func() {
 var _ = Service("mcpMetadata", func() {
 	Description("Manages metadata for the MCP install page shown to users.")
 
+	Security(security.ByKey, security.ProjectSlug, func() {
+		Scope("producer")
+	})
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
 	Method("getMcpMetadata", func() {
 		Description("Fetch the metadata that powers the MCP install page.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
 			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
 
 			Required("toolset_slug")
 
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -105,6 +113,7 @@ var _ = Service("mcpMetadata", func() {
 
 		HTTP(func() {
 			GET("/rpc/mcpMetadata.get")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("toolset_slug")
@@ -118,6 +127,10 @@ var _ = Service("mcpMetadata", func() {
 
 	Method("setMcpMetadata", func() {
 		Description("Create or update the metadata that powers the MCP install page.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
 			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
@@ -127,6 +140,7 @@ var _ = Service("mcpMetadata", func() {
 
 			Required("toolset_slug")
 
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -135,6 +149,7 @@ var _ = Service("mcpMetadata", func() {
 
 		HTTP(func() {
 			POST("/rpc/mcpMetadata.set")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 		})
@@ -145,12 +160,17 @@ var _ = Service("mcpMetadata", func() {
 
 	Method("exportMcpMetadata", func() {
 		Description("Export MCP server details as JSON for documentation and integration purposes.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
 			Attribute("toolset_slug", shared.Slug, "The slug of the toolset to export")
 
 			Required("toolset_slug")
 
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -159,6 +179,7 @@ var _ = Service("mcpMetadata", func() {
 
 		HTTP(func() {
 			POST("/rpc/mcpMetadata.export")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 		})

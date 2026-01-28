@@ -39,6 +39,7 @@ func DecodeGetMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	return func(r *http.Request) (*mcpmetadata.GetMcpMetadataPayload, error) {
 		var (
 			toolsetSlug      string
+			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
 			err              error
@@ -51,6 +52,10 @@ func DecodeGetMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if utf8.RuneCountInString(toolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", toolsetSlug, utf8.RuneCountInString(toolsetSlug), 40, false))
 		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -62,12 +67,12 @@ func DecodeGetMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetMcpMetadataPayload(toolsetSlug, sessionToken, projectSlugInput)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
+		payload := NewGetMcpMetadataPayload(toolsetSlug, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -75,6 +80,13 @@ func DecodeGetMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 
@@ -275,9 +287,14 @@ func DecodeSetMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		}
 
 		var (
+			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
 		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -286,12 +303,12 @@ func DecodeSetMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewSetMcpMetadataPayload(&body, sessionToken, projectSlugInput)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
+		payload := NewSetMcpMetadataPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -299,6 +316,13 @@ func DecodeSetMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 
@@ -499,9 +523,14 @@ func DecodeExportMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		}
 
 		var (
+			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
 		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -510,12 +539,12 @@ func DecodeExportMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewExportMcpMetadataPayload(&body, sessionToken, projectSlugInput)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
+		payload := NewExportMcpMetadataPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -523,6 +552,13 @@ func DecodeExportMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
 			}
 		}
 

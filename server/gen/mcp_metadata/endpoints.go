@@ -46,26 +46,50 @@ func NewGetMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		p := req.(*GetMcpMetadataPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err == nil {
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"producer"},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -81,26 +105,50 @@ func NewSetMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		p := req.(*SetMcpMetadataPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err == nil {
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"producer"},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -116,26 +164,50 @@ func NewExportMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		p := req.(*ExportMcpMetadataPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err == nil {
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"producer"},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
 		}
 		if err != nil {
 			return nil, err

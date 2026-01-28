@@ -19,7 +19,7 @@ import (
 
 // BuildGetMcpMetadataPayload builds the payload for the mcpMetadata
 // getMcpMetadata endpoint from CLI flags.
-func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcpMetadataGetMcpMetadataSessionToken string, mcpMetadataGetMcpMetadataProjectSlugInput string) (*mcpmetadata.GetMcpMetadataPayload, error) {
+func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcpMetadataGetMcpMetadataApikeyToken string, mcpMetadataGetMcpMetadataSessionToken string, mcpMetadataGetMcpMetadataProjectSlugInput string) (*mcpmetadata.GetMcpMetadataPayload, error) {
 	var err error
 	var toolsetSlug string
 	{
@@ -30,6 +30,12 @@ func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcp
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpMetadataGetMcpMetadataApikeyToken != "" {
+			apikeyToken = &mcpMetadataGetMcpMetadataApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -46,6 +52,7 @@ func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcp
 	}
 	v := &mcpmetadata.GetMcpMetadataPayload{}
 	v.ToolsetSlug = types.Slug(toolsetSlug)
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -54,13 +61,13 @@ func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcp
 
 // BuildSetMcpMetadataPayload builds the payload for the mcpMetadata
 // setMcpMetadata endpoint from CLI flags.
-func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadataSetMcpMetadataSessionToken string, mcpMetadataSetMcpMetadataProjectSlugInput string) (*mcpmetadata.SetMcpMetadataPayload, error) {
+func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadataSetMcpMetadataApikeyToken string, mcpMetadataSetMcpMetadataSessionToken string, mcpMetadataSetMcpMetadataProjectSlugInput string) (*mcpmetadata.SetMcpMetadataPayload, error) {
 	var err error
 	var body SetMcpMetadataRequestBody
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Mollitia eaque nostrum.\",\n      \"instructions\": \"Qui harum.\",\n      \"logo_asset_id\": \"Quia fuga impedit saepe quam porro accusamus.\",\n      \"toolset_slug\": \"bbj\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Aspernatur ipsum omnis.\",\n      \"instructions\": \"Ut enim alias aperiam.\",\n      \"logo_asset_id\": \"Aperiam omnis qui corporis qui non.\",\n      \"toolset_slug\": \"ljf\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
@@ -68,6 +75,12 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpMetadataSetMcpMetadataApikeyToken != "" {
+			apikeyToken = &mcpMetadataSetMcpMetadataApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -88,6 +101,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -96,13 +110,13 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 
 // BuildExportMcpMetadataPayload builds the payload for the mcpMetadata
 // exportMcpMetadata endpoint from CLI flags.
-func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpMetadataExportMcpMetadataSessionToken string, mcpMetadataExportMcpMetadataProjectSlugInput string) (*mcpmetadata.ExportMcpMetadataPayload, error) {
+func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpMetadataExportMcpMetadataApikeyToken string, mcpMetadataExportMcpMetadataSessionToken string, mcpMetadataExportMcpMetadataProjectSlugInput string) (*mcpmetadata.ExportMcpMetadataPayload, error) {
 	var err error
 	var body ExportMcpMetadataRequestBody
 	{
 		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"toolset_slug\": \"an2\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"toolset_slug\": \"eys\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
@@ -110,6 +124,12 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpMetadataExportMcpMetadataApikeyToken != "" {
+			apikeyToken = &mcpMetadataExportMcpMetadataApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -127,6 +147,7 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 	v := &mcpmetadata.ExportMcpMetadataPayload{
 		ToolsetSlug: types.Slug(body.ToolsetSlug),
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

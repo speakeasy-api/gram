@@ -5581,6 +5581,13 @@ paths:
             operationId: exportMcpMetadata
             parameters:
                 - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -5662,6 +5669,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: exportMcpMetadata mcpMetadata
@@ -5684,6 +5693,13 @@ paths:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
                     pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -5761,6 +5777,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: getMcpMetadata mcpMetadata
@@ -5774,6 +5792,13 @@ paths:
             description: Create or update the metadata that powers the MCP install page.
             operationId: setMcpMetadata
             parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -5856,6 +5881,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: setMcpMetadata mcpMetadata

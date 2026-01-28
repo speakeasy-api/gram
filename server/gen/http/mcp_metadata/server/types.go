@@ -1191,9 +1191,10 @@ func NewExportMcpMetadataGatewayErrorResponseBody(res *goa.ServiceError) *Export
 
 // NewGetMcpMetadataPayload builds a mcpMetadata service getMcpMetadata
 // endpoint payload.
-func NewGetMcpMetadataPayload(toolsetSlug string, sessionToken *string, projectSlugInput *string) *mcpmetadata.GetMcpMetadataPayload {
+func NewGetMcpMetadataPayload(toolsetSlug string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *mcpmetadata.GetMcpMetadataPayload {
 	v := &mcpmetadata.GetMcpMetadataPayload{}
 	v.ToolsetSlug = types.Slug(toolsetSlug)
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1202,13 +1203,14 @@ func NewGetMcpMetadataPayload(toolsetSlug string, sessionToken *string, projectS
 
 // NewSetMcpMetadataPayload builds a mcpMetadata service setMcpMetadata
 // endpoint payload.
-func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, sessionToken *string, projectSlugInput *string) *mcpmetadata.SetMcpMetadataPayload {
+func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *mcpmetadata.SetMcpMetadataPayload {
 	v := &mcpmetadata.SetMcpMetadataPayload{
 		ToolsetSlug:              types.Slug(*body.ToolsetSlug),
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -1217,10 +1219,11 @@ func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, sessionToken *str
 
 // NewExportMcpMetadataPayload builds a mcpMetadata service exportMcpMetadata
 // endpoint payload.
-func NewExportMcpMetadataPayload(body *ExportMcpMetadataRequestBody, sessionToken *string, projectSlugInput *string) *mcpmetadata.ExportMcpMetadataPayload {
+func NewExportMcpMetadataPayload(body *ExportMcpMetadataRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *mcpmetadata.ExportMcpMetadataPayload {
 	v := &mcpmetadata.ExportMcpMetadataPayload{
 		ToolsetSlug: types.Slug(*body.ToolsetSlug),
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

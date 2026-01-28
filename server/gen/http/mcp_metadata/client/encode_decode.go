@@ -42,6 +42,10 @@ func EncodeGetMcpMetadataRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if !ok {
 			return goahttp.ErrInvalidType("mcpMetadata", "getMcpMetadata", "*mcpmetadata.GetMcpMetadataPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -278,6 +282,10 @@ func EncodeSetMcpMetadataRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		p, ok := v.(*mcpmetadata.SetMcpMetadataPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("mcpMetadata", "setMcpMetadata", "*mcpmetadata.SetMcpMetadataPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -516,6 +524,10 @@ func EncodeExportMcpMetadataRequest(encoder func(*http.Request) goahttp.Encoder)
 		p, ok := v.(*mcpmetadata.ExportMcpMetadataPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("mcpMetadata", "exportMcpMetadata", "*mcpmetadata.ExportMcpMetadataPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken

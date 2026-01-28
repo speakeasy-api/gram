@@ -52,6 +52,7 @@ var MethodNames = [3]string{"getMcpMetadata", "setMcpMetadata", "exportMcpMetada
 type ExportMcpMetadataPayload struct {
 	// The slug of the toolset to export
 	ToolsetSlug      types.Slug
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -61,6 +62,7 @@ type ExportMcpMetadataPayload struct {
 type GetMcpMetadataPayload struct {
 	// The slug of the toolset associated with this install page metadata
 	ToolsetSlug      types.Slug
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -83,6 +85,7 @@ type SetMcpMetadataPayload struct {
 	ExternalDocumentationURL *string
 	// Server instructions returned in the MCP initialize response
 	Instructions     *string
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
