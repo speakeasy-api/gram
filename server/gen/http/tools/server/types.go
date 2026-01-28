@@ -652,11 +652,12 @@ func NewListToolsGatewayErrorResponseBody(res *goa.ServiceError) *ListToolsGatew
 }
 
 // NewListToolsPayload builds a tools service listTools endpoint payload.
-func NewListToolsPayload(cursor *string, limit *int32, deploymentID *string, sessionToken *string, projectSlugInput *string) *tools.ListToolsPayload {
+func NewListToolsPayload(cursor *string, limit *int32, deploymentID *string, sourceSlug *string, sessionToken *string, projectSlugInput *string) *tools.ListToolsPayload {
 	v := &tools.ListToolsPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
 	v.DeploymentID = deploymentID
+	v.SourceSlug = sourceSlug
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

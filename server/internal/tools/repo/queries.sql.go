@@ -577,10 +577,10 @@ WITH deployment AS (
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
     WHERE d.project_id = $2
-      AND ($4::uuid IS NOT NULL OR ds.status = 'completed')
+      AND ($5::uuid IS NOT NULL OR ds.status = 'completed')
       AND (
-        $4::uuid IS NULL
-        OR d.id = $4::uuid
+        $5::uuid IS NULL
+        OR d.id = $5::uuid
       )
     ORDER BY d.seq DESC
     LIMIT 1
@@ -628,6 +628,7 @@ WHERE
   htd.deployment_id IN (SELECT id FROM all_deployment_ids)
   AND htd.deleted IS FALSE
   AND ($3::uuid IS NULL OR htd.id < $3)
+  AND ($4::text IS NULL OR htd.tool_urn LIKE 'tools:http:' || $4 || ':%')
 ORDER BY htd.id DESC
 LIMIT $1
 `
@@ -636,6 +637,7 @@ type ListHttpToolsParams struct {
 	Limit        int32
 	ProjectID    uuid.UUID
 	Cursor       uuid.NullUUID
+	SourceSlug   pgtype.Text
 	DeploymentID uuid.NullUUID
 }
 
@@ -673,6 +675,7 @@ func (q *Queries) ListHttpTools(ctx context.Context, arg ListHttpToolsParams) ([
 		arg.Limit,
 		arg.ProjectID,
 		arg.Cursor,
+		arg.SourceSlug,
 		arg.DeploymentID,
 	)
 	if err != nil {

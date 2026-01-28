@@ -61,6 +61,9 @@ func EncodeListToolsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.DeploymentID != nil {
 			values.Add("deployment_id", *p.DeploymentID)
 		}
+		if p.SourceSlug != nil {
+			values.Add("source_slug", *p.SourceSlug)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

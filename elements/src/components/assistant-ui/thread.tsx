@@ -404,7 +404,7 @@ const Composer: FC = () => {
         <ComposerPrimitive.Input
           placeholder={composerConfig.placeholder}
           className={cn(
-            'aui-composer-input placeholder:text-muted-foreground mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 outline-none focus-visible:ring-0',
+            'aui-composer-input text-foreground placeholder:text-muted-foreground mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 outline-none focus-visible:ring-0',
             d('h-input'),
             d('text-base')
           )}

@@ -105,6 +105,7 @@ export function setListToolsData(
       cursor?: string | undefined;
       limit?: number | undefined;
       deploymentId?: string | undefined;
+      sourceSlug?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -123,6 +124,7 @@ export function invalidateListTools(
       cursor?: string | undefined;
       limit?: number | undefined;
       deploymentId?: string | undefined;
+      sourceSlug?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

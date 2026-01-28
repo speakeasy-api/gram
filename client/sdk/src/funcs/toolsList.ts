@@ -99,6 +99,7 @@ async function $do(
     "cursor": payload?.cursor,
     "deployment_id": payload?.deployment_id,
     "limit": payload?.limit,
+    "source_slug": payload?.source_slug,
   });
 
   const headers = new Headers(compactMap({

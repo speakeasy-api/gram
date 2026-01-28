@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -81,6 +82,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		ProjectID:    *authCtx.ProjectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		SourceSlug:   pgtype.Text{String: "", Valid: false},
 		Limit:        limit + 1,
 	}
 
@@ -98,6 +100,10 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment ID").Log(ctx, s.logger)
 		}
 		toolParams.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
+	}
+
+	if payload.SourceSlug != nil {
+		toolParams.SourceSlug = pgtype.Text{String: *payload.SourceSlug, Valid: true}
 	}
 
 	tools, err := s.repo.ListHttpTools(ctx, toolParams)

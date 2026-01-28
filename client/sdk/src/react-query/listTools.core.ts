@@ -47,6 +47,7 @@ export function buildListToolsQuery(
       cursor: request?.cursor,
       limit: request?.limit,
       deploymentId: request?.deploymentId,
+      sourceSlug: request?.sourceSlug,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
@@ -77,6 +78,7 @@ export function queryKeyListTools(
     cursor?: string | undefined;
     limit?: number | undefined;
     deploymentId?: string | undefined;
+    sourceSlug?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
