@@ -7,17 +7,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 
 	"github.com/google/uuid"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
-	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -64,16 +61,14 @@ func ParseAgenticConfig(r *http.Request) *AgenticConfig {
 
 // AgenticChatHandler handles chat requests with agent support
 type AgenticChatHandler struct {
-	service       *Service
 	agentsService *agents.Service
 	subAgentExec  *agents.StreamingSubAgentExecutor
 	logger        *slog.Logger
 }
 
 // NewAgenticChatHandler creates a new agentic chat handler
-func NewAgenticChatHandler(service *Service, agentsService *agents.Service, logger *slog.Logger) *AgenticChatHandler {
+func NewAgenticChatHandler(agentsService *agents.Service, logger *slog.Logger) *AgenticChatHandler {
 	return &AgenticChatHandler{
-		service:       service,
 		agentsService: agentsService,
 		subAgentExec:  agents.NewStreamingSubAgentExecutor(agentsService),
 		logger:        logger.With(attr.SlogComponent("agentic-chat")),
@@ -120,11 +115,8 @@ func (h *AgenticChatHandler) HandleAgenticCompletion(
 		attr.SlogOrganizationID(orgID),
 	)
 
-	// Convert request messages to internal format
-	messages, err := h.convertMessages(chatRequest.Messages)
-	if err != nil {
-		return fmt.Errorf("failed to convert messages: %w", err)
-	}
+	// Messages are already in the correct format
+	messages := chatRequest.Messages
 
 	// Load tools from toolsets
 	var toolDefs []openrouter.Tool
@@ -451,47 +443,7 @@ func (h *AgenticChatHandler) HandleAgenticCompletion(
 	}
 }
 
-// convertMessages converts or.Message array (already internal format) - just returns as-is
-// since OpenAIChatRequest.Messages is already []or.Message
-func (h *AgenticChatHandler) convertMessages(messages []or.Message) ([]or.Message, error) {
-	// Messages are already in the correct format
-	return messages, nil
-}
-
 // ShouldUseAgenticMode determines if the request should use agentic mode
 func ShouldUseAgenticMode(r *http.Request) bool {
 	return r.Header.Get("Gram-Agents-Enabled") == "true"
 }
-
-// ParseAgentExecutionDirectives parses execution mode directives from system prompt
-func ParseAgentExecutionDirectives(systemPrompt string) agents.AgentExecutionConfig {
-	config := agents.DefaultAgentExecutionConfig()
-
-	for _, line := range strings.Split(systemPrompt, "\n") {
-		line = strings.TrimSpace(line)
-		if mode, found := strings.CutPrefix(line, "@agent_execution_mode:"); found {
-			mode = strings.TrimSpace(mode)
-			if mode == "sequential" || mode == "parallel" || mode == "auto" {
-				config.DefaultMode = mode
-				config.Enabled = true
-			}
-		} else if depthStr, found := strings.CutPrefix(line, "@agent_max_depth:"); found {
-			var depth int
-			if _, err := fmt.Sscanf(depthStr, "%d", &depth); err == nil && depth > 0 {
-				config.MaxDepth = depth
-				config.Enabled = true
-			}
-		} else if value, found := strings.CutPrefix(line, "@agents_enabled:"); found {
-			value = strings.TrimSpace(value)
-			config.Enabled = value == "true"
-		}
-	}
-
-	return config
-}
-
-// Ensure optionalnullable and conv are used (for future expansion of message conversion)
-var (
-	_ = optionalnullable.From[int]
-	_ = conv.Ptr[int]
-)

@@ -617,7 +617,7 @@ func newStartCommand() *cli.Command {
 
 			// Create agents service and agentic handler for sub-agent support
 			agentsService := agents.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient)
-			agenticHandler := chat.NewAgenticChatHandler(chatService, agentsService, logger)
+			agenticHandler := chat.NewAgenticChatHandler(agentsService, logger)
 			chatService.SetAgenticHandler(agenticHandler)
 
 			chat.Attach(mux, chatService)

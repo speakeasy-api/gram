@@ -122,32 +122,3 @@ func (e SubAgentCompleteEvent) ToJSON() ([]byte, error) {
 	}
 	return data, nil
 }
-
-// FormatSSEEvent formats a sub-agent event as an SSE event string
-func FormatSSEEvent(event SubAgentEvent) (string, error) {
-	data, err := event.ToJSON()
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal event: %w", err)
-	}
-	return fmt.Sprintf("event: %s\ndata: %s\n\n", event.EventType(), string(data)), nil
-}
-
-// AgentExecutionConfig holds configuration parsed from system prompt directives
-type AgentExecutionConfig struct {
-	// DefaultMode is the default execution mode for sub-agents
-	// Valid values: "sequential", "parallel", "auto"
-	DefaultMode string `json:"default_mode"`
-	// MaxDepth is the maximum nesting level for sub-agents
-	MaxDepth int `json:"max_depth"`
-	// Enabled indicates if agent spawning is enabled
-	Enabled bool `json:"enabled"`
-}
-
-// DefaultAgentExecutionConfig returns the default agent execution configuration
-func DefaultAgentExecutionConfig() AgentExecutionConfig {
-	return AgentExecutionConfig{
-		DefaultMode: "auto",
-		MaxDepth:    3,
-		Enabled:     false,
-	}
-}
