@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   queryKeyDeploymentLogs,
 };
 
-export type DeploymentLogsQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * getDeploymentLogs deployments
  *
@@ -61,8 +39,8 @@ export type DeploymentLogsQueryError =
 export function useDeploymentLogs(
   request: operations.GetDeploymentLogsRequest,
   security?: operations.GetDeploymentLogsSecurity | undefined,
-  options?: QueryHookOptions<DeploymentLogsQueryData, DeploymentLogsQueryError>,
-): UseQueryResult<DeploymentLogsQueryData, DeploymentLogsQueryError> {
+  options?: QueryHookOptions<DeploymentLogsQueryData>,
+): UseQueryResult<DeploymentLogsQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildDeploymentLogsQuery(
@@ -84,11 +62,8 @@ export function useDeploymentLogs(
 export function useDeploymentLogsSuspense(
   request: operations.GetDeploymentLogsRequest,
   security?: operations.GetDeploymentLogsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<
-    DeploymentLogsQueryData,
-    DeploymentLogsQueryError
-  >,
-): UseSuspenseQueryResult<DeploymentLogsQueryData, DeploymentLogsQueryError> {
+  options?: SuspenseQueryHookOptions<DeploymentLogsQueryData>,
+): UseSuspenseQueryResult<DeploymentLogsQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildDeploymentLogsQuery(

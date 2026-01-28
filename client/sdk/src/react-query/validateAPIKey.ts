@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   type ValidateAPIKeyQueryData,
 };
 
-export type ValidateAPIKeyQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * verifyKey keys
  *
@@ -61,8 +39,8 @@ export type ValidateAPIKeyQueryError =
 export function useValidateAPIKey(
   request?: operations.ValidateAPIKeyRequest | undefined,
   security?: operations.ValidateAPIKeySecurity | undefined,
-  options?: QueryHookOptions<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError>,
-): UseQueryResult<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError> {
+  options?: QueryHookOptions<ValidateAPIKeyQueryData>,
+): UseQueryResult<ValidateAPIKeyQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildValidateAPIKeyQuery(
@@ -84,11 +62,8 @@ export function useValidateAPIKey(
 export function useValidateAPIKeySuspense(
   request?: operations.ValidateAPIKeyRequest | undefined,
   security?: operations.ValidateAPIKeySecurity | undefined,
-  options?: SuspenseQueryHookOptions<
-    ValidateAPIKeyQueryData,
-    ValidateAPIKeyQueryError
-  >,
-): UseSuspenseQueryResult<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError> {
+  options?: SuspenseQueryHookOptions<ValidateAPIKeyQueryData>,
+): UseSuspenseQueryResult<ValidateAPIKeyQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildValidateAPIKeyQuery(

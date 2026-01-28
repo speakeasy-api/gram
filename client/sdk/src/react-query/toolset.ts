@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   type ToolsetQueryData,
 };
 
-export type ToolsetQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * getToolset toolsets
  *
@@ -61,8 +39,8 @@ export type ToolsetQueryError =
 export function useToolset(
   request: operations.GetToolsetRequest,
   security?: operations.GetToolsetSecurity | undefined,
-  options?: QueryHookOptions<ToolsetQueryData, ToolsetQueryError>,
-): UseQueryResult<ToolsetQueryData, ToolsetQueryError> {
+  options?: QueryHookOptions<ToolsetQueryData>,
+): UseQueryResult<ToolsetQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildToolsetQuery(
@@ -84,8 +62,8 @@ export function useToolset(
 export function useToolsetSuspense(
   request: operations.GetToolsetRequest,
   security?: operations.GetToolsetSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ToolsetQueryData, ToolsetQueryError>,
-): UseSuspenseQueryResult<ToolsetQueryData, ToolsetQueryError> {
+  options?: SuspenseQueryHookOptions<ToolsetQueryData>,
+): UseSuspenseQueryResult<ToolsetQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildToolsetQuery(

@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   queryKeyListDeployments,
 };
 
-export type ListDeploymentsQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * listDeployments deployments
  *
@@ -61,11 +39,8 @@ export type ListDeploymentsQueryError =
 export function useListDeployments(
   request?: operations.ListDeploymentsRequest | undefined,
   security?: operations.ListDeploymentsSecurity | undefined,
-  options?: QueryHookOptions<
-    ListDeploymentsQueryData,
-    ListDeploymentsQueryError
-  >,
-): UseQueryResult<ListDeploymentsQueryData, ListDeploymentsQueryError> {
+  options?: QueryHookOptions<ListDeploymentsQueryData>,
+): UseQueryResult<ListDeploymentsQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildListDeploymentsQuery(
@@ -87,11 +62,8 @@ export function useListDeployments(
 export function useListDeploymentsSuspense(
   request?: operations.ListDeploymentsRequest | undefined,
   security?: operations.ListDeploymentsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<
-    ListDeploymentsQueryData,
-    ListDeploymentsQueryError
-  >,
-): UseSuspenseQueryResult<ListDeploymentsQueryData, ListDeploymentsQueryError> {
+  options?: SuspenseQueryHookOptions<ListDeploymentsQueryData>,
+): UseSuspenseQueryResult<ListDeploymentsQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListDeploymentsQuery(

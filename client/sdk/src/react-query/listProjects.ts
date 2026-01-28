@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   queryKeyListProjects,
 };
 
-export type ListProjectsQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * listProjects projects
  *
@@ -61,8 +39,8 @@ export type ListProjectsQueryError =
 export function useListProjects(
   request: operations.ListProjectsRequest,
   security?: operations.ListProjectsSecurity | undefined,
-  options?: QueryHookOptions<ListProjectsQueryData, ListProjectsQueryError>,
-): UseQueryResult<ListProjectsQueryData, ListProjectsQueryError> {
+  options?: QueryHookOptions<ListProjectsQueryData>,
+): UseQueryResult<ListProjectsQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildListProjectsQuery(
@@ -84,11 +62,8 @@ export function useListProjects(
 export function useListProjectsSuspense(
   request: operations.ListProjectsRequest,
   security?: operations.ListProjectsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<
-    ListProjectsQueryData,
-    ListProjectsQueryError
-  >,
-): UseSuspenseQueryResult<ListProjectsQueryData, ListProjectsQueryError> {
+  options?: SuspenseQueryHookOptions<ListProjectsQueryData>,
+): UseSuspenseQueryResult<ListProjectsQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListProjectsQuery(

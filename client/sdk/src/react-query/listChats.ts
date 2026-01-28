@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   queryKeyListChats,
 };
 
-export type ListChatsQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * listChats chat
  *
@@ -61,8 +39,8 @@ export type ListChatsQueryError =
 export function useListChats(
   request?: operations.ListChatsRequest | undefined,
   security?: operations.ListChatsSecurity | undefined,
-  options?: QueryHookOptions<ListChatsQueryData, ListChatsQueryError>,
-): UseQueryResult<ListChatsQueryData, ListChatsQueryError> {
+  options?: QueryHookOptions<ListChatsQueryData>,
+): UseQueryResult<ListChatsQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildListChatsQuery(
@@ -84,8 +62,8 @@ export function useListChats(
 export function useListChatsSuspense(
   request?: operations.ListChatsRequest | undefined,
   security?: operations.ListChatsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ListChatsQueryData, ListChatsQueryError>,
-): UseSuspenseQueryResult<ListChatsQueryData, ListChatsQueryError> {
+  options?: SuspenseQueryHookOptions<ListChatsQueryData>,
+): UseSuspenseQueryResult<ListChatsQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildListChatsQuery(

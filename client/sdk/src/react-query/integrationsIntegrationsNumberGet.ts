@@ -10,17 +10,6 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -41,17 +30,6 @@ export {
   queryKeyIntegrationsIntegrationsNumberGet,
 };
 
-export type IntegrationsIntegrationsNumberGetQueryError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * get integrations
  *
@@ -61,14 +39,8 @@ export type IntegrationsIntegrationsNumberGetQueryError =
 export function useIntegrationsIntegrationsNumberGet(
   request?: operations.IntegrationsNumberGetRequest | undefined,
   security?: operations.IntegrationsNumberGetSecurity | undefined,
-  options?: QueryHookOptions<
-    IntegrationsIntegrationsNumberGetQueryData,
-    IntegrationsIntegrationsNumberGetQueryError
-  >,
-): UseQueryResult<
-  IntegrationsIntegrationsNumberGetQueryData,
-  IntegrationsIntegrationsNumberGetQueryError
-> {
+  options?: QueryHookOptions<IntegrationsIntegrationsNumberGetQueryData>,
+): UseQueryResult<IntegrationsIntegrationsNumberGetQueryData, Error> {
   const client = useGramContext();
   return useQuery({
     ...buildIntegrationsIntegrationsNumberGetQuery(
@@ -91,13 +63,9 @@ export function useIntegrationsIntegrationsNumberGetSuspense(
   request?: operations.IntegrationsNumberGetRequest | undefined,
   security?: operations.IntegrationsNumberGetSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    IntegrationsIntegrationsNumberGetQueryData,
-    IntegrationsIntegrationsNumberGetQueryError
+    IntegrationsIntegrationsNumberGetQueryData
   >,
-): UseSuspenseQueryResult<
-  IntegrationsIntegrationsNumberGetQueryData,
-  IntegrationsIntegrationsNumberGetQueryError
-> {
+): UseSuspenseQueryResult<IntegrationsIntegrationsNumberGetQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildIntegrationsIntegrationsNumberGetQuery(

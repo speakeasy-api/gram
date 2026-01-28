@@ -12,17 +12,6 @@ import { environmentsCreate } from "../funcs/environmentsCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
-import { GramError } from "../models/errors/gramerror.js";
-import {
-  ConnectionError,
-  InvalidRequestError,
-  RequestAbortedError,
-  RequestTimeoutError,
-  UnexpectedClientError,
-} from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
-import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
-import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
@@ -36,17 +25,6 @@ export type CreateEnvironmentMutationVariables = {
 
 export type CreateEnvironmentMutationData = components.Environment;
 
-export type CreateEnvironmentMutationError =
-  | errors.ServiceError
-  | GramError
-  | ResponseValidationError
-  | ConnectionError
-  | RequestAbortedError
-  | RequestTimeoutError
-  | InvalidRequestError
-  | UnexpectedClientError
-  | SDKValidationError;
-
 /**
  * createEnvironment environments
  *
@@ -56,12 +34,12 @@ export type CreateEnvironmentMutationError =
 export function useCreateEnvironmentMutation(
   options?: MutationHookOptions<
     CreateEnvironmentMutationData,
-    CreateEnvironmentMutationError,
+    Error,
     CreateEnvironmentMutationVariables
   >,
 ): UseMutationResult<
   CreateEnvironmentMutationData,
-  CreateEnvironmentMutationError,
+  Error,
   CreateEnvironmentMutationVariables
 > {
   const client = useGramContext();
