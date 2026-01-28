@@ -374,8 +374,8 @@ importers:
         specifier: ^18 || ^19
         version: 19.2.3(react@19.2.3)
       zod:
-        specifier: ^3.25.0 || ^4.0.0
-        version: 4.2.1
+        specifier: ^3.20.0
+        version: 3.25.76(patch_hash=cba2b93eddc7a07a4ed221c3b3e8156ed9b4e3a4d8d4a91e013830785273923e)
     devDependencies:
       '@eslint/js':
         specifier: ^9.19.0
@@ -8699,11 +8699,11 @@ snapshots:
 
   '@openrouter/sdk@0.1.27':
     dependencies:
-      zod: 4.2.1
+      zod: 3.25.76(patch_hash=cba2b93eddc7a07a4ed221c3b3e8156ed9b4e3a4d8d4a91e013830785273923e)
 
   '@openrouter/sdk@0.3.14':
     dependencies:
-      zod: 4.2.1
+      zod: 3.25.76(patch_hash=cba2b93eddc7a07a4ed221c3b3e8156ed9b4e3a4d8d4a91e013830785273923e)
 
   '@opentelemetry/api@1.9.0': {}
 
