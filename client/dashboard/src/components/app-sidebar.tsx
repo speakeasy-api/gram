@@ -18,7 +18,6 @@ import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
 import {
   AlertTriangleIcon,
-  ChartNoAxesCombinedIcon,
   MinusIcon,
   Sparkles,
   TestTube2Icon,
@@ -35,7 +34,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const telemetry = useTelemetry();
 
-  const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   const isCatalogEnabled = telemetry.isFeatureEnabled("gram-external-mcp");
@@ -93,8 +91,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuItem>
                 <NavButton
                   title="Metrics"
-                  Icon={ChartNoAxesCombinedIcon}
-                  onClick={() => setMetricsModalOpen(true)}
+                  Icon={routes.metrics.Icon}
+                  href={routes.metrics.href()}
+                  active={routes.metrics.active}
                 />
               </SidebarMenuItem>
             </SidebarMenu>
@@ -127,14 +126,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <FreeTierExceededNotification />
         <ProjectMenu />
       </SidebarFooter>
-      <FeatureRequestModal
-        isOpen={metricsModalOpen}
-        onClose={() => setMetricsModalOpen(false)}
-        title="Metrics Coming Soon"
-        description="Metrics are coming soon! We'll let you know when this feature is available."
-        actionType="metrics"
-        icon={ChartNoAxesCombinedIcon}
-      />
       <FeatureRequestModal
         isOpen={isUpgradeModalOpen}
         onClose={() => setIsUpgradeModalOpen(false)}
