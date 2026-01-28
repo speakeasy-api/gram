@@ -63,9 +63,6 @@ type Service struct {
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
-//go:embed config_snippet.json.tmpl
-var configSnippetTmplData string
-
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
@@ -92,6 +89,14 @@ type IDEInstallLinkConfig struct {
 	Name *string `json:"name,omitempty"`
 	// Required for vscode ("http" only)
 	Type *string `json:"type,omitempty"`
+}
+
+// stdioConfigJSON is used for JSON serialization of stdio configs on the install page.
+// The generated types.McpExportStdioConfig doesn't have JSON tags.
+type stdioConfigJSON struct {
+	Command string            `json:"command"`
+	Args    []string          `json:"args"`
+	Env     map[string]string `json:"env,omitempty"`
 }
 
 type jsonSnippetData struct {
@@ -381,8 +386,10 @@ func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.To
 	return tools
 }
 
-func (s *Service) buildInstallConfigs(mcpSlug, mcpURL string, inputs []securityInput) *types.McpExportInstallConfigs {
-	// Build args for stdio-based clients (Claude Desktop, Cursor)
+// buildStdioConfig creates a stdio config for MCP clients (Claude Desktop, Cursor).
+// This is the single source of truth for stdio config generation, used by both
+// the export API and the install page.
+func buildStdioConfig(mcpURL string, inputs []securityInput) *types.McpExportStdioConfig {
 	args := []string{"mcp-remote@0.1.25", mcpURL}
 	env := make(map[string]string)
 
@@ -392,6 +399,16 @@ func (s *Service) buildInstallConfigs(mcpSlug, mcpURL string, inputs []securityI
 		args = append(args, "--header", fmt.Sprintf("%s:${%s}", headerKey, envVarName))
 		env[envVarName] = "<your-value-here>"
 	}
+
+	return &types.McpExportStdioConfig{
+		Command: "npx",
+		Args:    args,
+		Env:     env,
+	}
+}
+
+func (s *Service) buildInstallConfigs(mcpSlug, mcpURL string, inputs []securityInput) *types.McpExportInstallConfigs {
+	stdioConfig := buildStdioConfig(mcpURL, inputs)
 
 	// Build headers for HTTP-based clients (VS Code)
 	httpHeaders := make(map[string]string)
@@ -411,14 +428,14 @@ func (s *Service) buildInstallConfigs(mcpSlug, mcpURL string, inputs []securityI
 
 	return &types.McpExportInstallConfigs{
 		ClaudeDesktop: &types.McpExportStdioConfig{
-			Command: "npx",
-			Args:    append([]string(nil), args...),
-			Env:     maps.Clone(env),
+			Command: stdioConfig.Command,
+			Args:    append([]string(nil), stdioConfig.Args...),
+			Env:     maps.Clone(stdioConfig.Env),
 		},
 		Cursor: &types.McpExportStdioConfig{
-			Command: "npx",
-			Args:    append([]string(nil), args...),
-			Env:     maps.Clone(env),
+			Command: stdioConfig.Command,
+			Args:    append([]string(nil), stdioConfig.Args...),
+			Env:     maps.Clone(stdioConfig.Env),
 		},
 		Vscode: &types.McpExportHTTPConfig{
 			Type:    "http",
@@ -629,15 +646,18 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		ToolNames:      toolNames,
 	}
 
-	configSnippetTmpl, err := template.New("config_snippet").Funcs(templatefuncs.FuncMap()).Parse(configSnippetTmplData)
+	// Use the shared buildStdioConfig function to generate the config snippet
+	stdioConfig := buildStdioConfig(MCPURL, securityInputs)
+	configForJSON := stdioConfigJSON{
+		Command: stdioConfig.Command,
+		Args:    stdioConfig.Args,
+		Env:     stdioConfig.Env,
+	}
+	configBytes, err := json.MarshalIndent(configForJSON, "", "  ")
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to parse config snippet template").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal config snippet").Log(ctx, s.logger)
 	}
-
-	var configSnippet bytes.Buffer
-	if err := configSnippetTmpl.Execute(&configSnippet, configSnippetData); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template").Log(ctx, s.logger)
-	}
+	configSnippet := string(configBytes)
 
 	cursorURL, err := buildCursorInstallURL(toolset.Name, MCPURL, securityInputs)
 	if err != nil {
@@ -661,7 +681,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 
 	data := hostedPageData{
 		jsonSnippetData:   configSnippetData,
-		MCPConfig:         configSnippet.String(),
+		MCPConfig:         configSnippet,
 		CursorInstallLink: safeCursorURL,
 		VSCodeInstallLink: safeVsCodeURL,
 		OrganizationName:  organization.Name,

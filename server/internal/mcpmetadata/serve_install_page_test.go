@@ -240,6 +240,65 @@ func stringPtr(s string) *string {
 	return &s
 }
 
+func TestServeInstallPage_ConfigSnippetFormat(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "Auth context should be available from test setup")
+	require.NotNil(t, authCtx.ProjectID, "Project ID should be available from test setup")
+
+	// Create a public toolset
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Config Snippet Test",
+		Slug:                   "config-snippet-test",
+		McpSlug:                conv.ToPGText("config-snippet-test"),
+		Description:            conv.ToPGText("Test toolset for config snippet format"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	// Make it public
+	_, err = testInstance.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	// Create request
+	req := httptest.NewRequest("GET", "/mcp/config-snippet-test/install", nil)
+
+	// Add URL param for mcpSlug
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", "config-snippet-test")
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	// Create response recorder
+	rr := httptest.NewRecorder()
+
+	// Call the handler
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+
+	// Verify response
+	assert.Equal(t, http.StatusOK, rr.Code, "Expected successful response")
+
+	// Verify the config snippet format in the HTML
+	// The config snippet should be valid JSON with expected structure
+	body := rr.Body.String()
+
+	// Check that the config snippet contains the expected JSON structure:
+	// - "command": "npx"
+	// - "args": ["mcp-remote@0.1.25", "http://..."]
+	assert.Contains(t, body, `"command": "npx"`, "Config snippet should have npx command")
+	assert.Contains(t, body, `"mcp-remote@0.1.25"`, "Config snippet should reference mcp-remote")
+	assert.Contains(t, body, `"args": [`, "Config snippet should have args array")
+
+	// The URL should contain the MCP slug
+	assert.Contains(t, body, "/mcp/config-snippet-test", "Config snippet should contain MCP URL with slug")
+}
+
 func TestServeInstallPage_Instructions(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
