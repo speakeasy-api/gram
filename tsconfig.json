@@ -1,6 +1,6 @@
 {
   "exclude": ["node_modules", "**/gram-template-*"],
-  "include": [".mise-tasks/**/*", "client/sdk/**/*"],
+  "include": [".mise-tasks/**/*"],
   "extends": "./tsconfig.strict.json",
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig to read more about this file */
