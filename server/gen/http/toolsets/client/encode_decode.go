@@ -2733,6 +2733,25 @@ func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentV
 	return res
 }
 
+// unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition
+// builds a value of type *types.ExternalMCPHeaderDefinition from a value of
+// type *ExternalMCPHeaderDefinitionResponseBody.
+func unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(v *ExternalMCPHeaderDefinitionResponseBody) *types.ExternalMCPHeaderDefinition {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPHeaderDefinition{
+		Name:        *v.Name,
+		HeaderName:  *v.HeaderName,
+		Description: v.Description,
+		Placeholder: v.Placeholder,
+		Required:    *v.Required,
+		Secret:      *v.Secret,
+	}
+
+	return res
+}
+
 // unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata
 // builds a value of type *types.OAuthEnablementMetadata from a value of type
 // *OAuthEnablementMetadataResponseBody.
@@ -3207,6 +3226,16 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 				continue
 			}
 			res.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
+		}
+	}
+	if v.ExternalMcpHeaderDefinitions != nil {
+		res.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(v.ExternalMcpHeaderDefinitions))
+		for i, val := range v.ExternalMcpHeaderDefinitions {
+			if val == nil {
+				res.ExternalMcpHeaderDefinitions[i] = nil
+				continue
+			}
+			res.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	res.Tools = make([]*types.ToolEntry, len(v.Tools))

@@ -21,3 +21,8 @@ func SearchToolCallsTelemetryPath() string {
 func CaptureEventTelemetryPath() string {
 	return "/rpc/telemetry.captureEvent"
 }
+
+// GetProjectMetricsSummaryTelemetryPath returns the URL path to the telemetry service getProjectMetricsSummary HTTP endpoint.
+func GetProjectMetricsSummaryTelemetryPath() string {
+	return "/rpc/telemetry.getProjectMetricsSummary"
+}

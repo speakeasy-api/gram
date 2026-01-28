@@ -16,9 +16,10 @@ import (
 
 // Endpoints wraps the "telemetry" service endpoints.
 type Endpoints struct {
-	SearchLogs      goa.Endpoint
-	SearchToolCalls goa.Endpoint
-	CaptureEvent    goa.Endpoint
+	SearchLogs               goa.Endpoint
+	SearchToolCalls          goa.Endpoint
+	CaptureEvent             goa.Endpoint
+	GetProjectMetricsSummary goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "telemetry" service with endpoints.
@@ -26,9 +27,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		SearchLogs:      NewSearchLogsEndpoint(s, a.APIKeyAuth),
-		SearchToolCalls: NewSearchToolCallsEndpoint(s, a.APIKeyAuth),
-		CaptureEvent:    NewCaptureEventEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		SearchLogs:               NewSearchLogsEndpoint(s, a.APIKeyAuth),
+		SearchToolCalls:          NewSearchToolCallsEndpoint(s, a.APIKeyAuth),
+		CaptureEvent:             NewCaptureEventEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		GetProjectMetricsSummary: NewGetProjectMetricsSummaryEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -37,6 +39,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SearchLogs = m(e.SearchLogs)
 	e.SearchToolCalls = m(e.SearchToolCalls)
 	e.CaptureEvent = m(e.CaptureEvent)
+	e.GetProjectMetricsSummary = m(e.GetProjectMetricsSummary)
 }
 
 // NewSearchLogsEndpoint returns an endpoint function that calls the method
@@ -369,5 +372,88 @@ func NewCaptureEventEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, au
 			return nil, err
 		}
 		return s.CaptureEvent(ctx, p)
+	}
+}
+
+// NewGetProjectMetricsSummaryEndpoint returns an endpoint function that calls
+// the method "getProjectMetricsSummary" of service "telemetry".
+func NewGetProjectMetricsSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetProjectMetricsSummaryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat"},
+				RequiredScopes: []string{"consumer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"consumer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetProjectMetricsSummary(ctx, p)
 	}
 }

@@ -30,6 +30,8 @@ type GetInstanceResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The external MCP header definitions that are relevant to the toolset
+	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The MCP servers that are relevant to the toolset
 	McpServers []*InstanceMcpServerResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 }
@@ -549,6 +551,23 @@ type FunctionEnvironmentVariableResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 }
 
+// ExternalMCPHeaderDefinitionResponseBody is used to define fields on response
+// body types.
+type ExternalMCPHeaderDefinitionResponseBody struct {
+	// The prefixed environment variable name (e.g., SLACK_X_API_KEY)
+	Name string `form:"name" json:"name" xml:"name"`
+	// The actual HTTP header name to send (e.g., X-Api-Key)
+	HeaderName string `form:"header_name" json:"header_name" xml:"header_name"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Placeholder value for the header
+	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
+	// Whether the header is required
+	Required bool `form:"required" json:"required" xml:"required"`
+	// Whether the header value is secret
+	Secret bool `form:"secret" json:"secret" xml:"secret"`
+}
+
 // InstanceMcpServerResponseBody is used to define fields on response body
 // types.
 type InstanceMcpServerResponseBody struct {
@@ -613,6 +632,16 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 				continue
 			}
 			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.ExternalMcpHeaderDefinitions != nil {
+		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
+		for i, val := range res.ExternalMcpHeaderDefinitions {
+			if val == nil {
+				body.ExternalMcpHeaderDefinitions[i] = nil
+				continue
+			}
+			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
 		}
 	}
 	if res.McpServers != nil {
