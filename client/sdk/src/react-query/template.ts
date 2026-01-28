@@ -5,30 +5,28 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
+  QueryFunctionContext,
+  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramCore } from "../core.js";
+import { templatesGet } from "../funcs/templatesGet.js";
+import { combineSignals } from "../lib/primitives.js";
+import { RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
+import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-import {
-  buildTemplateQuery,
-  prefetchTemplate,
-  queryKeyTemplate,
-  TemplateQueryData,
-} from "./template.core.js";
-export {
-  buildTemplateQuery,
-  prefetchTemplate,
-  queryKeyTemplate,
-  type TemplateQueryData,
-};
+
+export type TemplateQueryData = components.GetPromptTemplateResult;
 
 /**
  * getTemplate templates
@@ -73,6 +71,21 @@ export function useTemplateSuspense(
       options,
     ),
     ...options,
+  });
+}
+
+export function prefetchTemplate(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request?: operations.GetTemplateRequest | undefined,
+  security?: operations.GetTemplateSecurity | undefined,
+): Promise<void> {
+  return queryClient.prefetchQuery({
+    ...buildTemplateQuery(
+      client$,
+      request,
+      security,
+    ),
   });
 }
 
@@ -121,4 +134,50 @@ export function invalidateAllTemplate(
     ...filters,
     queryKey: ["@gram/client", "templates", "get"],
   });
+}
+
+export function buildTemplateQuery(
+  client$: GramCore,
+  request?: operations.GetTemplateRequest | undefined,
+  security?: operations.GetTemplateSecurity | undefined,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (context: QueryFunctionContext) => Promise<TemplateQueryData>;
+} {
+  return {
+    queryKey: queryKeyTemplate({
+      id: request?.id,
+      name: request?.name,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function templateQueryFn(ctx): Promise<TemplateQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      return unwrapAsync(templatesGet(
+        client$,
+        request,
+        security,
+        mergedOptions,
+      ));
+    },
+  };
+}
+
+export function queryKeyTemplate(
+  parameters: {
+    id?: string | undefined;
+    name?: string | undefined;
+    gramKey?: string | undefined;
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
+): QueryKey {
+  return ["@gram/client", "templates", "get", parameters];
 }

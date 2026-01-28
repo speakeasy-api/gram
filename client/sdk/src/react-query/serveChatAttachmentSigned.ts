@@ -5,30 +5,28 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
+  QueryFunctionContext,
+  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramCore } from "../core.js";
+import { assetsServeChatAttachmentSigned } from "../funcs/assetsServeChatAttachmentSigned.js";
+import { combineSignals } from "../lib/primitives.js";
+import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
+import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
-import {
-  buildServeChatAttachmentSignedQuery,
-  prefetchServeChatAttachmentSigned,
-  queryKeyServeChatAttachmentSigned,
-  ServeChatAttachmentSignedQueryData,
-} from "./serveChatAttachmentSigned.core.js";
-export {
-  buildServeChatAttachmentSignedQuery,
-  prefetchServeChatAttachmentSigned,
-  queryKeyServeChatAttachmentSigned,
-  type ServeChatAttachmentSignedQueryData,
-};
+
+export type ServeChatAttachmentSignedQueryData =
+  operations.ServeChatAttachmentSignedResponse;
 
 /**
  * serveChatAttachmentSigned assets
@@ -72,6 +70,19 @@ export function useServeChatAttachmentSignedSuspense(
   });
 }
 
+export function prefetchServeChatAttachmentSigned(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request: operations.ServeChatAttachmentSignedRequest,
+): Promise<void> {
+  return queryClient.prefetchQuery({
+    ...buildServeChatAttachmentSignedQuery(
+      client$,
+      request,
+    ),
+  });
+}
+
 export function setServeChatAttachmentSignedData(
   client: QueryClient,
   queryKeyBase: [parameters: { token: string }],
@@ -106,4 +117,40 @@ export function invalidateAllServeChatAttachmentSigned(
     ...filters,
     queryKey: ["@gram/client", "assets", "serveChatAttachmentSigned"],
   });
+}
+
+export function buildServeChatAttachmentSignedQuery(
+  client$: GramCore,
+  request: operations.ServeChatAttachmentSignedRequest,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (
+    context: QueryFunctionContext,
+  ) => Promise<ServeChatAttachmentSignedQueryData>;
+} {
+  return {
+    queryKey: queryKeyServeChatAttachmentSigned({ token: request.token }),
+    queryFn: async function serveChatAttachmentSignedQueryFn(
+      ctx,
+    ): Promise<ServeChatAttachmentSignedQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      return unwrapAsync(assetsServeChatAttachmentSigned(
+        client$,
+        request,
+        mergedOptions,
+      ));
+    },
+  };
+}
+
+export function queryKeyServeChatAttachmentSigned(
+  parameters: { token: string },
+): QueryKey {
+  return ["@gram/client", "assets", "serveChatAttachmentSigned", parameters];
 }
