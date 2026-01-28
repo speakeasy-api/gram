@@ -148,12 +148,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadataPayload) (*gen.GetMcpMetadataResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeForbidden)
 	}
 
 	toolset, err := s.toolsetRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
@@ -187,12 +183,8 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 
 func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadataPayload) (*types.McpMetadata, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeForbidden)
 	}
 
 	toolset, err := s.toolsetRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
@@ -377,7 +369,11 @@ func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.To
 			// Parse schema from JSON string to any
 			var inputSchema any
 			if toolDesc.ExternalMcpToolDefinition.Schema != "" {
-				_ = json.Unmarshal([]byte(toolDesc.ExternalMcpToolDefinition.Schema), &inputSchema)
+				if err := json.Unmarshal([]byte(toolDesc.ExternalMcpToolDefinition.Schema), &inputSchema); err != nil {
+					s.logger.WarnContext(ctx, "failed to unmarshal tool schema",
+						attr.SlogError(err),
+						attr.SlogToolName(toolDesc.ExternalMcpToolDefinition.Name))
+				}
 			}
 			if inputSchema == nil {
 				inputSchema = map[string]any{"type": "object", "properties": map[string]any{}}
@@ -400,7 +396,11 @@ func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.To
 		// Parse schema from JSON string to any
 		var inputSchema any
 		if baseTool.Schema != "" {
-			_ = json.Unmarshal([]byte(baseTool.Schema), &inputSchema)
+			if err := json.Unmarshal([]byte(baseTool.Schema), &inputSchema); err != nil {
+				s.logger.WarnContext(ctx, "failed to unmarshal tool schema",
+					attr.SlogError(err),
+					attr.SlogToolName(baseTool.Name))
+			}
 		}
 		if inputSchema == nil {
 			inputSchema = map[string]any{"type": "object", "properties": map[string]any{}}
