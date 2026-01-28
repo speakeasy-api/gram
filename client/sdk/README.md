@@ -217,6 +217,7 @@ run();
 
 ### [McpMetadata](docs/sdks/mcpmetadata/README.md)
 
+* [export](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 * [get](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 * [set](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 
@@ -375,6 +376,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`keysValidate`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`mcpMetadataExport`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
@@ -484,6 +486,7 @@ To learn about this feature and how to get started, check
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
+- [`useExportMcpMetadataMutation`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat

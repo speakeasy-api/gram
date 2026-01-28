@@ -45,6 +45,7 @@ export function buildGetMcpMetadataQuery(
   return {
     queryKey: queryKeyGetMcpMetadata({
       toolsetSlug: request.toolsetSlug,
+      gramKey: request.gramKey,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
@@ -75,6 +76,7 @@ export function buildGetMcpMetadataQuery(
 export function queryKeyGetMcpMetadata(
   parameters: {
     toolsetSlug: string;
+    gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

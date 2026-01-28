@@ -30,6 +30,13 @@ type SetMcpMetadataRequestBody struct {
 	EnvironmentConfigs []*McpEnvironmentConfigInputRequestBody `form:"environment_configs,omitempty" json:"environment_configs,omitempty" xml:"environment_configs,omitempty"`
 }
 
+// ExportMcpMetadataRequestBody is the type of the "mcpMetadata" service
+// "exportMcpMetadata" endpoint HTTP request body.
+type ExportMcpMetadataRequestBody struct {
+	// The slug of the toolset to export
+	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
+}
+
 // GetMcpMetadataResponseBody is the type of the "mcpMetadata" service
 // "getMcpMetadata" endpoint HTTP response body.
 type GetMcpMetadataResponseBody struct {
@@ -58,6 +65,29 @@ type SetMcpMetadataResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the metadata entry was last updated
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ExportMcpMetadataResponseBody is the type of the "mcpMetadata" service
+// "exportMcpMetadata" endpoint HTTP response body.
+type ExportMcpMetadataResponseBody struct {
+	// The MCP server name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The MCP server slug
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Description of the MCP server
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The MCP server URL
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+	// Link to external documentation
+	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	// URL to the server logo
+	LogoURL *string `form:"logo_url,omitempty" json:"logo_url,omitempty" xml:"logo_url,omitempty"`
+	// Server instructions for users
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Available tools on this MCP server
+	Tools []*McpExportToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Authentication requirements
+	Authentication *McpExportAuthenticationResponseBody `form:"authentication,omitempty" json:"authentication,omitempty" xml:"authentication,omitempty"`
 }
 
 // GetMcpMetadataUnauthorizedResponseBody is the type of the "mcpMetadata"
@@ -432,6 +462,196 @@ type SetMcpMetadataGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ExportMcpMetadataUnauthorizedResponseBody is the type of the "mcpMetadata"
+// service "exportMcpMetadata" endpoint HTTP response body for the
+// "unauthorized" error.
+type ExportMcpMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExportMcpMetadataForbiddenResponseBody is the type of the "mcpMetadata"
+// service "exportMcpMetadata" endpoint HTTP response body for the "forbidden"
+// error.
+type ExportMcpMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExportMcpMetadataBadRequestResponseBody is the type of the "mcpMetadata"
+// service "exportMcpMetadata" endpoint HTTP response body for the
+// "bad_request" error.
+type ExportMcpMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExportMcpMetadataNotFoundResponseBody is the type of the "mcpMetadata"
+// service "exportMcpMetadata" endpoint HTTP response body for the "not_found"
+// error.
+type ExportMcpMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExportMcpMetadataConflictResponseBody is the type of the "mcpMetadata"
+// service "exportMcpMetadata" endpoint HTTP response body for the "conflict"
+// error.
+type ExportMcpMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExportMcpMetadataUnsupportedMediaResponseBody is the type of the
+// "mcpMetadata" service "exportMcpMetadata" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ExportMcpMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExportMcpMetadataInvalidResponseBody is the type of the "mcpMetadata"
+// service "exportMcpMetadata" endpoint HTTP response body for the "invalid"
+// error.
+type ExportMcpMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExportMcpMetadataInvariantViolationResponseBody is the type of the
+// "mcpMetadata" service "exportMcpMetadata" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ExportMcpMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExportMcpMetadataUnexpectedResponseBody is the type of the "mcpMetadata"
+// service "exportMcpMetadata" endpoint HTTP response body for the "unexpected"
+// error.
+type ExportMcpMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExportMcpMetadataGatewayErrorResponseBody is the type of the "mcpMetadata"
+// service "exportMcpMetadata" endpoint HTTP response body for the
+// "gateway_error" error.
+type ExportMcpMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // McpMetadataResponseBody is used to define fields on response body types.
 type McpMetadataResponseBody struct {
 	// The ID of the metadata record
@@ -482,6 +702,34 @@ type McpEnvironmentConfigInputRequestBody struct {
 	ProvidedBy string `form:"provided_by" json:"provided_by" xml:"provided_by"`
 }
 
+// McpExportToolResponseBody is used to define fields on response body types.
+type McpExportToolResponseBody struct {
+	// The tool name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Description of what the tool does
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// JSON Schema for the tool's input parameters
+	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
+}
+
+// McpExportAuthenticationResponseBody is used to define fields on response
+// body types.
+type McpExportAuthenticationResponseBody struct {
+	// Whether authentication is required
+	Required *bool `form:"required,omitempty" json:"required,omitempty" xml:"required,omitempty"`
+	// Required authentication headers
+	Headers []*McpExportAuthHeaderResponseBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+}
+
+// McpExportAuthHeaderResponseBody is used to define fields on response body
+// types.
+type McpExportAuthHeaderResponseBody struct {
+	// The HTTP header name (e.g., Authorization)
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// User-friendly display name (e.g., API Key)
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+}
+
 // NewSetMcpMetadataRequestBody builds the HTTP request body from the payload
 // of the "setMcpMetadata" endpoint of the "mcpMetadata" service.
 func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpMetadataRequestBody {
@@ -501,6 +749,15 @@ func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpM
 			}
 			body.EnvironmentConfigs[i] = marshalTypesMcpEnvironmentConfigInputToMcpEnvironmentConfigInputRequestBody(val)
 		}
+	}
+	return body
+}
+
+// NewExportMcpMetadataRequestBody builds the HTTP request body from the
+// payload of the "exportMcpMetadata" endpoint of the "mcpMetadata" service.
+func NewExportMcpMetadataRequestBody(p *mcpmetadata.ExportMcpMetadataPayload) *ExportMcpMetadataRequestBody {
+	body := &ExportMcpMetadataRequestBody{
+		ToolsetSlug: string(p.ToolsetSlug),
 	}
 	return body
 }
@@ -843,6 +1100,181 @@ func NewSetMcpMetadataGatewayError(body *SetMcpMetadataGatewayErrorResponseBody)
 	return v
 }
 
+// NewExportMcpMetadataMcpExportOK builds a "mcpMetadata" service
+// "exportMcpMetadata" endpoint result from a HTTP "OK" response.
+func NewExportMcpMetadataMcpExportOK(body *ExportMcpMetadataResponseBody) *types.McpExport {
+	v := &types.McpExport{
+		Name:             *body.Name,
+		Slug:             *body.Slug,
+		Description:      body.Description,
+		ServerURL:        *body.ServerURL,
+		DocumentationURL: body.DocumentationURL,
+		LogoURL:          body.LogoURL,
+		Instructions:     body.Instructions,
+	}
+	v.Tools = make([]*types.McpExportTool, len(body.Tools))
+	for i, val := range body.Tools {
+		if val == nil {
+			v.Tools[i] = nil
+			continue
+		}
+		v.Tools[i] = unmarshalMcpExportToolResponseBodyToTypesMcpExportTool(val)
+	}
+	v.Authentication = unmarshalMcpExportAuthenticationResponseBodyToTypesMcpExportAuthentication(body.Authentication)
+
+	return v
+}
+
+// NewExportMcpMetadataUnauthorized builds a mcpMetadata service
+// exportMcpMetadata endpoint unauthorized error.
+func NewExportMcpMetadataUnauthorized(body *ExportMcpMetadataUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExportMcpMetadataForbidden builds a mcpMetadata service exportMcpMetadata
+// endpoint forbidden error.
+func NewExportMcpMetadataForbidden(body *ExportMcpMetadataForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExportMcpMetadataBadRequest builds a mcpMetadata service
+// exportMcpMetadata endpoint bad_request error.
+func NewExportMcpMetadataBadRequest(body *ExportMcpMetadataBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExportMcpMetadataNotFound builds a mcpMetadata service exportMcpMetadata
+// endpoint not_found error.
+func NewExportMcpMetadataNotFound(body *ExportMcpMetadataNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExportMcpMetadataConflict builds a mcpMetadata service exportMcpMetadata
+// endpoint conflict error.
+func NewExportMcpMetadataConflict(body *ExportMcpMetadataConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExportMcpMetadataUnsupportedMedia builds a mcpMetadata service
+// exportMcpMetadata endpoint unsupported_media error.
+func NewExportMcpMetadataUnsupportedMedia(body *ExportMcpMetadataUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExportMcpMetadataInvalid builds a mcpMetadata service exportMcpMetadata
+// endpoint invalid error.
+func NewExportMcpMetadataInvalid(body *ExportMcpMetadataInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExportMcpMetadataInvariantViolation builds a mcpMetadata service
+// exportMcpMetadata endpoint invariant_violation error.
+func NewExportMcpMetadataInvariantViolation(body *ExportMcpMetadataInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExportMcpMetadataUnexpected builds a mcpMetadata service
+// exportMcpMetadata endpoint unexpected error.
+func NewExportMcpMetadataUnexpected(body *ExportMcpMetadataUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExportMcpMetadataGatewayError builds a mcpMetadata service
+// exportMcpMetadata endpoint gateway_error error.
+func NewExportMcpMetadataGatewayError(body *ExportMcpMetadataGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetMcpMetadataResponseBody runs the validations defined on
 // GetMcpMetadataResponseBody
 func ValidateGetMcpMetadataResponseBody(body *GetMcpMetadataResponseBody) (err error) {
@@ -893,6 +1325,39 @@ func ValidateSetMcpMetadataResponseBody(body *SetMcpMetadataResponseBody) (err e
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateExportMcpMetadataResponseBody runs the validations defined on
+// ExportMcpMetadataResponseBody
+func ValidateExportMcpMetadataResponseBody(body *ExportMcpMetadataResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.ServerURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_url", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.Authentication == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authentication", "body"))
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateMcpExportToolResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Authentication != nil {
+		if err2 := ValidateMcpExportAuthenticationResponseBody(body.Authentication); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -1377,6 +1842,246 @@ func ValidateSetMcpMetadataGatewayErrorResponseBody(body *SetMcpMetadataGatewayE
 	return
 }
 
+// ValidateExportMcpMetadataUnauthorizedResponseBody runs the validations
+// defined on exportMcpMetadata_unauthorized_response_body
+func ValidateExportMcpMetadataUnauthorizedResponseBody(body *ExportMcpMetadataUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExportMcpMetadataForbiddenResponseBody runs the validations defined
+// on exportMcpMetadata_forbidden_response_body
+func ValidateExportMcpMetadataForbiddenResponseBody(body *ExportMcpMetadataForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExportMcpMetadataBadRequestResponseBody runs the validations defined
+// on exportMcpMetadata_bad_request_response_body
+func ValidateExportMcpMetadataBadRequestResponseBody(body *ExportMcpMetadataBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExportMcpMetadataNotFoundResponseBody runs the validations defined
+// on exportMcpMetadata_not_found_response_body
+func ValidateExportMcpMetadataNotFoundResponseBody(body *ExportMcpMetadataNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExportMcpMetadataConflictResponseBody runs the validations defined
+// on exportMcpMetadata_conflict_response_body
+func ValidateExportMcpMetadataConflictResponseBody(body *ExportMcpMetadataConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExportMcpMetadataUnsupportedMediaResponseBody runs the validations
+// defined on exportMcpMetadata_unsupported_media_response_body
+func ValidateExportMcpMetadataUnsupportedMediaResponseBody(body *ExportMcpMetadataUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExportMcpMetadataInvalidResponseBody runs the validations defined on
+// exportMcpMetadata_invalid_response_body
+func ValidateExportMcpMetadataInvalidResponseBody(body *ExportMcpMetadataInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExportMcpMetadataInvariantViolationResponseBody runs the validations
+// defined on exportMcpMetadata_invariant_violation_response_body
+func ValidateExportMcpMetadataInvariantViolationResponseBody(body *ExportMcpMetadataInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExportMcpMetadataUnexpectedResponseBody runs the validations defined
+// on exportMcpMetadata_unexpected_response_body
+func ValidateExportMcpMetadataUnexpectedResponseBody(body *ExportMcpMetadataUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExportMcpMetadataGatewayErrorResponseBody runs the validations
+// defined on exportMcpMetadata_gateway_error_response_body
+func ValidateExportMcpMetadataGatewayErrorResponseBody(body *ExportMcpMetadataGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateMcpMetadataResponseBody runs the validations defined on
 // McpMetadataResponseBody
 func ValidateMcpMetadataResponseBody(body *McpMetadataResponseBody) (err error) {
@@ -1443,6 +2148,52 @@ func ValidateMcpEnvironmentConfigResponseBody(body *McpEnvironmentConfigResponse
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateMcpExportToolResponseBody runs the validations defined on
+// McpExportToolResponseBody
+func ValidateMcpExportToolResponseBody(body *McpExportToolResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.InputSchema == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_schema", "body"))
+	}
+	return
+}
+
+// ValidateMcpExportAuthenticationResponseBody runs the validations defined on
+// McpExportAuthenticationResponseBody
+func ValidateMcpExportAuthenticationResponseBody(body *McpExportAuthenticationResponseBody) (err error) {
+	if body.Required == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required", "body"))
+	}
+	if body.Headers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+	}
+	for _, e := range body.Headers {
+		if e != nil {
+			if err2 := ValidateMcpExportAuthHeaderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateMcpExportAuthHeaderResponseBody runs the validations defined on
+// McpExportAuthHeaderResponseBody
+func ValidateMcpExportAuthHeaderResponseBody(body *McpExportAuthHeaderResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
 	return
 }

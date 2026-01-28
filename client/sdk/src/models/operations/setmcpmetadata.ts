@@ -6,12 +6,26 @@ import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
+export type SetMcpMetadataSecurityOption1 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type SetMcpMetadataSecurityOption2 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
 export type SetMcpMetadataSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: SetMcpMetadataSecurityOption1 | undefined;
+  option2?: SetMcpMetadataSecurityOption2 | undefined;
 };
 
 export type SetMcpMetadataRequest = {
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -24,9 +38,71 @@ export type SetMcpMetadataRequest = {
 };
 
 /** @internal */
+export type SetMcpMetadataSecurityOption1$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const SetMcpMetadataSecurityOption1$outboundSchema: z.ZodType<
+  SetMcpMetadataSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  SetMcpMetadataSecurityOption1
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+export function setMcpMetadataSecurityOption1ToJSON(
+  setMcpMetadataSecurityOption1: SetMcpMetadataSecurityOption1,
+): string {
+  return JSON.stringify(
+    SetMcpMetadataSecurityOption1$outboundSchema.parse(
+      setMcpMetadataSecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type SetMcpMetadataSecurityOption2$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const SetMcpMetadataSecurityOption2$outboundSchema: z.ZodType<
+  SetMcpMetadataSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  SetMcpMetadataSecurityOption2
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+export function setMcpMetadataSecurityOption2ToJSON(
+  setMcpMetadataSecurityOption2: SetMcpMetadataSecurityOption2,
+): string {
+  return JSON.stringify(
+    SetMcpMetadataSecurityOption2$outboundSchema.parse(
+      setMcpMetadataSecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type SetMcpMetadataSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: SetMcpMetadataSecurityOption1$Outbound | undefined;
+  Option2?: SetMcpMetadataSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -35,12 +111,14 @@ export const SetMcpMetadataSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SetMcpMetadataSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => SetMcpMetadataSecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => SetMcpMetadataSecurityOption2$outboundSchema)
+    .optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
 
@@ -54,6 +132,7 @@ export function setMcpMetadataSecurityToJSON(
 
 /** @internal */
 export type SetMcpMetadataRequest$Outbound = {
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   SetMcpMetadataRequestBody: components.SetMcpMetadataRequestBody$Outbound;
@@ -65,12 +144,14 @@ export const SetMcpMetadataRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SetMcpMetadataRequest
 > = z.object({
+  gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
   setMcpMetadataRequestBody:
     components.SetMcpMetadataRequestBody$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
+    gramKey: "Gram-Key",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
     setMcpMetadataRequestBody: "SetMcpMetadataRequestBody",

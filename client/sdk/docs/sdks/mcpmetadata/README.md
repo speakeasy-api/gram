@@ -6,8 +6,102 @@ Manages metadata for the MCP install page shown to users.
 
 ### Available Operations
 
+* [export](#export) - exportMcpMetadata mcpMetadata
 * [get](#get) - getMcpMetadata mcpMetadata
 * [set](#set) - setMcpMetadata mcpMetadata
+
+## export
+
+Export MCP server details as JSON for documentation and integration purposes.
+
+### Example Usage
+
+<!-- UsageSnippet language="typescript" operationID="exportMcpMetadata" method="post" path="/rpc/mcpMetadata.export" -->
+```typescript
+import { Gram } from "@gram/client";
+
+const gram = new Gram();
+
+async function run() {
+  const result = await gram.mcpMetadata.export({
+    exportMcpMetadataRequestBody: {
+      toolsetSlug: "<value>",
+    },
+  });
+
+  console.log(result);
+}
+
+run();
+```
+
+### Standalone function
+
+The standalone function version of this method:
+
+```typescript
+import { GramCore } from "@gram/client/core.js";
+import { mcpMetadataExport } from "@gram/client/funcs/mcpMetadataExport.js";
+
+// Use `GramCore` for best tree-shaking performance.
+// You can create one instance of it to use across an application.
+const gram = new GramCore();
+
+async function run() {
+  const res = await mcpMetadataExport(gram, {
+    exportMcpMetadataRequestBody: {
+      toolsetSlug: "<value>",
+    },
+  });
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("mcpMetadataExport failed:", res.error);
+  }
+}
+
+run();
+```
+
+### React hooks and utilities
+
+This method can be used in React components through the following hooks and
+associated utilities.
+
+> Check out [this guide][hook-guide] for information about each of the utilities
+> below and how to get started using React hooks.
+
+[hook-guide]: ../../../REACT_QUERY.md
+
+```tsx
+import {
+  // Mutation hook for triggering the API call.
+  useExportMcpMetadataMutation
+} from "@gram/client/react-query/mcpMetadataExport.js";
+```
+
+### Parameters
+
+| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`                                                                                                                                                                      | [operations.ExportMcpMetadataRequest](../../models/operations/exportmcpmetadatarequest.md)                                                                                     | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.ExportMcpMetadataSecurity](../../models/operations/exportmcpmetadatasecurity.md)                                                                                   | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+
+### Response
+
+**Promise\<[components.McpExport](../../models/components/mcpexport.md)\>**
+
+### Errors
+
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
+| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
 ## get
 
