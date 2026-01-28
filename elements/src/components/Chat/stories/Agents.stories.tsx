@@ -86,7 +86,11 @@ AutoExpandAgents.parameters = {
         enabled: true,
         autoExpandSubAgents: true,
       },
-      systemPrompt: `You are a helpful assistant. Use spawn_agent to delegate tasks to sub-agents. Keep responses concise with 3-5 bullet points max.`,
+      systemPrompt: `You are a helpful assistant. Use the spawn_agent tool to delegate tasks to specialized sub-agents.
+
+When given a multi-part request, spawn separate agents for each part to work in parallel.
+
+IMPORTANT: Keep all responses concise - use bullet points, not lengthy prose. Aim for 3-5 key points per topic.`,
       welcome: {
         title: 'Agentic Assistant (Auto-Expand)',
         subtitle: 'Sub-agents automatically expand when spawned',
@@ -141,7 +145,11 @@ WidgetWithAgents.parameters = {
         enabled: true,
         autoExpandSubAgents: true,
       },
-      systemPrompt: `You are a helpful assistant. Use spawn_agent to delegate tasks to sub-agents. Keep responses concise with 3-5 bullet points max.`,
+      systemPrompt: `You are a helpful assistant. Use the spawn_agent tool to delegate tasks to specialized sub-agents.
+
+When given a multi-part request, spawn separate agents for each part to work in parallel.
+
+IMPORTANT: Keep all responses concise - use bullet points, not lengthy prose. Aim for 3-5 key points per topic.`,
       modal: {
         defaultOpen: true,
         expandable: true,
@@ -174,7 +182,11 @@ SidecarWithAgents.parameters = {
       agents: {
         enabled: true,
       },
-      systemPrompt: `You are a helpful assistant. Use spawn_agent to delegate tasks to sub-agents. Keep responses concise with 3-5 bullet points max.`,
+      systemPrompt: `You are a helpful assistant. Use the spawn_agent tool to delegate tasks to specialized sub-agents.
+
+When given a multi-part request, spawn separate agents for each part to work in parallel.
+
+IMPORTANT: Keep all responses concise - use bullet points, not lengthy prose. Aim for 3-5 key points per topic.`,
       sidecar: {
         title: 'Agent Panel',
       },
