@@ -67,6 +67,55 @@ export function MCPDetailsRoot() {
   return <Outlet />;
 }
 
+function MCPLoading() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body fullWidth noPadding>
+        {/* Hero skeleton */}
+        <div className="relative w-full h-64 bg-muted/30 animate-pulse">
+          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
+            <Stack gap={2}>
+              <div className="h-8 w-64 bg-muted rounded" />
+              <div className="h-4 w-96 bg-muted rounded" />
+            </Stack>
+          </div>
+        </div>
+
+        {/* Tabs skeleton */}
+        <div className="border-b">
+          <div className="max-w-[1270px] mx-auto px-8">
+            <div className="flex gap-6 h-11">
+              <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-28 bg-muted rounded animate-pulse" />
+            </div>
+          </div>
+        </div>
+
+        {/* Content skeleton */}
+        <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+          <Stack gap={6}>
+            <div className="space-y-4">
+              <div className="h-6 w-48 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-full max-w-2xl bg-muted rounded animate-pulse" />
+              <div className="h-32 w-full bg-muted rounded animate-pulse" />
+            </div>
+            <div className="space-y-4">
+              <div className="h-6 w-40 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-full max-w-2xl bg-muted rounded animate-pulse" />
+              <div className="h-24 w-full bg-muted rounded animate-pulse" />
+            </div>
+          </Stack>
+        </div>
+      </Page.Body>
+    </Page>
+  );
+}
+
 export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
   const routes = useRoutes();
@@ -207,9 +256,8 @@ export function MCPDetailPage() {
     mcpMetadataForBadge,
   );
 
-  // TODO: better loading state
   if (isLoading || !toolset) {
-    return <div>Loading...</div>;
+    return <MCPLoading />;
   }
 
   const availableOAuthAuthCode =
@@ -332,7 +380,7 @@ export function MCPDetailPage() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   {!toolset?.mcpEnabled ||
-                  (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
+                    (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
                     <span className="inline-block">
                       <Button variant="secondary" size="md" disabled={true}>
                         {isOAuthConnected
@@ -358,12 +406,12 @@ export function MCPDetailPage() {
                 </TooltipTrigger>
                 {(!toolset?.mcpEnabled ||
                   (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
-                  <TooltipContent>
-                    {!toolset?.mcpEnabled
-                      ? "Enable server to configure OAuth"
-                      : "This MCP server does not require the OAuth authorization code flow"}
-                  </TooltipContent>
-                )}
+                    <TooltipContent>
+                      {!toolset?.mcpEnabled
+                        ? "Enable server to configure OAuth"
+                        : "This MCP server does not require the OAuth authorization code flow"}
+                    </TooltipContent>
+                  )}
               </Tooltip>
               <MCPEnableButton toolset={toolset} />
               <Tooltip>
@@ -660,10 +708,11 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     grouped.map((group) => group.key),
   );
 
-  // Update selected groups when grouped changes
+  // Set initial selected groups when the tool list resolves
+  const groupKeys = grouped.map((group) => group.key);
   useEffect(() => {
-    setSelectedGroups(grouped.map((group) => group.key));
-  }, [grouped.length]);
+    setSelectedGroups(groupKeys);
+  }, groupKeys);
 
   const groupFilterItems = grouped.map((group) => ({
     label: group.key,
@@ -684,7 +733,6 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
   return (
     <Stack className="mb-4">
-      {/* Header with Add Tools button */}
       <Stack
         direction="horizontal"
         justify="space-between"
@@ -692,20 +740,30 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         className="mb-4"
       >
         <Heading variant="h3">Tools</Heading>
-        <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
-          <Button.LeftIcon>
-            <Icon name="plus" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Add Tools</Button.Text>
-        </Button>
+        <Stack
+          direction="horizontal"
+          gap={2}
+        >
+          <routes.customTools.Link>
+            <Button variant="secondary" size="sm">
+              <Button.Text>Custom Tools</Button.Text>
+            </Button>
+          </routes.customTools.Link>
+          <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
+            <Button.LeftIcon>
+              <Icon name="plus" className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Add Tools</Button.Text>
+          </Button>
+        </Stack>
       </Stack>
 
       {/* Group filter */}
       {groupFilterItems.length > 1 && (
         <MultiSelect
           options={groupFilterItems}
-          defaultValue={groupFilterItems.map((group) => group.value)}
-          onValueChange={setSelectedGroups}
+          selectedValues={selectedGroups}
+          setSelectedValues={setSelectedGroups}
           placeholder="Filter tools"
           className="w-fit mb-4 capitalize"
         />
@@ -1252,14 +1310,13 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
       .replace(/-/g, "")
       .replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
-      "args": ${argsStringIndented}${
-        !toolset.mcpIsPublic
-          ? `,
+      "args": ${argsStringIndented}${!toolset.mcpIsPublic
+      ? `,
       "env": {
         "GRAM_KEY": "Bearer <your-key-here>"
       }`
-          : ""
-      }
+      : ""
+    }
     }
   }
 }`;
@@ -1382,18 +1439,18 @@ function OAuthDetailsModal({
                   </Type>
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
                     ?.environmentSlug && (
-                    <div>
-                      <Type small className="font-medium text-muted-foreground">
-                        Environment:
-                      </Type>
-                      <CodeBlock className="mt-1">
-                        {
-                          toolset.oauthProxyServer.oauthProxyProviders[0]
-                            .environmentSlug
-                        }
-                      </CodeBlock>
-                    </div>
-                  )}
+                      <div>
+                        <Type small className="font-medium text-muted-foreground">
+                          Environment:
+                        </Type>
+                        <CodeBlock className="mt-1">
+                          {
+                            toolset.oauthProxyServer.oauthProxyProviders[0]
+                              .environmentSlug
+                          }
+                        </CodeBlock>
+                      </div>
+                    )}
                 </Stack>
               </>
             )}
@@ -1456,7 +1513,7 @@ function OAuthDetailsModal({
                       </div>
                       {provider.tokenEndpointAuthMethodsSupported &&
                         provider.tokenEndpointAuthMethodsSupported.length >
-                          0 && (
+                        0 && (
                           <div>
                             <Type
                               small
@@ -1537,11 +1594,9 @@ function OAuthDetailsModal({
                     </Type>
                     <CodeBlock className="mt-1">
                       {mcpUrl
-                        ? `${
-                            new URL(mcpUrl).origin
-                          }/.well-known/oauth-authorization-server/mcp/${
-                            toolset.mcpSlug
-                          }`
+                        ? `${new URL(mcpUrl).origin
+                        }/.well-known/oauth-authorization-server/mcp/${toolset.mcpSlug
+                        }`
                         : ""}
                     </CodeBlock>
                   </div>

@@ -336,14 +336,14 @@ export function ToolsetView({
       // Only show "Add tools" for default toolsets
       ...(toolset.kind !== "external-mcp-proxy"
         ? [
-            {
-              id: "toolset-add-tools",
-              label: "Add tools",
-              icon: "plus",
-              onSelect: () => setAddToolsDialogOpen(true),
-              group: "Toolset",
-            },
-          ]
+          {
+            id: "toolset-add-tools",
+            label: "Add tools",
+            icon: "plus",
+            onSelect: () => setAddToolsDialogOpen(true),
+            group: "Toolset",
+          },
+        ]
         : []),
       {
         id: "toolset-go-to-playground",
@@ -576,8 +576,8 @@ export function ToolsetView({
   const filterButton = (
     <MultiSelect
       options={groupFilterItems}
-      defaultValue={groupFilterItems.map((group) => group.value)}
-      onValueChange={setSelectedGroups}
+      selectedValues={selectedGroups}
+      setSelectedValues={setSelectedGroups}
       placeholder="Filter tools"
       className="w-fit mb-4 capitalize"
     />
