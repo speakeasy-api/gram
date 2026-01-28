@@ -66,13 +66,13 @@ const JiraLogo = () => (
 );
 
 // AI Client logos
-const CursorLogo = () => (
+const _CursorLogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
     <path d="M5 3l14 9-14 9V3z" />
   </svg>
 );
 
-const ClaudeCodeLogo = () => (
+const _ClaudeCodeLogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4">
     <circle cx="12" cy="12" r="10" fill="#D97706" />
     <path
@@ -84,20 +84,20 @@ const ClaudeCodeLogo = () => (
   </svg>
 );
 
-const WindsurfLogo = () => (
+const _WindsurfLogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
     <path d="M12 2L2 22h20L12 2zm0 6l6 12H6l6-12z" />
   </svg>
 );
 
 // Agent logos
-const OpenAILogo = () => (
+const _OpenAILogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
     <path d="M22.282 9.821a5.985 5.985 0 00-.516-4.91 6.046 6.046 0 00-6.51-2.9A6.065 6.065 0 0012 .067a6.045 6.045 0 00-5.764 4.152 5.985 5.985 0 00-3.996 2.9 6.045 6.045 0 00.749 7.102 5.985 5.985 0 00.516 4.911 6.045 6.045 0 006.51 2.9A6.065 6.065 0 0012 23.933a6.045 6.045 0 005.764-4.152 5.985 5.985 0 003.996-2.9 6.045 6.045 0 00-.749-7.102" />
   </svg>
 );
 
-const LangChainLogo = () => (
+const _LangChainLogo = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4">
     <path d="M12 2a10 10 0 100 20 10 10 0 000-20z" fill="#1C3C3C" />
     <path
