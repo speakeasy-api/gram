@@ -426,9 +426,7 @@ export function MCPDetailPage() {
                     <Button.LeftIcon>
                       <Download className="w-4 h-4" />
                     </Button.LeftIcon>
-                    <Button.Text className="sr-only">
-                      Export JSON
-                    </Button.Text>
+                    <Button.Text className="sr-only">Export JSON</Button.Text>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
