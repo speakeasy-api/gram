@@ -7,7 +7,7 @@ import {
   useIsMarkdownCodeBlock,
 } from '@assistant-ui/react-markdown'
 import { CheckIcon, CopyIcon } from 'lucide-react'
-import { type FC, memo, useState } from 'react'
+import { type FC, memo, useState, useCallback, useRef, useEffect } from 'react'
 import remarkGfm from 'remark-gfm'
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
@@ -15,10 +15,60 @@ import { cn } from '@/lib/utils'
 import { useElements } from '@/hooks/useElements'
 import { useComponentsByLanguage } from '@/hooks/usePluginComponents'
 import { useAssistantState } from '@assistant-ui/react'
+import {
+  useSubAgentOptional,
+  parseAgentEventsFromContent,
+  getEventKey,
+} from '@/contexts/SubAgentContext'
 
 const MarkdownTextImpl = () => {
   const { plugins } = useElements()
   const componentsByLanguage = useComponentsByLanguage(plugins)
+  const subAgentContext = useSubAgentOptional()
+
+  // Track which events we've already processed to avoid duplicate handling
+  const processedEventsRef = useRef<Set<string>>(new Set())
+
+  // Queue for pending events to process after render (avoids setState during render)
+  const pendingEventsRef = useRef<import('@/types/agents').SubAgentEvent[]>([])
+
+  // Process pending events after render to avoid "setState during render" error
+  useEffect(() => {
+    if (pendingEventsRef.current.length > 0 && subAgentContext) {
+      const events = pendingEventsRef.current
+      pendingEventsRef.current = []
+      for (const event of events) {
+        subAgentContext.handleEvent(event)
+      }
+    }
+  })
+
+  // Preprocess function that extracts agent events and returns cleaned content
+  // Note: preprocess receives the FULL accumulated text each time, not deltas
+  const preprocess = useCallback(
+    (text: string): string => {
+      // Parse the content for agent events
+      // The function handles partial markers by stripping them from cleanContent
+      const { cleanContent, events } = parseAgentEventsFromContent(text)
+
+      // If no SubAgentContext, just strip markers without processing events
+      if (!subAgentContext) {
+        return cleanContent
+      }
+
+      // Queue new events for processing after render
+      for (const event of events) {
+        const eventKey = getEventKey(event)
+        if (!processedEventsRef.current.has(eventKey)) {
+          processedEventsRef.current.add(eventKey)
+          pendingEventsRef.current.push(event)
+        }
+      }
+
+      return cleanContent
+    },
+    [subAgentContext]
+  )
 
   return (
     <MarkdownTextPrimitive
@@ -26,6 +76,7 @@ const MarkdownTextImpl = () => {
       className="aui-md"
       components={defaultComponents}
       componentsByLanguage={componentsByLanguage}
+      preprocess={preprocess}
     />
   )
 }

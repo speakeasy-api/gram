@@ -59,6 +59,7 @@ import {
   useConnectionStatusOptional,
 } from './ConnectionStatusContext'
 import { ToolExecutionProvider } from './ToolExecutionContext'
+import { SubAgentProvider } from './SubAgentContext'
 
 /**
  * Extracts executable tools from frontend tool definitions.
@@ -298,6 +299,10 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           ...config.api?.headers, // We do this after X-Gram-Source so the playground can override it
           ...(config.gramEnvironment && {
             'Gram-Environment': config.gramEnvironment,
+          }),
+          // Add agents header when enabled
+          ...(config.agents?.enabled && {
+            'Gram-Agents-Enabled': 'true',
           }),
         }
 
@@ -575,25 +580,39 @@ const ElementsProviderWithHistory = ({
     threadListAdapter.unstable_Provider ??
     (({ children }: { children: React.ReactNode }) => <>{children}</>)
 
+  const agentsConfig = contextValue?.config.agents
+  const agentsEnabled = agentsConfig?.enabled ?? false
+
+  // Conditionally wrap with SubAgentProvider when agents are enabled
+  const renderContent = () => (
+    <ElementsContext.Provider value={contextValue}>
+      <ToolExecutionProvider tools={executableTools}>
+        <div
+          className={cn(
+            ROOT_SELECTOR,
+            (contextValue?.config.variant === 'standalone' ||
+              contextValue?.config.variant === 'sidecar') &&
+              'h-full'
+          )}
+        >
+          {children}
+        </div>
+        <FrontendTools tools={frontendTools} />
+      </ToolExecutionProvider>
+    </ElementsContext.Provider>
+  )
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadIdSync remoteIdRef={currentRemoteIdRef} />
       <HistoryProvider>
-        <ElementsContext.Provider value={contextValue}>
-          <ToolExecutionProvider tools={executableTools}>
-            <div
-              className={cn(
-                ROOT_SELECTOR,
-                (contextValue?.config.variant === 'standalone' ||
-                  contextValue?.config.variant === 'sidecar') &&
-                  'h-full'
-              )}
-            >
-              {children}
-            </div>
-            <FrontendTools tools={frontendTools} />
-          </ToolExecutionProvider>
-        </ElementsContext.Provider>
+        {agentsEnabled ? (
+          <SubAgentProvider config={agentsConfig}>
+            {renderContent()}
+          </SubAgentProvider>
+        ) : (
+          renderContent()
+        )}
       </HistoryProvider>
     </AssistantRuntimeProvider>
   )
@@ -625,23 +644,37 @@ const ElementsProviderWithoutHistory = ({
     runtimeRef.current = runtime
   }, [runtime, runtimeRef])
 
+  const agentsConfig = contextValue?.config.agents
+  const agentsEnabled = agentsConfig?.enabled ?? false
+
+  // Conditionally wrap with SubAgentProvider when agents are enabled
+  const renderContent = () => (
+    <ElementsContext.Provider value={contextValue}>
+      <ToolExecutionProvider tools={executableTools}>
+        <div
+          className={cn(
+            ROOT_SELECTOR,
+            (contextValue?.config.variant === 'standalone' ||
+              contextValue?.config.variant === 'sidecar') &&
+              'h-full'
+          )}
+        >
+          {children}
+        </div>
+        <FrontendTools tools={frontendTools} />
+      </ToolExecutionProvider>
+    </ElementsContext.Provider>
+  )
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ElementsContext.Provider value={contextValue}>
-        <ToolExecutionProvider tools={executableTools}>
-          <div
-            className={cn(
-              ROOT_SELECTOR,
-              (contextValue?.config.variant === 'standalone' ||
-                contextValue?.config.variant === 'sidecar') &&
-                'h-full'
-            )}
-          >
-            {children}
-          </div>
-          <FrontendTools tools={frontendTools} />
-        </ToolExecutionProvider>
-      </ElementsContext.Provider>
+      {agentsEnabled ? (
+        <SubAgentProvider config={agentsConfig}>
+          {renderContent()}
+        </SubAgentProvider>
+      ) : (
+        renderContent()
+      )}
     </AssistantRuntimeProvider>
   )
 }
