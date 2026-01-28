@@ -611,10 +611,21 @@ func (s *ExternalOAuthService) handleExternalDisconnect(w http.ResponseWriter, r
 func (s *ExternalOAuthService) handleGetToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	// Get user session
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
+		// Try session header (for cross-origin requests from dashboard)
+		sessionToken := r.Header.Get("Gram-Session")
+		if sessionToken != "" {
+			var err error
+			ctx, err = s.sessionManager.Authenticate(ctx, sessionToken, false)
+			if err != nil {
+				return oops.E(oops.CodeUnauthorized, err, "invalid session").Log(ctx, s.logger)
+			}
+			authCtx, ok = contextvalues.GetAuthContext(ctx)
+		}
+		if !ok || authCtx == nil {
+			return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
+		}
 	}
 
 	issuer := r.URL.Query().Get("issuer")
