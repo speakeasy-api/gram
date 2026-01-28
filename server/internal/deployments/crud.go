@@ -114,7 +114,16 @@ func createDeployment(
 	logger = logger.With(attr.SlogDeploymentID(d.Deployment.ID.String()))
 	span.SetAttributes(attr.DeploymentID(d.Deployment.ID.String()))
 
-	aerr := amendDeployment(ctx, logger, tx, DeploymentID(newID), openAPIv3ToUpsert, functionsToUpsert, packagesToUpsert, externalMCPsToUpsert)
+	aerr := amendDeployment(
+		ctx,
+		logger,
+		tx,
+		DeploymentID(newID),
+		openAPIv3ToUpsert,
+		functionsToUpsert,
+		packagesToUpsert,
+		externalMCPsToUpsert,
+	)
 	if aerr != nil {
 		return uuid.Nil, aerr
 	}

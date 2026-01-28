@@ -60,7 +60,7 @@ export function ToolsetCard({
   const cloneToolset = useCloneToolset();
 
   return (
-    <routes.toolsets.toolset.Link
+    <routes.mcp.details.Link
       params={[toolset.slug]}
       className="hover:no-underline"
     >
@@ -73,7 +73,7 @@ export function ToolsetCard({
             actions={[
               {
                 label: "Add Tools",
-                onClick: () => routes.toolsets.toolset.goTo(toolset.slug),
+                onClick: () => routes.mcp.details.goTo(toolset.slug),
                 icon: "pencil",
               },
               {
@@ -118,7 +118,7 @@ export function ToolsetCard({
           <UpdatedAt date={new Date(toolset.updatedAt)} />
         </Card.Footer>
       </Card>
-    </routes.toolsets.toolset.Link>
+    </routes.mcp.details.Link>
   );
 }
 

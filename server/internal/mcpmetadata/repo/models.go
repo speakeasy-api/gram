@@ -9,6 +9,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type McpEnvironmentConfig struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	McpMetadataID     uuid.UUID
+	VariableName      string
+	HeaderDisplayName pgtype.Text
+	ProvidedBy        string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
 type McpMetadatum struct {
 	ID                       uuid.UUID
 	ToolsetID                uuid.UUID

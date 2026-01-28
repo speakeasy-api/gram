@@ -114,12 +114,7 @@ GRAM_UNSAFE_LOCAL_ENV_PATH = "{{config_root}}/.local.env.json"
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
 VITE_DEV_HOSTNAMES = "localhost,gram.local"
 TEMPORAL_WEB_PORT = "8233"
-## The following variables configure the local opentelemetry stack powered by
-## Grafana.
-GRAFANA_PORT = "6171"
-PROMETHEUS_PORT = "9090"
-TEMPO_PORT = "3200"
-ALLOY_PORT = "12345"
+## The following variables configure the local opentelemetry stack
 OTLP_GRPC_PORT = "4317"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing

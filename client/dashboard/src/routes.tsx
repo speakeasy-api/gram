@@ -5,6 +5,9 @@ import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 import Billing from "./pages/billing/Billing";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
+import CatalogDetail, {
+  CatalogDetailRoot,
+} from "./pages/catalog/CatalogDetail";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import Elements from "./pages/elements/Elements";
@@ -19,8 +22,8 @@ import Register from "./pages/login/Register";
 import Logs from "./pages/logs/Logs";
 import Metrics from "./pages/metrics/Metrics";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
-import { MCPHostedPage } from "./pages/mcp/MCPHostedPage";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
+import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import Playground from "./pages/playground/Playground";
@@ -30,14 +33,12 @@ import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Settings from "./pages/settings/Settings";
 import SourceDetails from "./pages/sources/SourceDetails";
-import { SourcesRoot } from "./pages/sources/Sources";
+import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
-import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
-import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 
 type AppRouteBasic = {
   title: string;
@@ -130,7 +131,7 @@ const ROUTE_STRUCTURE = {
   elements: {
     title: "Chat Elements",
     url: "elements",
-    icon: "atom",
+    icon: "message-circle",
     component: Elements,
   },
   integrations: {
@@ -177,32 +178,33 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  toolsets: {
-    title: "Toolsets",
-    url: "toolsets",
-    icon: "blocks",
-    component: ToolsetsRoot,
-    indexComponent: Toolsets,
-    subPages: {
-      toolset: {
-        title: "Toolset",
-        url: ":toolsetSlug",
-        component: ToolsetRoot,
-        indexComponent: ToolsetPage,
-      },
-    },
-  },
   sources: {
     title: "Sources",
     url: "sources",
     icon: "file-code",
     component: SourcesRoot,
-    indexComponent: Toolsets,
+    indexComponent: SourcesPage,
     subPages: {
       source: {
         title: "Source Details",
         url: ":sourceKind/:sourceSlug",
         component: SourceDetails,
+      },
+      addOpenAPI: {
+        title: "Add OpenAPI",
+        url: "add-openapi",
+        component: UploadOpenAPI,
+      },
+      addFunction: {
+        title: "Add Function",
+        url: "add-function",
+        component: FunctionsOnboarding,
+      },
+      addFromCatalog: {
+        title: "Add from Catalog",
+        url: "add-from-catalog",
+        component: CatalogRoot,
+        indexComponent: Catalog,
       },
     },
   },
@@ -212,6 +214,14 @@ const ROUTE_STRUCTURE = {
     icon: "store",
     component: CatalogRoot,
     indexComponent: Catalog,
+    subPages: {
+      detail: {
+        title: "Server Details",
+        url: ":serverSpecifier",
+        component: CatalogDetailRoot,
+        indexComponent: CatalogDetail,
+      },
+    },
   },
   mcp: {
     title: "MCP",
@@ -225,13 +235,19 @@ const ROUTE_STRUCTURE = {
         url: ":toolsetSlug",
         component: MCPDetailsRoot,
         indexComponent: MCPDetailPage,
-        subPages: {
-          hosted_page: {
-            title: "Hosted MCP Page",
-            url: "page",
-            component: MCPHostedPage,
-          },
-        },
+      },
+    },
+  },
+  environments: {
+    title: "Environments",
+    url: "environments",
+    component: EnvironmentsRoot,
+    indexComponent: Environments,
+    subPages: {
+      environment: {
+        title: "Environment Details",
+        url: ":environmentSlug",
+        component: EnvironmentPage,
       },
     },
   },
@@ -241,37 +257,11 @@ const ROUTE_STRUCTURE = {
     icon: "activity",
     component: Logs,
   },
-  metrics: {
-    title: "Metrics",
-    url: "metrics",
-    icon: "chart-no-axes-combined",
-    component: Metrics,
-  },
-  environments: {
-    title: "Environments",
-    url: "environments",
-    icon: "globe",
-    component: EnvironmentsRoot,
-    indexComponent: Environments,
-    subPages: {
-      environment: {
-        title: "Environment",
-        url: ":environmentSlug",
-        component: EnvironmentPage,
-      },
-    },
-  },
   sdks: {
     title: "SDKs",
     url: "sdks",
     icon: "code",
     component: SDK,
-  },
-  uploadOpenAPI: {
-    title: "Upload OpenAPI",
-    url: "upload",
-    icon: "upload",
-    component: UploadOpenAPI,
   },
   deployments: {
     title: "Deployments",

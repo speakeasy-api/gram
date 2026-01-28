@@ -28,6 +28,8 @@ type ToolsetEntry struct {
 	ServerVariables []*ServerVariable
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariable
+	// The external MCP header definitions that are relevant to the toolset
+	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinition
 	// The tools in this toolset
 	Tools []*ToolEntry
 	// The tool URNs in this toolset

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -23,7 +24,7 @@ func (tp *ToolProxy) ReadResource(
 	ctx context.Context,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env ToolCallEnv,
+	env toolconfig.ToolCallEnv,
 	plan *ResourceCallPlan,
 	attrRecorder tm.HTTPLogAttributes,
 ) (err error) {
@@ -64,7 +65,7 @@ func (tp *ToolProxy) doFunctionResource(
 	logger *slog.Logger,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env ToolCallEnv,
+	env toolconfig.ToolCallEnv,
 	descriptor *ResourceDescriptor,
 	plan *ResourceFunctionCallPlan,
 	attrs tm.HTTPLogAttributes,

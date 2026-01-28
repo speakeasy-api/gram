@@ -1,20 +1,8 @@
 speakeasyVersion: 1.700.1
-sources:
-    Gram-Internal:
-        sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:2cdf515c2e3cb80c800bb28ad64623fd687bec1a5e1cb21804e6671767be07d8
-        sourceBlobDigest: sha256:06c6601bbf033b1c544476b59af2d6821972cfbc1a12370630e020fc59c9a380
-        tags:
-            - latest
-            - 0.0.1
+sources: {}
 targets:
     gram-internal:
         source: Gram-Internal
-        sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:2cdf515c2e3cb80c800bb28ad64623fd687bec1a5e1cb21804e6671767be07d8
-        sourceBlobDigest: sha256:06c6601bbf033b1c544476b59af2d6821972cfbc1a12370630e020fc59c9a380
-    openrouter:
-        source: OpenRouter
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned

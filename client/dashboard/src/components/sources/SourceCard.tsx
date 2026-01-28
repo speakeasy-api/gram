@@ -3,21 +3,20 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { ExternalMcpIcon } from "@/components/ui/mcp-icon";
 import { MoreActions } from "@/components/ui/more-actions";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
-import {
-  useGetSourceEnvironment,
-  useLatestDeployment,
-} from "@gram/client/react-query/index.js";
+import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Badge } from "@speakeasy-api/moonshine";
-import { CircleAlertIcon, FileCode, Globe, SquareFunction } from "lucide-react";
+import { CircleAlertIcon } from "lucide-react";
+import {
+  ExternalMCPIllustration,
+  FunctionIllustration,
+  OpenAPIIllustration,
+} from "./SourceCardIllustrations";
 
 export type NamedAsset =
   | (Asset & {
@@ -33,30 +32,36 @@ export type NamedAsset =
       slug: string;
       type: "externalmcp";
       registryId: string;
+      iconUrl?: string;
     };
+
+const sourceTypeConfig = {
+  openapi: {
+    label: "OpenAPI",
+  },
+  function: {
+    label: "Function",
+  },
+  externalmcp: {
+    label: "Catalog",
+  },
+};
 
 export function SourceCard({
   asset,
   causingFailure,
   handleRemove,
-  handleAttachEnvironment,
   handleViewAsset,
   setChangeDocumentTargetSlug,
 }: {
   asset: NamedAsset;
   causingFailure?: boolean | undefined;
   handleRemove: (assetId: string) => void;
-  handleAttachEnvironment: (assetId: string) => void;
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
   const routes = useRoutes();
-  const IconComponent =
-    asset.type === "openapi"
-      ? FileCode
-      : asset.type === "function"
-        ? SquareFunction
-        : ExternalMcpIcon;
+  const config = sourceTypeConfig[asset.type];
 
   const sourceKind =
     asset.type === "openapi"
@@ -64,28 +69,6 @@ export function SourceCard({
       : asset.type === "function"
         ? "function"
         : "externalmcp";
-
-  // Check if environment is attached (not applicable for external MCPs)
-  const sourceEnvironment = useGetSourceEnvironment(
-    {
-      sourceKind: sourceKind as "http" | "function",
-      sourceSlug: asset.slug,
-    },
-    undefined,
-    {
-      enabled: asset.type !== "externalmcp",
-      retry: (_, err) => {
-        if (err instanceof GramError && err.statusCode === 404) {
-          return false;
-        }
-        return true;
-      },
-      throwOnError: false,
-    },
-  );
-
-  const hasEnvironment =
-    asset.type !== "externalmcp" && !!sourceEnvironment.data?.id;
 
   const actions = [
     ...(asset.type === "openapi"
@@ -102,15 +85,6 @@ export function SourceCard({
           },
         ]
       : []),
-    ...(asset.type !== "externalmcp"
-      ? [
-          {
-            label: "Attach Environment",
-            onClick: () => handleAttachEnvironment(asset.id),
-            icon: "globe" as const,
-          },
-        ]
-      : []),
     {
       label: "Delete",
       onClick: () => handleRemove(asset.id),
@@ -119,71 +93,97 @@ export function SourceCard({
     },
   ];
 
-  let displayName = asset.name;
-  let footer =
-    "updatedAt" in asset && asset.updatedAt ? (
+  const displayName = asset.name;
+  let subtitle: React.ReactNode = null;
+
+  if (asset.type === "externalmcp") {
+    subtitle = asset.slug;
+  } else if ("updatedAt" in asset && asset.updatedAt) {
+    subtitle = (
       <UpdatedAt
         date={new Date(asset.updatedAt)}
         italic={false}
         className="text-xs"
         showRecentness
       />
-    ) : null;
-
-  if (asset.type === "externalmcp") {
-    displayName = asset.name;
-    footer = (
-      <Type muted className="text-xs">
-        {asset.slug}
-      </Type>
     );
   }
 
-  const cardContent = (
-    <>
-      <div className="flex items-center justify-between mb-2">
-        <IconComponent className="size-5 shrink-0" strokeWidth={2} />
-        <div onClick={(e) => e.stopPropagation()}>
-          <MoreActions actions={actions} />
-        </div>
-      </div>
-
-      <div className="leading-none mb-1.5 flex items-center justify-between flex-wrap">
-        <Type className="overflow-hidden text-ellipsis whitespace-nowrap max-w-[200px] [direction:rtl]">
-          <span className="[direction:ltr] [unicode-bidi:embed]">
-            {displayName}
-          </span>
-        </Type>
-        {hasEnvironment && (
-          <SimpleTooltip
-            tooltip={`Attached environment: ${sourceEnvironment.data?.name || "Unknown"}`}
-          >
-            <Badge className="flex items-center gap-1 text-xs">
-              <Globe className="h-3 w-3" />
-              Env
-            </Badge>
-          </SimpleTooltip>
-        )}
-      </div>
-
-      <div className="flex gap-1.5 items-center text-muted-foreground text-xs">
-        {causingFailure && <AssetIsCausingFailureNotice />}
-        {footer}
-      </div>
-    </>
-  );
-
-  const cardClassName =
-    "bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3 hover:brightness-95 transition-colors hover:no-underline";
+  // Render the appropriate illustration based on source type
+  const renderIllustration = () => {
+    switch (asset.type) {
+      case "openapi":
+        return <OpenAPIIllustration />;
+      case "function":
+        return <FunctionIllustration />;
+      case "externalmcp":
+        return (
+          <ExternalMCPIllustration logoUrl={asset.iconUrl} name={asset.name} />
+        );
+    }
+  };
 
   return (
     <routes.sources.source.Link
       key={asset.id}
       params={[sourceKind, asset.slug]}
-      className={cardClassName}
+      className="group bg-card text-card-foreground flex flex-col rounded-xl border overflow-hidden hover:border-foreground/20 hover:shadow-md transition-all hover:no-underline"
     >
-      {cardContent}
+      {/* Illustration header */}
+      <div className="h-36 w-full overflow-hidden border-b">
+        {renderIllustration()}
+      </div>
+
+      {/* Content area */}
+      <div className="p-4 flex flex-col flex-1">
+        {/* Header row with name and actions */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <Type
+            variant="subheading"
+            as="div"
+            className="truncate flex-1 text-md group-hover:text-primary transition-colors"
+            title={displayName}
+          >
+            {displayName}
+          </Type>
+          <div className="flex items-center gap-1 shrink-0">
+            {causingFailure && <AssetIsCausingFailureNotice />}
+            <div onClick={(e) => e.stopPropagation()}>
+              <MoreActions actions={actions} />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer row with type badge and metadata */}
+        <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+          <Badge variant="neutral">{config.label}</Badge>
+          <Type small muted as="span">
+            {subtitle}
+          </Type>
+        </div>
+      </div>
     </routes.sources.source.Link>
+  );
+}
+
+export function SourceCardSkeleton() {
+  return (
+    <div className="bg-card text-card-foreground flex flex-col rounded-xl border overflow-hidden">
+      {/* Illustration header placeholder */}
+      <div className="h-36 w-full bg-muted/50 animate-pulse border-b" />
+
+      {/* Content area */}
+      <div className="p-4 flex flex-col">
+        {/* Name placeholder */}
+        <div className="h-5 w-2/3 bg-muted rounded animate-pulse mb-2" />
+
+        {/* Footer row */}
+        <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+          <div className="h-5 w-16 bg-muted rounded-full animate-pulse" />
+          <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+        </div>
+      </div>
+    </div>
   );
 }
 

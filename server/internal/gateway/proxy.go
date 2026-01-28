@@ -21,6 +21,7 @@ import (
 
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
@@ -127,7 +128,7 @@ func (tp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env ToolCallEnv,
+	env toolconfig.ToolCallEnv,
 	plan *ToolCallPlan,
 	attrs tm.HTTPLogAttributes,
 ) (err error) {
@@ -174,7 +175,7 @@ func (tp *ToolProxy) doFunction(
 	logger *slog.Logger,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env ToolCallEnv,
+	env toolconfig.ToolCallEnv,
 	descriptor *ToolDescriptor,
 	plan *FunctionToolCallPlan,
 	attrs tm.HTTPLogAttributes,
@@ -299,7 +300,7 @@ func (tp *ToolProxy) doHTTP(
 	logger *slog.Logger,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env ToolCallEnv,
+	env toolconfig.ToolCallEnv,
 	descriptor *ToolDescriptor,
 	plan *HTTPToolCallPlan,
 	attrRecorder tm.HTTPLogAttributes,
@@ -566,7 +567,7 @@ type promptGetParams struct {
 	Arguments map[string]any `json:"arguments"`
 }
 
-func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, env ToolCallEnv, descriptor *ToolDescriptor, plan *PromptToolCallPlan) error {
+func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, env toolconfig.ToolCallEnv, descriptor *ToolDescriptor, plan *PromptToolCallPlan) error {
 	var params promptGetParams
 	if err := json.NewDecoder(requestBody).Decode(&params); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").Log(ctx, logger)
@@ -586,47 +587,48 @@ func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.R
 	return nil
 }
 
-// ExternalMCPOAuthTokenKey is the key used to pass OAuth tokens for external MCP servers via ToolCallEnv.
-const ExternalMCPOAuthTokenKey = "externalmcp_oauth" //nolint:gosec // not a credential, just a key name
-
 func (tp *ToolProxy) doExternalMCP(
 	ctx context.Context,
 	logger *slog.Logger,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	env ToolCallEnv,
+	env toolconfig.ToolCallEnv,
 	plan *ExternalMCPToolCallPlan,
 ) error {
-	// Read the request body (tool arguments)
 	arguments, err := io.ReadAll(requestBody)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to read tool arguments").Log(ctx, logger)
 	}
 
-	// Build client options with OAuth token if required and available
-	var opts *externalmcp.ClientOptions
+	// Use the tool name from the plan (set by Match for proxy tools, or directly for materialized tools)
+	toolName := plan.ToolName
+
+	// Only pass OAuth token if this plan requires it
+	var oauthToken string
 	if plan.RequiresOAuth {
-		if token := env.UserConfig.Get(ExternalMCPOAuthTokenKey); token != "" {
-			opts = &externalmcp.ClientOptions{
-				Authorization: "Bearer " + token,
-				TransportType: plan.TransportType,
-			}
-		}
+		oauthToken = env.OAuthToken
 	}
 
-	// Create client and call tool
+	// Build headers from environment variables
+	headers := externalmcp.BuildHeaders(env.SystemEnv, env.UserConfig, plan.HeaderDefinitions, oauthToken)
+	opts := &externalmcp.ClientOptions{
+		Authorization: "",
+		Headers:       headers,
+	}
+
+	// Connect to the external MCP server
 	client, err := externalmcp.NewClient(ctx, logger, plan.RemoteURL, plan.TransportType, opts)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, client.Close)
 
-	callResult, err := client.CallTool(ctx, plan.ToolName, arguments)
+	// Call the tool on the external MCP server
+	callResult, err := client.CallTool(ctx, toolName, arguments)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").Log(ctx, logger)
 	}
 
-	// Write the response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
@@ -650,8 +652,8 @@ type retryConfig struct {
 	maxInterval     time.Duration
 	maxAttempts     int
 	backoffFactor   float64
-	statusCodes     []int    // HTTP status codes to retry on
-	methods         []string // HTTP methods to retry on
+	statusCodes     []int
+	methods         []string
 }
 
 func retryWithBackoff(
@@ -915,7 +917,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 	return nil
 }
 
-func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, env ToolCallEnv) string {
+func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, env toolconfig.ToolCallEnv) string {
 	if tool.ServerEnvVar != "" {
 		if envVar := env.SystemEnv.Get(tool.ServerEnvVar); envVar != "" {
 			return envVar

@@ -3,7 +3,6 @@ package externalmcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -14,23 +13,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 )
 
-// AuthRequiredError is returned when an external MCP server requires authentication.
-type AuthRequiredError struct {
+// OAuthRequiredError is returned when 401 + WWW-Authenticate header present.
+type OAuthRequiredError struct {
 	RemoteURL       string
 	WWWAuthenticate string
 }
 
-func (e *AuthRequiredError) Error() string {
-	return fmt.Sprintf("authentication required for MCP server %s", e.RemoteURL)
+func (e *OAuthRequiredError) Error() string {
+	return fmt.Sprintf("OAuth authentication required for MCP server %s", e.RemoteURL)
 }
 
-// IsAuthRequiredError checks if an error is an AuthRequiredError and returns it.
-func IsAuthRequiredError(err error) (*AuthRequiredError, bool) {
-	var authErr *AuthRequiredError
-	if errors.As(err, &authErr) {
-		return authErr, true
-	}
-	return nil, false
+// AuthRejectedError is returned when 401 (no WWW-Authenticate) or 403.
+type AuthRejectedError struct {
+	RemoteURL  string
+	StatusCode int
+}
+
+func (e *AuthRejectedError) Error() string {
+	return fmt.Sprintf("authentication rejected by MCP server %s (status %d)", e.RemoteURL, e.StatusCode)
 }
 
 // ClientOptions contains options for creating an MCP client.
@@ -38,7 +38,9 @@ type ClientOptions struct {
 	// Authorization is the value for the Authorization header (e.g., "Bearer token").
 	// If empty, no Authorization header is sent.
 	Authorization string
-	TransportType types.TransportType
+	// Headers contains additional HTTP headers to send with each request.
+	// Keys are header names, values are header values.
+	Headers map[string]string
 }
 
 // Client represents an active connection to an external MCP server.
@@ -55,7 +57,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 	if opts == nil {
 		opts = &ClientOptions{
 			Authorization: "",
-			TransportType: "",
+			Headers:       nil,
 		}
 	}
 
@@ -64,7 +66,10 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 	authRT := &authRoundTripper{
 		base:            http.DefaultTransport,
 		authorization:   opts.Authorization,
-		authRequired:    false,
+		headers:         opts.Headers,
+		oauthRequired:   false,
+		authRejected:    false,
+		statusCode:      0,
 		wwwAuthenticate: "",
 	}
 
@@ -100,10 +105,16 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
-		if authRT.authRequired {
-			return nil, &AuthRequiredError{
+		if authRT.oauthRequired {
+			return nil, &OAuthRequiredError{
 				RemoteURL:       remoteURL,
 				WWWAuthenticate: authRT.wwwAuthenticate,
+			}
+		}
+		if authRT.authRejected {
+			return nil, &AuthRejectedError{
+				RemoteURL:  remoteURL,
+				StatusCode: authRT.statusCode,
 			}
 		}
 		return nil, fmt.Errorf("connect to external mcp server: %w", err)
@@ -138,10 +149,16 @@ type Tool struct {
 func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 	toolsResult, err := c.session.ListTools(ctx, nil)
 	if err != nil {
-		if c.authRT.authRequired {
-			return nil, &AuthRequiredError{
+		if c.authRT.oauthRequired {
+			return nil, &OAuthRequiredError{
 				RemoteURL:       c.remoteURL,
 				WWWAuthenticate: c.authRT.wwwAuthenticate,
+			}
+		}
+		if c.authRT.authRejected {
+			return nil, &AuthRejectedError{
+				RemoteURL:  c.remoteURL,
+				StatusCode: c.authRT.statusCode,
 			}
 		}
 		return nil, fmt.Errorf("list tools from external mcp server: %w", err)
@@ -198,10 +215,16 @@ func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.R
 		Arguments: args,
 	})
 	if err != nil {
-		if c.authRT.authRequired {
-			return nil, &AuthRequiredError{
+		if c.authRT.oauthRequired {
+			return nil, &OAuthRequiredError{
 				RemoteURL:       c.remoteURL,
 				WWWAuthenticate: c.authRT.wwwAuthenticate,
+			}
+		}
+		if c.authRT.authRejected {
+			return nil, &AuthRejectedError{
+				RemoteURL:  c.remoteURL,
+				StatusCode: c.authRT.statusCode,
 			}
 		}
 		return nil, fmt.Errorf("call tool on external mcp server: %w", err)
@@ -227,21 +250,26 @@ func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.R
 	}, nil
 }
 
-// authRoundTripper is an http.RoundTripper that adds Authorization headers
-// and captures 401 responses.
 type authRoundTripper struct {
 	base          http.RoundTripper
 	authorization string
+	headers       map[string]string
 
-	// Captured from 401 response
-	authRequired    bool
+	oauthRequired   bool
+	authRejected    bool
+	statusCode      int
 	wwwAuthenticate string
 }
 
 func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	if rt.authorization != "" {
+	if rt.authorization != "" || len(rt.headers) > 0 {
 		req = req.Clone(req.Context())
-		req.Header.Set("Authorization", rt.authorization)
+		if rt.authorization != "" {
+			req.Header.Set("Authorization", rt.authorization)
+		}
+		for k, v := range rt.headers {
+			req.Header.Set(k, v)
+		}
 	}
 
 	resp, err := rt.base.RoundTrip(req)
@@ -249,9 +277,18 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 		return nil, fmt.Errorf("external mcp round trip: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusUnauthorized {
-		rt.authRequired = true
+	switch resp.StatusCode {
+	case http.StatusUnauthorized:
+		rt.statusCode = resp.StatusCode
 		rt.wwwAuthenticate = resp.Header.Get("WWW-Authenticate")
+		if rt.wwwAuthenticate != "" {
+			rt.oauthRequired = true
+		} else {
+			rt.authRejected = true
+		}
+	case http.StatusForbidden:
+		rt.statusCode = resp.StatusCode
+		rt.authRejected = true
 	}
 
 	return resp, nil

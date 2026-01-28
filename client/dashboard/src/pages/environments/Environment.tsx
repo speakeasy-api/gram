@@ -256,7 +256,8 @@ export default function EnvironmentPage() {
       selectedToolset &&
       (selectedToolset.securityVariables ||
         selectedToolset.serverVariables ||
-        selectedToolset.functionEnvironmentVariables)
+        selectedToolset.functionEnvironmentVariables ||
+        selectedToolset.externalMcpHeaderDefinitions)
     ) {
       const newValues = { ...envValues };
       const newEdited = new Set(editedFields);
@@ -296,6 +297,17 @@ export default function EnvironmentPage() {
             newEdited.add(varName);
           }
         });
+      });
+
+      // Process external MCP header definitions
+      selectedToolset.externalMcpHeaderDefinitions?.forEach((entry) => {
+        const existingEntry = environment?.entries?.find(
+          (e) => e.name === entry.name,
+        );
+        if (!existingEntry) {
+          newValues[entry.name] = "";
+          newEdited.add(entry.name);
+        }
       });
 
       setEnvValues(newValues);

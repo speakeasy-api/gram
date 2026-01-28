@@ -2098,6 +2098,9 @@ type EnvironmentEntryResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Redacted values of the environment variable
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Hash of the value to identify matching values across environments without
+	// exposing the actual value
+	ValueHash *string `form:"value_hash,omitempty" json:"value_hash,omitempty" xml:"value_hash,omitempty"`
 	// The creation date of the environment entry
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the environment entry was last updated
@@ -6537,6 +6540,9 @@ func ValidateEnvironmentEntryResponseBody(body *EnvironmentEntryResponseBody) (e
 	}
 	if body.Value == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
+	}
+	if body.ValueHash == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value_hash", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

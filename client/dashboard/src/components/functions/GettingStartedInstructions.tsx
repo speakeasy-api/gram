@@ -5,20 +5,7 @@ import { Stack } from "@speakeasy-api/moonshine";
 export function GettingStartedInstructions() {
   const commands = [
     {
-      label: (
-        <>
-          Create a new function project. See gram functions{" "}
-          <a
-            href="https://www.speakeasy.com/docs/gram/getting-started/typescript"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline cursor-pointer"
-          >
-            docs
-          </a>{" "}
-          for more info
-        </>
-      ),
+      label: "Create a new function project",
       command: "npm create @gram-ai/function@latest",
     },
     {
@@ -32,19 +19,25 @@ export function GettingStartedInstructions() {
   ];
 
   return (
-    <div className="p-8">
-      <Stack gap={4}>
-        {commands.map((item, index) => (
-          <Stack key={index} gap={2}>
-            <Type small className="font-medium">
-              {index + 1}. {item.label}
-            </Type>
-            <CodeBlock language="bash" preClassName="!bg-transparent">
-              {item.command}
-            </CodeBlock>
+    <Stack gap={6}>
+      {commands.map((item, index) => (
+        <Stack key={index} gap={2}>
+          <Stack direction="horizontal" gap={3} align="center">
+            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0">
+              <Type small className="font-medium text-muted-foreground">
+                {index + 1}
+              </Type>
+            </div>
+            <Type className="font-medium">{item.label}</Type>
           </Stack>
-        ))}
-      </Stack>
-    </div>
+          <CodeBlock
+            language="bash"
+            className="!border-0 !bg-muted/50 !rounded-lg"
+          >
+            {item.command}
+          </CodeBlock>
+        </Stack>
+      ))}
+    </Stack>
   );
 }

@@ -26,6 +26,18 @@ export function useToolsetEnvVars(
         }),
       ) ?? [];
 
-    return [...new Set([...securityVars, ...serverVars, ...functionEnvVars])];
+    const externalMcpHeaderVars =
+      toolset.externalMcpHeaderDefinitions?.map(
+        (headerDef) => headerDef.name,
+      ) ?? [];
+
+    return [
+      ...new Set([
+        ...securityVars,
+        ...serverVars,
+        ...functionEnvVars,
+        ...externalMcpHeaderVars,
+      ]),
+    ];
   }, [toolset, requiresServerURL]);
 }

@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -129,19 +129,13 @@ type PromptToolCallPlan struct {
 	Kind       string `json:"kind" yaml:"kind"`
 }
 
-// ExternalMCPToolCallPlan contains the execution plan for calling a tool on an external MCP server.
-type ExternalMCPToolCallPlan struct {
-	// RemoteURL is the URL of the external MCP server.
-	RemoteURL string `json:"remote_url" yaml:"remote_url"`
-	// ToolName is the name of the tool on the external server.
-	ToolName string `json:"tool_name" yaml:"tool_name"`
-	// Slug is the proxy identifier for this external MCP.
-	Slug string `json:"slug" yaml:"slug"`
-	// RequiresOAuth indicates if the external MCP requires OAuth authentication.
-	RequiresOAuth bool `json:"requires_oauth" yaml:"requires_oauth"`
-	// TransportType is the transport type to use when communicating with the external MCP.
-	TransportType externalmcptypes.TransportType `json:"transport_type" yaml:"transport_type"`
-}
+// ExternalMCPToolCallPlan is an alias for externalmcp.ToolCallPlan.
+// Kept for backwards compatibility with existing code.
+type ExternalMCPToolCallPlan = externalmcp.ToolCallPlan
+
+// ExternalMCPHeaderDef is an alias for externalmcp.HeaderDefinition.
+// Kept for backwards compatibility with existing code.
+type ExternalMCPHeaderDef = externalmcp.HeaderDefinition
 
 type ResourceFunctionCallPlan struct {
 	FunctionID        string   `json:"function_id" yaml:"function_id"`
