@@ -9,7 +9,6 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useSession } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
@@ -27,25 +26,16 @@ import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
 
   const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const isCatalogEnabled = telemetry.isFeatureEnabled("gram-external-mcp");
-
-  const topNavGroups = {
-    connect: [routes.sources] as AppRoute[],
+  const navGroups = {
+    connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
     build: [routes.elements, routes.mcp],
     observe: [routes.logs],
     settings: [routes.settings, routes.billing, routes.docs] as AppRoute[],
   };
-
-  if (isCatalogEnabled) {
-    topNavGroups.connect.push(routes.catalog);
-  }
-
-  topNavGroups.connect.push(routes.playground);
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -55,7 +45,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <NavMenu items={[routes.home]} />
           </SidebarGroupContent>
         </SidebarGroup>
-        {Object.entries(topNavGroups).map(([label, items]) => (
+        {Object.entries(navGroups).map(([label, items]) => (
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
             <SidebarGroupContent>
