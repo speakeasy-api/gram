@@ -332,7 +332,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 
 	// Collect security inputs
 	securityMode := s.resolveSecurityMode(&toolset)
-	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, nil)
+	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, map[string]bool{})
 
 	// Build tools list
 	exportTools := s.buildExportTools(ctx, toolsetDetails)
