@@ -19,11 +19,12 @@ import (
 
 // Server lists the chat service endpoint HTTP handlers.
 type Server struct {
-	Mounts        []*MountPoint
-	ListChats     http.Handler
-	LoadChat      http.Handler
-	GenerateTitle http.Handler
-	CreditUsage   http.Handler
+	Mounts                      []*MountPoint
+	ListChats                   http.Handler
+	LoadChat                    http.Handler
+	GenerateTitle               http.Handler
+	GenerateFollowOnSuggestions http.Handler
+	CreditUsage                 http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,12 +57,14 @@ func New(
 			{"ListChats", "GET", "/rpc/chat.list"},
 			{"LoadChat", "GET", "/rpc/chat.load"},
 			{"GenerateTitle", "POST", "/rpc/chat.generateTitle"},
+			{"GenerateFollowOnSuggestions", "POST", "/rpc/chat.generateFollowOnSuggestions"},
 			{"CreditUsage", "GET", "/rpc/chat.creditUsage"},
 		},
-		ListChats:     NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
-		LoadChat:      NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
-		GenerateTitle: NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
-		CreditUsage:   NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
+		ListChats:                   NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
+		LoadChat:                    NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
+		GenerateTitle:               NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
+		GenerateFollowOnSuggestions: NewGenerateFollowOnSuggestionsHandler(e.GenerateFollowOnSuggestions, mux, decoder, encoder, errhandler, formatter),
+		CreditUsage:                 NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -73,6 +76,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListChats = m(s.ListChats)
 	s.LoadChat = m(s.LoadChat)
 	s.GenerateTitle = m(s.GenerateTitle)
+	s.GenerateFollowOnSuggestions = m(s.GenerateFollowOnSuggestions)
 	s.CreditUsage = m(s.CreditUsage)
 }
 
@@ -84,6 +88,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListChatsHandler(mux, h.ListChats)
 	MountLoadChatHandler(mux, h.LoadChat)
 	MountGenerateTitleHandler(mux, h.GenerateTitle)
+	MountGenerateFollowOnSuggestionsHandler(mux, h.GenerateFollowOnSuggestions)
 	MountCreditUsageHandler(mux, h.CreditUsage)
 }
 
@@ -228,6 +233,60 @@ func NewGenerateTitleHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "generateTitle")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGenerateFollowOnSuggestionsHandler configures the mux to serve the
+// "chat" service "generateFollowOnSuggestions" endpoint.
+func MountGenerateFollowOnSuggestionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/chat.generateFollowOnSuggestions", otelhttp.WithRouteTag("/rpc/chat.generateFollowOnSuggestions", f).ServeHTTP)
+}
+
+// NewGenerateFollowOnSuggestionsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "chat" service "generateFollowOnSuggestions"
+// endpoint.
+func NewGenerateFollowOnSuggestionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGenerateFollowOnSuggestionsRequest(mux, decoder)
+		encodeResponse = EncodeGenerateFollowOnSuggestionsResponse(encoder)
+		encodeError    = EncodeGenerateFollowOnSuggestionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "generateFollowOnSuggestions")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

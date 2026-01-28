@@ -22,6 +22,11 @@ func GenerateTitleChatPath() string {
 	return "/rpc/chat.generateTitle"
 }
 
+// GenerateFollowOnSuggestionsChatPath returns the URL path to the chat service generateFollowOnSuggestions HTTP endpoint.
+func GenerateFollowOnSuggestionsChatPath() string {
+	return "/rpc/chat.generateFollowOnSuggestions"
+}
+
 // CreditUsageChatPath returns the URL path to the chat service creditUsage HTTP endpoint.
 func CreditUsageChatPath() string {
 	return "/rpc/chat.creditUsage"

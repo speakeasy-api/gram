@@ -641,6 +641,95 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	return &gen.GenerateTitleResult{Title: title}, nil
 }
 
+// suggestionsModel is a cheap, fast model used for generating follow-on suggestions.
+const suggestionsModel = "openai/gpt-4o-mini"
+
+func (s *Service) GenerateFollowOnSuggestions(ctx context.Context, payload *gen.GenerateFollowOnSuggestionsPayload) (*gen.GenerateFollowOnSuggestionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if s.chatClient == nil {
+		return &gen.GenerateFollowOnSuggestionsResult{Suggestions: []string{}}, nil
+	}
+
+	if len(payload.Messages) == 0 {
+		return &gen.GenerateFollowOnSuggestionsResult{Suggestions: []string{}}, nil
+	}
+
+	count := payload.Count
+	if count <= 0 {
+		count = 3
+	}
+	if count > 10 {
+		count = 10
+	}
+
+	// Build conversation context from the last few messages
+	var conversationBuilder strings.Builder
+	// Take the last 10 messages max to avoid context overflow
+	startIdx := 0
+	if len(payload.Messages) > 10 {
+		startIdx = len(payload.Messages) - 10
+	}
+	for _, msg := range payload.Messages[startIdx:] {
+		conversationBuilder.WriteString(fmt.Sprintf("%s: %s\n", msg.Role, msg.Content))
+	}
+	conversation := conversationBuilder.String()
+
+	systemPrompt := fmt.Sprintf(`Generate exactly %d follow-up questions based on the conversation.
+
+Rules:
+- Questions only, no statements or preambles
+- Do not start with phrases like "That's interesting!", "I've heard that", "Could you", etc.
+- Start directly with the question word (What, How, Why, Where, When, Which, Can, Is, Are, Do, Does, Will, Would)
+- Keep each question concise (under 15 words ideally)
+- Make questions diverse, exploring different aspects
+- No numbering or bullet points
+- One question per line, nothing else`, count)
+
+	suggestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	msg, err := s.chatClient.GetCompletionFromMessages(suggestCtx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(),
+		[]or.Message{
+			or.CreateMessageSystem(or.SystemMessage{
+				Content: or.CreateSystemMessageContentStr(systemPrompt),
+				Name:    nil,
+			}),
+			or.CreateMessageUser(or.UserMessage{
+				Content: or.CreateUserMessageContentStr(conversation),
+				Name:    nil,
+			}),
+		},
+		nil, // no tools
+		nil, // default temperature
+		suggestionsModel,
+	)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to generate follow-on suggestions", attr.SlogError(err))
+		return &gen.GenerateFollowOnSuggestionsResult{Suggestions: []string{}}, nil
+	}
+
+	// Parse the response into individual suggestions
+	responseText := strings.TrimSpace(openrouter.GetText(*msg))
+	lines := strings.Split(responseText, "\n")
+
+	suggestions := make([]string, 0, count)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			suggestions = append(suggestions, line)
+			if len(suggestions) >= count {
+				break
+			}
+		}
+	}
+
+	return &gen.GenerateFollowOnSuggestionsResult{Suggestions: suggestions}, nil
+}
+
 // startOrResumeChatResult contains the result of starting or resuming a chat.
 type startOrResumeChatResult struct {
 	ChatID         uuid.UUID

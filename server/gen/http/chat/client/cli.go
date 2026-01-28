@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
@@ -108,6 +109,75 @@ func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSe
 	}
 	v := &chat.GenerateTitlePayload{
 		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildGenerateFollowOnSuggestionsPayload builds the payload for the chat
+// generateFollowOnSuggestions endpoint from CLI flags.
+func BuildGenerateFollowOnSuggestionsPayload(chatGenerateFollowOnSuggestionsBody string, chatGenerateFollowOnSuggestionsSessionToken string, chatGenerateFollowOnSuggestionsProjectSlugInput string, chatGenerateFollowOnSuggestionsChatSessionsToken string) (*chat.GenerateFollowOnSuggestionsPayload, error) {
+	var err error
+	var body GenerateFollowOnSuggestionsRequestBody
+	{
+		err = json.Unmarshal([]byte(chatGenerateFollowOnSuggestionsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"count\": 6,\n      \"messages\": [\n         {\n            \"content\": \"Doloremque repellat molestiae.\",\n            \"role\": \"Aut minus.\"\n         },\n         {\n            \"content\": \"Doloremque repellat molestiae.\",\n            \"role\": \"Aut minus.\"\n         }\n      ]\n   }'")
+		}
+		if body.Messages == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
+		}
+		if body.Count < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", body.Count, 1, true))
+		}
+		if body.Count > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", body.Count, 10, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatGenerateFollowOnSuggestionsSessionToken != "" {
+			sessionToken = &chatGenerateFollowOnSuggestionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatGenerateFollowOnSuggestionsProjectSlugInput != "" {
+			projectSlugInput = &chatGenerateFollowOnSuggestionsProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatGenerateFollowOnSuggestionsChatSessionsToken != "" {
+			chatSessionsToken = &chatGenerateFollowOnSuggestionsChatSessionsToken
+		}
+	}
+	v := &chat.GenerateFollowOnSuggestionsPayload{
+		Count: body.Count,
+	}
+	if body.Messages != nil {
+		v.Messages = make([]*chat.SuggestionMessage, len(body.Messages))
+		for i, val := range body.Messages {
+			if val == nil {
+				v.Messages[i] = nil
+				continue
+			}
+			v.Messages[i] = marshalSuggestionMessageRequestBodyToChatSuggestionMessage(val)
+		}
+	} else {
+		v.Messages = []*chat.SuggestionMessage{}
+	}
+	{
+		var zero int
+		if v.Count == zero {
+			v.Count = 3
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

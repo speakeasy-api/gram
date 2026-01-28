@@ -23,6 +23,8 @@ type Service interface {
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
 	// Generate a title for a chat based on its messages
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
+	// Generate follow-on message suggestions based on conversation context
+	GenerateFollowOnSuggestions(context.Context, *GenerateFollowOnSuggestionsPayload) (res *GenerateFollowOnSuggestionsResult, err error)
 	// Load a chat by its ID
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 }
@@ -49,7 +51,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"listChats", "loadChat", "generateTitle", "creditUsage"}
+var MethodNames = [5]string{"listChats", "loadChat", "generateTitle", "generateFollowOnSuggestions", "creditUsage"}
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
@@ -127,6 +129,25 @@ type CreditUsageResult struct {
 	MonthlyCredits int
 }
 
+// GenerateFollowOnSuggestionsPayload is the payload type of the chat service
+// generateFollowOnSuggestions method.
+type GenerateFollowOnSuggestionsPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// The conversation messages to analyze
+	Messages []*SuggestionMessage
+	// Number of suggestions to generate (default 3)
+	Count int
+}
+
+// GenerateFollowOnSuggestionsResult is the result type of the chat service
+// generateFollowOnSuggestions method.
+type GenerateFollowOnSuggestionsResult struct {
+	// The generated follow-on suggestions
+	Suggestions []string
+}
+
 // GenerateTitlePayload is the payload type of the chat service generateTitle
 // method.
 type GenerateTitlePayload struct {
@@ -164,6 +185,14 @@ type LoadChatPayload struct {
 	ChatSessionsToken *string
 	// The ID of the chat
 	ID string
+}
+
+// A simplified message format for generating suggestions
+type SuggestionMessage struct {
+	// The role of the message (user or assistant)
+	Role string
+	// The text content of the message
+	Content string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
