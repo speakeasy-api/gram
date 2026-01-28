@@ -939,7 +939,7 @@ func TestToolsService_ListTools_WithUrnPrefixFilter(t *testing.T) {
 
 	// Create deployment with both assets using different slugs
 	_, err = ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
-		IdempotencyKey: "test-list-tools-source-slug",
+		IdempotencyKey: "test-list-tools-urn-prefix",
 		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{
 			{
 				AssetID: ares1.Asset.ID,
