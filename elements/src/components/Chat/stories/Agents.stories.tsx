@@ -141,6 +141,7 @@ WidgetWithAgents.parameters = {
         enabled: true,
         autoExpandSubAgents: true,
       },
+      systemPrompt: `You are a helpful assistant. Use spawn_agent to delegate tasks to sub-agents. Keep responses concise with 3-5 bullet points max.`,
       modal: {
         defaultOpen: true,
         expandable: true,
@@ -173,6 +174,7 @@ SidecarWithAgents.parameters = {
       agents: {
         enabled: true,
       },
+      systemPrompt: `You are a helpful assistant. Use spawn_agent to delegate tasks to sub-agents. Keep responses concise with 3-5 bullet points max.`,
       sidecar: {
         title: 'Agent Panel',
       },
