@@ -104,8 +104,9 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	if payload.UrnPrefix != nil {
-		// Escape LIKE wildcards to treat urn_prefix as a literal value
-		escaped := strings.ReplaceAll(*payload.UrnPrefix, "%", "\\%")
+		// Escape LIKE wildcards and backslash to treat urn_prefix as a literal value
+		escaped := strings.ReplaceAll(*payload.UrnPrefix, "\\", "\\\\")
+		escaped = strings.ReplaceAll(escaped, "%", "\\%")
 		escaped = strings.ReplaceAll(escaped, "_", "\\_")
 		toolParams.UrnPrefix = pgtype.Text{String: escaped, Valid: true}
 	}
