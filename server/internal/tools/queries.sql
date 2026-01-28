@@ -58,7 +58,7 @@ WHERE
   htd.deployment_id IN (SELECT id FROM all_deployment_ids)
   AND htd.deleted IS FALSE
   AND (sqlc.narg(cursor)::uuid IS NULL OR htd.id < sqlc.narg(cursor))
-  AND (sqlc.narg(source_slug)::text IS NULL OR htd.tool_urn LIKE 'tools:http:' || sqlc.narg(source_slug) || ':%')
+  AND (sqlc.narg(source_slug)::text IS NULL OR htd.tool_urn LIKE 'tools:http:' || sqlc.narg(source_slug) || ':%' ESCAPE '\')
 ORDER BY htd.id DESC
 LIMIT $1;
 

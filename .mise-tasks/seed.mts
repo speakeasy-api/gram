@@ -332,13 +332,6 @@ async function deployAssets(init: {
 }
 
 type Toolset = { created: boolean; slug: string; mcpURL: string };
-function extractToolUrn(t: { httpToolDefinition?: { toolUrn: string }; functionToolDefinition?: { toolUrn: string }; externalMcpToolDefinition?: { toolUrn: string }; promptTemplate?: { toolUrn: string } }): string {
-  if (t.httpToolDefinition) return t.httpToolDefinition.toolUrn;
-  if (t.functionToolDefinition) return t.functionToolDefinition.toolUrn;
-  if (t.externalMcpToolDefinition) return t.externalMcpToolDefinition.toolUrn;
-  if (t.promptTemplate) return t.promptTemplate.toolUrn;
-  assert(false, "Unknown tool type: " + JSON.stringify(t));
-}
 
 async function upsertToolset(init: {
   gram: GramCore;
@@ -363,7 +356,10 @@ async function upsertToolset(init: {
   if (!toolRes.ok) {
     abort(`Failed to list tools for project \`${projectSlug}\``, toolRes.error);
   }
-  const toolUrns = toolRes.value.tools.map(extractToolUrn);
+  // Only include HTTP tools (source_slug filter only applies to HTTP tools)
+  const toolUrns = toolRes.value.tools
+    .filter((t) => t.httpToolDefinition)
+    .map((t) => t.httpToolDefinition!.toolUrn);
 
   let toolset: Toolset;
   const name = assetSlug + "-seed";

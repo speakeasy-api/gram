@@ -628,7 +628,7 @@ WHERE
   htd.deployment_id IN (SELECT id FROM all_deployment_ids)
   AND htd.deleted IS FALSE
   AND ($3::uuid IS NULL OR htd.id < $3)
-  AND ($4::text IS NULL OR htd.tool_urn LIKE 'tools:http:' || $4 || ':%')
+  AND ($4::text IS NULL OR htd.tool_urn LIKE 'tools:http:' || $4 || ':%' ESCAPE '\')
 ORDER BY htd.id DESC
 LIMIT $1
 `

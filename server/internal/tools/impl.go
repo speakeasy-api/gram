@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -103,7 +104,10 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	if payload.SourceSlug != nil {
-		toolParams.SourceSlug = pgtype.Text{String: *payload.SourceSlug, Valid: true}
+		// Escape LIKE wildcards to treat source_slug as a literal value
+		escaped := strings.ReplaceAll(*payload.SourceSlug, "%", "\\%")
+		escaped = strings.ReplaceAll(escaped, "_", "\\_")
+		toolParams.SourceSlug = pgtype.Text{String: escaped, Valid: true}
 	}
 
 	tools, err := s.repo.ListHttpTools(ctx, toolParams)
