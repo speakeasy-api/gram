@@ -16,7 +16,7 @@ import (
 
 // BuildListToolsPayload builds the payload for the tools listTools endpoint
 // from CLI flags.
-func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit string, toolsListToolsDeploymentID string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
+func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit string, toolsListToolsDeploymentID string, toolsListToolsUrnPrefix string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -42,6 +42,12 @@ func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit stri
 			deploymentID = &toolsListToolsDeploymentID
 		}
 	}
+	var urnPrefix *string
+	{
+		if toolsListToolsUrnPrefix != "" {
+			urnPrefix = &toolsListToolsUrnPrefix
+		}
+	}
 	var sessionToken *string
 	{
 		if toolsListToolsSessionToken != "" {
@@ -58,6 +64,7 @@ func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit stri
 	v.Cursor = cursor
 	v.Limit = limit
 	v.DeploymentID = deploymentID
+	v.UrnPrefix = urnPrefix
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
