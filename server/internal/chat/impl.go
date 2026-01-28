@@ -658,6 +658,45 @@ func (s *Service) GenerateFollowOnSuggestions(ctx context.Context, payload *gen.
 		return &gen.GenerateFollowOnSuggestionsResult{Suggestions: []string{}}, nil
 	}
 
+	// Find the last assistant message
+	var lastAssistantMessage string
+	for i := len(payload.Messages) - 1; i >= 0; i-- {
+		if payload.Messages[i].Role == "assistant" {
+			lastAssistantMessage = payload.Messages[i].Content
+			break
+		}
+	}
+
+	// Use LLM to check if the assistant is asking the user a question
+	// If so, don't generate suggestions as it would be confusing
+	if lastAssistantMessage != "" {
+		checkCtx, checkCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer checkCancel()
+
+		checkPrompt := `Does this message end by asking the user a question that requires their input or response? Answer only "yes" or "no".
+
+Message:
+` + lastAssistantMessage
+
+		checkResult, err := s.chatClient.GetCompletionFromMessages(checkCtx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(),
+			[]or.Message{
+				or.CreateMessageUser(or.UserMessage{
+					Content: or.CreateUserMessageContentStr(checkPrompt),
+					Name:    nil,
+				}),
+			},
+			nil,
+			nil,
+			suggestionsModel,
+		)
+		if err == nil {
+			response := strings.ToLower(strings.TrimSpace(openrouter.GetText(*checkResult)))
+			if strings.HasPrefix(response, "yes") {
+				return &gen.GenerateFollowOnSuggestionsResult{Suggestions: []string{}}, nil
+			}
+		}
+	}
+
 	count := payload.Count
 	if count <= 0 {
 		count = 3
@@ -682,17 +721,10 @@ func (s *Service) GenerateFollowOnSuggestions(ctx context.Context, payload *gen.
 
 The user wants to dig deeper into what the assistant just explained. Generate questions that ask the assistant to elaborate, compare, or provide more details.
 
-IMPORTANT: If the assistant asked the user a question, IGNORE it. Instead, generate questions about the information/content the assistant provided.
-
 Good examples:
 - "How does X compare to Y?"
 - "Can you explain more about Z?"
 - "What are the pros and cons of X?"
-
-Bad examples (DO NOT generate these):
-- Questions that answer what the assistant asked
-- Questions about the user's own preferences or needs
-- Questions like "What should I choose?" or "What do I need?"
 
 Rules:
 - Focus on the informational content the assistant provided
