@@ -619,11 +619,6 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
   // Check if this is an external MCP proxy server
   const isExternalMcpProxy = fullToolset?.kind === "external-mcp-proxy";
 
-  // For external MCP proxy servers, show the server info instead of tools list
-  if (isExternalMcpProxy && fullToolset) {
-    return <ServerTabContent toolset={fullToolset} />;
-  }
-
   // Check if we have orphaned tool URNs (URNs exist but tools were deleted)
   const hasOrphanedTools =
     (fullToolset?.toolUrns?.length ?? 0) > 0 &&
@@ -642,6 +637,54 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
       });
     },
   });
+
+  const handleToolsRemove = useCallback(
+    (removedUrns: string[]) => {
+      const currentUrns = fullToolset?.toolUrns || [];
+      const updatedUrns = currentUrns.filter(
+        (urn) => !removedUrns.includes(urn),
+      );
+
+      updateToolsetMutation.mutate(
+        {
+          request: {
+            slug: toolset.slug,
+            updateToolsetRequestBody: {
+              toolUrns: updatedUrns,
+            },
+          },
+        },
+        {
+          onSuccess: () => {
+            telemetry.capture("toolset_event", {
+              action: "tools_removed",
+              count: removedUrns.length,
+            });
+            toast.success(
+              `Removed ${removedUrns.length} tool${removedUrns.length !== 1 ? "s" : ""}`,
+            );
+          },
+        },
+      );
+    },
+    [fullToolset?.toolUrns, toolset.slug, updateToolsetMutation, telemetry],
+  );
+
+  const handleTestInPlayground = useCallback(() => {
+    routes.playground.goTo(toolset.slug);
+  }, [toolset.slug, routes.playground]);
+
+  // Group filtering
+  const grouped = useGroupedTools(tools);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(
+    grouped.map((group) => group.key),
+  );
+
+  const groupKeys = grouped.map((group) => group.key);
+  // Set initial selected groups when the tool list resolves
+  useEffect(() => {
+    setSelectedGroups(groupKeys);
+  }, [groupKeys.join(",")]);
 
   const handleToolUpdate = async (
     tool: Tool,
@@ -676,53 +719,10 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     refetch();
   };
 
-  const handleToolsRemove = useCallback(
-    (removedUrns: string[]) => {
-      const currentUrns = fullToolset?.toolUrns || [];
-      const updatedUrns = currentUrns.filter(
-        (urn) => !removedUrns.includes(urn),
-      );
-
-      updateToolsetMutation.mutate(
-        {
-          request: {
-            slug: toolset.slug,
-            updateToolsetRequestBody: {
-              toolUrns: updatedUrns,
-            },
-          },
-        },
-        {
-          onSuccess: () => {
-            telemetry.capture("toolset_event", {
-              action: "tools_removed",
-              count: removedUrns.length,
-            });
-            toast.success(
-              `Removed ${removedUrns.length} tool${removedUrns.length !== 1 ? "s" : ""}`,
-            );
-          },
-        },
-      );
-    },
-    [fullToolset?.toolUrns, toolset.slug],
-  );
-
-  const handleTestInPlayground = useCallback(() => {
-    routes.playground.goTo(toolset.slug);
-  }, [toolset.slug]);
-
-  // Group filtering
-  const grouped = useGroupedTools(tools);
-  const [selectedGroups, setSelectedGroups] = useState<string[]>(
-    grouped.map((group) => group.key),
-  );
-
-  const groupKeys = grouped.map((group) => group.key);
-  // Set initial selected groups when the tool list resolves
-  useEffect(() => {
-    setSelectedGroups(groupKeys);
-  }, [groupKeys.join(",")]);
+  // For external MCP proxy servers, show the server info instead of tools list
+  if (isExternalMcpProxy && fullToolset) {
+    return <ServerTabContent toolset={fullToolset} />;
+  }
 
   const groupFilterItems = grouped.map((group) => ({
     label: group.key,
