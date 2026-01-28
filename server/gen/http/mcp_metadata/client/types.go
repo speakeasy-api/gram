@@ -707,6 +707,10 @@ type McpExportInstallConfigsResponseBody struct {
 	Vscode *McpExportHTTPConfigResponseBody `form:"vscode,omitempty" json:"vscode,omitempty" xml:"vscode,omitempty"`
 	// CLI command for Claude Code
 	ClaudeCode *string `form:"claude_code,omitempty" json:"claude_code,omitempty" xml:"claude_code,omitempty"`
+	// CLI command for Gemini CLI
+	GeminiCli *string `form:"gemini_cli,omitempty" json:"gemini_cli,omitempty" xml:"gemini_cli,omitempty"`
+	// TOML configuration for Codex CLI
+	CodexCli *string `form:"codex_cli,omitempty" json:"codex_cli,omitempty" xml:"codex_cli,omitempty"`
 }
 
 // McpExportStdioConfigResponseBody is used to define fields on response body
@@ -2161,6 +2165,12 @@ func ValidateMcpExportInstallConfigsResponseBody(body *McpExportInstallConfigsRe
 	}
 	if body.ClaudeCode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("claude_code", "body"))
+	}
+	if body.GeminiCli == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gemini_cli", "body"))
+	}
+	if body.CodexCli == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("codex_cli", "body"))
 	}
 	if body.ClaudeDesktop != nil {
 		if err2 := ValidateMcpExportStdioConfigResponseBody(body.ClaudeDesktop); err2 != nil {

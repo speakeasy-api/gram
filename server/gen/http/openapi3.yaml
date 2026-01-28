@@ -13582,8 +13582,14 @@ components:
                     description: CLI command for Claude Code
                 claude_desktop:
                     $ref: '#/components/schemas/McpExportStdioConfig'
+                codex_cli:
+                    type: string
+                    description: TOML configuration for Codex CLI
                 cursor:
                     $ref: '#/components/schemas/McpExportStdioConfig'
+                gemini_cli:
+                    type: string
+                    description: CLI command for Gemini CLI
                 vscode:
                     $ref: '#/components/schemas/McpExportHTTPConfig'
             description: Installation configurations for different MCP clients
@@ -13592,6 +13598,8 @@ components:
                 - cursor
                 - vscode
                 - claude_code
+                - gemini_cli
+                - codex_cli
         McpExportStdioConfig:
             type: object
             properties:

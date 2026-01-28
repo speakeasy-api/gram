@@ -182,6 +182,25 @@ func TestBuildInstallConfigs_AllClients(t *testing.T) {
 		require.Contains(t, configs.ClaudeCode, `"https://example.com/mcp/test-mcp"`)
 		require.Contains(t, configs.ClaudeCode, "--header 'Authorization:${API_KEY}'")
 	})
+
+	t.Run("GeminiCLI", func(t *testing.T) {
+		t.Parallel()
+		require.NotEmpty(t, configs.GeminiCli, "command should not be empty")
+		require.Contains(t, configs.GeminiCli, "gemini mcp add")
+		require.Contains(t, configs.GeminiCli, "--transport http")
+		require.Contains(t, configs.GeminiCli, `"test-mcp"`)
+		require.Contains(t, configs.GeminiCli, `"https://example.com/mcp/test-mcp"`)
+		require.Contains(t, configs.GeminiCli, "--header 'Authorization:${API_KEY}'")
+	})
+
+	t.Run("CodexCLI", func(t *testing.T) {
+		t.Parallel()
+		require.NotEmpty(t, configs.CodexCli, "config should not be empty")
+		require.Contains(t, configs.CodexCli, "[mcp_servers.test-mcp]")
+		require.Contains(t, configs.CodexCli, `url = "https://example.com/mcp/test-mcp"`)
+		require.Contains(t, configs.CodexCli, "http_headers = {")
+		require.Contains(t, configs.CodexCli, `"Authorization" = "your-API_KEY-value"`)
+	})
 }
 
 // TestBuildInstallConfigs_NoSharedReferences verifies that ClaudeDesktop and Cursor

@@ -24,7 +24,7 @@ func BuildSearchLogsPayload(telemetrySearchLogsBody string, telemetrySearchLogsA
 	{
 		err = json.Unmarshal([]byte(telemetrySearchLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Quia sint.\",\n      \"filter\": {\n         \"deployment_id\": \"d40bca5d-1103-432f-9b55-03eb1c56d7b7\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"d1c97b79-026f-43f0-88a9-6f594c79ce04\",\n         \"gram_urn\": \"Mollitia fugit commodi.\",\n         \"gram_urns\": [\n            \"Veniam sint.\",\n            \"Dolorum rem.\",\n            \"Omnis atque optio doloribus quia sunt.\",\n            \"Facilis dicta.\"\n         ],\n         \"http_method\": \"PUT\",\n         \"http_route\": \"Amet earum sed nemo sit.\",\n         \"http_status_code\": 1779988716,\n         \"service_name\": \"Quasi perspiciatis sed earum ut eos quibusdam.\",\n         \"severity_text\": \"DEBUG\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"7421e2f6e51698fa3c25507afce13d91\"\n      },\n      \"limit\": 303,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Sapiente accusamus exercitationem nam provident tempora assumenda.\",\n      \"filter\": {\n         \"deployment_id\": \"1a2d1621-6b7b-4818-92f1-dbb682253659\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"eaaba0cb-02c8-49cb-ac64-0ed9512b9e22\",\n         \"gram_urn\": \"Non praesentium eos.\",\n         \"gram_urns\": [\n            \"Nesciunt soluta quia velit impedit ea.\",\n            \"Alias sit autem est quaerat eaque dolor.\",\n            \"Qui omnis exercitationem culpa.\",\n            \"Suscipit earum doloremque.\"\n         ],\n         \"http_method\": \"PATCH\",\n         \"http_route\": \"Rem consequatur omnis atque optio doloribus.\",\n         \"http_status_code\": 809513406,\n         \"service_name\": \"Id facilis dicta.\",\n         \"severity_text\": \"FATAL\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"507afce13d91b64abf828efe2ccb2b2c\"\n      },\n      \"limit\": 324,\n      \"sort\": \"asc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -80,7 +80,7 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	{
 		err = json.Unmarshal([]byte(telemetrySearchToolCallsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Cumque fugit omnis ut consequatur quia culpa.\",\n      \"filter\": {\n         \"deployment_id\": \"37445f79-0270-4b98-9cc0-bbb984dd8c42\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"ac54f578-41c3-4ba1-ab51-45908a91e3dc\",\n         \"gram_urn\": \"Modi totam dolor voluptas commodi saepe eveniet.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 402,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Distinctio alias doloribus consequatur.\",\n      \"filter\": {\n         \"deployment_id\": \"598fde82-3487-4961-ba24-ec20e169b568\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"6f4111e5-6d57-46e0-95cd-31cf84e144ed\",\n         \"gram_urn\": \"Enim voluptatum.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 919,\n      \"sort\": \"asc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -136,7 +136,7 @@ func BuildCaptureEventPayload(telemetryCaptureEventBody string, telemetryCapture
 	{
 		err = json.Unmarshal([]byte(telemetryCaptureEventBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"distinct_id\": \"Quisquam aut aut facilis.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"distinct_id\": \"Est et natus.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }'")
 		}
 		if utf8.RuneCountInString(body.Event) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", body.Event, utf8.RuneCountInString(body.Event), 1, true))

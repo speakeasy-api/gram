@@ -17,4 +17,8 @@ type McpExportInstallConfigs struct {
 	Vscode *McpExportHTTPConfig
 	// CLI command for Claude Code
 	ClaudeCode string
+	// CLI command for Gemini CLI
+	GeminiCli string
+	// TOML configuration for Codex CLI
+	CodexCli string
 }

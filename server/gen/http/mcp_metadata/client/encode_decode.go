@@ -808,6 +808,8 @@ func unmarshalMcpExportAuthHeaderResponseBodyToTypesMcpExportAuthHeader(v *McpEx
 func unmarshalMcpExportInstallConfigsResponseBodyToTypesMcpExportInstallConfigs(v *McpExportInstallConfigsResponseBody) *types.McpExportInstallConfigs {
 	res := &types.McpExportInstallConfigs{
 		ClaudeCode: *v.ClaudeCode,
+		GeminiCli:  *v.GeminiCli,
+		CodexCli:   *v.CodexCli,
 	}
 	res.ClaudeDesktop = unmarshalMcpExportStdioConfigResponseBodyToTypesMcpExportStdioConfig(v.ClaudeDesktop)
 	res.Cursor = unmarshalMcpExportStdioConfigResponseBodyToTypesMcpExportStdioConfig(v.Cursor)

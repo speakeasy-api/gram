@@ -67,8 +67,10 @@ var McpExportInstallConfigs = Type("McpExportInstallConfigs", func() {
 	Attribute("cursor", McpExportStdioConfig, "Configuration for Cursor")
 	Attribute("vscode", McpExportHttpConfig, "Configuration for VS Code")
 	Attribute("claude_code", String, "CLI command for Claude Code")
+	Attribute("gemini_cli", String, "CLI command for Gemini CLI")
+	Attribute("codex_cli", String, "TOML configuration for Codex CLI")
 
-	Required("claude_desktop", "cursor", "vscode", "claude_code")
+	Required("claude_desktop", "cursor", "vscode", "claude_code", "gemini_cli", "codex_cli")
 })
 
 var McpExport = Type("McpExport", func() {

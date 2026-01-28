@@ -766,6 +766,8 @@ func marshalTypesMcpExportAuthHeaderToMcpExportAuthHeaderResponseBody(v *types.M
 func marshalTypesMcpExportInstallConfigsToMcpExportInstallConfigsResponseBody(v *types.McpExportInstallConfigs) *McpExportInstallConfigsResponseBody {
 	res := &McpExportInstallConfigsResponseBody{
 		ClaudeCode: v.ClaudeCode,
+		GeminiCli:  v.GeminiCli,
+		CodexCli:   v.CodexCli,
 	}
 	if v.ClaudeDesktop != nil {
 		res.ClaudeDesktop = marshalTypesMcpExportStdioConfigToMcpExportStdioConfigResponseBody(v.ClaudeDesktop)

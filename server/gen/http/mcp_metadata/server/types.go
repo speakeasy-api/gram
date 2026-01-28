@@ -709,6 +709,10 @@ type McpExportInstallConfigsResponseBody struct {
 	Vscode *McpExportHTTPConfigResponseBody `form:"vscode" json:"vscode" xml:"vscode"`
 	// CLI command for Claude Code
 	ClaudeCode string `form:"claude_code" json:"claude_code" xml:"claude_code"`
+	// CLI command for Gemini CLI
+	GeminiCli string `form:"gemini_cli" json:"gemini_cli" xml:"gemini_cli"`
+	// TOML configuration for Codex CLI
+	CodexCli string `form:"codex_cli" json:"codex_cli" xml:"codex_cli"`
 }
 
 // McpExportStdioConfigResponseBody is used to define fields on response body

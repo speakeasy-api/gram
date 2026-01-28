@@ -426,6 +426,29 @@ func (s *Service) buildInstallConfigs(mcpSlug, mcpURL string, inputs []securityI
 		claudeCodeCmd += fmt.Sprintf(" --header '%s:${%s}'", headerKey, envVarName)
 	}
 
+	// Build Gemini CLI command (same format as Claude Code)
+	geminiCmd := fmt.Sprintf("gemini mcp add --transport http %q %q", mcpSlug, mcpURL)
+	for _, input := range inputs {
+		headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
+		envVarName := templatefuncs.AsPosixName(input.DisplayName)
+		geminiCmd += fmt.Sprintf(" --header '%s:${%s}'", headerKey, envVarName)
+	}
+
+	// Build Codex CLI TOML config
+	codexConfig := fmt.Sprintf("[mcp_servers.%s]\nurl = %q\n", mcpSlug, mcpURL)
+	if len(inputs) > 0 {
+		codexConfig += "http_headers = { "
+		for i, input := range inputs {
+			if i > 0 {
+				codexConfig += ", "
+			}
+			headerKey := templatefuncs.AsHTTPHeader(input.SystemName)
+			envVarName := templatefuncs.AsPosixName(input.DisplayName)
+			codexConfig += fmt.Sprintf("%q = \"your-%s-value\"", headerKey, envVarName)
+		}
+		codexConfig += " }"
+	}
+
 	return &types.McpExportInstallConfigs{
 		ClaudeDesktop: &types.McpExportStdioConfig{
 			Command: stdioConfig.Command,
@@ -443,6 +466,8 @@ func (s *Service) buildInstallConfigs(mcpSlug, mcpURL string, inputs []securityI
 			Headers: httpHeaders,
 		},
 		ClaudeCode: claudeCodeCmd,
+		GeminiCli:  geminiCmd,
+		CodexCli:   codexConfig,
 	}
 }
 
