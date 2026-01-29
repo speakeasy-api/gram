@@ -255,6 +255,15 @@ run();
 * [getSlackConnection](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 * [updateSlackConnection](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 
+### [Teams](docs/sdks/teams/README.md)
+
+* [cancelInvite](docs/sdks/teams/README.md#cancelinvite) - cancelInvite teams
+* [inviteMember](docs/sdks/teams/README.md#invitemember) - inviteMember teams
+* [listInvites](docs/sdks/teams/README.md#listinvites) - listInvites teams
+* [listMembers](docs/sdks/teams/README.md#listmembers) - listMembers teams
+* [removeMember](docs/sdks/teams/README.md#removemember) - removeMember teams
+* [resendInvite](docs/sdks/teams/README.md#resendinvite) - resendInvite teams
+
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
 * [captureEvent](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
@@ -398,6 +407,12 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`slackSlackCallback`](docs/sdks/slack/README.md#slackcallback) - callback slack
 - [`slackSlackLogin`](docs/sdks/slack/README.md#slacklogin) - login slack
 - [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
+- [`teamsCancelInvite`](docs/sdks/teams/README.md#cancelinvite) - cancelInvite teams
+- [`teamsInviteMember`](docs/sdks/teams/README.md#invitemember) - inviteMember teams
+- [`teamsListInvites`](docs/sdks/teams/README.md#listinvites) - listInvites teams
+- [`teamsListMembers`](docs/sdks/teams/README.md#listmembers) - listMembers teams
+- [`teamsRemoveMember`](docs/sdks/teams/README.md#removemember) - removeMember teams
+- [`teamsResendInvite`](docs/sdks/teams/README.md#resendinvite) - resendInvite teams
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`telemetryGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
@@ -459,6 +474,7 @@ To learn about this feature and how to get started, check
 - [`useAgentsCreateMutation`](docs/sdks/agents/README.md#create) - createResponse agents
 - [`useAgentsDeleteMutation`](docs/sdks/agents/README.md#delete) - deleteResponse agents
 - [`useAgentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
+- [`useCancelTeamInviteMutation`](docs/sdks/teams/README.md#cancelinvite) - cancelInvite teams
 - [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
@@ -501,6 +517,7 @@ To learn about this feature and how to get started, check
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
+- [`useInviteTeamMemberMutation`](docs/sdks/teams/README.md#invitemember) - inviteMember teams
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`useListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
@@ -513,6 +530,8 @@ To learn about this feature and how to get started, check
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
+- [`useListTeamInvites`](docs/sdks/teams/README.md#listinvites) - listInvites teams
+- [`useListTeamMembers`](docs/sdks/teams/README.md#listmembers) - listMembers teams
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -525,8 +544,10 @@ To learn about this feature and how to get started, check
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+- [`useRemoveTeamMemberMutation`](docs/sdks/teams/README.md#removemember) - removeMember teams
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
+- [`useResendTeamInviteMutation`](docs/sdks/teams/README.md#resendinvite) - resendInvite teams
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry

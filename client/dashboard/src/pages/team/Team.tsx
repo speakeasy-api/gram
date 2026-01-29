@@ -5,29 +5,22 @@ import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
-import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
+import {
+  invalidateAllListTeamInvites,
+  invalidateAllListTeamMembers,
+  useCancelTeamInviteMutation,
+  useInviteTeamMemberMutation,
+  useListTeamInvitesSuspense,
+  useListTeamMembersSuspense,
+  useRemoveTeamMemberMutation,
+  useResendTeamInviteMutation,
+} from "@gram/client/react-query";
+import { TeamInvite, TeamMember } from "@gram/client/models/components";
+import { Button, Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Mail, Send, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
-// Placeholder types until generated SDK is available
-interface TeamMember {
-  id: string;
-  email: string;
-  displayName: string;
-  photoUrl?: string;
-  joinedAt: string;
-}
-
-interface TeamInvite {
-  id: string;
-  email: string;
-  status: string;
-  invitedBy: string;
-  createdAt: string;
-  expiresAt: string;
-}
 
 export default function Team() {
   const organization = useOrganization();
@@ -38,75 +31,111 @@ export default function Team() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
   const [inviteToCancel, setInviteToCancel] = useState<TeamInvite | null>(null);
-  const [isInviting, setIsInviting] = useState(false);
 
-  // TODO: Replace with actual API hooks when generated
-  // const { data: membersData } = useListTeamMembersSuspense({ organizationId: organization.id });
-  // const { data: invitesData } = useListTeamInvitesSuspense({ organizationId: organization.id });
+  const { data: membersData } = useListTeamMembersSuspense({
+    organizationId: organization.id,
+  });
+  const { data: invitesData } = useListTeamInvitesSuspense({
+    organizationId: organization.id,
+  });
 
-  // Placeholder data - will be replaced with actual API data
-  const members: TeamMember[] = [
-    {
-      id: user.id,
-      email: user.email,
-      displayName: user.displayName || user.email,
-      photoUrl: user.photoUrl,
-      joinedAt: new Date().toISOString(),
-    },
-  ];
-  const invites: TeamInvite[] = [];
+  const members = membersData?.members ?? [];
+  const invites = invitesData?.invites ?? [];
 
-  const handleInvite = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!inviteEmail.trim()) return;
+  const invalidateTeamData = async () => {
+    await Promise.all([
+      invalidateAllListTeamMembers(queryClient),
+      invalidateAllListTeamInvites(queryClient),
+    ]);
+  };
 
-    setIsInviting(true);
-    try {
-      // TODO: Call inviteTeamMember mutation
-      // await inviteMutation.mutateAsync({
-      //   request: { organizationId: organization.id, email: inviteEmail }
-      // });
+  const inviteMutation = useInviteTeamMemberMutation({
+    onSuccess: async () => {
+      await invalidateTeamData();
       toast.success(`Invite sent to ${inviteEmail}`);
       setInviteEmail("");
       setIsInviteDialogOpen(false);
-    } catch {
+    },
+    onError: () => {
       toast.error("Failed to send invite");
-    } finally {
-      setIsInviting(false);
-    }
+    },
+  });
+
+  const removeMemberMutation = useRemoveTeamMemberMutation({
+    onSuccess: async () => {
+      await invalidateTeamData();
+      toast.success(`${memberToRemove?.displayName} has been removed`);
+      setMemberToRemove(null);
+    },
+    onError: () => {
+      toast.error("Failed to remove member");
+    },
+  });
+
+  const cancelInviteMutation = useCancelTeamInviteMutation({
+    onSuccess: async () => {
+      await invalidateTeamData();
+      toast.success(`Invite to ${inviteToCancel?.email} has been cancelled`);
+      setInviteToCancel(null);
+    },
+    onError: () => {
+      toast.error("Failed to cancel invite");
+    },
+  });
+
+  const resendInviteMutation = useResendTeamInviteMutation({
+    onSuccess: async () => {
+      await invalidateTeamData();
+      toast.success("Invite resent");
+    },
+    onError: () => {
+      toast.error("Failed to resend invite");
+    },
+  });
+
+  const handleInvite = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+
+    inviteMutation.mutate({
+      request: {
+        inviteMemberForm: {
+          organizationId: organization.id,
+          email: inviteEmail,
+        },
+      },
+    });
   };
 
-  const handleRemoveMember = async () => {
+  const handleRemoveMember = () => {
     if (!memberToRemove) return;
 
-    try {
-      // TODO: Call removeTeamMember mutation
-      toast.success(`${memberToRemove.displayName} has been removed`);
-      setMemberToRemove(null);
-    } catch {
-      toast.error("Failed to remove member");
-    }
+    removeMemberMutation.mutate({
+      request: {
+        organizationId: organization.id,
+        userId: memberToRemove.id,
+      },
+    });
   };
 
-  const handleCancelInvite = async () => {
+  const handleCancelInvite = () => {
     if (!inviteToCancel) return;
 
-    try {
-      // TODO: Call cancelTeamInvite mutation
-      toast.success(`Invite to ${inviteToCancel.email} has been cancelled`);
-      setInviteToCancel(null);
-    } catch {
-      toast.error("Failed to cancel invite");
-    }
+    cancelInviteMutation.mutate({
+      request: {
+        inviteId: inviteToCancel.id,
+      },
+    });
   };
 
-  const handleResendInvite = async (invite: TeamInvite) => {
-    try {
-      // TODO: Call resendTeamInvite mutation
-      toast.success(`Invite resent to ${invite.email}`);
-    } catch {
-      toast.error("Failed to resend invite");
-    }
+  const handleResendInvite = (invite: TeamInvite) => {
+    resendInviteMutation.mutate({
+      request: {
+        resendInviteRequestBody: {
+          inviteId: invite.id,
+        },
+      },
+    });
   };
 
   const memberColumns: Column<TeamMember>[] = [
@@ -332,8 +361,11 @@ export default function Team() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isInviting || !inviteEmail.trim()}>
-                  {isInviting ? "Sending..." : "Send Invite"}
+                <Button
+                  type="submit"
+                  disabled={inviteMutation.isPending || !inviteEmail.trim()}
+                >
+                  {inviteMutation.isPending ? "Sending..." : "Send Invite"}
                 </Button>
               </div>
             </form>
@@ -363,8 +395,14 @@ export default function Team() {
                 >
                   Cancel
                 </Button>
-                <Button variant="destructive-primary" onClick={handleRemoveMember}>
-                  Remove Member
+                <Button
+                  variant="destructive-primary"
+                  onClick={handleRemoveMember}
+                  disabled={removeMemberMutation.isPending}
+                >
+                  {removeMemberMutation.isPending
+                    ? "Removing..."
+                    : "Remove Member"}
                 </Button>
               </div>
             </div>
@@ -392,8 +430,14 @@ export default function Team() {
                 >
                   Keep Invite
                 </Button>
-                <Button variant="destructive-primary" onClick={handleCancelInvite}>
-                  Cancel Invite
+                <Button
+                  variant="destructive-primary"
+                  onClick={handleCancelInvite}
+                  disabled={cancelInviteMutation.isPending}
+                >
+                  {cancelInviteMutation.isPending
+                    ? "Cancelling..."
+                    : "Cancel Invite"}
                 </Button>
               </div>
             </div>
