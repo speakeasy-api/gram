@@ -45,7 +45,6 @@ import (
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -57,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	temporal_client "go.temporal.io/sdk/client"
 )
@@ -555,8 +555,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	sessionID := parseMcpSessionID(r.Header)
 	w.Header().Set("Mcp-Session-Id", sessionID)
 
-	chatID := r.Header.Get("Gram-Chat-ID")
-
 	// Load header display names for remapping
 	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
 
@@ -568,7 +566,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		authenticated:    authenticated,
 		oauthTokenInputs: tokenInputs,
 		sessionID:        sessionID,
-		chatID:           chatID,
+		chatID:           r.Header.Get("Gram-Chat-ID"),
 		mode:             resolveToolMode(r, *toolset),
 	}
 
@@ -719,6 +717,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		authenticated:    true,
 		oauthTokenInputs: []oauthTokenInputs{},
 		sessionID:        sessionID,
+		chatID:           r.Header.Get("Gram-Chat-ID"),
 		mode:             resolveToolMode(r, toolset),
 	}
 
