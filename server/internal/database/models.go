@@ -38,6 +38,7 @@ type ApiKey struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	Deleted         bool
+	LastAccessedAt  pgtype.Timestamptz
 }
 
 type Asset struct {
