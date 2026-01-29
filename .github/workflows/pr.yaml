@@ -200,13 +200,8 @@ jobs:
       - name: Generate tag
         id: tag
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            SHORT_SHA=$(echo "${{ github.event.pull_request.base.sha }}" | cut -c1-8)
-            echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          else
-            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-            echo "tag=sha-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          fi
+          SHORT_SHA=$(echo "${{ github.event.pull_request.base.sha }}" | cut -c1-7)
+          echo "tag=sha-${SHORT_SHA}" >> $GITHUB_OUTPUT
 
       - name: Lint PostgreSQL migrations
         uses: ariga/atlas-action/migrate/lint@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
