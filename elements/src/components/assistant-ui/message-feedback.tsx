@@ -159,7 +159,7 @@ export const MessageFeedback: FC<MessageFeedbackProps> = ({
         ) : (
           <m.div
             key="thank-you"
-            className="rounded-full border border-black/[0.08] bg-gradient-to-b from-white/80 to-white/60 px-4 py-2 text-sm text-muted-foreground shadow-lg backdrop-blur-2xl dark:border-white/[0.08] dark:from-white/15 dark:to-white/10"
+            className="text-muted-foreground rounded-full border border-black/[0.08] bg-gradient-to-b from-white/80 to-white/60 px-4 py-2 text-sm shadow-lg backdrop-blur-2xl dark:border-white/[0.08] dark:from-white/15 dark:to-white/10"
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, ease: EASE_OUT_QUINT }}

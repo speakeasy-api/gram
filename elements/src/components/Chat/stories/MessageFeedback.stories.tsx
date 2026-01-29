@@ -111,9 +111,9 @@ Sidecar.parameters = {
  * Standalone component demo showing the feedback buttons in isolation.
  */
 export const ComponentOnly: StoryFn = () => (
-  <div className="flex min-h-screen items-center justify-center bg-background p-10">
+  <div className="bg-background flex min-h-screen items-center justify-center p-10">
     <div className="flex flex-col items-center gap-8">
-      <h2 className="text-lg font-semibold text-foreground">
+      <h2 className="text-foreground text-lg font-semibold">
         Message Feedback Buttons
       </h2>
       <MessageFeedback

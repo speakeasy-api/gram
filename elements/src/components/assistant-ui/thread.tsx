@@ -118,7 +118,15 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const resetFeedbackHidden = () => setFeedbackHidden(false)
 
   return (
-    <ChatResolutionContext.Provider value={{ isResolved: showFeedback && isResolved, feedbackHidden, setResolved, setUnresolved, resetFeedbackHidden }}>
+    <ChatResolutionContext.Provider
+      value={{
+        isResolved: showFeedback && isResolved,
+        feedbackHidden,
+        setResolved,
+        setUnresolved,
+        resetFeedbackHidden,
+      }}
+    >
       <LazyMotion features={domAnimation}>
         <MotionConfig reducedMotion="user">
           <ThreadPrimitive.Root
@@ -165,7 +173,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
             <AnimatePresence>
               {showFeedback && isResolved && (
                 <m.div
-                  className="pointer-events-none absolute inset-0 z-50 bg-background/40"
+                  className="bg-background/40 pointer-events-none absolute inset-0 z-50"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -492,7 +500,7 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
         >
-          <span className="text-sm text-muted-foreground">
+          <span className="text-muted-foreground text-sm">
             This conversation has been resolved
           </span>
           <Button
