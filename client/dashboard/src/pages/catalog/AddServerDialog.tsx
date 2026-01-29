@@ -1,11 +1,10 @@
 import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
-import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
-import { Server } from "@/pages/catalog/hooks";
+import { Server, useAddServerMutation } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query";
+import type { ExternalMCPServer } from "@gram/client/models/components";
 import { Button, Input } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -17,82 +16,6 @@ import {
   Settings,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-
-function generateSlug(name: string): string {
-  const lastPart = name.split("/").pop() || name;
-  return lastPart
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-export function useAddServerMutation() {
-  const client = useSdkClient();
-  const { data: deploymentResult, refetch: refetchDeployment } =
-    useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-
-  const mutation = useMutation({
-    mutationFn: async ({
-      server,
-      toolsetName,
-    }: {
-      server: Server;
-      toolsetName: string;
-    }) => {
-      const slug = generateSlug(server.registrySpecifier);
-      let toolUrns = [`tools:externalmcp:${slug}:proxy`];
-      if (server.tools) {
-        toolUrns = server.tools.map(
-          (t) => `tools:externalmcp:${slug}:${t.name}`,
-        );
-      }
-
-      await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment?.id,
-          upsertExternalMcps: [
-            {
-              registryId: server.registryId,
-              name: toolsetName,
-              slug,
-              registryServerSpecifier: server.registrySpecifier,
-            },
-          ],
-        },
-      });
-
-      const toolset = await client.toolsets.create({
-        createToolsetRequestBody: {
-          name: toolsetName,
-          description:
-            server.description ?? `MCP server: ${server.registrySpecifier}`,
-          toolUrns,
-        },
-      });
-
-      await client.toolsets.updateBySlug({
-        slug: toolset.slug,
-        updateToolsetRequestBody: {
-          mcpEnabled: true,
-          mcpIsPublic: true,
-        },
-      });
-
-      // Fetch the toolset to get the generated mcpSlug
-      const updatedToolset = await client.toolsets.getBySlug({
-        slug: toolset.slug,
-      });
-
-      return {
-        slug: toolset.slug,
-        mcpSlug: updatedToolset.mcpSlug,
-      };
-    },
-  });
-
-  return { mutation, refetchDeployment };
-}
 
 interface AddServerDialogProps {
   server: Server | null;
@@ -254,14 +177,14 @@ function AddServerForm({
   onCancel,
   onSuccess,
 }: {
-  server: Server;
+  server: ExternalMCPServer;
   desiredToolsetName: string;
   setDesiredToolsetName: (name: string) => void;
   addServerMutation: ReturnType<
     typeof useMutation<
       AddServerResult,
       Error,
-      { server: Server; toolsetName: string }
+      { server: ExternalMCPServer; toolsetName: string }
     >
   >;
   onCancel: () => void;

@@ -1,40 +1,39 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
+import { getServerURL } from "@/lib/utils";
+import { useAddServerMutation } from "@/pages/catalog/hooks";
+import { useRoutes } from "@/routes";
 import {
-  useLatestDeployment,
   useListMCPCatalog,
-  useEvolveDeploymentMutation,
 } from "@gram/client/react-query";
 import type { ExternalMCPServer } from "@gram/client/models/components";
-import { Input } from "@speakeasy-api/moonshine";
-import { SearchIcon, ServerIcon, Loader2Icon } from "lucide-react";
+import { Button, Input } from "@speakeasy-api/moonshine";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Loader2Icon,
+  MessageCircle,
+  Plug,
+  Plus,
+  SearchIcon,
+  ServerIcon,
+  Settings,
+} from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
 
-function generateSlug(name: string): string {
-  // Extract the last part after "/" for reverse-DNS names like "ai.exa/exa"
-  const lastPart = name.split("/").pop() || name;
-  // Convert to lowercase, replace non-alphanumeric with dashes, collapse multiple dashes
-  return lastPart
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
 function MCPServerCard({
   server,
-  onImport,
-  isImporting,
+  onSelect,
 }: {
   server: ExternalMCPServer;
-  onImport: (server: ExternalMCPServer) => void;
-  isImporting: boolean;
+  onSelect: (server: ExternalMCPServer) => void;
 }) {
   return (
     <button
       type="button"
-      onClick={() => onImport(server)}
-      disabled={isImporting}
-      className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 hover:border-border-hover transition-colors cursor-pointer text-left w-full disabled:opacity-50 disabled:cursor-not-allowed"
+      onClick={() => onSelect(server)}
+      className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 hover:border-border-hover transition-colors cursor-pointer text-left w-full"
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
         {server.iconUrl ? (
@@ -58,9 +57,6 @@ function MCPServerCard({
           {server.registrySpecifier} v{server.version}
         </p>
       </div>
-      {isImporting && (
-        <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
-      )}
     </button>
   );
 }
@@ -82,20 +78,65 @@ interface ImportMCPTabContentProps {
   onSuccess?: () => void;
 }
 
+type Step =
+  | { kind: "browse" }
+  | { kind: "name"; server: ExternalMCPServer }
+  | { kind: "success"; server: ExternalMCPServer; slug: string; mcpSlug: string };
+
 export default function ImportMCPTabContent({
   onSuccess,
 }: ImportMCPTabContentProps) {
-  const { data: deploymentResult, refetch: refetchDeployment } =
-    useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
+  const [step, setStep] = React.useState<Step>({ kind: "browse" });
 
+  if (step.kind === "browse") {
+    return (
+      <BrowseStep
+        onSelect={(server) => setStep({ kind: "name", server })}
+      />
+    );
+  }
+
+  if (step.kind === "name") {
+    return (
+      <NameStep
+        server={step.server}
+        onBack={() => setStep({ kind: "browse" })}
+        onSuccess={(result) => {
+          if (result.mcpSlug) {
+            setStep({
+              kind: "success",
+              server: step.server,
+              slug: result.slug,
+              mcpSlug: result.mcpSlug,
+            });
+          } else {
+            toast.success(
+              `Added ${step.server.title ?? step.server.registrySpecifier}`,
+            );
+            onSuccess?.();
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <SuccessStep
+      server={step.server}
+      slug={step.slug}
+      mcpSlug={step.mcpSlug}
+      onAddMore={() => setStep({ kind: "browse" })}
+    />
+  );
+}
+
+function BrowseStep({
+  onSelect,
+}: {
+  onSelect: (server: ExternalMCPServer) => void;
+}) {
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
-  const [importingServer, setImportingServer] = React.useState<string | null>(
-    null,
-  );
-
-  const evolveMutation = useEvolveDeploymentMutation();
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -107,40 +148,6 @@ export default function ImportMCPTabContent({
   const { data, isLoading, error } = useListMCPCatalog(
     debouncedSearch ? { search: debouncedSearch } : undefined,
   );
-
-  const handleImport = async (server: ExternalMCPServer) => {
-    const serverKey = `${server.registryId}-${server.registrySpecifier}`;
-    setImportingServer(serverKey);
-
-    try {
-      await evolveMutation.mutateAsync({
-        request: {
-          evolveForm: {
-            deploymentId: deployment?.id,
-            upsertExternalMcps: [
-              {
-                registryId: server.registryId,
-                name: server.title ?? server.registrySpecifier,
-                slug: generateSlug(server.registrySpecifier),
-                registryServerSpecifier: server.registrySpecifier,
-              },
-            ],
-          },
-        },
-      });
-
-      await refetchDeployment();
-      toast.success(`Imported ${server.title ?? server.registrySpecifier}`);
-      onSuccess?.();
-    } catch (err) {
-      console.error("Failed to import external MCP:", err);
-      toast.error(
-        `Failed to import ${server.title ?? server.registrySpecifier}`,
-      );
-    } finally {
-      setImportingServer(null);
-    }
-  };
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -187,13 +194,210 @@ export default function ImportMCPTabContent({
               <MCPServerCard
                 key={serverKey}
                 server={server}
-                onImport={handleImport}
-                isImporting={importingServer === serverKey}
+                onSelect={onSelect}
               />
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function NameStep({
+  server,
+  onBack,
+  onSuccess,
+}: {
+  server: ExternalMCPServer;
+  onBack: () => void;
+  onSuccess: (result: { slug: string; mcpSlug: string | undefined }) => void;
+}) {
+  const displayName = server.title ?? server.registrySpecifier;
+  const [toolsetName, setToolsetName] = React.useState(server.title ?? "");
+  const { mutation: addServerMutation, refetchDeployment } =
+    useAddServerMutation();
+
+  const handleSubmit = () => {
+    addServerMutation.mutate(
+      {
+        server,
+        toolsetName: toolsetName || displayName,
+      },
+      {
+        onSuccess: async (result) => {
+          await refetchDeployment();
+          onSuccess(result);
+        },
+        onError: (err) => {
+          console.error("Failed to add MCP server:", err);
+          toast.error(`Failed to add ${displayName}`);
+        },
+      },
+    );
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !addServerMutation.isPending) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4 p-4" onKeyDown={handleKeyDown}>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={addServerMutation.isPending}
+          className="flex items-center justify-center rounded-md p-1 hover:bg-muted transition-colors disabled:opacity-50"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
+            {server.iconUrl ? (
+              <img
+                src={server.iconUrl}
+                alt={displayName}
+                className="h-6 w-6 rounded"
+              />
+            ) : (
+              <ServerIcon className="h-5 w-5 text-muted-foreground" />
+            )}
+          </div>
+          <div>
+            <h3 className="font-medium text-foreground">{displayName}</h3>
+            <p className="text-xs text-muted-foreground">
+              {server.registrySpecifier}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Source name</label>
+        <Input
+          placeholder={displayName}
+          value={toolsetName}
+          onChange={(e) => setToolsetName(e.target.value)}
+          disabled={addServerMutation.isPending}
+        />
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="tertiary"
+          onClick={onBack}
+          disabled={addServerMutation.isPending}
+        >
+          Back
+        </Button>
+        <Button
+          disabled={addServerMutation.isPending}
+          onClick={handleSubmit}
+        >
+          {addServerMutation.isPending ? (
+            <>
+              <Loader2Icon className="w-4 h-4 animate-spin mr-2" />
+              Adding...
+            </>
+          ) : (
+            "Add"
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SuccessStep({
+  server,
+  slug,
+  mcpSlug,
+  onAddMore,
+}: {
+  server: ExternalMCPServer;
+  slug: string;
+  mcpSlug: string;
+  onAddMore: () => void;
+}) {
+  const routes = useRoutes();
+  const displayName = server.title ?? server.registrySpecifier;
+
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      <Type small muted>
+        <span className="font-medium text-foreground">{displayName}</span> has
+        been added to your project.
+      </Type>
+      <Type className="font-medium">Next steps</Type>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onAddMore}
+          className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all text-left"
+        >
+          <div className="w-8 h-8 rounded-md bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
+            <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div className="flex-1">
+            <Type className="text-sm font-medium">Add more sources</Type>
+          </div>
+          <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+        <routes.elements.Link
+          className="no-underline hover:no-underline"
+          queryParams={{ toolset: slug }}
+        >
+          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
+            <div className="w-8 h-8 rounded-md bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
+              <MessageCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div className="flex-1">
+              <Type className="text-sm font-medium no-underline">
+                Deploy as chat
+              </Type>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </routes.elements.Link>
+        <a
+          href={`${getServerURL()}/mcp/${mcpSlug}/install`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="no-underline hover:no-underline"
+        >
+          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
+            <div className="w-8 h-8 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+              <Plug className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="flex-1">
+              <Type className="text-sm font-medium no-underline">
+                Connect via Claude, Cursor
+              </Type>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </a>
+        <routes.mcp.details.Link
+          params={[slug]}
+          className="no-underline hover:no-underline"
+        >
+          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
+            <div className="w-8 h-8 rounded-md bg-orange-500/10 dark:bg-orange-500/20 flex items-center justify-center shrink-0">
+              <Settings className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div className="flex-1">
+              <Type className="text-sm font-medium no-underline">
+                Configure MCP settings
+              </Type>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </routes.mcp.details.Link>
+      </div>
     </div>
   );
 }
