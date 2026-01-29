@@ -233,7 +233,7 @@ function ExternalMcpOAuthConnection({
           // Also invalidate the token query so GramElementsProvider
           // re-renders with the new OAuth access token
           queryClient.invalidateQueries({
-            queryKey: ["oauthToken", "notion"],
+            queryKey: ["oauthToken"],
           });
         }, 300);
       }
