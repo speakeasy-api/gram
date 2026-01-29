@@ -10,7 +10,12 @@ import { useSessionInfo } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
