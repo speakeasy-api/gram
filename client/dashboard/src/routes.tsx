@@ -20,6 +20,7 @@ import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import Logs from "./pages/logs/Logs";
+import Metrics from "./pages/metrics/Metrics";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
@@ -255,6 +256,12 @@ const ROUTE_STRUCTURE = {
     url: "logs",
     icon: "activity",
     component: Logs,
+  },
+  metrics: {
+    title: "Metrics",
+    url: "metrics",
+    icon: "chart-no-axes-combined",
+    component: Metrics,
   },
   sdks: {
     title: "SDKs",
