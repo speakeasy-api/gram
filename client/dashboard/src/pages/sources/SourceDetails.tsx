@@ -1,25 +1,31 @@
+import MonacoEditorLazy from "@/components/monaco-editor.lazy";
 import { Page } from "@/components/page-layout";
-import { Button, Badge, Dialog, Stack } from "@speakeasy-api/moonshine";
-import { Type } from "@/components/ui/type";
+import { RemoveSourceDialogContent } from "@/components/sources/RemoveSourceDialogContent";
+import { MCPPatternIllustration } from "@/components/sources/SourceCardIllustrations";
+import {
+  useFetchSourceContent,
+  ViewSourceDialogContent,
+} from "@/components/sources/ViewSourceDialogContent";
 import { Heading } from "@/components/ui/heading";
+import { SkeletonCode } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
+import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
   useListAssets,
 } from "@gram/client/react-query/index.js";
-import { useParams, Navigate } from "react-router";
-import { useRoutes } from "@/routes";
-import { Download, Eye, FileCode, Tag, Package, Clock } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { useMemo, useState } from "react";
-import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogContent";
+import { useListTools } from "@/hooks/toolTypes";
+import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { format, formatDistanceToNow } from "date-fns";
+import { Download, Eye, Search, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Navigate, useNavigate, useParams } from "react-router";
+import { toast } from "sonner";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
-import {
-  OpenAPIIllustration,
-  FunctionIllustration,
-} from "@/components/sources/SourceCardIllustrations";
-import { InfoField } from "@/components/sources/InfoField";
 
 export default function SourceDetails() {
   const { sourceKind, sourceSlug } = useParams<{
@@ -27,12 +33,47 @@ export default function SourceDetails() {
     sourceSlug: string;
   }>();
   const routes = useRoutes();
+  const navigate = useNavigate();
   const project = useProject();
-  const { data: deployment, isLoading: isLoadingDeployment } =
-    useLatestDeployment();
-  const { data: assetsData } = useListAssets();
+  const client = useSdkClient();
+  const {
+    data: deployment,
+    isLoading: isLoadingDeployment,
+    refetch,
+  } = useLatestDeployment();
+  const { data: assetsData, refetch: refetchAssets } = useListAssets();
 
+  const { projectSlug } = useSlugs();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [methodFilter, setMethodFilter] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Valid tabs - spec only for OpenAPI sources
+  const validTabs = ["overview", "tools", "spec", "settings"];
+
+  // Tab state from URL hash
+  const [activeTab, setActiveTab] = useState(() => {
+    const hash = window.location.hash.replace("#", "");
+    return validTabs.includes(hash) ? hash : "overview";
+  });
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace("#", "");
+      if (validTabs.includes(hash)) {
+        setActiveTab(hash);
+      }
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    window.location.hash = value;
+  };
 
   // Find the specific source from the deployment
   const source = useMemo(() => {
@@ -56,8 +97,37 @@ export default function SourceDetails() {
     return assetsData.assets.find((a) => a.id === source.assetId);
   }, [source, assetsData]);
 
+  // Get tools derived from this source
+  const { data: toolsData } = useListTools(
+    { deploymentId: deployment?.deployment?.id },
+    undefined,
+    { enabled: !!deployment?.deployment?.id },
+  );
+
+  const relatedTools = useMemo(() => {
+    if (!toolsData?.tools || !source) return [];
+    return toolsData.tools.filter(
+      (tool) => tool.type === "http" && tool.openapiv3DocumentId === source.id,
+    );
+  }, [toolsData, source]);
+
   const isOpenAPI = sourceKind === "http" || sourceKind === "openapi";
   const sourceType = isOpenAPI ? "OpenAPI" : "Function";
+
+  // Fetch spec content for OpenAPI sources
+  const {
+    data: specContent,
+    isLoading: isLoadingSpec,
+    error: specError,
+    refetch: refetchSpec,
+  } = useFetchSourceContent(source, isOpenAPI, project, projectSlug);
+
+  // Format file size
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   // Download functionality
   const handleDownload = () => {
@@ -95,6 +165,41 @@ export default function SourceDetails() {
       })
     : "Unknown";
 
+  const handleRemoveSource = async (
+    assetId: string,
+    type: "openapi" | "function" | "externalmcp",
+  ) => {
+    try {
+      await client.deployments.create({
+        evolveForm: {
+          deploymentId: deployment?.deployment?.id,
+          ...(type === "openapi"
+            ? { excludeOpenapiv3Assets: [assetId] }
+            : { excludeFunctions: [assetId] }),
+        },
+      });
+      await Promise.all([refetch(), refetchAssets()]);
+      const typeLabel = type === "openapi" ? "API" : "Function";
+      toast.success(`${typeLabel} source deleted successfully`);
+      navigate(routes.sources.href());
+    } catch (error) {
+      console.error(`Failed to delete ${type} source:`, error);
+      const typeLabel = type === "openapi" ? "API" : "function";
+      toast.error(`Failed to delete ${typeLabel} source. Please try again.`);
+    }
+  };
+
+  // Create asset object for delete dialog
+  const assetForDialog = source
+    ? {
+        id: source.assetId,
+        deploymentAssetId: source.id,
+        name: source.name,
+        slug: source.slug,
+        type: isOpenAPI ? ("openapi" as const) : ("function" as const),
+      }
+    : null;
+
   return (
     <Page>
       <Page.Header>
@@ -104,14 +209,13 @@ export default function SourceDetails() {
         />
       </Page.Header>
 
-      <Page.Body fullWidth noPadding>
+      <Page.Body fullWidth noPadding fullHeight overflowHidden>
         {/* Hero Header with Illustration - full width */}
-        <div className="relative w-full h-64 overflow-hidden">
-          {isOpenAPI ? (
-            <OpenAPIIllustration className="saturate-[.3]" />
-          ) : (
-            <FunctionIllustration className="saturate-[.3]" />
-          )}
+        <div className="relative w-full h-64 shrink-0 overflow-hidden">
+          <MCPPatternIllustration
+            toolsetSlug={sourceSlug || ""}
+            className="saturate-[.3]"
+          />
 
           {/* Overlay for text readability */}
           <div className="absolute inset-0 bg-linear-to-t from-foreground/50 via-foreground/20 to-transparent" />
@@ -132,100 +236,428 @@ export default function SourceDetails() {
               </div>
             </Stack>
           </div>
-
-          {/* Action buttons */}
-          <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
-            <Stack direction="horizontal" gap={2} className="justify-end">
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => setIsModalOpen(true)}
-              >
-                <Button.LeftIcon>
-                  <Eye className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>
-                  View {isOpenAPI ? "Spec" : "Manifest"}
-                </Button.Text>
-              </Button>
-              <Button variant="secondary" size="md" onClick={handleDownload}>
-                <Button.LeftIcon>
-                  <Download className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Download</Button.Text>
-              </Button>
-            </Stack>
-          </div>
         </div>
 
-        {/* Content Section */}
-        <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
-          <div className="space-y-6">
-            {/* Source Metadata Card */}
-            <div className="rounded-lg border bg-card overflow-hidden">
-              <div className="border-b bg-surface-secondary/30 px-6 py-4">
-                <Type as="h2" className="text-lg flex items-center gap-2">
-                  <FileCode className="h-5 w-5 text-muted-foreground" />
-                  Source Information
-                </Type>
-              </div>
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <InfoField icon={Tag} label="Name" value={source?.name} />
-
-                  <InfoField
-                    icon={Tag}
-                    label="Slug"
-                    value={
-                      <Type className="font-mono text-sm">{source?.slug}</Type>
-                    }
-                  />
-
-                  <InfoField icon={Package} label="Type" value={sourceType} />
-
-                  {!isOpenAPI && source && "runtime" in source && (
-                    <InfoField
-                      icon={Package}
-                      label="Runtime"
-                      value={String(source.runtime)}
-                    />
-                  )}
-
-                  <InfoField
-                    icon={Clock}
-                    label="Last Updated"
-                    value={lastUpdated}
-                  />
-
-                  <InfoField
-                    icon={Package}
-                    label="Deployment"
-                    value={
-                      deployment?.deployment?.id ? (
-                        <routes.deployments.deployment.Link
-                          params={[deployment.deployment.id]}
-                          className="hover:underline text-primary"
-                        >
-                          {deployment.deployment.id.slice(0, 8)}
-                        </routes.deployments.deployment.Link>
-                      ) : (
-                        <Type className="text-muted-foreground">None</Type>
-                      )
-                    }
-                  />
-                </div>
-              </div>
+        {/* Tabs Navigation */}
+        <Tabs
+          value={activeTab}
+          onValueChange={handleTabChange}
+          className="w-full flex-1 flex flex-col min-h-0"
+        >
+          <div className="border-b shrink-0">
+            <div className="max-w-[1270px] mx-auto px-8">
+              <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
+                <TabsTrigger
+                  value="overview"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger
+                  value="tools"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Tools {relatedTools.length > 0 && `(${relatedTools.length})`}
+                </TabsTrigger>
+                {isOpenAPI && (
+                  <TabsTrigger
+                    value="spec"
+                    className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                  >
+                    OpenAPI Specification
+                  </TabsTrigger>
+                )}
+                <TabsTrigger
+                  value="settings"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Settings
+                </TabsTrigger>
+              </TabsList>
             </div>
           </div>
-        </div>
 
-        {/* View Spec/Source Modal */}
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <Dialog.Content className="min-w-[80vw] h-[90vh]">
-            <ViewSourceDialogContent
-              source={source || null}
-              isOpenAPI={isOpenAPI}
-            />
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="mt-0 flex-1">
+            <div className="max-w-[1270px] mx-auto px-8 py-8 w-full space-y-6">
+              {/* Row 1: Name, Format, File Size (or Runtime for functions) */}
+              <div className="flex gap-16">
+                <div>
+                  <Type muted small className="mb-1">
+                    Name
+                  </Type>
+                  <Type className="font-medium">{source?.name || "—"}</Type>
+                </div>
+                {isOpenAPI ? (
+                  <div>
+                    <Type muted small className="mb-1">
+                      Format
+                    </Type>
+                    <Type className="font-mono">
+                      {underlyingAsset?.contentType?.includes("yaml")
+                        ? "YAML"
+                        : underlyingAsset?.contentType?.includes("json")
+                          ? "JSON"
+                          : underlyingAsset?.contentType || "—"}
+                    </Type>
+                  </div>
+                ) : (
+                  <div>
+                    <Type muted small className="mb-1">
+                      Runtime
+                    </Type>
+                    <Type>
+                      {source && "runtime" in source
+                        ? String(source.runtime)
+                        : "—"}
+                    </Type>
+                  </div>
+                )}
+                <div>
+                  <Type muted small className="mb-1">
+                    File Size
+                  </Type>
+                  <Type>
+                    {underlyingAsset?.contentLength
+                      ? formatFileSize(underlyingAsset.contentLength)
+                      : "—"}
+                  </Type>
+                </div>
+              </div>
+
+              {/* Row 2: Last Updated, Created At */}
+              <div className="flex gap-16">
+                <div>
+                  <Type muted small className="mb-1">
+                    Last Updated
+                  </Type>
+                  <Type>{lastUpdated}</Type>
+                </div>
+                <div>
+                  <Type muted small className="mb-1">
+                    Created
+                  </Type>
+                  <Type>
+                    {underlyingAsset?.createdAt
+                      ? format(new Date(underlyingAsset.createdAt), "MMM d, yyyy")
+                      : "—"}
+                  </Type>
+                </div>
+              </div>
+
+              {/* Row 3: Deployment */}
+              <div>
+                <Type muted small className="mb-1">
+                  Deployment
+                </Type>
+                {deployment?.deployment?.id ? (
+                  <routes.deployments.deployment.Link
+                    params={[deployment.deployment.id]}
+                    className="hover:underline text-primary font-mono"
+                  >
+                    {deployment.deployment.id.slice(0, 8)}
+                  </routes.deployments.deployment.Link>
+                ) : (
+                  <Type className="text-muted-foreground">None</Type>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Tools Tab */}
+          <TabsContent value="tools" className="mt-0 flex-1 flex flex-col min-h-0">
+            <div className="max-w-[1270px] mx-auto px-8 py-6 w-full flex-1 flex flex-col min-h-0">
+              {relatedTools.length > 0 ? (
+                <div className="flex flex-col gap-4 flex-1 min-h-0">
+                  {/* Method filter pills */}
+                  <div className="flex gap-2 flex-wrap shrink-0">
+                    <button onClick={() => setMethodFilter(null)}>
+                      <Badge
+                        variant={methodFilter === null ? "default" : "neutral"}
+                        className="py-2"
+                      >
+                        <Badge.Text>
+                          All ({relatedTools.filter((t) => t.type === "http").length})
+                        </Badge.Text>
+                      </Badge>
+                    </button>
+                    {["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => {
+                      const count = relatedTools.filter(
+                        (t) => t.type === "http" && t.httpMethod === method,
+                      ).length;
+                      if (count === 0) return null;
+                      const isActive = methodFilter === method;
+                      const variant =
+                        method === "GET"
+                          ? "success"
+                          : method === "POST"
+                            ? "information"
+                            : method === "PUT"
+                              ? "warning"
+                              : method === "PATCH"
+                                ? "neutral"
+                                : "destructive";
+                      return (
+                        <button
+                          key={method}
+                          onClick={() =>
+                            setMethodFilter(isActive ? null : method)
+                          }
+                        >
+                          <Badge
+                            variant={variant}
+                            className={`py-2 ${isActive ? "" : "opacity-50 hover:opacity-100"}`}
+                          >
+                            <Badge.Text>
+                              {method} ({count})
+                            </Badge.Text>
+                          </Badge>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Tools table */}
+                  <div className="border rounded-lg flex flex-col overflow-hidden flex-1 min-h-0 mb-4">
+                    {/* Fixed header */}
+                    <div className="border-b bg-muted/50 shrink-0">
+                      <div className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-1">
+                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                          Method
+                        </div>
+                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider pr-3">
+                          Endpoint
+                        </div>
+                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                          <span>Tool Name</span>
+                          <div className="flex items-center">
+                            <div
+                              className={`flex items-center overflow-hidden transition-all duration-200 ${
+                                searchOpen ? "w-48 mr-2" : "w-0"
+                              }`}
+                            >
+                              <input
+                                type="text"
+                                placeholder="Search tools..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onBlur={() => {
+                                  if (!searchQuery) {
+                                    setSearchOpen(false);
+                                  }
+                                }}
+                                className="w-full px-2 py-1 text-sm font-normal normal-case tracking-normal border border-border rounded bg-background focus:outline-none focus:border-muted-foreground"
+                                autoFocus={searchOpen}
+                              />
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (searchOpen && searchQuery) {
+                                  setSearchQuery("");
+                                } else {
+                                  setSearchOpen(!searchOpen);
+                                }
+                              }}
+                              className="p-1 rounded hover:bg-muted transition-colors"
+                            >
+                              {searchOpen ? (
+                                <X className="h-4 w-4" />
+                              ) : (
+                                <Search className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Scrollable body */}
+                    <div className="flex-1 overflow-y-auto">
+                      {(() => {
+                        const filteredTools = relatedTools.filter((tool) => {
+                          if (tool.type !== "http") return false;
+                          if (methodFilter && tool.httpMethod !== methodFilter)
+                            return false;
+                          if (searchQuery) {
+                            const query = searchQuery.toLowerCase();
+                            return (
+                              tool.name.toLowerCase().includes(query) ||
+                              tool.path.toLowerCase().includes(query)
+                            );
+                          }
+                          return true;
+                        });
+
+                        if (filteredTools.length === 0) {
+                          return (
+                            <div className="flex items-center justify-center h-full">
+                              <Type muted>No matching tools found</Type>
+                            </div>
+                          );
+                        }
+
+                        return filteredTools.map((tool) => {
+                          if (tool.type !== "http") return null;
+                          return (
+                            <div
+                              key={tool.toolUrn}
+                              className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
+                            >
+                              <div>
+                                <Badge
+                                  variant={
+                                    tool.httpMethod === "GET"
+                                      ? "success"
+                                      : tool.httpMethod === "POST"
+                                        ? "information"
+                                        : tool.httpMethod === "PUT"
+                                          ? "warning"
+                                          : tool.httpMethod === "PATCH"
+                                            ? "neutral"
+                                            : "destructive"
+                                  }
+                                >
+                                  <Badge.Text>{tool.httpMethod}</Badge.Text>
+                                </Badge>
+                              </div>
+                              <div className="font-mono text-sm text-muted-foreground truncate pr-3">
+                                {tool.path}
+                              </div>
+                              <div className="text-sm truncate">
+                                {tool.name}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Type muted>No tools derived from this source yet.</Type>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Spec Tab (OpenAPI only) */}
+          {isOpenAPI && (
+            <TabsContent value="spec" className="mt-0">
+              {isLoadingSpec ? (
+                <div className="p-8">
+                  <SkeletonCode lines={20} />
+                </div>
+              ) : specError ? (
+                <div className="text-center py-8">
+                  <Type className="text-destructive">
+                    {specError instanceof Error
+                      ? specError.message
+                      : "Failed to fetch spec"}
+                  </Type>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => refetchSpec()}
+                  >
+                    <Button.Text>Retry</Button.Text>
+                  </Button>
+                </div>
+              ) : specContent ? (
+                <MonacoEditorLazy
+                  value={specContent.content}
+                  language={specContent.language}
+                  height="calc(100vh - 380px)"
+                  wordWrap="on"
+                />
+              ) : (
+                <Type className="text-muted-foreground text-center py-8">
+                  No spec content available
+                </Type>
+              )}
+            </TabsContent>
+          )}
+
+          {/* Settings Tab */}
+          <TabsContent value="settings" className="mt-0 flex-1">
+            <div className="max-w-[1270px] mx-auto px-8 py-8 w-full space-y-8">
+              {/* Source Actions */}
+              <div>
+                <Type variant="subheading" className="mb-4">
+                  Source Actions
+                </Type>
+                <Stack direction="horizontal" gap={3}>
+                  {!isOpenAPI && (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() => setIsModalOpen(true)}
+                    >
+                      <Button.LeftIcon>
+                        <Eye className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>View Manifest</Button.Text>
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={handleDownload}
+                  >
+                    <Button.LeftIcon>
+                      <Download className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Download</Button.Text>
+                  </Button>
+                </Stack>
+              </div>
+
+              {/* Danger Zone */}
+              <div className="border border-destructive/30 rounded-lg p-6">
+                <Type variant="subheading" className="text-destructive mb-1">
+                  Danger Zone
+                </Type>
+                <Type muted small className="mb-4">
+                  Removing this source will remove it from the current
+                  deployment. This action cannot be undone.
+                </Type>
+                <Button
+                  variant="destructive-primary"
+                  size="md"
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  <Button.LeftIcon>
+                    <Trash2 className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Delete Source</Button.Text>
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        {/* View Manifest Modal (Function sources only) */}
+        {!isOpenAPI && (
+          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <Dialog.Content className="min-w-[80vw] h-[90vh]">
+              <ViewSourceDialogContent
+                source={source || null}
+                isOpenAPI={isOpenAPI}
+              />
+            </Dialog.Content>
+          </Dialog>
+        )}
+
+        {/* Delete Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <Dialog.Content className="max-w-2xl!">
+            {assetForDialog && (
+              <RemoveSourceDialogContent
+                asset={assetForDialog}
+                onConfirmRemoval={handleRemoveSource}
+                onClose={() => setDeleteDialogOpen(false)}
+              />
+            )}
           </Dialog.Content>
         </Dialog>
       </Page.Body>

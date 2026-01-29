@@ -151,11 +151,6 @@ export function AddVariableSheet({
             </div>
           </div>
 
-          {/* Add Note link */}
-          <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Add Note
-          </button>
-
           {/* Add Another button */}
           <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <Plus className="h-4 w-4" />

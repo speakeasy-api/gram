@@ -26,23 +26,29 @@ function PageBody({
   fullWidth = false,
   fullHeight = false,
   noPadding = false,
+  overflowHidden = false,
   className,
 }: {
   children: React.ReactNode;
   fullWidth?: boolean;
   fullHeight?: boolean;
   noPadding?: boolean;
+  overflowHidden?: boolean;
   className?: string;
 }) {
   return (
     // Nest the max-width container inside another div so that the entire page area remains scrollable
-    <div className="overflow-y-auto h-full w-full">
+    <div className={cn(
+      "h-full w-full",
+      overflowHidden ? "overflow-hidden flex flex-col" : "overflow-y-auto"
+    )}>
       <div
         className={cn(
           "@container/main flex flex-col gap-4 w-full",
           noPadding ? "p-0" : "p-8",
           !fullWidth && "max-w-7xl mx-auto",
           fullHeight && "h-full",
+          overflowHidden && "flex-1 min-h-0",
           className,
         )}
       >

@@ -58,7 +58,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
-import { Outlet, useParams } from "react-router";
+import { Outlet, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { onboardingStepStorageKeys } from "../home/Home";
@@ -144,13 +144,6 @@ export function MCPDetailPage() {
   );
   const mcpMetadataForBadge = mcpMetadataData?.metadata;
 
-  const isOAuthConnected = !!(
-    toolset?.oauthProxyServer || toolset?.externalOauthServer
-  );
-  const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
-  const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
-  const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
-
   // Tab state controlled by URL hash - initialize directly from hash
   const [activeTab, setActiveTab] = useState<string>(() => {
     const hash = window.location.hash.slice(1); // Remove the '#'
@@ -179,120 +172,6 @@ export function MCPDetailPage() {
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
-  const exportMutation = useExportMcpMetadataMutation();
-
-  const handleExportJson = async () => {
-    if (!toolset?.mcpSlug) {
-      toast.error("MCP server slug not available");
-      return;
-    }
-
-    const toastId = toast.loading("Exporting MCP configuration...");
-
-    try {
-      const result = await exportMutation.mutateAsync({
-        request: {
-          exportMcpMetadataRequestBody: {
-            mcpSlug: toolset.mcpSlug,
-          },
-        },
-      });
-
-      // Create and download the JSON file
-      const blob = new Blob([JSON.stringify(result, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${toolset.mcpSlug}-mcp-config.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      telemetry.capture("mcp_event", {
-        action: "mcp_json_exported",
-        slug: toolset.slug,
-      });
-
-      toast.success("MCP configuration exported", { id: toastId });
-    } catch (error) {
-      console.error("Failed to export MCP configuration:", error);
-      toast.error(
-        `Failed to export: ${error instanceof Error ? error.message : "Unknown error"}`,
-        { id: toastId },
-      );
-    }
-  };
-
-  const handleDeleteMcpServer = async () => {
-    if (!toolset) return;
-
-    if (
-      !confirm(
-        "Are you sure you want to delete this MCP server? This action cannot be undone.",
-      )
-    ) {
-      return;
-    }
-
-    // Navigate immediately, show loading toast
-    routes.mcp.goTo();
-    const toastId = toast.loading("Deleting MCP server...");
-
-    console.log(
-      "Deleting toolset:",
-      toolset.slug,
-      "toolUrns:",
-      toolset.toolUrns,
-    );
-
-    try {
-      // Check if this toolset uses an external MCP from the catalog
-      const externalMcpUrn = toolset.toolUrns?.find((urn) =>
-        urn.includes(":externalmcp:"),
-      );
-
-      if (externalMcpUrn && deployment) {
-        // Extract the external MCP slug from the URN (format: tools:externalmcp:{slug}:proxy)
-        const parts = externalMcpUrn.split(":");
-        const externalMcpSlug = parts[2];
-
-        if (externalMcpSlug) {
-          // Remove the external MCP from the deployment
-          await client.deployments.evolveDeployment({
-            evolveForm: {
-              deploymentId: deployment.id,
-              excludeExternalMcps: [externalMcpSlug],
-            },
-          });
-        }
-      }
-
-      // Delete the toolset
-      await client.toolsets.deleteBySlug({ slug: toolset.slug });
-
-      telemetry.capture("mcp_event", {
-        action: "mcp_server_deleted",
-        slug: toolset.slug,
-      });
-
-      invalidateAllToolset(queryClient);
-      invalidateAllGetPeriodUsage(queryClient);
-      refetchDeployment();
-
-      console.log("Successfully deleted toolset:", toolset.slug);
-      toast.success("MCP server deleted", { id: toastId });
-    } catch (error) {
-      console.error("Failed to delete MCP server:", error);
-      toast.error(
-        `Failed to delete: ${error instanceof Error ? error.message : "Unknown error"}`,
-        { id: toastId },
-      );
-    }
-  };
-
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
   }, []);
@@ -309,9 +188,6 @@ export function MCPDetailPage() {
   if (isLoading || !toolset) {
     return <MCPLoading />;
   }
-
-  const availableOAuthAuthCode =
-    toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
 
   let statusBadge = null;
   if (!toolset.mcpEnabled) {
@@ -409,11 +285,17 @@ export function MCPDetailPage() {
                   </Button>
                 </div>
               </Stack>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
+            <Stack direction="horizontal" gap={2} className="justify-end">
               <routes.playground.Link queryParams={{ toolset: toolset.slug }}>
                 <Button
                   variant="secondary"
                   size="md"
-                  className="bg-background/10 hover:bg-background/20 text-background border-background/20"
+                  className="bg-background/10 hover:bg-background/20 text-background hover:text-background border-background/20"
                 >
                   <Button.LeftIcon>
                     <Play className="w-4 h-4" />
@@ -421,86 +303,7 @@ export function MCPDetailPage() {
                   <Button.Text>Playground</Button.Text>
                 </Button>
               </routes.playground.Link>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
-            <Stack direction="horizontal" gap={2} className="justify-end">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  {!toolset?.mcpEnabled ||
-                  (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
-                    <span className="inline-block">
-                      <Button variant="secondary" size="md" disabled={true}>
-                        {isOAuthConnected
-                          ? "OAuth Connected"
-                          : "Configure OAuth"}
-                      </Button>
-                    </span>
-                  ) : (
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      onClick={() =>
-                        isOAuthConnected
-                          ? setIsOAuthDetailsModalOpen(true)
-                          : toolset.mcpIsPublic
-                            ? setIsOAuthModalOpen(true)
-                            : setIsGramOAuthModalOpen(true)
-                      }
-                    >
-                      {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
-                    </Button>
-                  )}
-                </TooltipTrigger>
-                {(!toolset?.mcpEnabled ||
-                  (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
-                  <TooltipContent>
-                    {!toolset?.mcpEnabled
-                      ? "Enable server to configure OAuth"
-                      : "This MCP server does not require the OAuth authorization code flow"}
-                  </TooltipContent>
-                )}
-              </Tooltip>
               <MCPEnableButton toolset={toolset} />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    onClick={handleExportJson}
-                    disabled={!toolset?.mcpEnabled || !toolset?.mcpSlug}
-                  >
-                    <Button.LeftIcon>
-                      <Download className="w-4 h-4" />
-                    </Button.LeftIcon>
-                    <Button.Text className="sr-only">Export JSON</Button.Text>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {!toolset?.mcpEnabled
-                    ? "Enable server to export configuration"
-                    : "Export MCP configuration as JSON"}
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    onClick={handleDeleteMcpServer}
-                  >
-                    <Button.LeftIcon>
-                      <Trash2 className="w-4 h-4" />
-                    </Button.LeftIcon>
-                    <Button.Text className="sr-only">
-                      Delete MCP server
-                    </Button.Text>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Delete MCP server</TooltipContent>
-              </Tooltip>
             </Stack>
           </div>
         </div>
@@ -527,12 +330,6 @@ export function MCPDetailPage() {
                   Tools
                 </TabsTrigger>
                 <TabsTrigger
-                  value="settings"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                >
-                  Settings
-                </TabsTrigger>
-                <TabsTrigger
                   value="authentication"
                   className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
                 >
@@ -542,6 +339,12 @@ export function MCPDetailPage() {
                       <AlertTriangle className="h-3.5 w-3.5 text-warning" />
                     )}
                   </span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="settings"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Settings
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -557,32 +360,15 @@ export function MCPDetailPage() {
               <MCPToolsTab toolset={toolset} />
             </TabsContent>
 
-            <TabsContent value="settings" className="mt-0 w-full">
-              <MCPSettingsTab toolset={toolset} />
-            </TabsContent>
-
             <TabsContent value="authentication" className="mt-0 w-full">
               <MCPAuthenticationTab toolset={toolset} />
             </TabsContent>
+
+            <TabsContent value="settings" className="mt-0 w-full">
+              <MCPSettingsTab toolset={toolset} />
+            </TabsContent>
           </div>
         </Tabs>
-
-        <ConnectOAuthModal
-          isOpen={isOAuthModalOpen}
-          onClose={() => setIsOAuthModalOpen(false)}
-          toolsetSlug={toolset.slug}
-          toolset={toolset}
-        />
-        <GramOAuthProxyModal
-          isOpen={isGramOAuthModalOpen}
-          onClose={() => setIsGramOAuthModalOpen(false)}
-          toolset={toolset}
-        />
-        <OAuthDetailsModal
-          isOpen={isOAuthDetailsModalOpen}
-          onClose={() => setIsOAuthDetailsModalOpen(false)}
-          toolset={toolset}
-        />
       </Page.Body>
     </Page>
   );
@@ -909,7 +695,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 /**
 
 /**
- * Settings Tab - Visibility, Slug, Custom Domain, Tool Selection Mode
+ * Settings Tab - Visibility, Slug, Custom Domain, Tool Selection Mode, Actions, Danger Zone
  */
 function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const telemetry = useTelemetry();
@@ -918,6 +704,121 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const { orgSlug } = useParams();
   const { domain } = useCustomDomain();
   const routes = useRoutes();
+  const client = useSdkClient();
+  const { data: deploymentResult, refetch: refetchDeployment } =
+    useLatestDeployment();
+  const deployment = deploymentResult?.deployment;
+
+  // OAuth state
+  const isOAuthConnected = !!(
+    toolset?.oauthProxyServer || toolset?.externalOauthServer
+  );
+  const availableOAuthAuthCode =
+    toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
+  const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
+  const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
+  const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+
+  // Export mutation
+  const exportMutation = useExportMcpMetadataMutation();
+
+  const handleExportJson = async () => {
+    if (!toolset?.mcpSlug) {
+      toast.error("MCP server slug not available");
+      return;
+    }
+
+    const toastId = toast.loading("Exporting MCP configuration...");
+
+    try {
+      const result = await exportMutation.mutateAsync({
+        request: {
+          exportMcpMetadataRequestBody: {
+            mcpSlug: toolset.mcpSlug,
+          },
+        },
+      });
+
+      const blob = new Blob([JSON.stringify(result, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${toolset.mcpSlug}-mcp-config.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      telemetry.capture("mcp_event", {
+        action: "mcp_json_exported",
+        slug: toolset.slug,
+      });
+
+      toast.success("MCP configuration exported", { id: toastId });
+    } catch (error) {
+      console.error("Failed to export MCP configuration:", error);
+      toast.error(
+        `Failed to export: ${error instanceof Error ? error.message : "Unknown error"}`,
+        { id: toastId },
+      );
+    }
+  };
+
+  const handleDeleteMcpServer = async () => {
+    if (!toolset) return;
+
+    if (
+      !confirm(
+        "Are you sure you want to delete this MCP server? This action cannot be undone.",
+      )
+    ) {
+      return;
+    }
+
+    routes.mcp.goTo();
+    const toastId = toast.loading("Deleting MCP server...");
+
+    try {
+      const externalMcpUrn = toolset.toolUrns?.find((urn) =>
+        urn.includes(":externalmcp:"),
+      );
+
+      if (externalMcpUrn && deployment) {
+        const parts = externalMcpUrn.split(":");
+        const externalMcpSlug = parts[2];
+
+        if (externalMcpSlug) {
+          await client.deployments.evolveDeployment({
+            evolveForm: {
+              deploymentId: deployment.id,
+              excludeExternalMcps: [externalMcpSlug],
+            },
+          });
+        }
+      }
+
+      await client.toolsets.deleteBySlug({ slug: toolset.slug });
+
+      telemetry.capture("mcp_event", {
+        action: "mcp_server_deleted",
+        slug: toolset.slug,
+      });
+
+      invalidateAllToolset(queryClient);
+      invalidateAllGetPeriodUsage(queryClient);
+      refetchDeployment();
+
+      toast.success("MCP server deleted", { id: toastId });
+    } catch (error) {
+      console.error("Failed to delete MCP server:", error);
+      toast.error(
+        `Failed to delete: ${error instanceof Error ? error.message : "Unknown error"}`,
+        { id: toastId },
+      );
+    }
+  };
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -1207,6 +1108,92 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         />
       </PageSection>
 
+      <PageSection
+        heading="Actions"
+        description="Export or configure your MCP server."
+      >
+        <Stack direction="horizontal" gap={3}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={handleExportJson}
+                disabled={!toolset?.mcpEnabled || !toolset?.mcpSlug}
+              >
+                <Button.LeftIcon>
+                  <Download className="w-4 h-4" />
+                </Button.LeftIcon>
+                <Button.Text>Export JSON</Button.Text>
+              </Button>
+            </TooltipTrigger>
+            {!toolset?.mcpEnabled && (
+              <TooltipContent>
+                Enable server to export configuration
+              </TooltipContent>
+            )}
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {!toolset?.mcpEnabled ||
+              (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
+                <span className="inline-block">
+                  <Button variant="secondary" size="md" disabled={true}>
+                    <Button.Text>
+                      {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
+                    </Button.Text>
+                  </Button>
+                </span>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() =>
+                    isOAuthConnected
+                      ? setIsOAuthDetailsModalOpen(true)
+                      : toolset.mcpIsPublic
+                        ? setIsOAuthModalOpen(true)
+                        : setIsGramOAuthModalOpen(true)
+                  }
+                >
+                  <Button.Text>
+                    {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
+                  </Button.Text>
+                </Button>
+              )}
+            </TooltipTrigger>
+            {(!toolset?.mcpEnabled ||
+              (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
+              <TooltipContent>
+                {!toolset?.mcpEnabled
+                  ? "Enable server to configure OAuth"
+                  : "This MCP server does not require the OAuth authorization code flow"}
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </Stack>
+      </PageSection>
+
+      {/* Danger Zone */}
+      <div className="border border-destructive/30 rounded-lg p-6 mt-8">
+        <Type variant="subheading" className="text-destructive mb-1">
+          Danger Zone
+        </Type>
+        <Type muted small className="mb-4">
+          Permanently delete this MCP server. This action cannot be undone.
+        </Type>
+        <Button
+          variant="destructive-primary"
+          size="md"
+          onClick={handleDeleteMcpServer}
+        >
+          <Button.LeftIcon>
+            <Trash2 className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Delete MCP Server</Button.Text>
+        </Button>
+      </div>
+
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainModalOpen(false)}
@@ -1226,6 +1213,22 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         icon={Globe}
         telemetryData={{ slug: toolset.slug }}
         accountUpgrade
+      />
+      <ConnectOAuthModal
+        isOpen={isOAuthModalOpen}
+        onClose={() => setIsOAuthModalOpen(false)}
+        toolsetSlug={toolset.slug}
+        toolset={toolset}
+      />
+      <GramOAuthProxyModal
+        isOpen={isGramOAuthModalOpen}
+        onClose={() => setIsGramOAuthModalOpen(false)}
+        toolset={toolset}
+      />
+      <OAuthDetailsModal
+        isOpen={isOAuthDetailsModalOpen}
+        onClose={() => setIsOAuthDetailsModalOpen(false)}
+        toolset={toolset}
       />
     </Stack>
   );
