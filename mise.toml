@@ -6,7 +6,7 @@
 # well as overriding environment variables.
 [tools]
 "aqua:ariga/atlas" = "0.38.0"
-"github:sbdchd/squawk" = "2.36.0"
+"github:sbdchd/squawk" = "2.38.0"
 "github:speakeasy-api/speakeasy" = "1.700.1"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.0.1"
