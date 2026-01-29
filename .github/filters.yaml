@@ -22,3 +22,7 @@ tsframework:
 
 elements:
   - 'elements/**'
+
+migrations:
+  - 'server/migrations/**'
+  - 'server/clickhouse/migrations/**'

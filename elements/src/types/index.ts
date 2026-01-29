@@ -315,6 +315,7 @@ export interface ElementsConfig {
    * @example
    * const config: ElementsConfig = {
    *   thread: {
+   *     experimental_showFeedback: true,
    *     followUpSuggestions: true,
    *   },
    * }
@@ -932,6 +933,33 @@ export interface SidecarConfig extends ExpandableConfig {
 }
 
 /**
+ * Configuration for the chat thread display and behavior.
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   thread: {
+ *     experimental_showFeedback: true,
+ *     followUpSuggestions: true,
+ *   },
+ * }
+ */
+export interface ThreadConfig {
+  /**
+   * Whether to show feedback buttons (like/dislike) after assistant messages.
+   * When enabled, users can mark conversations as resolved or provide feedback.
+   * @default false
+   */
+  experimental_showFeedback?: boolean
+
+  /**
+   * Whether to show AI-generated follow-up question suggestions after each assistant response.
+   * When enabled, suggestions appear below the assistant's message to help guide the conversation.
+   * @default true
+   */
+  followUpSuggestions?: boolean
+}
+
+/**
  * Configuration for chat history persistence.
  * When enabled, threads are persisted and can be restored from the thread list.
  *
@@ -977,25 +1005,6 @@ export interface HistoryConfig {
    * }}>
    */
   initialThreadId?: string
-}
-
-/**
- * Configuration for the chat thread display and behavior.
- *
- * @example
- * const config: ElementsConfig = {
- *   thread: {
- *     followUpSuggestions: true,
- *   },
- * }
- */
-export interface ThreadConfig {
-  /**
-   * Whether to show AI-generated follow-up question suggestions after each assistant response.
-   * When enabled, suggestions appear below the assistant's message to help guide the conversation.
-   * @default true
-   */
-  followUpSuggestions?: boolean
 }
 
 /**

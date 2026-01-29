@@ -48,8 +48,8 @@ const FEATURED_SERVER_SPECIFIERS = [
   "com.stripe/mcp",
   "app.linear/linear",
   "io.github.getsentry/sentry-mcp",
-  "io.github.aws/mcp-proxy-for-aws",
-  "io.github.grafana/mcp-grafana",
+  "io.github.github/github-mcp-server",
+  "com.notion/mcp",
 ];
 
 export default function Home() {

@@ -29,8 +29,8 @@ const SERVER_WEBSITE_MAP: Record<string, string> = {
   "com.stripe/mcp": "stripe.com",
   "app.linear/linear": "linear.app",
   "io.github.getsentry/sentry-mcp": "sentry.io",
-  "io.github.aws/mcp-proxy-for-aws": "aws.amazon.com",
-  "io.github.grafana/mcp-grafana": "grafana.com",
+  "io.github.github/github-mcp-server": "github.com",
+  "com.notion/mcp": "notion.so",
 };
 
 export function CatalogDetailRoot() {

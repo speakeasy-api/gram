@@ -14,10 +14,20 @@ if (process.env["GRAM_SSL_KEY_FILE"] && process.env["GRAM_SSL_CERT_FILE"]) {
   cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
 }
 
+const serverUrl = process.env["GRAM_SERVER_URL"];
+if (!serverUrl) {
+  throw new Error("GRAM_SERVER_URL environment variable is not set");
+}
+
+const siteUrl = process.env["GRAM_SITE_URL"];
+if (!siteUrl) {
+  throw new Error("GRAM_SITE_URL environment variable is not set");
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
-    __GRAM_SERVER_URL__: JSON.stringify(process.env["GRAM_SERVER_URL"]),
+    __GRAM_SERVER_URL__: JSON.stringify(siteUrl),
     __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
   },
   build: {
@@ -64,6 +74,16 @@ export default defineConfig({
     host: true,
     allowedHosts: ["localhost", "127.0.0.1", "devbox"],
     https: key && cert ? { key, cert } : void 0,
+    // Setting these up to side-step cors issues experienced during
+    // development. Specifically, the Vercel AI SDK does not forward cookies
+    // (Eg: gram_session) to the server.
+    proxy: {
+      "/rpc": serverUrl,
+      "/chat": serverUrl,
+      "/mcp": serverUrl,
+      "/oauth": serverUrl,
+      "/.well-known": serverUrl,
+    },
   },
   plugins: [react(), tailwindcss()],
   resolve: {
