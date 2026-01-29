@@ -947,6 +947,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   instructions TEXT,
   header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
   default_environment_id UUID, -- Informs mcp_environment_configs which environment to load from by default
+  installation_override_url TEXT, -- URL to redirect to instead of the default installation page
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
