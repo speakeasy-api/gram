@@ -2,6 +2,9 @@ package openapi
 
 import (
 	"context"
+	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -309,4 +312,146 @@ components:
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NoError(t, skippedErr)
+}
+
+// capturingHandler is a slog handler that captures log records for testing
+type capturingHandler struct {
+	mu      sync.Mutex
+	records []slog.Record
+	attrs   []slog.Attr
+	group   string
+}
+
+func newCapturingHandler() *capturingHandler {
+	return &capturingHandler{
+		records: make([]slog.Record, 0),
+	}
+}
+
+func (h *capturingHandler) Enabled(_ context.Context, _ slog.Level) bool {
+	return true
+}
+
+func (h *capturingHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+
+func (h *capturingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &capturingHandler{
+		records: h.records,
+		attrs:   append(h.attrs, attrs...),
+		group:   h.group,
+	}
+}
+
+func (h *capturingHandler) WithGroup(name string) slog.Handler {
+	return &capturingHandler{
+		records: h.records,
+		attrs:   h.attrs,
+		group:   name,
+	}
+}
+
+func (h *capturingHandler) getRecords() []slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]slog.Record{}, h.records...)
+}
+
+func TestDoProcess_DeprecatedOperationsLoggedNotErrors(t *testing.T) {
+	t.Parallel()
+
+	handler := newCapturingHandler()
+	logger := slog.New(handler)
+	tracer := testenv.NewTracerProvider(t).Tracer("github.com/speakeasy-api/gram/server/internal/openapi")
+
+	p := &ToolExtractor{
+		logger:       logger,
+		tracer:       tracer,
+		db:           nil,
+		feature:      nil,
+		assetStorage: nil,
+	}
+
+	mockedDBTX := &MockedDBTX{
+		recordedQueryRows: [][]any{},
+		recordedExec:      [][]any{},
+	}
+	tx := repo.New(mockedDBTX)
+
+	deploymentID := uuid.MustParse("87654321-4321-4321-4321-210987654321")
+	projectID := uuid.MustParse("12345678-1234-1234-1234-123456789012")
+	openapiDocID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+
+	// OpenAPI document with a deprecated operation
+	docWithDeprecated := []byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /active:
+    get:
+      operationId: activeEndpoint
+      summary: Active endpoint
+      responses:
+        '200':
+          description: OK
+  /deprecated:
+    get:
+      operationId: deprecatedEndpoint
+      summary: Deprecated endpoint
+      deprecated: true
+      responses:
+        '200':
+          description: OK
+`)
+
+	var skippedErr error
+	tet := ToolExtractorTask{
+		Parser: "speakeasy",
+		DocInfo: &types.OpenAPIv3DeploymentAsset{
+			Name:    "test",
+			Slug:    "test",
+			ID:      "a",
+			AssetID: "b",
+		},
+		ProjectID:    projectID,
+		DeploymentID: deploymentID,
+		DocumentID:   openapiDocID,
+		DocURL:       nil,
+		ProjectSlug:  "c",
+		OrgSlug:      "d",
+		OnOperationSkipped: func(err error) {
+			skippedErr = err
+		},
+	}
+
+	result, err := p.doSpeakeasy(t.Context(), logger, tracer, tx, docWithDeprecated, tet)
+
+	// Should succeed without error
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// OnOperationSkipped should NOT be called for deprecated operations
+	// (it's only called for actual errors, not expected skips)
+	require.NoError(t, skippedErr, "deprecated operations should not trigger OnOperationSkipped")
+
+	// Verify that the deprecated operation was logged
+	records := handler.getRecords()
+	var foundDeprecatedLog bool
+	for _, r := range records {
+		if r.Level == slog.LevelInfo && strings.Contains(r.Message, "skipping deprecated operation") {
+			foundDeprecatedLog = true
+			require.Contains(t, r.Message, "deprecatedEndpoint", "log should contain the operation ID")
+			break
+		}
+	}
+	require.True(t, foundDeprecatedLog, "expected info log for skipped deprecated operation")
+
+	// Verify the active endpoint was processed (should have a tool definition created)
+	require.Len(t, mockedDBTX.recordedQueryRows, 1, "should have created one tool definition for the active endpoint")
 }
