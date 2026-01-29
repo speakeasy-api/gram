@@ -628,6 +628,7 @@ func EncodeLogoutResponse(encoder func(context.Context, http.ResponseWriter) goa
 			Name:     "gram_session",
 			Value:    sessionCookie,
 			MaxAge:   -1,
+			Path:     "/",
 			Secure:   true,
 			HttpOnly: true,
 		})

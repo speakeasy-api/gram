@@ -19,6 +19,7 @@ import {
   SettingsIcon,
   CreditCardIcon,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { GramLogo } from "./gram-logo";
 import { InputDialog } from "./input-dialog";
@@ -45,6 +46,13 @@ export function TopHeader() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const client = useSdkClient();
+  const queryClient = useQueryClient();
+
+  const handleLogout = async () => {
+    await client.auth.logout();
+    queryClient.clear();
+    window.location.href = "/login";
+  };
 
   const userInitials =
     user.displayName
@@ -193,9 +201,7 @@ export function TopHeader() {
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => (window.location.href = "/logout")}
-              >
+              <DropdownMenuItem onClick={handleLogout}>
                 <LogOutIcon className="mr-2 h-4 w-4" />
                 Log out
               </DropdownMenuItem>
