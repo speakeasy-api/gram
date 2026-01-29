@@ -483,9 +483,6 @@ export type ApiConfig =
   | BaseApiConfig
   | (BaseApiConfig & SessionAuthConfig)
   | (BaseApiConfig & StaticSessionAuthConfig)
-  | (BaseApiConfig & OAuthApiConfig)
-  | (BaseApiConfig & SessionAuthConfig & OAuthApiConfig)
-  | (BaseApiConfig & StaticSessionAuthConfig & OAuthApiConfig)
 
 /**
  * The LLM model to use for the Elements library.

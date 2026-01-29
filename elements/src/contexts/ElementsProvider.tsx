@@ -5,10 +5,8 @@ import {
   useGramThreadListAdapter,
 } from '@/hooks/useGramThreadListAdapter'
 import { useMCPTools } from '@/hooks/useMCPTools'
-import { useOAuthStatus } from '@/hooks/useOAuthStatus'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
-import { getOAuthConfig } from '@/lib/auth'
 import { initErrorTracking, trackError } from '@/lib/errorTracking'
 import { MODELS } from '@/lib/models'
 import {
@@ -27,8 +25,8 @@ import { Plugin } from '@/types/plugins'
 import {
   AssistantRuntimeProvider,
   AssistantTool,
-  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
   useAssistantState,
+  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
 } from '@assistant-ui/react'
 import {
   frontendTools as convertFrontendToolsToAISDKTools,
@@ -54,12 +52,12 @@ import {
   useState,
 } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { ElementsContext } from './contexts'
-import { ToolApprovalProvider } from './ToolApprovalContext'
 import {
   ConnectionStatusProvider,
   useConnectionStatusOptional,
 } from './ConnectionStatusContext'
+import { ElementsContext } from './contexts'
+import { ToolApprovalProvider } from './ToolApprovalContext'
 import { ToolExecutionProvider } from './ToolExecutionContext'
 
 /**
@@ -178,14 +176,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // When history is enabled, the thread adapter manages chat IDs instead
   const chatIdRef = useRef<string | null>(null)
 
-  // OAuth status checking (only if OAuth is configured)
-  const oauthConfig = getOAuthConfig(config.api)
-  const oauthStatus = useOAuthStatus({
-    apiUrl,
-    auth: config.api,
-    sessionHeaders: auth.headers ?? {},
-  })
-
   const { data: mcpTools } = useMCPTools({
     auth,
     mcp: config.mcp,
@@ -194,42 +184,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     gramEnvironment: config.gramEnvironment,
     chatId: chatIdRef.current ?? undefined,
   })
-
-  // Handle OAuth callback parameters from URL (after redirect back)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const params = new URLSearchParams(window.location.search)
-    const oauthSuccess = params.get('oauth_success')
-    const oauthError = params.get('oauth_error')
-    const oauthProvider = params.get('oauth_provider')
-
-    if (oauthSuccess === 'true' && oauthProvider) {
-      // Refresh OAuth status after successful authentication
-      oauthStatus.refresh().catch(console.error)
-
-      // Call success callback if provided
-      if (oauthConfig?.onAuthSuccess) {
-        oauthConfig.onAuthSuccess(oauthProvider)
-      }
-
-      // Clean up URL parameters
-      const url = new URL(window.location.href)
-      url.searchParams.delete('oauth_success')
-      url.searchParams.delete('oauth_provider')
-      window.history.replaceState({}, '', url.toString())
-    } else if (oauthError) {
-      // Call error callback if provided
-      if (oauthConfig?.onAuthError) {
-        oauthConfig.onAuthError(oauthError)
-      }
-
-      // Clean up URL parameters
-      const url = new URL(window.location.href)
-      url.searchParams.delete('oauth_error')
-      window.history.replaceState({}, '', url.toString())
-    }
-  }, [oauthConfig])
 
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({

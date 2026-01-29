@@ -7,8 +7,6 @@ export { ElementsProvider } from './contexts/ElementsProvider'
 export { useElements as useGramElements } from './hooks/useElements'
 export { useElements } from './hooks/useElements'
 export { useThreadId } from './hooks/useThreadId'
-export { useOAuthStatus } from './hooks/useOAuthStatus'
-export type { OAuthStatus, UseOAuthStatusResult } from './hooks/useOAuthStatus'
 
 // Core Components
 export { Chat } from '@/components/Chat'
@@ -37,15 +35,12 @@ export type {
   Dimensions,
   ElementsConfig,
   ErrorTrackingConfigOption,
-  ExternalOAuthConfig,
   GetSessionFn,
   HistoryConfig,
   ModalConfig,
   ModalTriggerPosition,
   Model,
   ModelConfig,
-  OAuthApiConfig,
-  OAuthContextState,
   RADII,
   Radius,
   SidecarConfig,
