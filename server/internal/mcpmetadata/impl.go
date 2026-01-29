@@ -301,6 +301,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	var docsURL *string
 	var instructions *string
 	headerDisplayNames := make(map[string]string)
+	variableProvidedBy := make(map[string]string)
 
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
 	if metadataErr == nil {
@@ -319,6 +320,13 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 				s.logger.ErrorContext(ctx, "failed to unmarshal header display names", attr.SlogError(err))
 			}
 		}
+		envEntries, err := s.repo.ListEnvironmentConfigs(ctx, metadataRecord.ID)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to list environment configs", attr.SlogError(err))
+		}
+		for _, entry := range envEntries {
+			variableProvidedBy[entry.VariableName] = entry.ProvidedBy
+		}
 	} else if !errors.Is(metadataErr, pgx.ErrNoRows) {
 		s.logger.WarnContext(ctx, "failed to load MCP metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))
 	}
@@ -331,7 +339,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 
 	// Collect security inputs
 	securityMode := s.resolveSecurityMode(&toolset)
-	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, map[string]bool{})
+	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, variableProvidedBy)
 
 	// Build tools list
 	exportTools := s.buildExportTools(ctx, toolsetDetails)
