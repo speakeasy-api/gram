@@ -110,6 +110,7 @@ type mcpInputs struct {
 	oauthTokenInputs []oauthTokenInputs
 	authenticated    bool
 	sessionID        string
+	chatID           string
 	mode             ToolMode
 }
 
@@ -554,6 +555,8 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	sessionID := parseMcpSessionID(r.Header)
 	w.Header().Set("Mcp-Session-Id", sessionID)
 
+	chatID := r.Header.Get("Gram-Chat-ID")
+
 	// Load header display names for remapping
 	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
 
@@ -565,6 +568,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		authenticated:    authenticated,
 		oauthTokenInputs: tokenInputs,
 		sessionID:        sessionID,
+		chatID:           chatID,
 		mode:             resolveToolMode(r, *toolset),
 	}
 
