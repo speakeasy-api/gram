@@ -291,6 +291,15 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
 	}
 
+	// Resolve custom domain from the toolset's organization if not already set
+	if !toolset.CustomDomainID.Valid {
+		domainRecord, err := s.domainsRepo.GetCustomDomainByOrganization(ctx, toolset.OrganizationID)
+		if err == nil {
+			toolset.CustomDomainID = uuid.NullUUID{UUID: domainRecord.ID, Valid: true}
+		}
+		// Ignore errors - custom domain is optional
+	}
+
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)

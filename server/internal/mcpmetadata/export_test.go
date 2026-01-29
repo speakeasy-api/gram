@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -141,4 +142,48 @@ func TestService_ExportMcpMetadata_WithMetadata(t *testing.T) {
 	require.Equal(t, "https://docs.example.com", *result.DocumentationURL, "documentation URL should match")
 	require.NotNil(t, result.Instructions, "instructions should not be nil")
 	require.Equal(t, "Use this server to interact with our API.", *result.Instructions, "instructions should match")
+}
+
+func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	domainsRepo := customdomains_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// Create a custom domain for the organization
+	customDomain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "mcp.example.com",
+		IngressName:    pgtype.Text{String: "test-ingress", Valid: true},
+		CertSecretName: pgtype.Text{String: "test-cert", Valid: true},
+	})
+	require.NoError(t, err, "create custom domain")
+
+	// Create a toolset with MCP enabled
+	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Test Custom Domain Export",
+		Slug:                   "test-custom-domain",
+		Description:            conv.ToPGText("A toolset with custom domain"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                pgtype.Text{String: "custom-domain-mcp", Valid: true},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err, "create toolset")
+
+	// Export the MCP metadata
+	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
+		McpSlug: types.Slug(toolset.McpSlug.String),
+	})
+	require.NoError(t, err, "export mcp metadata")
+
+	// Verify the server URL uses the custom domain
+	require.Contains(t, result.ServerURL, customDomain.Domain, "server URL should contain custom domain")
+	require.Equal(t, "https://mcp.example.com/mcp/custom-domain-mcp", result.ServerURL, "server URL should use custom domain")
 }
