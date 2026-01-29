@@ -59,7 +59,11 @@ export function PlaygroundElements({
   const initialThreadId = searchParams.get("threadId") ?? undefined;
 
   // Get toolset data to construct MCP URL
-  const { data: toolset } = useToolset({ slug: toolsetSlug ?? "" });
+  const { data: toolset } = useToolset(
+    { slug: toolsetSlug ?? "" },
+    {},
+    { enabled: !!toolsetSlug },
+  );
 
   // Get MCP URL from toolset (always uses Gram domain, not custom domains)
   const mcpUrl = useInternalMcpUrl(toolset);
@@ -281,7 +285,11 @@ const useExternalMcpOAuthToken = ({
   sessionHeaders: Record<string, string>;
 }): UseOAuthTokenResult => {
   const session = useSession();
-  const { data: toolset } = useToolset({ slug: toolsetSlug });
+  const { data: toolset } = useToolset(
+    { slug: toolsetSlug },
+    {},
+    { enabled: !!toolsetSlug },
+  );
 
   const externalMcpOAuthConfig: { issuer: string } | undefined = useMemo(() => {
     let firstToolWithOAuth: ExternalMCPToolDefinition | undefined = undefined;
@@ -302,9 +310,6 @@ const useExternalMcpOAuthToken = ({
     };
   }, [toolset]);
 
-  // Query key for caching OAuth token
-  const queryKey = useMemo(() => ["oauthToken", toolsetSlug], [toolsetSlug]);
-
   // Fetch OAuth token from the backend
   const {
     data: tokenResponse,
@@ -312,7 +317,7 @@ const useExternalMcpOAuthToken = ({
     error,
     refetch,
   } = useQuery<OAuthTokenResponse, Error>({
-    queryKey,
+    queryKey: ["oauthToken", toolsetSlug],
     queryFn: async (): Promise<OAuthTokenResponse> => {
       const params = new URLSearchParams({
         toolset_id: toolset?.id ?? "",
