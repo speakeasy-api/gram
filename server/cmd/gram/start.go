@@ -556,6 +556,7 @@ func newStartCommand() *cli.Command {
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
+				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
