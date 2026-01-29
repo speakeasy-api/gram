@@ -743,6 +743,12 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 		isOAuthEnabled := mode == securityModeOAuth
 		seen := make(map[string]bool)
 
+		isExplicitlyNotUserProvided := func(variableName string) bool {
+			// This exists check ensure backwards compatibility for when there are no environment entries for a variable
+			providedBy, exists := variableProvidedBy[variableName]
+			return exists && providedBy != "user"
+		}
+
 		for _, secVar := range toolsetDetails.SecurityVariables {
 			for _, envVar := range secVar.EnvVariables {
 				envVarLower := strings.ToLower(envVar)
@@ -754,7 +760,7 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 					continue
 				}
 
-				if variableProvidedBy[envVar] != "user" {
+				if isExplicitlyNotUserProvided(envVar) {
 					continue
 				}
 
@@ -784,7 +790,7 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 				if isOAuthEnabled && functionEnvVar.AuthInputType != nil && *functionEnvVar.AuthInputType == "oauth2" {
 					continue
 				}
-				if variableProvidedBy[functionEnvVar.Name] != "user" {
+				if isExplicitlyNotUserProvided(functionEnvVar.Name) {
 					continue
 				}
 
