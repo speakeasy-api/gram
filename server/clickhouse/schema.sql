@@ -94,15 +94,13 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     gram_urn String COMMENT 'The Gram URN (e.g. tools:function:my-source:my-tool).',
     service_name LowCardinality(String) COMMENT 'Logical service name (e.g., gram-functions, gram-http-gateway).',
     service_version Nullable(String) COMMENT 'Service version.',
+    gram_chat_id Nullable(UUID) COMMENT 'Chat ID that triggered this log (null for non-chat contexts).',
 
-    -- Denormalized HTTP Fields (Wide Event Pattern - for HTTP logs only, NULL for function logs)
-    http_request_method LowCardinality(Nullable(String)) COMMENT 'HTTP method (GET, POST, etc.) - null for non-HTTP logs.',
-    http_response_status_code Nullable(Int32) COMMENT 'HTTP status code - null for non-HTTP logs.',
-    http_route Nullable(String) COMMENT 'HTTP route pattern (/api/v1/users) - null for non-HTTP logs.',
-    http_server_url Nullable(String) COMMENT 'HTTP server URL - null for non-HTTP logs.' CODEC(ZSTD),
+    -- Materialized timestamp for convenient querying
+    timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(time_unix_nano) COMMENT 'Event timestamp derived from time_unix_nano for human-readable queries.',
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
-ORDER BY (gram_project_id, time_unix_nano, id)
+ORDER BY (gram_project_id, gram_chat_id, time_unix_nano, id)
 TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Unified OTel-compatible telemetry logs from all Gram sources (HTTP requests, function logs, etc.)';
@@ -115,5 +113,4 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_deployment_id ON telemetry_logs (g
 -- Secondary filters
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_function_id ON telemetry_logs (gram_function_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_severity ON telemetry_logs (severity_text) TYPE set(0) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_telemetry_logs_http_status ON telemetry_logs (http_response_status_code) TYPE set(100) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_telemetry_logs_http_route ON telemetry_logs (http_route) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_chat_id ON telemetry_logs (gram_chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
