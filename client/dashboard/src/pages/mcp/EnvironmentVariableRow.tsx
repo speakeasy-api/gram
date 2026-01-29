@@ -44,22 +44,22 @@ const MODE_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-    {
-      value: "system",
-      label: "System",
-      description: "Value is stored securely and injected by the system",
-    },
-    {
-      value: "user-provided",
-      label: "User",
-      description: "User must provide this value when connecting",
-    },
-    {
-      value: "omitted",
-      label: "Omit",
-      description: "Variable is not included in the configuration",
-    },
-  ];
+  {
+    value: "system",
+    label: "System",
+    description: "Value is stored securely and injected by the system",
+  },
+  {
+    value: "user-provided",
+    label: "User",
+    description: "User must provide this value when connecting",
+  },
+  {
+    value: "omitted",
+    label: "Omit",
+    description: "Variable is not included in the configuration",
+  },
+];
 
 export function EnvironmentVariableRow({
   envVar,
