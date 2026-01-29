@@ -187,6 +187,9 @@ function ExternalMcpOAuthConnection({
       queryClient.invalidateQueries({
         queryKey: ["mcpOauthStatus", toolset?.id ?? "", mcpOAuthConfig.slug],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["playground.oauthToken"],
+      });
       toast.success(
         `Disconnected from ${mcpOAuthConfig.name || mcpOAuthConfig.slug}`,
       );
