@@ -48,6 +48,7 @@ export default function Playground() {
 function PlaygroundInner() {
   const [searchParams] = useSearchParams();
   const chat = useChatContext();
+  const routes = useRoutes();
 
   const [selectedToolset, setSelectedToolset] = useState<string | null>(
     searchParams.get("toolset") ?? null,
@@ -62,6 +63,9 @@ function PlaygroundInner() {
   const [userProvidedHeaders, setUserProvidedHeaders] = useState<
     Record<string, string>
   >({});
+
+  const { data: toolsetsData } = useListToolsets();
+  const toolsets = toolsetsData?.toolsets;
 
   // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
   const chatConfigRef = useRef({
@@ -82,6 +86,22 @@ function PlaygroundInner() {
   useRegisterEnvironmentTelemetry({
     environmentSlug: selectedEnvironment ?? "",
   });
+
+  // If toolsets have loaded and none are selected, show full-page empty state
+  if (toolsets !== undefined && !selectedToolset) {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs fullWidth />
+        </Page.Header>
+        <Page.Body>
+          <div className="h-full flex m-8">
+            <ToolsetsEmptyState onCreateToolset={() => routes.mcp.goTo()} />
+          </div>
+        </Page.Body>
+      </Page>
+    );
+  }
 
   const logsButton = (
     <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
