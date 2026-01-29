@@ -640,7 +640,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 	} else {
 		// Check for installation override URL and redirect if set
-		if overrideURL := conv.FromPGText[string](metadataRecord.InstallationOverrideUrl); overrideURL != nil {
+		if overrideURL := conv.FromPGText[string](metadataRecord.InstallationOverrideUrl); overrideURL != nil && *overrideURL != "" {
 			http.Redirect(w, r, *overrideURL, http.StatusFound)
 			return nil
 		}
