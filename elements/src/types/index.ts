@@ -320,6 +320,18 @@ export interface ElementsConfig {
    * }
    */
   errorTracking?: ErrorTrackingConfigOption
+
+  /**
+   * Configuration for the chat thread display and behavior.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   thread: {
+   *     followUpSuggestions: true,
+   *   },
+   * }
+   */
+  thread?: ThreadConfig
 }
 
 /**
@@ -911,6 +923,25 @@ export interface HistoryConfig {
    * }}>
    */
   initialThreadId?: string
+}
+
+/**
+ * Configuration for the chat thread display and behavior.
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   thread: {
+ *     followUpSuggestions: true,
+ *   },
+ * }
+ */
+export interface ThreadConfig {
+  /**
+   * Whether to show AI-generated follow-up question suggestions after each assistant response.
+   * When enabled, suggestions appear below the assistant's message to help guide the conversation.
+   * @default true
+   */
+  followUpSuggestions?: boolean
 }
 
 /**

@@ -37,6 +37,7 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from '@/components/assistant-ui/attachment'
+import { FollowOnSuggestions } from '@/components/assistant-ui/follow-on-suggestions'
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'
 import { MessageFeedback } from '@/components/assistant-ui/message-feedback'
 import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
@@ -161,6 +162,10 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
                     components.AssistantMessage ?? AssistantMessage,
                 }}
               />
+
+              <ThreadPrimitive.If empty={false} running={false}>
+                <FollowOnSuggestions />
+              </ThreadPrimitive.If>
 
               <ThreadPrimitive.If empty={false}>
                 <div className="aui-thread-viewport-spacer min-h-8 grow" />
