@@ -320,12 +320,16 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 				s.logger.ErrorContext(ctx, "failed to unmarshal header display names", attr.SlogError(err))
 			}
 		}
-		envEntries, err := s.repo.ListEnvironmentConfigs(ctx, metadataRecord.ID)
+
+		metadata, err := ToMCPMetadata(ctx, s.repo, metadataRecord)
 		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to list environment configs", attr.SlogError(err))
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to convert metadata").Log(ctx, s.logger)
 		}
-		for _, entry := range envEntries {
-			variableProvidedBy[entry.VariableName] = entry.ProvidedBy
+		for _, config := range metadata.EnvironmentConfigs {
+			variableProvidedBy[config.VariableName] = config.ProvidedBy
+			if config.HeaderDisplayName != nil {
+				headerDisplayNames[config.VariableName] = *config.HeaderDisplayName
+			}
 		}
 	} else if !errors.Is(metadataErr, pgx.ErrNoRows) {
 		s.logger.WarnContext(ctx, "failed to load MCP metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))
