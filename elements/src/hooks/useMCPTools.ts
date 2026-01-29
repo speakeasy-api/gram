@@ -25,10 +25,10 @@ export function useMCPTools({
   mcpHeaders: Record<string, string>
 } {
   const envQueryKey = Object.entries(environment ?? {}).map(
-    (k, v) => `${k}:${v}`
+    ([k, v]) => `${k}:${v}`
   )
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
-    (k, v) => `${k}:${v}`
+    ([k, v]) => `${k}:${v}`
   )
 
   // Mutable headers object shared with the MCP transport. The transport stores
