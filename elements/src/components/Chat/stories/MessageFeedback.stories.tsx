@@ -1,6 +1,7 @@
 import { Chat } from '..'
 import type { Meta, StoryFn } from '@storybook/react-vite'
 import { MessageFeedback } from '@/components/assistant-ui/message-feedback'
+import { LazyMotion, domAnimation } from 'motion/react'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Message Feedback',
@@ -108,21 +109,60 @@ Sidecar.parameters = {
 }
 
 /**
+ * Demonstrates feedback UI combined with follow-up suggestions.
+ * After the assistant responds, you'll see both AI-generated follow-up questions
+ * and feedback buttons (like/dislike) to mark the conversation as resolved.
+ */
+export const WithFollowUpSuggestions: Story = () => <Chat />
+WithFollowUpSuggestions.parameters = {
+  elements: {
+    config: {
+      variant: 'widget',
+      modal: { defaultOpen: true },
+      systemPrompt:
+        'You are a helpful customer support assistant. Keep ALL responses extremely brief - 1-2 sentences only. No lists, no elaboration.',
+      thread: {
+        experimental_showFeedback: true,
+        followUpSuggestions: true,
+      },
+      welcome: {
+        title: 'Support Chat',
+        subtitle: 'How can we help you today?',
+        suggestions: [
+          {
+            title: 'Order status',
+            label: 'Where is my package?',
+            prompt: 'Where is my package?',
+          },
+          {
+            title: 'Returns',
+            label: 'How do I return an item?',
+            prompt: 'How do I return an item?',
+          },
+        ],
+      },
+    },
+  },
+}
+
+/**
  * Standalone component demo showing the feedback buttons in isolation.
  */
 export const ComponentOnly: StoryFn = () => (
-  <div className="bg-background flex min-h-screen items-center justify-center p-10">
-    <div className="flex flex-col items-center gap-8">
-      <h2 className="text-foreground text-lg font-semibold">
-        Message Feedback Buttons
-      </h2>
-      <MessageFeedback
-        onFeedback={(type) => {
-          console.log('Feedback:', type)
-        }}
-      />
+  <LazyMotion features={domAnimation}>
+    <div className="bg-background flex min-h-screen items-center justify-center p-10">
+      <div className="flex flex-col items-center gap-8">
+        <h2 className="text-foreground text-lg font-semibold">
+          Message Feedback Buttons
+        </h2>
+        <MessageFeedback
+          onFeedback={(type) => {
+            console.log('Feedback:', type)
+          }}
+        />
+      </div>
     </div>
-  </div>
+  </LazyMotion>
 )
 ComponentOnly.parameters = {
   layout: 'fullscreen',
