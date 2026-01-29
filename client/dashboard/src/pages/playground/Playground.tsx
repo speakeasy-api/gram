@@ -87,8 +87,8 @@ function PlaygroundInner() {
     environmentSlug: selectedEnvironment ?? "",
   });
 
-  // If toolsets have loaded and none are selected, show full-page empty state
-  if (toolsets !== undefined && !selectedToolset) {
+  // If toolsets have loaded and there are none, show full-page empty state
+  if (toolsets !== undefined && toolsets.length === 0) {
     return (
       <Page>
         <Page.Header>
