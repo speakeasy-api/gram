@@ -465,6 +465,38 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 	return i, err
 }
 
+const getToolsetByID = `-- name: GetToolsetByID :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+FROM toolsets
+WHERE id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) GetToolsetByID(ctx context.Context, id uuid.UUID) (Toolset, error) {
+	row := q.db.QueryRow(ctx, getToolsetByID, id)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getToolsetByMCPSlug = `-- name: GetToolsetByMCPSlug :one
 SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
