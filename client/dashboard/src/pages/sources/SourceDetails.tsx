@@ -169,7 +169,7 @@ export default function SourceDetails() {
     isLoading: isLoadingSpec,
     error: specError,
     refetch: refetchSpec,
-  } = useFetchSourceContent(source, isOpenAPI, project, projectSlug);
+  } = useFetchSourceContent(source ?? null, isOpenAPI, project, projectSlug);
 
   // Format file size
   const formatFileSize = (bytes: number) => {
@@ -219,7 +219,7 @@ export default function SourceDetails() {
     type: "openapi" | "function" | "externalmcp",
   ) => {
     try {
-      await client.deployments.create({
+      await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.deployment?.id,
           ...(type === "openapi"
@@ -239,15 +239,16 @@ export default function SourceDetails() {
   };
 
   // Create asset object for delete dialog
-  const assetForDialog = source
-    ? {
-        id: source.assetId,
-        deploymentAssetId: source.id,
-        name: source.name,
-        slug: source.slug,
-        type: isOpenAPI ? ("openapi" as const) : ("function" as const),
-      }
-    : null;
+  const assetForDialog =
+    source && underlyingAsset
+      ? {
+          ...underlyingAsset,
+          deploymentAssetId: source.id,
+          name: source.name,
+          slug: source.slug,
+          type: isOpenAPI ? ("openapi" as const) : ("function" as const),
+        }
+      : null;
 
   return (
     <Page>
@@ -436,7 +437,9 @@ export default function SourceDetails() {
                   <div className="flex gap-2 flex-wrap shrink-0">
                     <button onClick={() => setMethodFilter(null)}>
                       <Badge
-                        variant={methodFilter === null ? "default" : "neutral"}
+                        variant={
+                          methodFilter === null ? "information" : "neutral"
+                        }
                         className="py-2"
                       >
                         <Badge.Text>

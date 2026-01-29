@@ -58,7 +58,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
-import { Outlet, useNavigate, useParams } from "react-router";
+import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { onboardingStepStorageKeys } from "../home/Home";
@@ -122,14 +122,8 @@ function MCPLoading() {
 export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
   const routes = useRoutes();
-  const client = useSdkClient();
-  const queryClient = useQueryClient();
-  const telemetry = useTelemetry();
 
   const { data: toolset, isLoading } = useToolset(toolsetSlug);
-  const { data: deploymentResult, refetch: refetchDeployment } =
-    useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
 
   // Call hooks before any conditional returns
   const { url: mcpUrl } = useMcpUrl(toolset);

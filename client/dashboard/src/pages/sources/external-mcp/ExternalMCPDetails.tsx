@@ -13,15 +13,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
-import {
-  ChevronRight,
-  Download,
-  Globe,
-  Lock,
-  Power,
-  Server,
-  Trash2,
-} from "lucide-react";
+import { ChevronRight, Globe, Lock, Power, Server, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -92,7 +84,7 @@ export default function ExternalMCPDetails() {
     _type: "openapi" | "function" | "externalmcp",
   ) => {
     try {
-      await client.deployments.create({
+      await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.deployment?.id,
           excludeExternalMcps: [slug],
