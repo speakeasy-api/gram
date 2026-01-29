@@ -9,7 +9,12 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import {
+  useIsAdmin,
+  useOrganization,
+  useProject,
+  useSession,
+} from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -43,8 +48,8 @@ export default function Settings() {
   const isAdmin = useIsAdmin();
   const navigate = useNavigate();
   const client = useSdkClient();
+  const project = useProject();
 
-  const [orgOverride, setOrgOverride] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
@@ -677,29 +682,41 @@ export default function Settings() {
                 Admin Only
               </Heading>
             </Stack>
+            <dl className="grid grid-cols-[max-content_auto] gap-x-6 gap-y-2 mb-8">
+              <dt className="text-end">Organization ID</dt>
+              <dd className="font-mono">{organization.id}</dd>
+              <dt className="text-end">Project ID</dt>
+              <dd className="font-mono">{project.id}</dd>
+            </dl>
+
             <Type variant="body" className="text-muted-foreground mb-4">
               Override to a different organization by entering its slug below.
             </Type>
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                if (orgOverride.trim()) {
-                  navigate(`/${orgOverride.trim()}`);
+                const formData = new FormData(e.currentTarget);
+                const val = formData.get("gram_admin_override");
+                if (typeof val !== "string" || !val.trim()) {
+                  return;
                 }
+
+                document.cookie = `gram_admin_override=${val}; path=/; max-age=31536000;`;
+                await client.auth.logout();
+                window.location.href = "/login";
               }}
               className="flex gap-2 max-w-md"
             >
               <Input
                 placeholder="organization-slug"
-                value={orgOverride}
-                onChange={setOrgOverride}
+                name="gram_admin_override"
                 className="flex-1"
+                required
               />
-              <Button type="submit" disabled={!orgOverride.trim()}>
-                Go to Org
-              </Button>
+              <Button type="submit">Go to Org</Button>
               <Button
                 variant="secondary"
+                type="button"
                 onClick={async () => {
                   document.cookie = `gram_admin_override=; path=/; max-age=0;`;
                   await client.auth.logout();
