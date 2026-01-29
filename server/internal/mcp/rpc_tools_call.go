@@ -189,10 +189,19 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
+	// Extract OAuth token for external MCP servers (token with no security keys = general token)
+	var oauthToken string
+	for _, t := range payload.oauthTokenInputs {
+		if len(t.securityKeys) == 0 && t.Token != "" {
+			oauthToken = t.Token
+			break
+		}
+	}
+
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
-		OAuthToken: "",
+		OAuthToken: oauthToken,
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)

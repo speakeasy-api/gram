@@ -2,10 +2,10 @@ import { Page } from "@/components/page-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useUser } from "@/contexts/Auth";
-import { useInfiniteListMCPCatalog, Server } from "@/pages/catalog/hooks";
+import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment, useListToolsets } from "@gram/client/react-query";
 import { DeploymentExternalMCP } from "@gram/client/models/components";
+import { useLatestDeployment, useListToolsets } from "@gram/client/react-query";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import {
   ArrowRight,
@@ -68,9 +68,11 @@ export default function Home() {
     );
   }, [deployment]);
 
-  const hasMcpPublic = useMemo(() => {
+  const hasEnabledMcpWithTools = useMemo(() => {
     if (!toolsetsResult?.toolsets) return false;
-    return toolsetsResult.toolsets.some((t) => t.mcpIsPublic);
+    return toolsetsResult.toolsets.some(
+      (t) => t.mcpEnabled && t.toolUrns.length > 0,
+    );
   }, [toolsetsResult]);
 
   // Get the first public MCP toolset slug to pass to elements page
@@ -87,11 +89,14 @@ export default function Home() {
   const hasDeployedChatFlag =
     typeof window !== "undefined" &&
     localStorage.getItem(onboardingStepStorageKeys.configure) === "true";
-  const hasDeployedChat = hasSource && hasMcpPublic && hasDeployedChatFlag;
+  const hasDeployedChat =
+    hasSource && hasEnabledMcpWithTools && hasDeployedChatFlag;
 
-  const completedSteps = [hasSource, hasMcpPublic, hasDeployedChat].filter(
-    Boolean,
-  ).length;
+  const completedSteps = [
+    hasSource,
+    hasEnabledMcpWithTools,
+    hasDeployedChat,
+  ].filter(Boolean).length;
   const isSetupComplete = completedSteps === 3;
   const isSetupDataLoading = isDeploymentLoading || isToolsetsLoading;
 
@@ -124,12 +129,12 @@ export default function Home() {
                 cta="Add source"
               />
 
-              {/* Step 2: Make MCP public */}
+              {/* Step 2: Enable MCP */}
               <SetupStep
                 number={2}
-                title="Make MCP public"
-                description="Enable public access to your MCP server"
-                completed={hasMcpPublic}
+                title="Add an MCP server"
+                description="Enable an MCP server connected to your source"
+                completed={hasEnabledMcpWithTools}
                 enabled={hasSource}
                 href={routes.mcp.href()}
                 icon={<Globe className="h-[18px] w-[18px]" strokeWidth={1.5} />}
@@ -143,7 +148,7 @@ export default function Home() {
                 title="Deploy chat or connect"
                 description="Embed chat on your site or connect via Claude"
                 completed={hasDeployedChat}
-                enabled={hasSource && hasMcpPublic}
+                enabled={hasSource && hasEnabledMcpWithTools}
                 href={`${routes.elements.href()}${firstPublicToolsetSlug ? `?toolset=${firstPublicToolsetSlug}` : ""}`}
                 icon={
                   <MessageCircleIcon

@@ -24,11 +24,12 @@ import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
-import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
+import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
+import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
 import { Confirm, ToolsetEntry } from "@gram/client/models/components";
 import {
@@ -67,6 +68,55 @@ import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
+}
+
+function MCPLoading() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body fullWidth noPadding>
+        {/* Hero skeleton */}
+        <div className="relative w-full h-64 bg-muted/30 animate-pulse">
+          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
+            <Stack gap={2}>
+              <div className="h-8 w-64 bg-muted rounded" />
+              <div className="h-4 w-96 bg-muted rounded" />
+            </Stack>
+          </div>
+        </div>
+
+        {/* Tabs skeleton */}
+        <div className="border-b">
+          <div className="max-w-[1270px] mx-auto px-8">
+            <div className="flex gap-6 h-11">
+              <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-28 bg-muted rounded animate-pulse" />
+            </div>
+          </div>
+        </div>
+
+        {/* Content skeleton */}
+        <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+          <Stack gap={6}>
+            <div className="space-y-4">
+              <div className="h-6 w-48 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-full max-w-2xl bg-muted rounded animate-pulse" />
+              <div className="h-32 w-full bg-muted rounded animate-pulse" />
+            </div>
+            <div className="space-y-4">
+              <div className="h-6 w-40 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-full max-w-2xl bg-muted rounded animate-pulse" />
+              <div className="h-24 w-full bg-muted rounded animate-pulse" />
+            </div>
+          </Stack>
+        </div>
+      </Page.Body>
+    </Page>
+  );
 }
 
 export function MCPDetailPage() {
@@ -256,9 +306,8 @@ export function MCPDetailPage() {
     mcpMetadataForBadge,
   );
 
-  // TODO: better loading state
   if (isLoading || !toolset) {
-    return <div>Loading...</div>;
+    return <MCPLoading />;
   }
 
   const availableOAuthAuthCode =
@@ -636,9 +685,13 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
   const tools = fullToolset?.tools ?? [];
 
+  // Check if this is an external MCP proxy server
+  const isExternalMcpProxy = fullToolset?.kind === "external-mcp-proxy";
+
   // Check if we have orphaned tool URNs (URNs exist but tools were deleted)
   const hasOrphanedTools =
-    (fullToolset?.toolUrns?.length ?? 0) > 0 && tools.length === 0;
+    (fullToolset?.toolUrns?.length ?? 0) > 0 &&
+    fullToolset?.rawTools.length === 0;
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -653,6 +706,54 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
       });
     },
   });
+
+  const handleToolsRemove = useCallback(
+    (removedUrns: string[]) => {
+      const currentUrns = fullToolset?.toolUrns || [];
+      const updatedUrns = currentUrns.filter(
+        (urn) => !removedUrns.includes(urn),
+      );
+
+      updateToolsetMutation.mutate(
+        {
+          request: {
+            slug: toolset.slug,
+            updateToolsetRequestBody: {
+              toolUrns: updatedUrns,
+            },
+          },
+        },
+        {
+          onSuccess: () => {
+            telemetry.capture("toolset_event", {
+              action: "tools_removed",
+              count: removedUrns.length,
+            });
+            toast.success(
+              `Removed ${removedUrns.length} tool${removedUrns.length !== 1 ? "s" : ""}`,
+            );
+          },
+        },
+      );
+    },
+    [fullToolset?.toolUrns, toolset.slug, updateToolsetMutation, telemetry],
+  );
+
+  const handleTestInPlayground = useCallback(() => {
+    routes.playground.goTo(toolset.slug);
+  }, [toolset.slug, routes.playground]);
+
+  // Group filtering
+  const grouped = useGroupedTools(tools);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(
+    grouped.map((group) => group.key),
+  );
+
+  const groupKeys = grouped.map((group) => group.key);
+  // Set initial selected groups when the tool list resolves
+  useEffect(() => {
+    setSelectedGroups(groupKeys);
+  }, [groupKeys.join(",")]);
 
   const handleToolUpdate = async (
     tool: Tool,
@@ -687,52 +788,10 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     refetch();
   };
 
-  const handleToolsRemove = useCallback(
-    (removedUrns: string[]) => {
-      const currentUrns = fullToolset?.toolUrns || [];
-      const updatedUrns = currentUrns.filter(
-        (urn) => !removedUrns.includes(urn),
-      );
-
-      updateToolsetMutation.mutate(
-        {
-          request: {
-            slug: toolset.slug,
-            updateToolsetRequestBody: {
-              toolUrns: updatedUrns,
-            },
-          },
-        },
-        {
-          onSuccess: () => {
-            telemetry.capture("toolset_event", {
-              action: "tools_removed",
-              count: removedUrns.length,
-            });
-            toast.success(
-              `Removed ${removedUrns.length} tool${removedUrns.length !== 1 ? "s" : ""}`,
-            );
-          },
-        },
-      );
-    },
-    [fullToolset?.toolUrns, toolset.slug],
-  );
-
-  const handleTestInPlayground = useCallback(() => {
-    routes.playground.goTo(toolset.slug);
-  }, [toolset.slug]);
-
-  // Group filtering
-  const grouped = useGroupedTools(tools);
-  const [selectedGroups, setSelectedGroups] = useState<string[]>(
-    grouped.map((group) => group.key),
-  );
-
-  // Update selected groups when grouped changes
-  useEffect(() => {
-    setSelectedGroups(grouped.map((group) => group.key));
-  }, [grouped.length]);
+  // For external MCP proxy servers, show the server info instead of tools list
+  if (isExternalMcpProxy && fullToolset) {
+    return <ServerTabContent toolset={fullToolset} />;
+  }
 
   const groupFilterItems = grouped.map((group) => ({
     label: group.key,
@@ -753,28 +812,36 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
   return (
     <Stack className="mb-4">
-      {/* Header with Add Tools button */}
-      <Stack
-        direction="horizontal"
-        justify="space-between"
-        align="center"
-        className="mb-4"
-      >
-        <Heading variant="h3">Tools</Heading>
-        <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
-          <Button.LeftIcon>
-            <Icon name="plus" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Add Tools</Button.Text>
-        </Button>
-      </Stack>
+      {!isExternalMcpProxy && (
+        <Stack
+          direction="horizontal"
+          justify="space-between"
+          align="center"
+          className="mb-4"
+        >
+          <Heading variant="h3">Tools</Heading>
+          <Stack direction="horizontal" gap={2}>
+            <routes.customTools.Link>
+              <Button variant="secondary" size="sm">
+                <Button.Text>Custom Tools</Button.Text>
+              </Button>
+            </routes.customTools.Link>
+            <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Tools</Button.Text>
+            </Button>
+          </Stack>
+        </Stack>
+      )}
 
       {/* Group filter */}
-      {groupFilterItems.length > 1 && (
+      {!isExternalMcpProxy && groupFilterItems.length > 1 && (
         <MultiSelect
           options={groupFilterItems}
-          defaultValue={groupFilterItems.map((group) => group.value)}
-          onValueChange={setSelectedGroups}
+          selectedValues={selectedGroups}
+          setSelectedValues={setSelectedGroups}
           placeholder="Filter tools"
           className="w-fit mb-4 capitalize"
         />
@@ -786,7 +853,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
           <div className="text-center max-w-md">
             <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-warning" />
             <Heading variant="h3" className="mb-2">
-              Tools Source Deleted
+              Tool Source Deleted
             </Heading>
             <Type muted>
               This MCP server has tool references, but the underlying source has
@@ -810,7 +877,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
       )}
 
       {/* Add Tools Dialog */}
-      {fullToolset && (
+      {fullToolset && !isExternalMcpProxy && (
         <AddToolsDialog
           open={addToolsDialogOpen}
           onOpenChange={setAddToolsDialogOpen}

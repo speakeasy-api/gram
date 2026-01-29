@@ -37,7 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/templatefuncs"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -45,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -245,7 +245,6 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete existing environment configs").Log(ctx, s.logger)
 		}
 
-		// Insert new entries
 		for _, config := range payload.EnvironmentConfigs {
 			var headerDisplayName pgtype.Text
 			if config.HeaderDisplayName != nil {
@@ -614,7 +613,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	var docsURL string
 	var instructions string
 	headerDisplayNames := make(map[string]string)
-	omittedVariables := make(map[string]bool)
+	variableProvidedBy := make(map[string]string)
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
 	if metadataErr != nil {
 		if !errors.Is(metadataErr, pgx.ErrNoRows) {
@@ -643,11 +642,8 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		} else {
 			// Build maps of header display names and omitted variables
 			for _, config := range metadata.EnvironmentConfigs {
-				if config.ProvidedBy != "user" {
-					// Mark as omitted - should not appear in install page
-					omittedVariables[config.VariableName] = true
-				} else if config.HeaderDisplayName != nil {
-					// User-provided with custom display name
+				variableProvidedBy[config.VariableName] = config.ProvidedBy
+				if config.HeaderDisplayName != nil {
 					headerDisplayNames[config.VariableName] = *config.HeaderDisplayName
 				}
 			}
@@ -655,7 +651,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	}
 
 	securityMode := s.resolveSecurityMode(toolset)
-	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, omittedVariables)
+	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, variableProvidedBy)
 
 	toolNames := []string{}
 
@@ -869,8 +865,7 @@ func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset) securityMo
 
 // collectEnvironmentVariables returns security inputs based on the security mode.
 // headerDisplayNames maps env var names to their custom display names (from MCP metadata).
-// omittedVariables maps env var names to whether they should be omitted (provided_by: "gram").
-func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails *types.Toolset, headerDisplayNames map[string]string, omittedVariables map[string]bool) []securityInput {
+func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails *types.Toolset, headerDisplayNames map[string]string, variableProvidedBy map[string]string) []securityInput {
 	switch mode {
 	case securityModeGram:
 		return []securityInput{
@@ -891,6 +886,12 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 		isOAuthEnabled := mode == securityModeOAuth
 		seen := make(map[string]bool)
 
+		isExplicitlyNotUserProvided := func(variableName string) bool {
+			// This exists check ensure backwards compatibility for when there are no environment entries for a variable
+			providedBy, exists := variableProvidedBy[variableName]
+			return exists && providedBy != "user"
+		}
+
 		for _, secVar := range toolsetDetails.SecurityVariables {
 			for _, envVar := range secVar.EnvVariables {
 				envVarLower := strings.ToLower(envVar)
@@ -902,7 +903,7 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 					continue
 				}
 
-				if omittedVariables[envVar] {
+				if isExplicitlyNotUserProvided(envVar) {
 					continue
 				}
 
@@ -932,7 +933,7 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 				if isOAuthEnabled && functionEnvVar.AuthInputType != nil && *functionEnvVar.AuthInputType == "oauth2" {
 					continue
 				}
-				if omittedVariables[functionEnvVar.Name] {
+				if isExplicitlyNotUserProvided(functionEnvVar.Name) {
 					continue
 				}
 
@@ -960,6 +961,21 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 					SystemName:  fmt.Sprintf("MCP-%s", headerDef.Name),
 					DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(headerDef.Name, "_", "-")),
 					Sensitive:   headerDef.Secret,
+				})
+			}
+		}
+
+		// Add in any variables that were explicitly set to "user provided"
+		for variableName, providedBy := range variableProvidedBy {
+			if providedBy != "user" {
+				continue
+			}
+			if !seen[variableName] {
+				seen[variableName] = true
+				inputs = append(inputs, securityInput{
+					SystemName:  fmt.Sprintf("MCP-%s", variableName),
+					DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(variableName, "_", "-")),
+					Sensitive:   true,
 				})
 			}
 		}
