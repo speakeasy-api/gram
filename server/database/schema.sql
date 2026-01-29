@@ -223,6 +223,8 @@ CREATE TABLE IF NOT EXISTS api_keys (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
+  last_accessed_at timestamptz,
+
   CONSTRAINT api_keys_pkey PRIMARY KEY (id),
   CONSTRAINT api_keys_key_hash UNIQUE (key_hash),
   CONSTRAINT api_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
