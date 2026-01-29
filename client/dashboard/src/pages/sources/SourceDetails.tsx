@@ -101,9 +101,17 @@ export default function SourceDetails() {
 
   const relatedTools = useMemo(() => {
     if (!toolsData?.tools || !source) return [];
-    return toolsData.tools.filter(
-      (tool) => tool.type === "http" && tool.openapiv3DocumentId === source.id,
-    );
+    return toolsData.tools.filter((tool) => {
+      if (tool.type === "http") {
+        // HTTP tools link to OpenAPI sources via openapiv3DocumentId
+        return tool.openapiv3DocumentId === source.id;
+      }
+      if (tool.type === "function") {
+        // Function tools link to function sources via assetId
+        return tool.assetId === source.assetId;
+      }
+      return false;
+    });
   }, [toolsData, source]);
 
   // Get toolsets to find which MCP servers use this source
