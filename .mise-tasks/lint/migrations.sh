@@ -33,7 +33,7 @@ squawk_cmd=""
 # Check if running in GitHub Actions environment
 if [ -n "$usage_github_token" ] && [ -n "$usage_github_event_path" ]; then
   echo "Running in GitHub Actions environment"
-  
+
   squawk_cmd="upload-to-github"
 
   SQUAWK_GITHUB_TOKEN=$usage_github_token
@@ -49,7 +49,7 @@ fi
 
 printf "Changed files:\n%s\n" "${files[@]}"
 
-printf "%s\n" "${files[@]}" | xargs squawk "$squawk_cmd" \
+printf "%s\n" "${files[@]}" | xargs mise exec squawk -- "$squawk_cmd" \
   --config server/.squawk.toml
 
 # We cannot use squawk's `ban-concurrent-index-creation-in-transaction` rule
