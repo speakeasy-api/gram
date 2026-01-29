@@ -181,12 +181,12 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Atlas
-        uses: ariga/setup-atlas@v0
+        uses: ariga/setup-atlas@1ffa6444093025c9791791f0de623560359acd02 # v0
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@v1
+        uses: ariga/atlas-action/migrate/lint@ffcda7674f642bd28873a37bee3a47f5631e72d3 # v1
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -196,7 +196,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@v1
+        uses: ariga/atlas-action/migrate/lint@ffcda7674f642bd28873a37bee3a47f5631e72d3 # v1
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -236,7 +236,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Atlas
-        uses: ariga/setup-atlas@v0
+        uses: ariga/setup-atlas@1ffa6444093025c9791791f0de623560359acd02 # v0
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
@@ -252,7 +252,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@v1
+        uses: ariga/atlas-action/migrate/push@ffcda7674f642bd28873a37bee3a47f5631e72d3 # v1
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -260,7 +260,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@v1
+        uses: ariga/atlas-action/migrate/push@ffcda7674f642bd28873a37bee3a47f5631e72d3 # v1
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
