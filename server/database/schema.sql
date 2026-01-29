@@ -1208,3 +1208,80 @@ CREATE TABLE IF NOT EXISTS project_allowed_origins (
 CREATE UNIQUE INDEX IF NOT EXISTS project_allowed_origins_project_id_origin_key
 ON project_allowed_origins (project_id, origin)
 WHERE deleted IS FALSE;
+
+-- User OAuth tokens for external MCP servers
+-- Stores tokens obtained from external OAuth 2.1 providers (e.g., Google, Atlassian)
+-- when users authenticate to use external MCP servers in the Playground.
+-- Scoped per user + organization + OAuth issuer, allowing one token to work
+-- for multiple MCP servers that share the same OAuth provider.
+CREATE TABLE IF NOT EXISTS user_oauth_tokens (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  -- Scoping: per user, per org, per OAuth server (RFC recommendation)
+  user_id TEXT NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  -- OAuth 2.1 server issuer URL (from AS metadata, e.g., "https://accounts.google.com")
+  -- This allows token reuse across MCP servers sharing the same OAuth provider
+  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
+
+  -- Token data (encrypted at rest via application layer)
+  access_token_encrypted TEXT NOT NULL,
+  refresh_token_encrypted TEXT,  -- Optional, for refresh flow
+  token_type TEXT NOT NULL DEFAULT 'Bearer',
+  expires_at timestamptz,  -- When access token expires (NULL if non-expiring)
+  scope TEXT,  -- Space-separated granted scopes
+
+  -- Metadata for debugging/display
+  provider_name TEXT,  -- Human-readable name (e.g., "Google", "Atlassian")
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_oauth_tokens_pkey PRIMARY KEY (id),
+  CONSTRAINT user_oauth_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT user_oauth_tokens_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- Unique constraint: one token per user per org per OAuth issuer
+CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
+ON user_oauth_tokens (user_id, organization_id, oauth_server_issuer)
+WHERE deleted IS FALSE;
+
+-- Index for looking up tokens by user within an org
+CREATE INDEX IF NOT EXISTS user_oauth_tokens_user_org_idx
+ON user_oauth_tokens (user_id, organization_id)
+WHERE deleted IS FALSE;
+
+-- Organization-level OAuth client registrations from Dynamic Client Registration (DCR)
+-- When Gram acts as an OAuth client to external MCP servers using MCP OAuth 2.1,
+-- it needs to register itself via DCR and store the resulting client credentials.
+-- These credentials are shared by all users in the organization.
+CREATE TABLE IF NOT EXISTS external_oauth_client_registrations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- OAuth server issuer URL (from AS metadata or derived from auth endpoint origin)
+  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> ''),
+
+  -- Client credentials from DCR response
+  client_id TEXT NOT NULL CHECK (client_id <> ''),
+  client_secret_encrypted TEXT,  -- May be null for public clients (PKCE-only)
+  client_id_issued_at timestamptz,
+  client_secret_expires_at timestamptz,  -- When the secret expires (null = never)
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT external_oauth_client_registrations_pkey PRIMARY KEY (id),
+  CONSTRAINT external_oauth_client_registrations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
+);
+
+-- Unique constraint: one client registration per org per OAuth issuer
+CREATE UNIQUE INDEX IF NOT EXISTS external_oauth_client_registrations_org_issuer_key
+ON external_oauth_client_registrations (organization_id, oauth_server_issuer)
+WHERE deleted IS FALSE;
