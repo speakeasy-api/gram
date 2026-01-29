@@ -1,4 +1,4 @@
-import { NavButton, NavMenu } from "@/components/nav-menu";
+import { NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -6,18 +6,12 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useSession } from "@/contexts/Auth";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
-import {
-  AlertTriangleIcon,
-  ChartNoAxesCombinedIcon,
-  MinusIcon,
-  TestTube2Icon,
-} from "lucide-react";
+import { AlertTriangleIcon, MinusIcon, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { FeatureRequestModal } from "./FeatureRequestModal";
@@ -27,13 +21,12 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
 
-  const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
     build: [routes.elements, routes.mcp],
-    observe: [routes.logs],
+    observe: [routes.logs, routes.metrics],
     settings: [routes.settings, routes.billing, routes.docs] as AppRoute[],
   };
 
@@ -49,17 +42,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
             <SidebarGroupContent>
-              <NavMenu items={items}>
-                {label === "observe" && (
-                  <SidebarMenuItem>
-                    <NavButton
-                      title="Metrics"
-                      Icon={ChartNoAxesCombinedIcon}
-                      onClick={() => setMetricsModalOpen(true)}
-                    />
-                  </SidebarMenuItem>
-                )}
-              </NavMenu>
+              <NavMenu items={items} />
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
@@ -67,14 +50,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <FreeTierExceededNotification />
       </SidebarFooter>
-      <FeatureRequestModal
-        isOpen={metricsModalOpen}
-        onClose={() => setMetricsModalOpen(false)}
-        title="Metrics Coming Soon"
-        description="Metrics are coming soon! We'll let you know when this feature is available."
-        actionType="metrics"
-        icon={ChartNoAxesCombinedIcon}
-      />
       <FeatureRequestModal
         isOpen={isUpgradeModalOpen}
         onClose={() => setIsUpgradeModalOpen(false)}
