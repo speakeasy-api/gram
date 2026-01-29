@@ -198,6 +198,10 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	registryID := registry.ID.String()
 	servers := make([]*types.ExternalMCPServer, 0, len(listResp.Servers))
 	for _, s := range listResp.Servers {
+		if s.Meta.Version.Status == "deleted" {
+			continue
+		}
+
 		var iconURL *string
 		if len(s.Server.Icons) > 0 {
 			iconURL = &s.Server.Icons[0].Src
