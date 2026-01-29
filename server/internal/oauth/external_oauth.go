@@ -1067,6 +1067,24 @@ func (s *ExternalOAuthService) redirectWithError(w http.ResponseWriter, r *http.
 		return oops.E(oops.CodeUnexpected, err, "invalid redirect URI").Log(r.Context(), s.logger)
 	}
 
+	// Defense-in-depth: validate redirect URI origin matches server origin.
+	// Fall back to JSON error response if validation fails.
+	serverHost := s.serverURL.Hostname()
+	redirectHost := parsed.Hostname()
+	if serverHost == "localhost" || serverHost == "127.0.0.1" {
+		if redirectHost != "localhost" && redirectHost != "127.0.0.1" {
+			s.logger.WarnContext(r.Context(), "redirectWithError: redirect_uri origin mismatch, returning JSON error instead",
+				attr.SlogOAuthRedirectURIFull(redirectURI))
+			return s.redirectWithError(w, r, "", errorCode, errorDesc)
+		}
+	} else {
+		if parsed.Scheme != s.serverURL.Scheme || parsed.Host != s.serverURL.Host {
+			s.logger.WarnContext(r.Context(), "redirectWithError: redirect_uri origin mismatch, returning JSON error instead",
+				attr.SlogOAuthRedirectURIFull(redirectURI))
+			return s.redirectWithError(w, r, "", errorCode, errorDesc)
+		}
+	}
+
 	params := parsed.Query()
 	params.Set("error", errorCode)
 	params.Set("error_description", errorDesc)
