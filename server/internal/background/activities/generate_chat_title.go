@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -79,6 +80,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, firstMessa
 		"Generate a concise title (3-6 words) for this conversation. Return only the title text, no quotes or explanation.",
 		firstMessage,
 		nil,
+		billing.ModelUsageSourceChat,
 	)
 	if err != nil {
 		g.logger.WarnContext(ctx, "failed to generate chat title via OpenRouter", attr.SlogError(err))
