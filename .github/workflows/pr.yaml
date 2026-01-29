@@ -197,7 +197,7 @@ jobs:
           fi
 
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@ffcda7674f642bd28873a37bee3a47f5631e72d3 # v1
+        uses: ariga/atlas-action/migrate/lint@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -208,7 +208,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@ffcda7674f642bd28873a37bee3a47f5631e72d3 # v1
+        uses: ariga/atlas-action/migrate/lint@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -265,7 +265,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@ffcda7674f642bd28873a37bee3a47f5631e72d3 # v1
+        uses: ariga/atlas-action/migrate/push@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -273,7 +273,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@ffcda7674f642bd28873a37bee3a47f5631e72d3 # v1
+        uses: ariga/atlas-action/migrate/push@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
