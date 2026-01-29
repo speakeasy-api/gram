@@ -400,6 +400,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		"organization_slug": authCtx.OrganizationSlug,
 		"project_slug":      *authCtx.ProjectSlug,
 		"success":           false,
+		"source":            metadata.Source,
+		"user_agent":        metadata.UserAgent,
 	}
 
 	defer func() {
