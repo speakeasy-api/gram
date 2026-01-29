@@ -316,15 +316,16 @@ components:
 
 // capturingHandler is a slog handler that captures log records for testing
 type capturingHandler struct {
-	mu      sync.Mutex
-	records []slog.Record
+	mu      *sync.Mutex
+	records *[]slog.Record
 	attrs   []slog.Attr
 	group   string
 }
 
 func newCapturingHandler() *capturingHandler {
 	return &capturingHandler{
-		records: make([]slog.Record, 0),
+		mu:      &sync.Mutex{},
+		records: &[]slog.Record{},
 	}
 }
 
@@ -335,12 +336,13 @@ func (h *capturingHandler) Enabled(_ context.Context, _ slog.Level) bool {
 func (h *capturingHandler) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.records = append(h.records, r)
+	*h.records = append(*h.records, r)
 	return nil
 }
 
 func (h *capturingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &capturingHandler{
+		mu:      h.mu,
 		records: h.records,
 		attrs:   append(h.attrs, attrs...),
 		group:   h.group,
@@ -349,6 +351,7 @@ func (h *capturingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 
 func (h *capturingHandler) WithGroup(name string) slog.Handler {
 	return &capturingHandler{
+		mu:      h.mu,
 		records: h.records,
 		attrs:   h.attrs,
 		group:   name,
@@ -358,7 +361,7 @@ func (h *capturingHandler) WithGroup(name string) slog.Handler {
 func (h *capturingHandler) getRecords() []slog.Record {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return append([]slog.Record{}, h.records...)
+	return append([]slog.Record{}, *h.records...)
 }
 
 func TestDoProcess_DeprecatedOperationsLoggedNotErrors(t *testing.T) {
