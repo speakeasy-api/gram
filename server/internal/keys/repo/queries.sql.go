@@ -158,3 +158,18 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 	}
 	return items, nil
 }
+
+const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec
+UPDATE api_keys
+SET last_accessed_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS FALSE
+  -- This check reduces writes to the database to at most once per minute per
+  -- key as a way to mitigate excessive write spikes.
+  AND (last_accessed_at IS NULL OR last_accessed_at < clock_timestamp() - interval '1 minute')
+`
+
+func (q *Queries) UpdateAPIKeyLastAccessedAt(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, updateAPIKeyLastAccessedAt, id)
+	return err
+}

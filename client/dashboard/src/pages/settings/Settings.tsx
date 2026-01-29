@@ -239,6 +239,17 @@ export default function Settings() {
       render: (key: Key) => <HumanizeDateTime date={key.createdAt} />,
     },
     {
+      key: "lastAccessedAt",
+      header: "Last Accessed At",
+      width: "1fr",
+      render: (key: Key) =>
+        key.lastAccessedAt ? (
+          <HumanizeDateTime date={key.lastAccessedAt} />
+        ) : (
+          "-"
+        ),
+    },
+    {
       key: "actions",
       header: "",
       width: "80px",
