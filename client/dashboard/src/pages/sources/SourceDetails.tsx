@@ -63,30 +63,12 @@ export default function SourceDetails() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Valid tabs - spec only for OpenAPI sources, mcp-servers only if there are associated toolsets
-  const validTabs = ["overview", "tools", "mcp-servers", "spec", "settings"];
-
-  // Tab state from URL hash
+  // Tab state from URL hash - initialized to hash or "overview"
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.replace("#", "");
-    return validTabs.includes(hash) ? hash : "overview";
+    // Initial validation will be done after we know which tabs are valid
+    return hash || "overview";
   });
-
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace("#", "");
-      if (validTabs.includes(hash)) {
-        setActiveTab(hash);
-      }
-    };
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
-
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    window.location.hash = value;
-  };
 
   // Find the specific source from the deployment
   const source = useMemo(() => {
@@ -142,6 +124,44 @@ export default function SourceDetails() {
 
   const isOpenAPI = sourceKind === "http" || sourceKind === "openapi";
   const sourceType = isOpenAPI ? "OpenAPI" : "Function";
+
+  // Build valid tabs dynamically based on source type and associated toolsets
+  const validTabs = useMemo(() => {
+    const tabs = ["overview", "tools"];
+    if (associatedToolsets.length > 0) {
+      tabs.push("mcp-servers");
+    }
+    if (isOpenAPI) {
+      tabs.push("spec");
+    }
+    tabs.push("settings");
+    return tabs;
+  }, [isOpenAPI, associatedToolsets.length]);
+
+  // Validate and correct activeTab when validTabs changes
+  useEffect(() => {
+    if (!validTabs.includes(activeTab)) {
+      setActiveTab("overview");
+      window.location.hash = "overview";
+    }
+  }, [validTabs, activeTab]);
+
+  // Listen for hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace("#", "");
+      if (validTabs.includes(hash)) {
+        setActiveTab(hash);
+      }
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, [validTabs]);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    window.location.hash = value;
+  };
 
   // Fetch spec content for OpenAPI sources
   const {

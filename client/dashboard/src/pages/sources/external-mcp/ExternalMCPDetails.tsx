@@ -87,7 +87,10 @@ export default function ExternalMCPDetails() {
     );
   }, [toolsets, source]);
 
-  const handleRemoveSource = async (slug: string) => {
+  const handleRemoveSource = async (
+    slug: string,
+    _type: "openapi" | "function" | "externalmcp",
+  ) => {
     try {
       await client.deployments.create({
         evolveForm: {
