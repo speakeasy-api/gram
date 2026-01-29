@@ -22,6 +22,8 @@ type McpMetadata struct {
 	Instructions *string
 	// The default environment to load variables from
 	DefaultEnvironmentID *string
+	// URL to redirect to instead of showing the default installation page
+	InstallationOverrideURL *string
 	// The list of environment variables configured for this MCP
 	EnvironmentConfigs []*McpEnvironmentConfig
 	// When the metadata entry was created

@@ -104,6 +104,9 @@ var McpMetadata = Type("McpMetadata", func() {
 	Attribute("default_environment_id", String, "The default environment to load variables from", func() {
 		Format(FormatUUID)
 	})
+	Attribute("installation_override_url", String, "URL to redirect to instead of showing the default installation page", func() {
+		Format(FormatURI)
+	})
 	Attribute("environment_configs", ArrayOf(McpEnvironmentConfig), "The list of environment variables configured for this MCP")
 
 	Attribute("created_at", String, "When the metadata entry was created", func() {
@@ -174,6 +177,9 @@ var _ = Service("mcpMetadata", func() {
 			Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
 			Attribute("default_environment_id", String, "The default environment to load variables from", func() {
 				Format(FormatUUID)
+			})
+			Attribute("installation_override_url", String, "URL to redirect to instead of showing the default installation page", func() {
+				Format(FormatURI)
 			})
 			Attribute("environment_configs", ArrayOf(McpEnvironmentConfigInput), "The list of environment variables to configure for this MCP")
 

@@ -9,15 +9,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  ThemeSwitcher,
 } from "@speakeasy-api/moonshine";
-import { ThemeSwitcher } from "@speakeasy-api/moonshine";
 import {
   CheckIcon,
   ChevronsUpDown,
+  CreditCardIcon,
   LogOutIcon,
   PlusIcon,
   SettingsIcon,
-  CreditCardIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { GramLogo } from "./gram-logo";
@@ -194,7 +194,10 @@ export function TopHeader() {
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => (window.location.href = "/logout")}
+                onClick={async () => {
+                  await client.auth.logout();
+                  window.location.href = "/login";
+                }}
               >
                 <LogOutIcon className="mr-2 h-4 w-4" />
                 Log out

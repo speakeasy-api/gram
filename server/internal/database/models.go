@@ -409,6 +409,7 @@ type McpMetadatum struct {
 	Instructions             pgtype.Text
 	HeaderDisplayNames       []byte
 	DefaultEnvironmentID     uuid.NullUUID
+	InstallationOverrideUrl  pgtype.Text
 	CreatedAt                pgtype.Timestamptz
 	UpdatedAt                pgtype.Timestamptz
 }

@@ -87,6 +87,8 @@ type SetMcpMetadataPayload struct {
 	Instructions *string
 	// The default environment to load variables from
 	DefaultEnvironmentID *string
+	// URL to redirect to instead of showing the default installation page
+	InstallationOverrideURL *string
 	// The list of environment variables to configure for this MCP
 	EnvironmentConfigs []*types.McpEnvironmentConfigInput
 	ApikeyToken        *string
