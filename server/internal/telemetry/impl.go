@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -292,15 +293,15 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 			TotalInputTokens:      metrics.TotalInputTokens,
 			TotalOutputTokens:     metrics.TotalOutputTokens,
 			TotalTokens:           metrics.TotalTokens,
-			AvgTokensPerRequest:   metrics.AvgTokensPerReq,
+			AvgTokensPerRequest:   sanitizeFloat64(metrics.AvgTokensPerReq),
 			TotalChatRequests:     int64(metrics.TotalChatRequests),
-			AvgChatDurationMs:     metrics.AvgChatDurationMs,
+			AvgChatDurationMs:     sanitizeFloat64(metrics.AvgChatDurationMs),
 			FinishReasonStop:      int64(metrics.FinishReasonStop),
 			FinishReasonToolCalls: int64(metrics.FinishReasonToolCalls),
 			TotalToolCalls:        int64(metrics.TotalToolCalls),
 			ToolCallSuccess:       int64(metrics.ToolCallSuccess),
 			ToolCallFailure:       int64(metrics.ToolCallFailure),
-			AvgToolDurationMs:     metrics.AvgToolDurationMs,
+			AvgToolDurationMs:     sanitizeFloat64(metrics.AvgToolDurationMs),
 			TotalChats:            int64(metrics.TotalChats),
 			DistinctModels:        int64(metrics.DistinctModels),
 			DistinctProviders:     int64(metrics.DistinctProviders),
@@ -434,6 +435,14 @@ func toTelemetryLogPayload(log repo.TelemetryLog) (*telem_gen.TelemetryLogRecord
 			Version: log.ServiceVersion,
 		},
 	}, nil
+}
+
+// sanitizeFloat64 returns 0 for NaN or Inf values which cannot be JSON-encoded.
+func sanitizeFloat64(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0
+	}
+	return v
 }
 
 // CaptureEvent captures a telemetry event and forwards it to PostHog.

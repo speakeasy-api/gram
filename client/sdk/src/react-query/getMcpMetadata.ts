@@ -106,6 +106,7 @@ export function setGetMcpMetadataData(
   queryKeyBase: [
     parameters: {
       toolsetSlug: string;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -122,6 +123,7 @@ export function invalidateGetMcpMetadata(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       toolsetSlug: string;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

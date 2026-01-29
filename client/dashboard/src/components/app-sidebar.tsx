@@ -6,135 +6,69 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useSession } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
-import { cn, Stack } from "@speakeasy-api/moonshine";
-import {
-  AlertTriangleIcon,
-  ChartNoAxesCombinedIcon,
-  MinusIcon,
-  Sparkles,
-  TestTube2Icon,
-} from "lucide-react";
+import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
+import { AlertTriangleIcon, MinusIcon, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { FeatureRequestModal } from "./FeatureRequestModal";
-import { GramLogo } from "./gram-logo";
-import { ProjectMenu } from "./project-menu";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
+  const organization = useOrganization();
 
-  const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const isCatalogEnabled = telemetry.isFeatureEnabled("gram-external-mcp");
+  const teamUrl =
+    organization?.userWorkspaceSlugs &&
+    organization.userWorkspaceSlugs.length > 0
+      ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
+      : "https://app.speakeasy.com";
 
-  const topNavGroups = {
-    create: [routes.toolsets, routes.customTools, routes.prompts] as AppRoute[],
-    connect: [
-      routes.playground,
-      routes.elements,
-      routes.mcp,
-      routes.environments,
-    ],
+  const navGroups = {
+    connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
+    build: [routes.elements, routes.mcp],
+    observe: [routes.logs, routes.metrics],
+    settings: [routes.settings, routes.billing, routes.docs] as AppRoute[],
   };
-
-  if (isCatalogEnabled) {
-    topNavGroups.create.push(routes.catalog);
-  }
-
-  const bottomNav = [routes.deployments, routes.billing, routes.settings];
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem className="group/logo">
-            <routes.home.Link className="hover:no-underline!">
-              <SidebarMenuButton className="data-[slot=sidebar-menu-button]:!p-1.5 h-12">
-                <GramLogo className="w-25" />
-              </SidebarMenuButton>
-            </routes.home.Link>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-      <SidebarContent>
-        {Object.entries(topNavGroups).map(([label, items]) => (
+      <SidebarContent className="pt-2">
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <NavMenu items={[routes.home]} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+        {Object.entries(navGroups).map(([label, items]) => (
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
             <SidebarGroupContent>
-              <NavMenu items={items} />
+              <NavMenu items={items}>
+                {label === "settings" && (
+                  <SidebarMenuItem>
+                    <NavButton
+                      title="Team"
+                      href={teamUrl}
+                      target="_blank"
+                      Icon={(props) => <Icon name="users-round" {...props} />}
+                    />
+                  </SidebarMenuItem>
+                )}
+              </NavMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
-        <SidebarGroup>
-          <SidebarGroupLabel>Evaluate</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <NavButton
-                  title="Logs"
-                  Icon={routes.logs.Icon}
-                  href={routes.logs.href()}
-                  active={routes.logs.active}
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <NavButton
-                  title="Metrics"
-                  Icon={ChartNoAxesCombinedIcon}
-                  onClick={() => setMetricsModalOpen(true)}
-                />
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup className="mt-auto">
-          <SidebarGroupContent>
-            <NavMenu items={bottomNav}>
-              <SidebarMenuItem>
-                <NavButton
-                  title="What's new"
-                  Icon={Sparkles}
-                  href="https://www.getgram.ai/changelog"
-                  target="_blank"
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <NavButton
-                  title="Docs"
-                  Icon={routes.docs.Icon}
-                  href={routes.docs.href()}
-                  active={routes.docs.active}
-                />
-              </SidebarMenuItem>
-            </NavMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <FreeTierExceededNotification />
-        <ProjectMenu />
       </SidebarFooter>
-      <FeatureRequestModal
-        isOpen={metricsModalOpen}
-        onClose={() => setMetricsModalOpen(false)}
-        title="Metrics Coming Soon"
-        description="Metrics are coming soon! We'll let you know when this feature is available."
-        actionType="metrics"
-        icon={ChartNoAxesCombinedIcon}
-      />
       <FeatureRequestModal
         isOpen={isUpgradeModalOpen}
         onClose={() => setIsUpgradeModalOpen(false)}

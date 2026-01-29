@@ -6,6 +6,85 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
+var McpEnvironmentConfigInput = Type("McpEnvironmentConfigInput", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Input for configuring an environment variable for an MCP server.")
+
+	Attribute("variable_name", String, "The name of the environment variable")
+	Attribute("header_display_name", String, "Custom display name for the variable in MCP headers")
+	Attribute("provided_by", String, "How the variable is provided: 'user', 'system', or 'none'")
+
+	Required("variable_name", "provided_by")
+})
+
+var McpEnvironmentConfig = Type("McpEnvironmentConfig", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Represents an environment variable configured for an MCP server.")
+
+	Attribute("id", String, "The ID of the environment config")
+	Attribute("variable_name", String, "The name of the environment variable")
+	Attribute("header_display_name", String, "Custom display name for the variable in MCP headers")
+	Attribute("provided_by", String, "How the variable is provided: 'user', 'system', or 'none'")
+	Attribute("created_at", String, "When the config was created", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "When the config was last updated", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "variable_name", "provided_by", "created_at", "updated_at")
+})
+
+var McpExportTool = Type("McpExportTool", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A tool definition in the MCP export")
+
+	Attribute("name", String, "The tool name")
+	Attribute("description", String, "Description of what the tool does")
+	Attribute("input_schema", Any, "JSON Schema for the tool's input parameters")
+
+	Required("name", "description", "input_schema")
+})
+
+var McpExportAuthHeader = Type("McpExportAuthHeader", func() {
+	Meta("struct:pkg:path", "types")
+	Description("An authentication header required by the MCP server")
+
+	Attribute("name", String, "The HTTP header name (e.g., Authorization)")
+	Attribute("display_name", String, "User-friendly display name (e.g., API Key)")
+
+	Required("name", "display_name")
+})
+
+var McpExportAuthentication = Type("McpExportAuthentication", func() {
+	Meta("struct:pkg:path", "types")
+	Description("Authentication requirements for the MCP server")
+
+	Attribute("required", Boolean, "Whether authentication is required")
+	Attribute("headers", ArrayOf(McpExportAuthHeader), "Required authentication headers")
+
+	Required("required", "headers")
+})
+
+var McpExport = Type("McpExport", func() {
+	Meta("struct:pkg:path", "types")
+	Description("Complete MCP server export for documentation and integration")
+
+	Attribute("name", String, "The MCP server name")
+	Attribute("slug", String, "The MCP server slug")
+	Attribute("description", String, "Description of the MCP server")
+	Attribute("server_url", String, "The MCP server URL")
+	Attribute("documentation_url", String, "Link to external documentation")
+	Attribute("logo_url", String, "URL to the server logo")
+	Attribute("instructions", String, "Server instructions for users")
+	Attribute("tools", ArrayOf(McpExportTool), "Available tools on this MCP server")
+	Attribute("authentication", McpExportAuthentication, "Authentication requirements")
+
+	Required("name", "slug", "server_url", "tools", "authentication")
+})
+
 var McpMetadata = Type("McpMetadata", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -22,7 +101,11 @@ var McpMetadata = Type("McpMetadata", func() {
 		Format(FormatURI)
 	})
 	Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
-	Attribute("header_display_names", MapOf(String, String), "Maps security scheme keys to user-friendly display names")
+	Attribute("default_environment_id", String, "The default environment to load variables from", func() {
+		Format(FormatUUID)
+	})
+	Attribute("environment_configs", ArrayOf(McpEnvironmentConfig), "The list of environment variables configured for this MCP")
+
 	Attribute("created_at", String, "When the metadata entry was created", func() {
 		Format(FormatDateTime)
 	})
@@ -36,17 +119,25 @@ var McpMetadata = Type("McpMetadata", func() {
 var _ = Service("mcpMetadata", func() {
 	Description("Manages metadata for the MCP install page shown to users.")
 
+	Security(security.ByKey, security.ProjectSlug, func() {
+		Scope("producer")
+	})
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
 	Method("getMcpMetadata", func() {
 		Description("Fetch the metadata that powers the MCP install page.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
 			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
 
 			Required("toolset_slug")
 
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -57,6 +148,7 @@ var _ = Service("mcpMetadata", func() {
 
 		HTTP(func() {
 			GET("/rpc/mcpMetadata.get")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("toolset_slug")
@@ -70,15 +162,24 @@ var _ = Service("mcpMetadata", func() {
 
 	Method("setMcpMetadata", func() {
 		Description("Create or update the metadata that powers the MCP install page.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
 			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
 			Attribute("logo_asset_id", String, "The asset ID for the MCP install page logo")
 			Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page")
 			Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
+			Attribute("default_environment_id", String, "The default environment to load variables from", func() {
+				Format(FormatUUID)
+			})
+			Attribute("environment_configs", ArrayOf(McpEnvironmentConfigInput), "The list of environment variables to configure for this MCP")
 
 			Required("toolset_slug")
 
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -87,11 +188,43 @@ var _ = Service("mcpMetadata", func() {
 
 		HTTP(func() {
 			POST("/rpc/mcpMetadata.set")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 		})
 
 		Meta("openapi:operationId", "setMcpMetadata")
 		Meta("openapi:extension:x-speakeasy-name-override", "set")
+	})
+
+	Method("exportMcpMetadata", func() {
+		Description("Export MCP server details as JSON for documentation and integration purposes.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Attribute("mcp_slug", shared.Slug, "The MCP server slug (from the install URL)")
+
+			Required("mcp_slug")
+
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(McpExport)
+
+		HTTP(func() {
+			POST("/rpc/mcpMetadata.export")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "exportMcpMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "export")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ExportMcpMetadata"}`)
 	})
 })

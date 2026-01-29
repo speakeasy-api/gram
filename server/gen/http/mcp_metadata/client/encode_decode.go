@@ -42,6 +42,10 @@ func EncodeGetMcpMetadataRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if !ok {
 			return goahttp.ErrInvalidType("mcpMetadata", "getMcpMetadata", "*mcpmetadata.GetMcpMetadataPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -279,6 +283,10 @@ func EncodeSetMcpMetadataRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if !ok {
 			return goahttp.ErrInvalidType("mcpMetadata", "setMcpMetadata", "*mcpmetadata.SetMcpMetadataPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -494,6 +502,248 @@ func DecodeSetMcpMetadataResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildExportMcpMetadataRequest instantiates a HTTP request object with method
+// and path set to call the "mcpMetadata" service "exportMcpMetadata" endpoint
+func (c *Client) BuildExportMcpMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ExportMcpMetadataMcpMetadataPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpMetadata", "exportMcpMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeExportMcpMetadataRequest returns an encoder for requests sent to the
+// mcpMetadata exportMcpMetadata server.
+func EncodeExportMcpMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpmetadata.ExportMcpMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpMetadata", "exportMcpMetadata", "*mcpmetadata.ExportMcpMetadataPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewExportMcpMetadataRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpMetadata", "exportMcpMetadata", err)
+		}
+		return nil
+	}
+}
+
+// DecodeExportMcpMetadataResponse returns a decoder for responses returned by
+// the mcpMetadata exportMcpMetadata endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeExportMcpMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeExportMcpMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ExportMcpMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			err = ValidateExportMcpMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			res := NewExportMcpMetadataMcpExportOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ExportMcpMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			err = ValidateExportMcpMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			return nil, NewExportMcpMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ExportMcpMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			err = ValidateExportMcpMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			return nil, NewExportMcpMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ExportMcpMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			err = ValidateExportMcpMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			return nil, NewExportMcpMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ExportMcpMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			err = ValidateExportMcpMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			return nil, NewExportMcpMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ExportMcpMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			err = ValidateExportMcpMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			return nil, NewExportMcpMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ExportMcpMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			err = ValidateExportMcpMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			return nil, NewExportMcpMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ExportMcpMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			err = ValidateExportMcpMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			return nil, NewExportMcpMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ExportMcpMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+				}
+				err = ValidateExportMcpMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+				}
+				return nil, NewExportMcpMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ExportMcpMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+				}
+				err = ValidateExportMcpMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+				}
+				return nil, NewExportMcpMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpMetadata", "exportMcpMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ExportMcpMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			err = ValidateExportMcpMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+			}
+			return nil, NewExportMcpMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpMetadata", "exportMcpMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalMcpMetadataResponseBodyToTypesMcpMetadata builds a value of type
 // *types.McpMetadata from a value of type *McpMetadataResponseBody.
 func unmarshalMcpMetadataResponseBodyToTypesMcpMetadata(v *McpMetadataResponseBody) *types.McpMetadata {
@@ -506,16 +756,113 @@ func unmarshalMcpMetadataResponseBodyToTypesMcpMetadata(v *McpMetadataResponseBo
 		LogoAssetID:              v.LogoAssetID,
 		ExternalDocumentationURL: v.ExternalDocumentationURL,
 		Instructions:             v.Instructions,
+		DefaultEnvironmentID:     v.DefaultEnvironmentID,
 		CreatedAt:                *v.CreatedAt,
 		UpdatedAt:                *v.UpdatedAt,
 	}
-	if v.HeaderDisplayNames != nil {
-		res.HeaderDisplayNames = make(map[string]string, len(v.HeaderDisplayNames))
-		for key, val := range v.HeaderDisplayNames {
-			tk := key
-			tv := val
-			res.HeaderDisplayNames[tk] = tv
+	if v.EnvironmentConfigs != nil {
+		res.EnvironmentConfigs = make([]*types.McpEnvironmentConfig, len(v.EnvironmentConfigs))
+		for i, val := range v.EnvironmentConfigs {
+			if val == nil {
+				res.EnvironmentConfigs[i] = nil
+				continue
+			}
+			res.EnvironmentConfigs[i] = unmarshalMcpEnvironmentConfigResponseBodyToTypesMcpEnvironmentConfig(val)
 		}
+	}
+
+	return res
+}
+
+// unmarshalMcpEnvironmentConfigResponseBodyToTypesMcpEnvironmentConfig builds
+// a value of type *types.McpEnvironmentConfig from a value of type
+// *McpEnvironmentConfigResponseBody.
+func unmarshalMcpEnvironmentConfigResponseBodyToTypesMcpEnvironmentConfig(v *McpEnvironmentConfigResponseBody) *types.McpEnvironmentConfig {
+	if v == nil {
+		return nil
+	}
+	res := &types.McpEnvironmentConfig{
+		ID:                *v.ID,
+		VariableName:      *v.VariableName,
+		HeaderDisplayName: v.HeaderDisplayName,
+		ProvidedBy:        *v.ProvidedBy,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// marshalTypesMcpEnvironmentConfigInputToMcpEnvironmentConfigInputRequestBody
+// builds a value of type *McpEnvironmentConfigInputRequestBody from a value of
+// type *types.McpEnvironmentConfigInput.
+func marshalTypesMcpEnvironmentConfigInputToMcpEnvironmentConfigInputRequestBody(v *types.McpEnvironmentConfigInput) *McpEnvironmentConfigInputRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &McpEnvironmentConfigInputRequestBody{
+		VariableName:      v.VariableName,
+		HeaderDisplayName: v.HeaderDisplayName,
+		ProvidedBy:        v.ProvidedBy,
+	}
+
+	return res
+}
+
+// marshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput
+// builds a value of type *types.McpEnvironmentConfigInput from a value of type
+// *McpEnvironmentConfigInputRequestBody.
+func marshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput(v *McpEnvironmentConfigInputRequestBody) *types.McpEnvironmentConfigInput {
+	if v == nil {
+		return nil
+	}
+	res := &types.McpEnvironmentConfigInput{
+		VariableName:      v.VariableName,
+		HeaderDisplayName: v.HeaderDisplayName,
+		ProvidedBy:        v.ProvidedBy,
+	}
+
+	return res
+}
+
+// unmarshalMcpExportToolResponseBodyToTypesMcpExportTool builds a value of
+// type *types.McpExportTool from a value of type *McpExportToolResponseBody.
+func unmarshalMcpExportToolResponseBodyToTypesMcpExportTool(v *McpExportToolResponseBody) *types.McpExportTool {
+	res := &types.McpExportTool{
+		Name:        *v.Name,
+		Description: *v.Description,
+		InputSchema: v.InputSchema,
+	}
+
+	return res
+}
+
+// unmarshalMcpExportAuthenticationResponseBodyToTypesMcpExportAuthentication
+// builds a value of type *types.McpExportAuthentication from a value of type
+// *McpExportAuthenticationResponseBody.
+func unmarshalMcpExportAuthenticationResponseBodyToTypesMcpExportAuthentication(v *McpExportAuthenticationResponseBody) *types.McpExportAuthentication {
+	res := &types.McpExportAuthentication{
+		Required: *v.Required,
+	}
+	res.Headers = make([]*types.McpExportAuthHeader, len(v.Headers))
+	for i, val := range v.Headers {
+		if val == nil {
+			res.Headers[i] = nil
+			continue
+		}
+		res.Headers[i] = unmarshalMcpExportAuthHeaderResponseBodyToTypesMcpExportAuthHeader(val)
+	}
+
+	return res
+}
+
+// unmarshalMcpExportAuthHeaderResponseBodyToTypesMcpExportAuthHeader builds a
+// value of type *types.McpExportAuthHeader from a value of type
+// *McpExportAuthHeaderResponseBody.
+func unmarshalMcpExportAuthHeaderResponseBodyToTypesMcpExportAuthHeader(v *McpExportAuthHeaderResponseBody) *types.McpExportAuthHeader {
+	res := &types.McpExportAuthHeader{
+		Name:        *v.Name,
+		DisplayName: *v.DisplayName,
 	}
 
 	return res

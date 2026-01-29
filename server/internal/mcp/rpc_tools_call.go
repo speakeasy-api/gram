@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -27,6 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -66,6 +69,7 @@ func handleToolsCall(
 	featuresClient *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal temporal_client.Client,
+	mcpMetadataRepo *mcpmetadata_repo.Queries,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -185,6 +189,26 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
 	}
 
+	// Extract OAuth token for external MCP servers (token with no security keys = general token)
+	var oauthToken string
+	for _, t := range payload.oauthTokenInputs {
+		if len(t.securityKeys) == 0 && t.Token != "" {
+			oauthToken = t.Token
+			break
+		}
+	}
+
+	toolCallEnv := toolconfig.ToolCallEnv{
+		UserConfig: userConfig,
+		SystemEnv:  systemConfig,
+		OAuthToken: oauthToken,
+	}
+
+	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").Log(ctx, logger)
+	}
+
 	descriptor := plan.Descriptor
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
@@ -250,17 +274,7 @@ func handleToolsCall(
 		telemSvc.CreateLog(params)
 	}()
 
-	// Extract OAuth token for external MCP servers (token with no security keys = general token)
-	var oauthToken string
-	for _, t := range payload.oauthTokenInputs {
-		if len(t.securityKeys) == 0 && t.Token != "" {
-			oauthToken = t.Token
-			break
-		}
-	}
-
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolconfig.ToolCallEnv{
-		UserConfig: userConfig, SystemEnv: systemConfig, OAuthToken: oauthToken}, plan, logAttrs)
+	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}
@@ -549,4 +563,59 @@ type contentChunk[T any, D any] struct {
 type toolCallResult struct {
 	Content []json.RawMessage `json:"content"`
 	IsError bool              `json:"isError,omitzero"`
+}
+
+// filterOmittedEnvVars filters environment variables based on MCP metadata configuration.
+// It removes variables from SystemEnv and UserConfig that are not meant to be sourced from those locations.
+func filterOmittedEnvVars(
+	ctx context.Context,
+	env toolconfig.ToolCallEnv,
+	repo *mcpmetadata_repo.Queries,
+	toolsetID uuid.UUID,
+) error {
+	rawMetadata, err := repo.GetMetadataForToolset(ctx, toolsetID)
+	if err != nil {
+		// Fallback behavior for backwards compatibility
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("get metadata for toolset: %w", err)
+	}
+
+	mcpMeta, err := mcpmetadata.ToMCPMetadata(ctx, repo, rawMetadata)
+	if err != nil {
+		return fmt.Errorf("convert to mcp metadata: %w", err)
+	}
+
+	// Fallback behavior for backwards compatibility
+	if mcpMeta.DefaultEnvironmentID == nil {
+		return nil
+	}
+
+	systemKeysToRetain := make(map[string]bool)
+	userKeysToRetain := make(map[string]bool)
+	for _, config := range mcpMeta.EnvironmentConfigs {
+		switch config.ProvidedBy {
+		case "system":
+			systemKeysToRetain[strings.ToLower(config.VariableName)] = true
+		case "user":
+			userKeysToRetain[strings.ToLower(config.VariableName)] = true
+		}
+	}
+
+	// Delete environment variables that are not meant to be sourced from the given location
+	// E.G. if a variable is set to "system" it should not be sourced from the user config
+	// Removes anything not explicitly listed as a system or user variable
+	for _, key := range env.SystemEnv.Keys() {
+		if !systemKeysToRetain[key] {
+			env.SystemEnv.Delete(key)
+		}
+	}
+	for _, key := range env.UserConfig.Keys() {
+		if !userKeysToRetain[key] {
+			env.UserConfig.Delete(key)
+		}
+	}
+
+	return nil
 }

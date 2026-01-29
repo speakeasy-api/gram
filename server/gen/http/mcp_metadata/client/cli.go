@@ -19,7 +19,7 @@ import (
 
 // BuildGetMcpMetadataPayload builds the payload for the mcpMetadata
 // getMcpMetadata endpoint from CLI flags.
-func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcpMetadataGetMcpMetadataSessionToken string, mcpMetadataGetMcpMetadataProjectSlugInput string) (*mcpmetadata.GetMcpMetadataPayload, error) {
+func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcpMetadataGetMcpMetadataApikeyToken string, mcpMetadataGetMcpMetadataSessionToken string, mcpMetadataGetMcpMetadataProjectSlugInput string) (*mcpmetadata.GetMcpMetadataPayload, error) {
 	var err error
 	var toolsetSlug string
 	{
@@ -30,6 +30,12 @@ func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcp
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpMetadataGetMcpMetadataApikeyToken != "" {
+			apikeyToken = &mcpMetadataGetMcpMetadataApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -46,6 +52,7 @@ func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcp
 	}
 	v := &mcpmetadata.GetMcpMetadataPayload{}
 	v.ToolsetSlug = types.Slug(toolsetSlug)
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -54,20 +61,29 @@ func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcp
 
 // BuildSetMcpMetadataPayload builds the payload for the mcpMetadata
 // setMcpMetadata endpoint from CLI flags.
-func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadataSetMcpMetadataSessionToken string, mcpMetadataSetMcpMetadataProjectSlugInput string) (*mcpmetadata.SetMcpMetadataPayload, error) {
+func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadataSetMcpMetadataApikeyToken string, mcpMetadataSetMcpMetadataSessionToken string, mcpMetadataSetMcpMetadataProjectSlugInput string) (*mcpmetadata.SetMcpMetadataPayload, error) {
 	var err error
 	var body SetMcpMetadataRequestBody
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Magni et.\",\n      \"instructions\": \"Est esse velit similique.\",\n      \"logo_asset_id\": \"Minus eum.\",\n      \"toolset_slug\": \"tgt\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"ab67be27-e905-43ef-a7a4-ac59a7c814f1\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Amet suscipit id voluptatem consectetur tenetur.\",\n            \"provided_by\": \"Voluptas aut.\",\n            \"variable_name\": \"Architecto consectetur.\"\n         },\n         {\n            \"header_display_name\": \"Amet suscipit id voluptatem consectetur tenetur.\",\n            \"provided_by\": \"Voluptas aut.\",\n            \"variable_name\": \"Architecto consectetur.\"\n         },\n         {\n            \"header_display_name\": \"Amet suscipit id voluptatem consectetur tenetur.\",\n            \"provided_by\": \"Voluptas aut.\",\n            \"variable_name\": \"Architecto consectetur.\"\n         }\n      ],\n      \"external_documentation_url\": \"Rerum culpa omnis ea libero.\",\n      \"instructions\": \"Sint in et.\",\n      \"logo_asset_id\": \"Omnis deleniti facilis quia dolorum.\",\n      \"toolset_slug\": \"509\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", body.ToolsetSlug, utf8.RuneCountInString(body.ToolsetSlug), 40, false))
 		}
+		if body.DefaultEnvironmentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpMetadataSetMcpMetadataApikeyToken != "" {
+			apikeyToken = &mcpMetadataSetMcpMetadataApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -87,7 +103,65 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
+		DefaultEnvironmentID:     body.DefaultEnvironmentID,
 	}
+	if body.EnvironmentConfigs != nil {
+		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfigInput, len(body.EnvironmentConfigs))
+		for i, val := range body.EnvironmentConfigs {
+			if val == nil {
+				v.EnvironmentConfigs[i] = nil
+				continue
+			}
+			v.EnvironmentConfigs[i] = marshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildExportMcpMetadataPayload builds the payload for the mcpMetadata
+// exportMcpMetadata endpoint from CLI flags.
+func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpMetadataExportMcpMetadataApikeyToken string, mcpMetadataExportMcpMetadataSessionToken string, mcpMetadataExportMcpMetadataProjectSlugInput string) (*mcpmetadata.ExportMcpMetadataPayload, error) {
+	var err error
+	var body ExportMcpMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"gfk\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", body.McpSlug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(body.McpSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", body.McpSlug, utf8.RuneCountInString(body.McpSlug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpMetadataExportMcpMetadataApikeyToken != "" {
+			apikeyToken = &mcpMetadataExportMcpMetadataApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpMetadataExportMcpMetadataSessionToken != "" {
+			sessionToken = &mcpMetadataExportMcpMetadataSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpMetadataExportMcpMetadataProjectSlugInput != "" {
+			projectSlugInput = &mcpMetadataExportMcpMetadataProjectSlugInput
+		}
+	}
+	v := &mcpmetadata.ExportMcpMetadataPayload{
+		McpSlug: types.Slug(body.McpSlug),
+	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

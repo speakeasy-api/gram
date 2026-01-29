@@ -1,5 +1,6 @@
 import type {
   Deployment,
+  Toolset,
   UploadOpenAPIv3Result,
 } from "@gram/client/models/components";
 import React from "react";
@@ -11,6 +12,7 @@ type StepperContextApiMeta = {
   uploadResult: UploadOpenAPIv3Result | null;
   assetName: string | null;
   deployment: Deployment | null;
+  toolset: Toolset | null;
 };
 
 type StepperContextApi = {
@@ -54,6 +56,7 @@ export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
     uploadResult: null,
     assetName: null,
     deployment: null,
+    toolset: null,
   });
 
   const steps = React.useRef<Set<number>>(new Set());
@@ -103,6 +106,7 @@ export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
       uploadResult: null,
       assetName: null,
       deployment: null,
+      toolset: null,
     };
     subscribers.current.forEach((cb) => cb(step.current));
   }, [initialStep]);

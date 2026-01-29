@@ -2395,6 +2395,7 @@ func unmarshalEnvironmentEntryResponseBodyToTypesEnvironmentEntry(v *Environment
 	res := &types.EnvironmentEntry{
 		Name:      *v.Name,
 		Value:     *v.Value,
+		ValueHash: *v.ValueHash,
 		CreatedAt: *v.CreatedAt,
 		UpdatedAt: *v.UpdatedAt,
 	}

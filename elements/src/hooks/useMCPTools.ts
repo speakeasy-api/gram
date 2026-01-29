@@ -23,12 +23,21 @@ export function useMCPTools({
   gramEnvironment?: string
   chatId?: string
 }): UseQueryResult<MCPToolsResult, Error> {
+  const envQueryKey = Object.entries(environment ?? {}).map(
+    (k, v) => `${k}:${v}`
+  )
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
     (k, v) => `${k}:${v}`
   )
 
   const queryResult = useQuery({
-    queryKey: ['mcpTools', mcp, gramEnvironment, ...authQueryKey],
+    queryKey: [
+      'mcpTools',
+      mcp,
+      gramEnvironment,
+      ...envQueryKey,
+      ...authQueryKey,
+    ],
     queryFn: async () => {
       assert(!auth.isLoading, 'No auth found')
       assert(mcp, 'No MCP URL found')

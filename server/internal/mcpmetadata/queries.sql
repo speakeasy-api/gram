@@ -1,5 +1,14 @@
 -- name: GetMetadataForToolset :one
-SELECT *
+SELECT id,
+       toolset_id,
+       project_id,
+       external_documentation_url,
+       logo_id,
+       instructions,
+       header_display_names,
+       default_environment_id,
+       created_at,
+       updated_at
 FROM mcp_metadata
 WHERE toolset_id = @toolset_id
 ORDER BY updated_at DESC
@@ -11,26 +20,16 @@ INSERT INTO mcp_metadata (
     project_id,
     external_documentation_url,
     logo_id,
-    instructions
-) VALUES (@toolset_id, @project_id, @external_documentation_url, @logo_id, @instructions)
+    instructions,
+    default_environment_id
+) VALUES (@toolset_id, @project_id, @external_documentation_url, @logo_id, @instructions, @default_environment_id)
 ON CONFLICT (toolset_id)
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
+              default_environment_id = EXCLUDED.default_environment_id,
               updated_at = clock_timestamp()
-RETURNING *;
-
--- name: UpdateHeaderDisplayName :one
--- Updates a single header display name in the JSONB field.
--- If display_name is empty, removes the key from the map.
-UPDATE mcp_metadata
-SET header_display_names = CASE
-    WHEN @display_name::TEXT = '' THEN header_display_names - @security_key::TEXT
-    ELSE jsonb_set(header_display_names, ARRAY[@security_key::TEXT], to_jsonb(@display_name::TEXT))
-    END,
-    updated_at = clock_timestamp()
-WHERE toolset_id = @toolset_id AND project_id = @project_id
 RETURNING id,
           toolset_id,
           project_id,
@@ -38,6 +37,7 @@ RETURNING id,
           logo_id,
           instructions,
           header_display_names,
+          default_environment_id,
           created_at,
           updated_at;
 
@@ -45,3 +45,46 @@ RETURNING id,
 SELECT header_display_names
 FROM mcp_metadata
 WHERE toolset_id = @toolset_id;
+
+-- name: ListEnvironmentConfigs :many
+SELECT id,
+       project_id,
+       mcp_metadata_id,
+       variable_name,
+       header_display_name,
+       provided_by,
+       created_at,
+       updated_at
+FROM mcp_environment_configs
+WHERE mcp_metadata_id = @mcp_metadata_id
+ORDER BY variable_name ASC;
+
+-- name: UpsertEnvironmentConfig :one
+INSERT INTO mcp_environment_configs (
+    project_id,
+    mcp_metadata_id,
+    variable_name,
+    header_display_name,
+    provided_by
+) VALUES (@project_id, @mcp_metadata_id, @variable_name, @header_display_name, @provided_by)
+ON CONFLICT (mcp_metadata_id, variable_name)
+DO UPDATE SET header_display_name = EXCLUDED.header_display_name,
+              provided_by = EXCLUDED.provided_by,
+              updated_at = clock_timestamp()
+RETURNING id,
+          project_id,
+          mcp_metadata_id,
+          variable_name,
+          header_display_name,
+          provided_by,
+          created_at,
+          updated_at;
+
+-- name: DeleteEnvironmentConfig :exec
+DELETE FROM mcp_environment_configs
+WHERE mcp_metadata_id = @mcp_metadata_id
+  AND variable_name = @variable_name;
+
+-- name: DeleteAllEnvironmentConfigs :exec
+DELETE FROM mcp_environment_configs
+WHERE mcp_metadata_id = @mcp_metadata_id;

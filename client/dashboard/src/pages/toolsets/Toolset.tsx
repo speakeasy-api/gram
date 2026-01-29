@@ -90,7 +90,7 @@ export function useCloneToolset({
       });
       toast.success(`Toolset cloned successfully as "${data.name}"`);
       await toolsets.refetch();
-      routes.toolsets.toolset.goTo(data.slug);
+      routes.mcp.details.goTo(data.slug);
       onSuccess?.();
     },
     onError: (error) => {
@@ -505,7 +505,7 @@ export function ToolsetView({
       );
       setCreateToolsetDialogOpen(false);
       setNewToolsetName("");
-      routes.toolsets.toolset.goTo(data.slug);
+      routes.mcp.details.goTo(data.slug);
     },
   });
 
@@ -529,7 +529,7 @@ export function ToolsetView({
 
   const deleteToolset = useDeleteToolset({
     onSuccess: () => {
-      routes.toolsets.goTo();
+      routes.mcp.goTo();
     },
   });
 
@@ -576,8 +576,8 @@ export function ToolsetView({
   const filterButton = (
     <MultiSelect
       options={groupFilterItems}
-      defaultValue={groupFilterItems.map((group) => group.value)}
-      onValueChange={setSelectedGroups}
+      selectedValues={selectedGroups}
+      setSelectedValues={setSelectedGroups}
       placeholder="Filter tools"
       className="w-fit mb-4 capitalize"
     />

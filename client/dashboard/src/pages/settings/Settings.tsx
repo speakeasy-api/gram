@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useOrganization, useSession } from "@/contexts/Auth";
+import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert, cn, getCustomDomainCNAME } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
@@ -23,14 +23,26 @@ import { useRegisterDomainMutation } from "@gram/client/react-query/registerDoma
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, CheckCircle2, Copy, Globe, Loader2, X } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  Copy,
+  Globe,
+  Loader2,
+  ShieldAlert,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { SettingsProjectsTable } from "./SettingsProjectsTable";
 
 export default function Settings() {
   const organization = useOrganization();
   const session = useSession();
+  const isAdmin = useIsAdmin();
+  const navigate = useNavigate();
+  const [orgOverride, setOrgOverride] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
@@ -232,9 +244,10 @@ export default function Settings() {
           onClick={() => setKeyToRevoke(key)}
           className="hover:text-destructive"
         >
-          <Button.Text>
+          <Button.LeftIcon>
             <Icon name="trash-2" className="h-4 w-4" />
-          </Button.Text>
+          </Button.LeftIcon>
+          <Button.Text className="sr-only">Revoke API key</Button.Text>
         </Button>
       ),
     },
@@ -648,6 +661,44 @@ export default function Settings() {
           icon={Globe}
           accountUpgrade
         />
+
+        {isAdmin && (
+          <div className="mt-12 p-4 rounded-lg bg-red-500/5 border border-red-500/20">
+            <Stack
+              direction="horizontal"
+              align="center"
+              gap={2}
+              className="mb-3"
+            >
+              <ShieldAlert className="w-5 h-5 text-red-500" />
+              <Heading variant="h4" className="text-red-600 dark:text-red-400">
+                Admin Only
+              </Heading>
+            </Stack>
+            <Type variant="body" className="text-muted-foreground mb-4">
+              Override to a different organization by entering its slug below.
+            </Type>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (orgOverride.trim()) {
+                  navigate(`/${orgOverride.trim()}`);
+                }
+              }}
+              className="flex gap-2 max-w-md"
+            >
+              <Input
+                placeholder="organization-slug"
+                value={orgOverride}
+                onChange={setOrgOverride}
+                className="flex-1"
+              />
+              <Button type="submit" disabled={!orgOverride.trim()}>
+                Go to Org
+              </Button>
+            </form>
+          </div>
+        )}
       </Page.Body>
     </Page>
   );
