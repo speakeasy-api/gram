@@ -46,6 +46,12 @@ func TestCreateLog_LogsCorrectly(t *testing.T) {
 	require.Contains(t, log.Attributes, toolInfo.URN)
 	require.Contains(t, log.Attributes, toolInfo.Name)
 	require.Contains(t, log.Attributes, toolInfo.OrganizationID)
+
+	// HTTP data is stored in attributes (not denormalized columns)
+	require.Contains(t, log.Attributes, "POST")
+	require.Contains(t, log.Attributes, "\\/api\\/test")
+	require.Contains(t, log.Attributes, "200")
+	require.Contains(t, log.Attributes, "https:\\/\\/example.com")
 }
 
 func TestCreateLog_NilFunctionID(t *testing.T) {
