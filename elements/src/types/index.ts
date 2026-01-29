@@ -283,18 +283,6 @@ export interface ElementsConfig {
   history?: HistoryConfig
 
   /**
-   * Configuration for the chat thread.
-   *
-   * @example
-   * const config: ElementsConfig = {
-   *   thread: {
-   *     experimental_showFeedback: true,
-   *   },
-   * }
-   */
-  thread?: ThreadConfig
-
-  /**
    * The API configuration to use for the Elements library.
    *
    * Use this to override the default API URL, or add explicit auth configuration
@@ -327,6 +315,7 @@ export interface ElementsConfig {
    * @example
    * const config: ElementsConfig = {
    *   thread: {
+   *     experimental_showFeedback: true,
    *     followUpSuggestions: true,
    *   },
    * }
@@ -859,12 +848,13 @@ export interface SidecarConfig extends ExpandableConfig {
 }
 
 /**
- * Configuration for the chat thread.
+ * Configuration for the chat thread display and behavior.
  *
  * @example
  * const config: ElementsConfig = {
  *   thread: {
  *     experimental_showFeedback: true,
+ *     followUpSuggestions: true,
  *   },
  * }
  */
@@ -875,6 +865,13 @@ export interface ThreadConfig {
    * @default false
    */
   experimental_showFeedback?: boolean
+
+  /**
+   * Whether to show AI-generated follow-up question suggestions after each assistant response.
+   * When enabled, suggestions appear below the assistant's message to help guide the conversation.
+   * @default true
+   */
+  followUpSuggestions?: boolean
 }
 
 /**
@@ -923,25 +920,6 @@ export interface HistoryConfig {
    * }}>
    */
   initialThreadId?: string
-}
-
-/**
- * Configuration for the chat thread display and behavior.
- *
- * @example
- * const config: ElementsConfig = {
- *   thread: {
- *     followUpSuggestions: true,
- *   },
- * }
- */
-export interface ThreadConfig {
-  /**
-   * Whether to show AI-generated follow-up question suggestions after each assistant response.
-   * When enabled, suggestions appear below the assistant's message to help guide the conversation.
-   * @default true
-   */
-  followUpSuggestions?: boolean
 }
 
 /**
