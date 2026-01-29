@@ -735,6 +735,7 @@ func marshalTypesMcpMetadataToMcpMetadataResponseBody(v *types.McpMetadata) *Mcp
 		ExternalDocumentationURL: v.ExternalDocumentationURL,
 		Instructions:             v.Instructions,
 		DefaultEnvironmentID:     v.DefaultEnvironmentID,
+		InstallationOverrideURL:  v.InstallationOverrideURL,
 		CreatedAt:                v.CreatedAt,
 		UpdatedAt:                v.UpdatedAt,
 	}

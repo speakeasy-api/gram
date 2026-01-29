@@ -24,6 +24,10 @@ export type SetMcpMetadataRequestBody = {
    */
   externalDocumentationUrl?: string | undefined;
   /**
+   * URL to redirect to instead of showing the default installation page
+   */
+  installationOverrideUrl?: string | undefined;
+  /**
    * Server instructions returned in the MCP initialize response
    */
   instructions?: string | undefined;
@@ -42,6 +46,7 @@ export type SetMcpMetadataRequestBody$Outbound = {
   default_environment_id?: string | undefined;
   environment_configs?: Array<McpEnvironmentConfigInput$Outbound> | undefined;
   external_documentation_url?: string | undefined;
+  installation_override_url?: string | undefined;
   instructions?: string | undefined;
   logo_asset_id?: string | undefined;
   toolset_slug: string;
@@ -57,6 +62,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   environmentConfigs: z.array(McpEnvironmentConfigInput$outboundSchema)
     .optional(),
   externalDocumentationUrl: z.string().optional(),
+  installationOverrideUrl: z.string().optional(),
   instructions: z.string().optional(),
   logoAssetId: z.string().optional(),
   toolsetSlug: z.string(),
@@ -65,6 +71,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
     defaultEnvironmentId: "default_environment_id",
     environmentConfigs: "environment_configs",
     externalDocumentationUrl: "external_documentation_url",
+    installationOverrideUrl: "installation_override_url",
     logoAssetId: "logo_asset_id",
     toolsetSlug: "toolset_slug",
   });

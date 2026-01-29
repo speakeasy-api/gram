@@ -60,6 +60,7 @@ SELECT id,
        instructions,
        header_display_names,
        default_environment_id,
+       installation_override_url,
        created_at,
        updated_at
 FROM mcp_metadata
@@ -68,22 +69,9 @@ ORDER BY updated_at DESC
 LIMIT 1
 `
 
-type GetMetadataForToolsetRow struct {
-	ID                       uuid.UUID
-	ToolsetID                uuid.UUID
-	ProjectID                uuid.UUID
-	ExternalDocumentationUrl pgtype.Text
-	LogoID                   uuid.NullUUID
-	Instructions             pgtype.Text
-	HeaderDisplayNames       []byte
-	DefaultEnvironmentID     uuid.NullUUID
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
-}
-
-func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID) (GetMetadataForToolsetRow, error) {
+func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID) (McpMetadatum, error) {
 	row := q.db.QueryRow(ctx, getMetadataForToolset, toolsetID)
-	var i GetMetadataForToolsetRow
+	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
@@ -93,6 +81,7 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID
 		&i.Instructions,
 		&i.HeaderDisplayNames,
 		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -201,14 +190,16 @@ INSERT INTO mcp_metadata (
     external_documentation_url,
     logo_id,
     instructions,
-    default_environment_id
-) VALUES ($1, $2, $3, $4, $5, $6)
+    default_environment_id,
+    installation_override_url
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (toolset_id)
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
               default_environment_id = EXCLUDED.default_environment_id,
+              installation_override_url = EXCLUDED.installation_override_url,
               updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
@@ -218,6 +209,7 @@ RETURNING id,
           instructions,
           header_display_names,
           default_environment_id,
+          installation_override_url,
           created_at,
           updated_at
 `
@@ -229,22 +221,10 @@ type UpsertMetadataParams struct {
 	LogoID                   uuid.NullUUID
 	Instructions             pgtype.Text
 	DefaultEnvironmentID     uuid.NullUUID
+	InstallationOverrideUrl  pgtype.Text
 }
 
-type UpsertMetadataRow struct {
-	ID                       uuid.UUID
-	ToolsetID                uuid.UUID
-	ProjectID                uuid.UUID
-	ExternalDocumentationUrl pgtype.Text
-	LogoID                   uuid.NullUUID
-	Instructions             pgtype.Text
-	HeaderDisplayNames       []byte
-	DefaultEnvironmentID     uuid.NullUUID
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
-}
-
-func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (UpsertMetadataRow, error) {
+func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpMetadatum, error) {
 	row := q.db.QueryRow(ctx, upsertMetadata,
 		arg.ToolsetID,
 		arg.ProjectID,
@@ -252,8 +232,9 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		arg.LogoID,
 		arg.Instructions,
 		arg.DefaultEnvironmentID,
+		arg.InstallationOverrideUrl,
 	)
-	var i UpsertMetadataRow
+	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
@@ -263,6 +244,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		&i.Instructions,
 		&i.HeaderDisplayNames,
 		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

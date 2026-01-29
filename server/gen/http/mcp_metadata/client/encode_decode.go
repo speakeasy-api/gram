@@ -757,6 +757,7 @@ func unmarshalMcpMetadataResponseBodyToTypesMcpMetadata(v *McpMetadataResponseBo
 		ExternalDocumentationURL: v.ExternalDocumentationURL,
 		Instructions:             v.Instructions,
 		DefaultEnvironmentID:     v.DefaultEnvironmentID,
+		InstallationOverrideURL:  v.InstallationOverrideURL,
 		CreatedAt:                *v.CreatedAt,
 		UpdatedAt:                *v.UpdatedAt,
 	}
