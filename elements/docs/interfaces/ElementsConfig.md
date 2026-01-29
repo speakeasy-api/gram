@@ -391,3 +391,21 @@ const config: ElementsConfig = {
   },
 }
 ```
+
+***
+
+### thread?
+
+> `optional` **thread**: `ThreadConfig`
+
+Configuration for the chat thread display and behavior.
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  thread: {
+    followUpSuggestions: true,
+  },
+}
+```
