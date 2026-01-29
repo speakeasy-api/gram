@@ -117,11 +117,23 @@ jobs:
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
       - name: Login to GCR
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
-        with:
-          registry: gcr.io/linen-analyst-344721
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
+        env:
+          GCR_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          max_attempts=3
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "Docker login attempt $i/$max_attempts..."
+            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
+              echo "Login successful"
+              exit 0
+            fi
+            if [ $i -lt $max_attempts ]; then
+              echo "Login failed, waiting 5s before retry..."
+              sleep 5
+            fi
+          done
+          echo "All login attempts failed"
+          exit 1
       - name: Build and Push Registry image to GCR
         id: build
         if: ${{ needs.changes.outputs.server == 'true' }}
@@ -497,11 +509,23 @@ jobs:
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
       - name: Login to GCR
         if: env.SHOULD_BUILD_DOCKER == 'true'
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
-        with:
-          registry: gcr.io/linen-analyst-344721
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
+        env:
+          GCR_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          max_attempts=3
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "Docker login attempt $i/$max_attempts..."
+            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
+              echo "Login successful"
+              exit 0
+            fi
+            if [ $i -lt $max_attempts ]; then
+              echo "Login failed, waiting 5s before retry..."
+              sleep 5
+            fi
+          done
+          echo "All login attempts failed"
+          exit 1
       - name: Build and Push Registry image to GCR
         id: build
         if: env.SHOULD_BUILD_DOCKER == 'true'
