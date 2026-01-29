@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     -- OTel Log Record Identity
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.',
 
+    -- Materialized timestamp for convenient querying
+    timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(time_unix_nano) COMMENT 'Event timestamp derived from time_unix_nano for human-readable queries.',
+
     -- OTel Timestamp fields
     time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock.' CODEC(Delta, ZSTD),
     observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system.' CODEC(Delta, ZSTD),
@@ -92,15 +95,14 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     gram_deployment_id Nullable(UUID) COMMENT 'Deployment ID (denormalized from resource_attributes).',
     gram_function_id Nullable(UUID) COMMENT 'Function ID that generated the log (null for HTTP logs).',
     gram_urn String COMMENT 'The Gram URN (e.g. tools:function:my-source:my-tool).',
+    gram_chat_id Nullable(UUID) COMMENT 'Chat ID that triggered this log (null for non-chat contexts).',
+    
     service_name LowCardinality(String) COMMENT 'Logical service name (e.g., gram-functions, gram-http-gateway).',
     service_version Nullable(String) COMMENT 'Service version.',
-    gram_chat_id Nullable(UUID) COMMENT 'Chat ID that triggered this log (null for non-chat contexts).',
 
-    -- Materialized timestamp for convenient querying
-    timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(time_unix_nano) COMMENT 'Event timestamp derived from time_unix_nano for human-readable queries.',
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
-ORDER BY (gram_project_id, gram_chat_id, time_unix_nano, id)
+ORDER BY (gram_project_id, time_unix_nano, id)
 TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Unified OTel-compatible telemetry logs from all Gram sources (HTTP requests, function logs, etc.)';
