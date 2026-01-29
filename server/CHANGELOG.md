@@ -1,5 +1,12 @@
 # server
 
+## 0.20.2
+
+### Patch Changes
+
+- 89bcd84: Support custom HTTP headers for external MCP servers, enabling authenticated access to registries requiring API keys
+- afb9fbb: Adds new endpoint to retrieve summarized project metrics
+
 ## 0.20.1
 
 ### Patch Changes

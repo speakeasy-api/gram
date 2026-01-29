@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.27.0
+
+### Minor Changes
+
+- 0a550bc: Adds experimental metrics insights to dashboard.
+- 567289d: Major UX overhaul with redesigned MCP cards, pattern-based illustrations, and improved environment variable management
+
+### Patch Changes
+
+- 6a35424: Various UX improvements to the new dashboard
+- Updated dependencies [659d955]
+- Updated dependencies [afb9fbb]
+  - @gram/client@0.26.7
+
 ## 0.26.19
 
 ### Patch Changes
