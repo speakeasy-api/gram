@@ -101,8 +101,11 @@ const preview: Preview = {
         },
       }
 
+      // Use story ID + theme as key to ensure full remount when switching stories
+      const storyKey = `${context.id}-${storybookTheme}`
+
       return (
-        <ElementsDecorator config={elementsConfig} key={storybookTheme}>
+        <ElementsDecorator config={elementsConfig} key={storyKey}>
           <Story />
         </ElementsDecorator>
       )

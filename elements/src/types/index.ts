@@ -16,6 +16,9 @@ import {
   type ReactNode,
 } from 'react'
 import type { Plugin } from './plugins'
+import type { AgentsConfig } from './agents'
+
+export * from './agents'
 
 /**
  * Function to retrieve the session token from the backend endpoint.
@@ -308,6 +311,20 @@ export interface ElementsConfig {
    * }
    */
   errorTracking?: ErrorTrackingConfigOption
+
+  /**
+   * Configuration for agentic workflows.
+   * When enabled, the LLM can spawn sub-agents to handle specialized tasks.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   agents: {
+   *     enabled: true,
+   *     autoExpandSubAgents: false,
+   *   },
+   * }
+   */
+  agents?: AgentsConfig
 }
 
 /**

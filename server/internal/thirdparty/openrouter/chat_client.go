@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,8 +16,10 @@ import (
 	or_base "github.com/OpenRouterTeam/go-sdk"
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
+	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 type ChatClient struct {
@@ -214,4 +217,192 @@ func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string
 
 	msg := chatResp.Choices[0].Message
 	return &msg, nil
+}
+
+// StreamingCompletionResult holds the accumulated result from a streaming completion
+type StreamingCompletionResult struct {
+	Content   strings.Builder
+	ToolCalls []ToolCall
+}
+
+// StreamCompletionFromMessages streams a chat completion, calling onChunk for each content delta.
+// Returns the final accumulated message when complete.
+func (c *ChatClient) StreamCompletionFromMessages(
+	ctx context.Context,
+	orgID string,
+	projectID string,
+	messages []or.Message,
+	tools []Tool,
+	temperature *float64,
+	model string,
+	onChunk func(delta string) error,
+) (*or.Message, error) {
+	openrouterKey, err := c.openRouter.ProvisionAPIKey(ctx, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
+	}
+
+	// Default temperature to 1.0 if not provided
+	temp := float32(1.0)
+	if temperature != nil {
+		temp = float32(*temperature)
+	}
+
+	// Default model if not provided
+	modelToUse := model
+	if modelToUse == "" {
+		modelToUse = DefaultChatModel
+	}
+
+	reqBody := OpenAIChatRequest{
+		Model:       modelToUse,
+		Messages:    messages,
+		Stream:      true,
+		Tools:       tools,
+		Temperature: temp,
+	}
+
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request error: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/v1/chat/completions", OpenRouterBaseURL), bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("create request error: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+openrouterKey)
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, err := c.chatClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("chat request failed: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(err))
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("OpenRouter API error: %s", strings.TrimSpace(string(body)))
+	}
+
+	// Accumulate the response
+	var result StreamingCompletionResult
+	toolCallsMap := make(map[int]*ToolCall) // Track tool calls by index
+	var completionID string
+
+	// Read SSE stream
+	reader := NewSSEReader(resp.Body)
+	for {
+		event, err := reader.ReadEvent()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read SSE event: %w", err)
+		}
+
+		// Skip empty events
+		if event.Data == "" || event.Data == "[DONE]" {
+			continue
+		}
+
+		var chunk StreamingChunk
+		if err := json.Unmarshal([]byte(event.Data), &chunk); err != nil {
+			c.logger.WarnContext(ctx, "failed to unmarshal streaming chunk", attr.SlogError(err))
+			continue
+		}
+
+		if completionID == "" {
+			completionID = chunk.ID
+		}
+
+		for _, choice := range chunk.Choices {
+			// Handle content delta
+			if choice.Delta.Content != "" {
+				result.Content.WriteString(choice.Delta.Content)
+				if onChunk != nil {
+					if err := onChunk(choice.Delta.Content); err != nil {
+						return nil, fmt.Errorf("onChunk callback error: %w", err)
+					}
+				}
+			}
+
+			// Handle tool call deltas
+			for _, tc := range choice.Delta.ToolCalls {
+				existing, ok := toolCallsMap[tc.Index]
+				if !ok {
+					// New tool call
+					newTC := ToolCall{
+						Index:    tc.Index,
+						ID:       tc.ID,
+						Type:     tc.Type,
+						Function: tc.Function,
+					}
+					toolCallsMap[tc.Index] = &newTC
+				} else {
+					// Accumulate function arguments
+					if tc.Function.Name != "" {
+						existing.Function.Name = tc.Function.Name
+					}
+					existing.Function.Arguments += tc.Function.Arguments
+				}
+			}
+		}
+	}
+
+	// Convert tool calls map to slice
+	for _, tc := range toolCallsMap {
+		result.ToolCalls = append(result.ToolCalls, *tc)
+	}
+
+	// Track model usage for billing
+	if completionID != "" {
+		go func() {
+			err = c.openRouter.TriggerModelUsageTracking(context.WithoutCancel(ctx), completionID, orgID, projectID, billing.ModelUsageSourceAgents, "")
+			if err != nil {
+				c.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(err))
+			}
+		}()
+	}
+
+	// Build the final message
+	msg := buildMessageFromStreamResult(result)
+	return &msg, nil
+}
+
+// buildMessageFromStreamResult converts streaming result to an or.Message
+func buildMessageFromStreamResult(result StreamingCompletionResult) or.Message {
+	content := result.Content.String()
+
+	// Convert tool calls to or.ChatMessageToolCall format
+	var toolCalls []or.ChatMessageToolCall
+	for _, tc := range result.ToolCalls {
+		toolCalls = append(toolCalls, or.ChatMessageToolCall{
+			ID: tc.ID,
+			Function: or.ChatMessageToolCallFunction{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			},
+		})
+	}
+
+	// Build the assistant message
+	//nolint:exhaustruct // optional fields not needed
+	msg := or.AssistantMessage{
+		ToolCalls: toolCalls,
+	}
+
+	// Set content if present - use optionalnullable pattern
+	if content != "" {
+		msg.Content = optionalnullable.From(
+			conv.Ptr(or.CreateAssistantMessageContentStr(content)),
+		)
+	}
+
+	return or.CreateMessageAssistant(msg)
 }
