@@ -196,6 +196,27 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 		return oops.E(oops.CodeBadRequest, nil, "redirect_uri is required").Log(ctx, s.logger)
 	}
 
+	// Validate redirect_uri origin matches server origin to prevent open redirects.
+	// In local dev the frontend and backend run on different ports, so we only
+	// compare the hostname (without port) when the server is on localhost.
+	parsedRedirect, err := url.Parse(redirectURI)
+	if err != nil || parsedRedirect.Scheme == "" || parsedRedirect.Host == "" {
+		return oops.E(oops.CodeBadRequest, nil, "invalid redirect_uri").Log(ctx, s.logger)
+	}
+	serverHost := s.serverURL.Hostname()
+	redirectHost := parsedRedirect.Hostname()
+	if serverHost == "localhost" || serverHost == "127.0.0.1" {
+		// Local dev: allow any localhost redirect regardless of port
+		if redirectHost != "localhost" && redirectHost != "127.0.0.1" {
+			return oops.E(oops.CodeBadRequest, nil, "redirect_uri must be localhost in local mode").Log(ctx, s.logger)
+		}
+	} else {
+		// Prod/dev: strict origin match (scheme + host + port)
+		if parsedRedirect.Scheme != s.serverURL.Scheme || parsedRedirect.Host != s.serverURL.Host {
+			return oops.E(oops.CodeBadRequest, nil, "redirect_uri origin must match server origin").Log(ctx, s.logger)
+		}
+	}
+
 	toolsetID, err := uuid.Parse(toolsetIDStr)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
