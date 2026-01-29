@@ -39,14 +39,12 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
 import { SettingsProjectsTable } from "./SettingsProjectsTable";
 
 export default function Settings() {
   const organization = useOrganization();
   const session = useSession();
   const isAdmin = useIsAdmin();
-  const navigate = useNavigate();
   const client = useSdkClient();
   const project = useProject();
 
