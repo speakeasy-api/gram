@@ -78,6 +78,13 @@ WHERE mcp_slug = @mcp_slug
   AND custom_domain_id = @custom_domain_id
   AND deleted IS FALSE;
 
+-- name: GetToolsetByMcpSlugAndProject :one
+SELECT *
+FROM toolsets
+WHERE mcp_slug = @mcp_slug
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: GetPromptTemplatesForToolset :many
 WITH ranked_templates AS (
   SELECT

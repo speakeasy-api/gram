@@ -274,17 +274,15 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	}
 
 	mcpSlug := conv.ToLower(payload.McpSlug)
-	toolset, err := s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
+	toolset, err := s.toolsetRepo.GetToolsetByMcpSlugAndProject(ctx, toolsets_repo.GetToolsetByMcpSlugAndProjectParams{
+		McpSlug:   conv.ToPGText(mcpSlug),
+		ProjectID: *authCtx.ProjectID,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
-	}
-
-	// Verify the toolset belongs to the user's project
-	if toolset.ProjectID != *authCtx.ProjectID {
-		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
 	}
 
 	if !toolset.McpEnabled {
