@@ -1130,7 +1130,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           <Tooltip>
             <TooltipTrigger asChild>
               {!toolset?.mcpEnabled ||
-                (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
+              (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
                 <span className="inline-block">
                   <Button variant="secondary" size="md" disabled={true}>
                     <Button.Text>
@@ -1158,12 +1158,12 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
             </TooltipTrigger>
             {(!toolset?.mcpEnabled ||
               (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
-                <TooltipContent>
-                  {!toolset?.mcpEnabled
-                    ? "Enable server to configure OAuth"
-                    : "This MCP server does not require the OAuth authorization code flow"}
-                </TooltipContent>
-              )}
+              <TooltipContent>
+                {!toolset?.mcpEnabled
+                  ? "Enable server to configure OAuth"
+                  : "This MCP server does not require the OAuth authorization code flow"}
+              </TooltipContent>
+            )}
           </Tooltip>
         </Stack>
       </PageSection>
@@ -1385,13 +1385,14 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
       .replace(/-/g, "")
       .replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
-      "args": ${argsStringIndented}${!toolset.mcpIsPublic
-      ? `,
+      "args": ${argsStringIndented}${
+        !toolset.mcpIsPublic
+          ? `,
       "env": {
         "GRAM_KEY": "Bearer <your-key-here>"
       }`
-      : ""
-    }
+          : ""
+      }
     }
   }
 }`;
@@ -1514,18 +1515,18 @@ function OAuthDetailsModal({
                   </Type>
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
                     ?.environmentSlug && (
-                      <div>
-                        <Type small className="font-medium text-muted-foreground">
-                          Environment:
-                        </Type>
-                        <CodeBlock className="mt-1">
-                          {
-                            toolset.oauthProxyServer.oauthProxyProviders[0]
-                              .environmentSlug
-                          }
-                        </CodeBlock>
-                      </div>
-                    )}
+                    <div>
+                      <Type small className="font-medium text-muted-foreground">
+                        Environment:
+                      </Type>
+                      <CodeBlock className="mt-1">
+                        {
+                          toolset.oauthProxyServer.oauthProxyProviders[0]
+                            .environmentSlug
+                        }
+                      </CodeBlock>
+                    </div>
+                  )}
                 </Stack>
               </>
             )}
@@ -1588,7 +1589,7 @@ function OAuthDetailsModal({
                       </div>
                       {provider.tokenEndpointAuthMethodsSupported &&
                         provider.tokenEndpointAuthMethodsSupported.length >
-                        0 && (
+                          0 && (
                           <div>
                             <Type
                               small
@@ -1669,9 +1670,11 @@ function OAuthDetailsModal({
                     </Type>
                     <CodeBlock className="mt-1">
                       {mcpUrl
-                        ? `${new URL(mcpUrl).origin
-                        }/.well-known/oauth-authorization-server/mcp/${toolset.mcpSlug
-                        }`
+                        ? `${
+                            new URL(mcpUrl).origin
+                          }/.well-known/oauth-authorization-server/mcp/${
+                            toolset.mcpSlug
+                          }`
                         : ""}
                     </CodeBlock>
                   </div>

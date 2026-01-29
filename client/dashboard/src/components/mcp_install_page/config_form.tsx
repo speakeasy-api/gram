@@ -39,13 +39,13 @@ interface MetadataParams {
 
 type ValidationResult =
   | {
-    valid: true;
-    message?: undefined;
-  }
+      valid: true;
+      message?: undefined;
+    }
   | {
-    valid: false;
-    message: string;
-  };
+      valid: false;
+      message: string;
+    };
 
 interface UseMcpMetadataMetadataFormResult {
   valid: ValidationResult;
@@ -215,7 +215,7 @@ function useMcpMetadataMetadataForm(
       value: metadataParams.externalDocumentationUrl ?? "",
       error:
         metadataParams.externalDocumentationUrl &&
-          metadataParams.externalDocumentationUrl.length > 0
+        metadataParams.externalDocumentationUrl.length > 0
           ? !urlValid.valid
           : undefined,
       onChange: (e) =>
@@ -230,7 +230,8 @@ function useMcpMetadataMetadataForm(
       onChange: (e) =>
         setMetadataParams((prev) => ({
           ...prev,
-          installationOverrideUrl: e.target.value === "" ? undefined : e.target.value,
+          installationOverrideUrl:
+            e.target.value === "" ? undefined : e.target.value,
         })),
     },
     instructionsHandlers: {
@@ -335,8 +336,8 @@ export function InstallPageConfigForm({ toolset }: ConfigFormProps) {
             <div>
               <Heading> Installation Override URL </Heading>
               <Type muted small className="max-w-2xl">
-                A URL to redirect to instead of the default installation page when someone navigates
-                to your MCP URL in their browser.
+                A URL to redirect to instead of the default installation page
+                when someone navigates to your MCP URL in their browser.
               </Type>
             </div>
             <div className="relative">
