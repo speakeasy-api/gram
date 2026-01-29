@@ -387,16 +387,17 @@ type McpEnvironmentConfig struct {
 }
 
 type McpMetadatum struct {
-	ID                       uuid.UUID
-	ToolsetID                uuid.UUID
-	ProjectID                uuid.UUID
-	ExternalDocumentationUrl pgtype.Text
-	LogoID                   uuid.NullUUID
-	Instructions             pgtype.Text
-	HeaderDisplayNames       []byte
-	DefaultEnvironmentID     uuid.NullUUID
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
+	ID                        uuid.UUID
+	ToolsetID                 uuid.UUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	HeaderDisplayNames        []byte
+	DefaultEnvironmentID      uuid.NullUUID
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
 }
 
 type McpRegistry struct {

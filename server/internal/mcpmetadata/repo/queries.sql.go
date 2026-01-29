@@ -26,7 +26,7 @@ func (q *Queries) GetHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUID
 }
 
 const getMetadataForToolset = `-- name: GetMetadataForToolset :one
-SELECT id, toolset_id, project_id, external_documentation_url, logo_id, instructions, header_display_names, default_environment_id, created_at, updated_at
+SELECT id, toolset_id, project_id, external_documentation_url, external_documentation_text, logo_id, instructions, header_display_names, default_environment_id, created_at, updated_at
 FROM mcp_metadata
 WHERE toolset_id = $1
 ORDER BY updated_at DESC
@@ -41,6 +41,7 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID
 		&i.ToolsetID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
 		&i.LogoID,
 		&i.Instructions,
 		&i.HeaderDisplayNames,
@@ -127,7 +128,7 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
               updated_at = clock_timestamp()
-RETURNING id, toolset_id, project_id, external_documentation_url, logo_id, instructions, header_display_names, default_environment_id, created_at, updated_at
+RETURNING id, toolset_id, project_id, external_documentation_url, external_documentation_text, logo_id, instructions, header_display_names, default_environment_id, created_at, updated_at
 `
 
 type UpsertMetadataParams struct {
@@ -152,6 +153,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		&i.ToolsetID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
 		&i.LogoID,
 		&i.Instructions,
 		&i.HeaderDisplayNames,
