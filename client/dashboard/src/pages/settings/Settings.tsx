@@ -568,7 +568,7 @@ export default function Settings() {
                     className={cn(
                       domainError && "border-red-500",
                       domain?.domain &&
-                      "bg-muted text-muted-foreground cursor-not-allowed",
+                        "bg-muted text-muted-foreground cursor-not-allowed",
                     )}
                     readOnly={!!domain?.domain}
                   />
