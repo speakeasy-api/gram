@@ -1,4 +1,4 @@
-import { NavMenu } from "@/components/nav-menu";
+import { NavButton, NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -6,11 +6,12 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useSession } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
-import { cn, Stack } from "@speakeasy-api/moonshine";
+import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
 import { AlertTriangleIcon, MinusIcon, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -20,8 +21,15 @@ import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
+  const organization = useOrganization();
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+
+  const teamUrl =
+    organization?.userWorkspaceSlugs &&
+    organization.userWorkspaceSlugs.length > 0
+      ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
+      : "https://app.speakeasy.com";
 
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
@@ -42,7 +50,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
             <SidebarGroupContent>
-              <NavMenu items={items} />
+              <NavMenu items={items}>
+                {label === "settings" && (
+                  <SidebarMenuItem>
+                    <NavButton
+                      title="Team"
+                      href={teamUrl}
+                      target="_blank"
+                      Icon={(props) => <Icon name="users-round" {...props} />}
+                    />
+                  </SidebarMenuItem>
+                )}
+              </NavMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
