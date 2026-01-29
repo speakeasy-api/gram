@@ -23,7 +23,18 @@ import { ToolsetEntry } from "@gram/client/models/components";
 import { useListTools } from "@/hooks/toolTypes";
 import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { format, formatDistanceToNow } from "date-fns";
-import { ChevronRight, Download, Eye, Globe, Lock, Power, Search, Server, Trash2, X } from "lucide-react";
+import {
+  ChevronRight,
+  Download,
+  Eye,
+  Globe,
+  Lock,
+  Power,
+  Search,
+  Server,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -125,7 +136,7 @@ export default function SourceDetails() {
 
     // Find toolsets that have any of these tool URNs
     return toolsetsData.toolsets.filter((toolset) =>
-      toolset.toolUrns?.some((urn) => sourceToolUrns.has(urn))
+      toolset.toolUrns?.some((urn) => sourceToolUrns.has(urn)),
     );
   }, [toolsetsData, relatedTools]);
 
@@ -365,7 +376,10 @@ export default function SourceDetails() {
                   </Type>
                   <Type>
                     {underlyingAsset?.createdAt
-                      ? format(new Date(underlyingAsset.createdAt), "MMM d, yyyy")
+                      ? format(
+                          new Date(underlyingAsset.createdAt),
+                          "MMM d, yyyy",
+                        )
                       : "—"}
                   </Type>
                 </div>
@@ -391,7 +405,10 @@ export default function SourceDetails() {
           </TabsContent>
 
           {/* Tools Tab */}
-          <TabsContent value="tools" className="mt-0 flex-1 flex flex-col min-h-0">
+          <TabsContent
+            value="tools"
+            className="mt-0 flex-1 flex flex-col min-h-0"
+          >
             <div className="max-w-[1270px] mx-auto px-8 py-6 w-full flex-1 flex flex-col min-h-0">
               {relatedTools.length > 0 ? (
                 <div className="flex flex-col gap-4 flex-1 min-h-0">
@@ -403,7 +420,9 @@ export default function SourceDetails() {
                         className="py-2"
                       >
                         <Badge.Text>
-                          All ({relatedTools.filter((t) => t.type === "http").length})
+                          All (
+                          {relatedTools.filter((t) => t.type === "http").length}
+                          )
                         </Badge.Text>
                       </Badge>
                     </button>
@@ -743,7 +762,8 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
         {/* Footer with tool count */}
         <div className="mt-4 pt-3 border-t">
           <Type className="text-xs text-muted-foreground">
-            {toolset.toolUrns?.length || 0} tool{(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""} available
+            {toolset.toolUrns?.length || 0} tool
+            {(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""} available
           </Type>
         </div>
       </div>

@@ -13,7 +13,15 @@ import {
 } from "@gram/client/react-query/index.js";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
-import { ChevronRight, Download, Globe, Lock, Power, Server, Trash2 } from "lucide-react";
+import {
+  ChevronRight,
+  Download,
+  Globe,
+  Lock,
+  Power,
+  Server,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -173,7 +181,9 @@ export default function ExternalMCPDetails() {
                   value="mcp-servers"
                   className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
                 >
-                  MCP Servers {associatedToolsets.length > 0 && `(${associatedToolsets.length})`}
+                  MCP Servers{" "}
+                  {associatedToolsets.length > 0 &&
+                    `(${associatedToolsets.length})`}
                 </TabsTrigger>
                 <TabsTrigger
                   value="settings"
@@ -353,7 +363,8 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
         {/* Footer with tool count */}
         <div className="mt-4 pt-3 border-t">
           <Type className="text-xs text-muted-foreground">
-            {toolset.toolUrns?.length || 0} tool{(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""} available
+            {toolset.toolUrns?.length || 0} tool
+            {(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""} available
           </Type>
         </div>
       </div>

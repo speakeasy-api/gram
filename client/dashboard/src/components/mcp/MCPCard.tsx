@@ -6,7 +6,10 @@ import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useMemo } from "react";
 import { useCatalogIconMap } from "../sources/Sources";
-import { ExternalMCPIllustration, MCPPatternIllustration } from "../sources/SourceCardIllustrations";
+import {
+  ExternalMCPIllustration,
+  MCPPatternIllustration,
+} from "../sources/SourceCardIllustrations";
 import { ToolCollectionBadge } from "../tool-collection-badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
@@ -17,7 +20,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   // Check if this toolset uses an external MCP and get its info
   const externalMcpInfo = useMemo(() => {
     const externalMcpUrn = toolset.toolUrns?.find((urn) =>
-      urn.includes(":externalmcp:")
+      urn.includes(":externalmcp:"),
     );
     if (!externalMcpUrn) return null;
 

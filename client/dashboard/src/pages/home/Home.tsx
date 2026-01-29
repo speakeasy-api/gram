@@ -22,7 +22,7 @@ import { Link } from "react-router";
 
 function useWindowWidth() {
   const [width, setWidth] = useState(
-    typeof window !== "undefined" ? window.innerWidth : 1200
+    typeof window !== "undefined" ? window.innerWidth : 1200,
   );
 
   useEffect(() => {
@@ -358,7 +358,9 @@ function SetupSteps({
 
   return (
     <div className="mb-8">
-      <div className={`flex items-stretch ${isVertical ? "flex-col" : "flex-row"}`}>
+      <div
+        className={`flex items-stretch ${isVertical ? "flex-col" : "flex-row"}`}
+      >
         <SetupStep
           number={1}
           title="Add a source"
@@ -390,7 +392,12 @@ function SetupSteps({
           completed={hasDeployedChat}
           enabled={hasSource && hasEnabledMcpWithTools}
           href={`${routes.elements.href()}${firstPublicToolsetSlug ? `?toolset=${firstPublicToolsetSlug}` : ""}`}
-          icon={<MessageCircleIcon className="h-[18px] w-[18px]" strokeWidth={1.5} />}
+          icon={
+            <MessageCircleIcon
+              className="h-[18px] w-[18px]"
+              strokeWidth={1.5}
+            />
+          }
           position="last"
           cta="Deploy"
           isVertical={isVertical}
@@ -434,19 +441,25 @@ function SetupStep({
 
   // Horizontal arrow clip-paths (pointing right)
   const horizontalClipPaths = {
-    first: "polygon(0 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 0 100%)",
-    middle: "polygon(0 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 0 100%, 20px 50%)",
+    first:
+      "polygon(0 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 0 100%)",
+    middle:
+      "polygon(0 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 0 100%, 20px 50%)",
     last: "polygon(0 0, 100% 0, 100% 100%, 0 100%, 20px 50%)",
   };
 
   // Vertical arrow clip-paths (pointing down) - fixed arrow size (80px base, 20px depth)
   const verticalClipPaths = {
-    first: "polygon(0 0, 100% 0, 100% calc(100% - 20px), calc(50% + 40px) calc(100% - 20px), 50% 100%, calc(50% - 40px) calc(100% - 20px), 0 calc(100% - 20px))",
-    middle: "polygon(0 0, calc(50% - 40px) 0, 50% 20px, calc(50% + 40px) 0, 100% 0, 100% calc(100% - 20px), calc(50% + 40px) calc(100% - 20px), 50% 100%, calc(50% - 40px) calc(100% - 20px), 0 calc(100% - 20px))",
+    first:
+      "polygon(0 0, 100% 0, 100% calc(100% - 20px), calc(50% + 40px) calc(100% - 20px), 50% 100%, calc(50% - 40px) calc(100% - 20px), 0 calc(100% - 20px))",
+    middle:
+      "polygon(0 0, calc(50% - 40px) 0, 50% 20px, calc(50% + 40px) 0, 100% 0, 100% calc(100% - 20px), calc(50% + 40px) calc(100% - 20px), 50% 100%, calc(50% - 40px) calc(100% - 20px), 0 calc(100% - 20px))",
     last: "polygon(0 0, calc(50% - 40px) 0, 50% 20px, calc(50% + 40px) 0, 100% 0, 100% 100%, 0 100%)",
   };
 
-  const clipPath = isVertical ? verticalClipPaths[position] : horizontalClipPaths[position];
+  const clipPath = isVertical
+    ? verticalClipPaths[position]
+    : horizontalClipPaths[position];
 
   const content = (
     <div
@@ -460,7 +473,7 @@ function SetupStep({
         isVertical && (position === "first" ? "pt-7" : "pt-12"),
         isVertical && (position === "last" ? "pb-7" : "pb-12"),
         !isVertical && position !== "first" && "-ml-[10px]",
-        !isVertical && (position === "first" ? "pl-4" : "pl-9")
+        !isVertical && (position === "first" ? "pl-4" : "pl-9"),
       )}
       style={{ clipPath }}
     >

@@ -38,10 +38,12 @@ function PageBody({
 }) {
   return (
     // Nest the max-width container inside another div so that the entire page area remains scrollable
-    <div className={cn(
-      "h-full w-full",
-      overflowHidden ? "overflow-hidden flex flex-col" : "overflow-y-auto"
-    )}>
+    <div
+      className={cn(
+        "h-full w-full",
+        overflowHidden ? "overflow-hidden flex flex-col" : "overflow-y-auto",
+      )}
+    >
       <div
         className={cn(
           "@container/main flex flex-col gap-4 w-full",
