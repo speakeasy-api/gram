@@ -33,7 +33,7 @@ squawk_cmd=""
 # Check if running in GitHub Actions environment
 if [ -n "$usage_github_token" ] && [ -n "$usage_github_event_path" ]; then
   echo "Running in GitHub Actions environment"
-  
+
   squawk_cmd="upload-to-github"
 
   SQUAWK_GITHUB_TOKEN=$usage_github_token
