@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -30,6 +41,17 @@ export {
   type RenderTemplateQueryData,
 };
 
+export type RenderTemplateQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * renderTemplate templates
  *
@@ -39,8 +61,8 @@ export {
 export function useRenderTemplate(
   request: operations.RenderTemplateRequest,
   security?: operations.RenderTemplateSecurity | undefined,
-  options?: QueryHookOptions<RenderTemplateQueryData>,
-): UseQueryResult<RenderTemplateQueryData, Error> {
+  options?: QueryHookOptions<RenderTemplateQueryData, RenderTemplateQueryError>,
+): UseQueryResult<RenderTemplateQueryData, RenderTemplateQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildRenderTemplateQuery(
@@ -62,8 +84,11 @@ export function useRenderTemplate(
 export function useRenderTemplateSuspense(
   request: operations.RenderTemplateRequest,
   security?: operations.RenderTemplateSecurity | undefined,
-  options?: SuspenseQueryHookOptions<RenderTemplateQueryData>,
-): UseSuspenseQueryResult<RenderTemplateQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    RenderTemplateQueryData,
+    RenderTemplateQueryError
+  >,
+): UseSuspenseQueryResult<RenderTemplateQueryData, RenderTemplateQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildRenderTemplateQuery(

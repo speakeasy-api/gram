@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -30,6 +41,17 @@ export {
   queryKeyGetSlackConnection,
 };
 
+export type GetSlackConnectionQueryError =
+  | errors.ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * getSlackConnection slack
  *
@@ -39,8 +61,11 @@ export {
 export function useGetSlackConnection(
   request?: operations.GetSlackConnectionRequest | undefined,
   security?: operations.GetSlackConnectionSecurity | undefined,
-  options?: QueryHookOptions<GetSlackConnectionQueryData>,
-): UseQueryResult<GetSlackConnectionQueryData, Error> {
+  options?: QueryHookOptions<
+    GetSlackConnectionQueryData,
+    GetSlackConnectionQueryError
+  >,
+): UseQueryResult<GetSlackConnectionQueryData, GetSlackConnectionQueryError> {
   const client = useGramContext();
   return useQuery({
     ...buildGetSlackConnectionQuery(
@@ -62,8 +87,14 @@ export function useGetSlackConnection(
 export function useGetSlackConnectionSuspense(
   request?: operations.GetSlackConnectionRequest | undefined,
   security?: operations.GetSlackConnectionSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetSlackConnectionQueryData>,
-): UseSuspenseQueryResult<GetSlackConnectionQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    GetSlackConnectionQueryData,
+    GetSlackConnectionQueryError
+  >,
+): UseSuspenseQueryResult<
+  GetSlackConnectionQueryData,
+  GetSlackConnectionQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
     ...buildGetSlackConnectionQuery(
