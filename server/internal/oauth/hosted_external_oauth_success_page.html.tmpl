@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Authorization Successful</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="stylesheet" href="/oauth-external/oauth_success-{{ .StyleHash }}.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="checkmark">&#x2713;</div>
+      <h1>Connected to {{ .ProviderName }}</h1>
+      <p>This window will close automatically...</p>
+    </div>
+    <script src="/oauth-external/oauth_success-{{ .ScriptHash }}.js"></script>
+  </body>
+</html>

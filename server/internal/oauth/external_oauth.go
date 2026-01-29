@@ -5,9 +5,12 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
@@ -15,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -32,6 +36,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+//go:embed hosted_external_oauth_success_page.html.tmpl
+var externalOAuthSuccessPageTmplData string
+
+//go:embed hosted_external_oauth_success_page.css
+var externalOAuthSuccessStyleData []byte
+
+//go:embed hosted_external_oauth_success_script.js
+var externalOAuthSuccessScriptData []byte
+
+// externalOAuthSuccessPageData is the template data for the external OAuth success page.
+type externalOAuthSuccessPageData struct {
+	ProviderName string
+	ScriptHash   string
+	StyleHash    string
+}
 
 // ExternalOAuthState represents the state stored during external OAuth flow
 type ExternalOAuthState struct {
@@ -91,7 +111,12 @@ type ExternalOAuthService struct {
 		Encrypt(plaintext []byte) (string, error)
 		Decrypt(ciphertext string) (string, error)
 	}
-	httpClient *http.Client
+	httpClient         *http.Client
+	successPageTmpl    *template.Template
+	successScriptHash  string
+	successScriptData  []byte
+	successStyleHash   string
+	successStyleData   []byte
 }
 
 // SessionManager interface for authenticating session tokens
@@ -117,17 +142,30 @@ func NewExternalOAuthService(
 		cache.SuffixNone,
 	)
 
+	successPageTmpl := template.Must(template.New("external_oauth_success").Parse(externalOAuthSuccessPageTmplData))
+
+	scriptHash := sha256.Sum256(externalOAuthSuccessScriptData)
+	scriptHashStr := hex.EncodeToString(scriptHash[:])[:8]
+
+	styleHash := sha256.Sum256(externalOAuthSuccessStyleData)
+	styleHashStr := hex.EncodeToString(styleHash[:])[:8]
+
 	return &ExternalOAuthService{
-		logger:          logger.With(attr.SlogComponent("external_oauth")),
-		oauthRepo:       repo.New(db),
-		toolsetsRepo:    toolsets_repo.New(db),
-		deploymentsRepo: deployments_repo.New(db),
-		externalmcpRepo: externalmcp_repo.New(db),
-		stateStorage:    stateStorage,
-		serverURL:       serverURL,
-		sessionManager:  sessionManager,
-		enc:             enc,
-		httpClient:      retryablehttp.NewClient().StandardClient(),
+		logger:            logger.With(attr.SlogComponent("external_oauth")),
+		oauthRepo:         repo.New(db),
+		toolsetsRepo:      toolsets_repo.New(db),
+		deploymentsRepo:   deployments_repo.New(db),
+		externalmcpRepo:   externalmcp_repo.New(db),
+		stateStorage:      stateStorage,
+		serverURL:         serverURL,
+		sessionManager:    sessionManager,
+		enc:               enc,
+		httpClient:        retryablehttp.NewClient().StandardClient(),
+		successPageTmpl:   successPageTmpl,
+		successScriptHash: scriptHashStr,
+		successScriptData: externalOAuthSuccessScriptData,
+		successStyleHash:  styleHashStr,
+		successStyleData:  externalOAuthSuccessStyleData,
 	}
 }
 
@@ -158,6 +196,14 @@ func AttachExternalOAuth(mux goahttp.Muxer, service *ExternalOAuthService) {
 	// Get access token for MCP requests (used by Elements)
 	o11y.AttachHandler(mux, "GET", "/oauth-external/token", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleGetToken).ServeHTTP(w, r)
+	})
+
+	// External OAuth success page static assets (with cache busting hash)
+	o11y.AttachHandler(mux, "GET", "/oauth-external/oauth_success-{hash}.js", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.serveExternalSuccessScript).ServeHTTP(w, r)
+	})
+	o11y.AttachHandler(mux, "GET", "/oauth-external/oauth_success-{hash}.css", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.serveExternalSuccessStyle).ServeHTTP(w, r)
 	})
 }
 
@@ -430,48 +476,49 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 	// Return a success page that auto-closes the popup
 	// The parent window polls for popup close and refetches status
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	successHTML := fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<head>
-    <title>Authorization Successful</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%);
-            color: white;
-        }
-        .container {
-            text-align: center;
-            padding: 2rem;
-        }
-        .checkmark {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-        }
-        h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
-        p { margin: 0; opacity: 0.9; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="checkmark">✓</div>
-        <h1>Connected to %s</h1>
-        <p>This window will close automatically...</p>
-    </div>
-    <script>
-        setTimeout(function() { window.close(); }, 1500);
-    </script>
-</body>
-</html>`, state.ProviderName)
+	data := externalOAuthSuccessPageData{
+		ProviderName: state.ProviderName,
+		ScriptHash:   s.successScriptHash,
+		StyleHash:    s.successStyleHash,
+	}
+	if err := s.successPageTmpl.Execute(w, data); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to render external OAuth success page").Log(ctx, s.logger)
+	}
+	return nil
+}
 
-	if _, err := w.Write([]byte(successHTML)); err != nil {
-		s.logger.ErrorContext(ctx, "failed to write success page", attr.SlogError(err))
+// serveExternalSuccessScript serves the external OAuth success page JavaScript file with cache headers.
+func (s *ExternalOAuthService) serveExternalSuccessScript(w http.ResponseWriter, r *http.Request) error {
+	hash := chi.URLParam(r, "hash")
+	if hash != s.successScriptHash {
+		w.WriteHeader(http.StatusNotFound)
+		return nil
+	}
+
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := w.Write(s.successScriptData); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write script response").Log(r.Context(), s.logger)
+	}
+	return nil
+}
+
+// serveExternalSuccessStyle serves the external OAuth success page CSS file with cache headers.
+func (s *ExternalOAuthService) serveExternalSuccessStyle(w http.ResponseWriter, r *http.Request) error {
+	hash := chi.URLParam(r, "hash")
+	if hash != s.successStyleHash {
+		w.WriteHeader(http.StatusNotFound)
+		return nil
+	}
+
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := w.Write(s.successStyleData); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write style response").Log(r.Context(), s.logger)
 	}
 	return nil
 }
