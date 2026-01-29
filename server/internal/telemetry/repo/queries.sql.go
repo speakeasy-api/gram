@@ -23,34 +23,26 @@ INSERT INTO telemetry_logs (
     gram_function_id,
     gram_urn,
     service_name,
-    service_version,
-    http_request_method,
-    http_response_status_code,
-    http_route,
-    http_server_url
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    service_version
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertTelemetryLogParams struct {
-	ID                     string
-	TimeUnixNano           int64
-	ObservedTimeUnixNano   int64
-	SeverityText           *string
-	Body                   string
-	TraceID                *string
-	SpanID                 *string
-	Attributes             string
-	ResourceAttributes     string
-	GramProjectID          string
-	GramDeploymentID       *string
-	GramFunctionID         *string
-	GramURN                string
-	ServiceName            string
-	ServiceVersion         *string
-	HTTPRequestMethod      *string
-	HTTPResponseStatusCode *int32
-	HTTPRoute              *string
-	HTTPServerURL          *string
+	ID                   string
+	TimeUnixNano         int64
+	ObservedTimeUnixNano int64
+	SeverityText         *string
+	Body                 string
+	TraceID              *string
+	SpanID               *string
+	Attributes           string
+	ResourceAttributes   string
+	GramProjectID        string
+	GramDeploymentID     *string
+	GramFunctionID       *string
+	GramURN        string
+	ServiceName    string
+	ServiceVersion *string
 }
 
 //nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -74,10 +66,6 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 		arg.GramURN,
 		arg.ServiceName,
 		arg.ServiceVersion,
-		arg.HTTPRequestMethod,
-		arg.HTTPResponseStatusCode,
-		arg.HTTPRoute,
-		arg.HTTPServerURL,
 	)
 }
 

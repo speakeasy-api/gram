@@ -35,13 +35,7 @@ func TestCreateLog_LogsCorrectly(t *testing.T) {
 	log := waitForLog(
 		t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
-	// logs HTTP data
-	require.Equal(t, "POST", *log.HTTPRequestMethod)
-	require.Equal(t, "/api/test", *log.HTTPRoute)
-	require.Equal(t, int32(200), *log.HTTPResponseStatusCode)
-	require.Equal(t, "https://example.com", *log.HTTPServerURL)
-
-	/// logs tool info
+	// logs tool info
 	require.Equal(t, toolInfo.ProjectID, log.GramProjectID)
 	require.NotNil(t, log.GramDeploymentID)
 	require.Equal(t, toolInfo.DeploymentID, *log.GramDeploymentID)
