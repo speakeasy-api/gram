@@ -283,6 +283,18 @@ export interface ElementsConfig {
   history?: HistoryConfig
 
   /**
+   * Configuration for the chat thread.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   thread: {
+   *     experimental_showFeedback: true,
+   *   },
+   * }
+   */
+  thread?: ThreadConfig
+
+  /**
    * The API configuration to use for the Elements library.
    *
    * Use this to override the default API URL, or add explicit auth configuration
@@ -832,6 +844,25 @@ export interface SidecarConfig extends ExpandableConfig {
    * @default 'Chat'
    */
   title?: string
+}
+
+/**
+ * Configuration for the chat thread.
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   thread: {
+ *     experimental_showFeedback: true,
+ *   },
+ * }
+ */
+export interface ThreadConfig {
+  /**
+   * Whether to show feedback buttons (like/dislike) after assistant messages.
+   * When enabled, users can mark conversations as resolved or provide feedback.
+   * @default false
+   */
+  experimental_showFeedback?: boolean
 }
 
 /**

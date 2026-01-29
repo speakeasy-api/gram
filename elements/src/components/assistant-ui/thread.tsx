@@ -22,7 +22,14 @@ import {
 
 import { LazyMotion, MotionConfig, domAnimation } from 'motion/react'
 import * as m from 'motion/react-m'
-import { useEffect, useRef, useState, type FC } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type FC,
+} from 'react'
 import { AnimatePresence } from 'motion/react'
 
 import {
@@ -31,6 +38,7 @@ import {
   UserMessageAttachments,
 } from '@/components/assistant-ui/attachment'
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'
+import { MessageFeedback } from '@/components/assistant-ui/message-feedback'
 import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
 import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
 import { ToolMentionAutocomplete } from '@/components/assistant-ui/tool-mention-autocomplete'
@@ -55,6 +63,23 @@ import {
   TooltipTrigger,
 } from '../ui/tooltip'
 import { ToolGroup } from './tool-group'
+
+// Context for chat resolution state
+const ChatResolutionContext = createContext<{
+  isResolved: boolean
+  feedbackHidden: boolean
+  setResolved: () => void
+  setUnresolved: () => void
+  resetFeedbackHidden: () => void
+}>({
+  isResolved: false,
+  feedbackHidden: false,
+  setResolved: () => {},
+  setUnresolved: () => {},
+  resetFeedbackHidden: () => {},
+})
+
+const useChatResolution = () => useContext(ChatResolutionContext)
 
 const StaticSessionWarning = () => (
   <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
@@ -81,52 +106,77 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const { config } = useElements()
   const components = config.components ?? {}
   const showStaticSessionWarning = config.api && 'sessionToken' in config.api
+  const showFeedback = config.thread?.experimental_showFeedback ?? false
+  const [isResolved, setIsResolved] = useState(false)
+  const [feedbackHidden, setFeedbackHidden] = useState(false)
+
+  const setResolved = () => setIsResolved(true)
+  const setUnresolved = () => {
+    setIsResolved(false)
+    setFeedbackHidden(true)
+  }
+  const resetFeedbackHidden = () => setFeedbackHidden(false)
 
   return (
-    <LazyMotion features={domAnimation}>
-      <MotionConfig reducedMotion="user">
-        <ThreadPrimitive.Root
-          className={cn(
-            'aui-root aui-thread-root bg-background @container relative flex h-full flex-col',
-            themeProps.className,
-            className
-          )}
-        >
-          <ConnectionStatusIndicatorSafe />
-          <ThreadPrimitive.Viewport
+    <ChatResolutionContext.Provider value={{ isResolved: showFeedback && isResolved, feedbackHidden, setResolved, setUnresolved, resetFeedbackHidden }}>
+      <LazyMotion features={domAnimation}>
+        <MotionConfig reducedMotion="user">
+          <ThreadPrimitive.Root
             className={cn(
-              'aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!',
-              d('p-lg')
+              'aui-root aui-thread-root bg-background @container relative flex h-full flex-col',
+              themeProps.className,
+              className
             )}
           >
-            <ThreadPrimitive.If empty>
-              {components.ThreadWelcome ? (
-                <components.ThreadWelcome />
-              ) : (
-                <ThreadWelcome />
+            <ConnectionStatusIndicatorSafe />
+            <ThreadPrimitive.Viewport
+              className={cn(
+                'aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!',
+                d('p-lg')
               )}
-            </ThreadPrimitive.If>
+            >
+              <ThreadPrimitive.If empty>
+                {components.ThreadWelcome ? (
+                  <components.ThreadWelcome />
+                ) : (
+                  <ThreadWelcome />
+                )}
+              </ThreadPrimitive.If>
 
-            {showStaticSessionWarning && <StaticSessionWarning />}
+              {showStaticSessionWarning && <StaticSessionWarning />}
 
-            <ThreadPrimitive.Messages
-              components={{
-                UserMessage: components.UserMessage ?? UserMessage,
-                EditComposer: components.EditComposer ?? EditComposer,
-                AssistantMessage:
-                  components.AssistantMessage ?? AssistantMessage,
-              }}
-            />
+              <ThreadPrimitive.Messages
+                components={{
+                  UserMessage: components.UserMessage ?? UserMessage,
+                  EditComposer: components.EditComposer ?? EditComposer,
+                  AssistantMessage:
+                    components.AssistantMessage ?? AssistantMessage,
+                }}
+              />
 
-            <ThreadPrimitive.If empty={false}>
-              <div className="aui-thread-viewport-spacer min-h-8 grow" />
-            </ThreadPrimitive.If>
+              <ThreadPrimitive.If empty={false}>
+                <div className="aui-thread-viewport-spacer min-h-8 grow" />
+              </ThreadPrimitive.If>
 
-            <Composer />
-          </ThreadPrimitive.Viewport>
-        </ThreadPrimitive.Root>
-      </MotionConfig>
-    </LazyMotion>
+              <Composer showFeedback={showFeedback} />
+            </ThreadPrimitive.Viewport>
+
+            {/* Resolution overlay - subtle readonly effect */}
+            <AnimatePresence>
+              {showFeedback && isResolved && (
+                <m.div
+                  className="pointer-events-none absolute inset-0 z-50 bg-background/40"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
+                />
+              )}
+            </AnimatePresence>
+          </ThreadPrimitive.Root>
+        </MotionConfig>
+      </LazyMotion>
+    </ChatResolutionContext.Provider>
   )
 }
 
@@ -357,8 +407,52 @@ const ComposerToolMentions: FC<{
   )
 }
 
-const Composer: FC = () => {
+// Resets feedbackHidden when a new message starts generating
+const FeedbackHiddenResetter: FC = () => {
+  const { resetFeedbackHidden } = useChatResolution()
+
+  useEffect(() => {
+    resetFeedbackHidden()
+  }, [resetFeedbackHidden])
+
+  return null
+}
+
+const ComposerFeedback: FC = () => {
+  const { isResolved, feedbackHidden, setResolved } = useChatResolution()
+
+  return (
+    <ThreadPrimitive.If empty={false}>
+      {/* Reset feedbackHidden when a new message starts generating */}
+      <ThreadPrimitive.If running>
+        <FeedbackHiddenResetter />
+      </ThreadPrimitive.If>
+      <ThreadPrimitive.If running={false}>
+        <AnimatePresence>
+          {!isResolved && !feedbackHidden && (
+            <m.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
+              className="mb-3"
+            >
+              <MessageFeedback className="mx-auto" onResolved={setResolved} />
+            </m.div>
+          )}
+        </AnimatePresence>
+      </ThreadPrimitive.If>
+    </ThreadPrimitive.If>
+  )
+}
+
+interface ComposerProps {
+  showFeedback?: boolean
+}
+
+const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
   const { config, mcpTools } = useElements()
+  const { isResolved, setUnresolved } = useChatResolution()
   const r = useRadius()
   const d = useDensity()
   const composerConfig = config.composer ?? {
@@ -383,37 +477,59 @@ const Composer: FC = () => {
   return (
     <div
       className={cn(
-        'aui-composer-wrapper bg-background sticky bottom-0 flex w-full flex-col overflow-visible',
+        'aui-composer-wrapper bg-background sticky bottom-0 z-[60] flex w-full flex-col overflow-visible',
         d('gap-md'),
         d('py-md'),
         r('xl')
       )}
     >
+      {showFeedback && <ComposerFeedback />}
       <ThreadScrollToBottom />
-      <ComposerPrimitive.Root
-        ref={composerRootRef}
-        className={cn(
-          'aui-composer-root group/input-group border-input bg-background has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-ring/5 dark:bg-background relative flex w-full flex-col border px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:ring-1',
-          r('xl')
-        )}
-      >
-        {composerConfig.attachments && <ComposerAttachments />}
-
-        {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
-
-        <ComposerPrimitive.Input
-          placeholder={composerConfig.placeholder}
+      {showFeedback && isResolved ? (
+        <m.div
+          className="aui-composer-resolved border-input flex min-h-[118px] flex-col items-center justify-center gap-2 border-t px-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
+        >
+          <span className="text-sm text-muted-foreground">
+            This conversation has been resolved
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-foreground"
+            onClick={setUnresolved}
+          >
+            Reopen conversation
+          </Button>
+        </m.div>
+      ) : (
+        <ComposerPrimitive.Root
+          ref={composerRootRef}
           className={cn(
-            'aui-composer-input placeholder:text-muted-foreground mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 outline-none focus-visible:ring-0',
-            d('h-input'),
-            d('text-base')
+            'aui-composer-root group/input-group border-input bg-background has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-ring/5 dark:bg-background relative flex min-h-[118px] w-full flex-col border px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:ring-1',
+            r('xl')
           )}
-          rows={1}
-          autoFocus
-          aria-label="Message input"
-        />
-        <ComposerAction />
-      </ComposerPrimitive.Root>
+        >
+          {composerConfig.attachments && <ComposerAttachments />}
+
+          {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
+
+          <ComposerPrimitive.Input
+            placeholder={composerConfig.placeholder}
+            className={cn(
+              'aui-composer-input text-foreground placeholder:text-muted-foreground mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 outline-none focus-visible:ring-0',
+              d('h-input'),
+              d('text-base')
+            )}
+            rows={1}
+            autoFocus
+            aria-label="Message input"
+          />
+          <ComposerAction />
+        </ComposerPrimitive.Root>
+      )}
     </div>
   )
 }
@@ -599,7 +715,7 @@ const AssistantMessage: FC = () => {
           <MessageError />
         </div>
 
-        <div className="aui-assistant-message-footer mt-2 ml-2 flex">
+        <div className="aui-assistant-message-footer mt-2 ml-2 flex items-center gap-3">
           {/* <BranchPicker /> */}
           <AssistantActionBar />
         </div>
