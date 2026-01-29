@@ -213,11 +213,16 @@ function ExternalMcpOAuthConnection({
 
     const authUrl = `${apiUrl}/oauth-external/authorize?${params.toString()}`;
 
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
     // Open in popup
     const popup = window.open(
       authUrl,
       "oauth_popup",
-      "width=600,height=700,scrollbars=yes",
+      `width=${width},height=${height},scrollbars=yes,top=${top},left=${left}`,
     );
 
     if (!popup) {
