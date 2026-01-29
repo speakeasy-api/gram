@@ -317,7 +317,7 @@ const useExternalMcpOAuthToken = ({
     error,
     refetch,
   } = useQuery<OAuthTokenResponse, Error>({
-    queryKey: ["oauthToken", toolsetSlug],
+    queryKey: ["playground.oauthToken", toolsetSlug],
     queryFn: async (): Promise<OAuthTokenResponse> => {
       const params = new URLSearchParams({
         toolset_id: toolset?.id ?? "",
