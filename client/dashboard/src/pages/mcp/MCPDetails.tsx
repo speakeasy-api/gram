@@ -37,6 +37,7 @@ import {
   invalidateTemplate,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
+  useExportMcpMetadataMutation,
   useGetMcpMetadata,
   useLatestDeployment,
   useListEnvironments,
@@ -48,6 +49,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircleIcon,
+  Download,
   Globe,
   LockIcon,
   Play,
@@ -126,6 +128,53 @@ export function MCPDetailPage() {
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
+
+  const exportMutation = useExportMcpMetadataMutation();
+
+  const handleExportJson = async () => {
+    if (!toolset?.mcpSlug) {
+      toast.error("MCP server slug not available");
+      return;
+    }
+
+    const toastId = toast.loading("Exporting MCP configuration...");
+
+    try {
+      const result = await exportMutation.mutateAsync({
+        request: {
+          exportMcpMetadataRequestBody: {
+            mcpSlug: toolset.mcpSlug,
+          },
+        },
+      });
+
+      // Create and download the JSON file
+      const blob = new Blob([JSON.stringify(result, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${toolset.mcpSlug}-mcp-config.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      telemetry.capture("mcp_event", {
+        action: "mcp_json_exported",
+        slug: toolset.slug,
+      });
+
+      toast.success("MCP configuration exported", { id: toastId });
+    } catch (error) {
+      console.error("Failed to export MCP configuration:", error);
+      toast.error(
+        `Failed to export: ${error instanceof Error ? error.message : "Unknown error"}`,
+        { id: toastId },
+      );
+    }
+  };
 
   const handleDeleteMcpServer = async () => {
     if (!toolset) return;
@@ -366,6 +415,26 @@ export function MCPDetailPage() {
                 )}
               </Tooltip>
               <MCPEnableButton toolset={toolset} />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={handleExportJson}
+                    disabled={!toolset?.mcpEnabled || !toolset?.mcpSlug}
+                  >
+                    <Button.LeftIcon>
+                      <Download className="w-4 h-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Export JSON</Button.Text>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {!toolset?.mcpEnabled
+                    ? "Enable server to export configuration"
+                    : "Export MCP configuration as JSON"}
+                </TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

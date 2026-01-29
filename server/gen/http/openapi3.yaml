@@ -5575,6 +5575,110 @@ paths:
             x-speakeasy-name-override: validate
             x-speakeasy-react-hook:
                 name: ValidateAPIKey
+    /rpc/mcpMetadata.export:
+        post:
+            description: Export MCP server details as JSON for documentation and integration purposes.
+            operationId: exportMcpMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ExportMcpMetadataRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpExport'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: exportMcpMetadata mcpMetadata
+            tags:
+                - mcpMetadata
+            x-speakeasy-name-override: export
+            x-speakeasy-react-hook:
+                name: ExportMcpMetadata
     /rpc/mcpMetadata.get:
         get:
             description: Fetch the metadata that powers the MCP install page.
@@ -5589,6 +5693,13 @@ paths:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
                     pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -5666,6 +5777,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: getMcpMetadata mcpMetadata
@@ -5679,6 +5792,13 @@ paths:
             description: Create or update the metadata that powers the MCP install page.
             operationId: setMcpMetadata
             parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -5761,6 +5881,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: setMcpMetadata mcpMetadata
@@ -12222,6 +12344,16 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        ExportMcpMetadataRequestBody:
+            type: object
+            properties:
+                mcp_slug:
+                    type: string
+                    description: The MCP server slug (from the install URL)
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - mcp_slug
         ExternalMCPHeaderDefinition:
             type: object
             properties:
@@ -13494,6 +13626,88 @@ components:
             required:
                 - variable_name
                 - provided_by
+        McpExport:
+            type: object
+            properties:
+                authentication:
+                    $ref: '#/components/schemas/McpExportAuthentication'
+                description:
+                    type: string
+                    description: Description of the MCP server
+                documentation_url:
+                    type: string
+                    description: Link to external documentation
+                instructions:
+                    type: string
+                    description: Server instructions for users
+                logo_url:
+                    type: string
+                    description: URL to the server logo
+                name:
+                    type: string
+                    description: The MCP server name
+                server_url:
+                    type: string
+                    description: The MCP server URL
+                slug:
+                    type: string
+                    description: The MCP server slug
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpExportTool'
+                    description: Available tools on this MCP server
+            description: Complete MCP server export for documentation and integration
+            required:
+                - name
+                - slug
+                - server_url
+                - tools
+                - authentication
+        McpExportAuthHeader:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                    description: User-friendly display name (e.g., API Key)
+                name:
+                    type: string
+                    description: The HTTP header name (e.g., Authorization)
+            description: An authentication header required by the MCP server
+            required:
+                - name
+                - display_name
+        McpExportAuthentication:
+            type: object
+            properties:
+                headers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpExportAuthHeader'
+                    description: Required authentication headers
+                required:
+                    type: boolean
+                    description: Whether authentication is required
+            description: Authentication requirements for the MCP server
+            required:
+                - required
+                - headers
+        McpExportTool:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of what the tool does
+                input_schema:
+                    description: JSON Schema for the tool's input parameters
+                name:
+                    type: string
+                    description: The tool name
+            description: A tool definition in the MCP export
+            required:
+                - name
+                - description
+                - input_schema
         McpMetadata:
             type: object
             properties:
