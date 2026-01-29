@@ -1,3 +1,4 @@
+import { PrivateInput } from "@/components/ui/private-input";
 import {
   Select,
   SelectContent,
@@ -6,8 +7,7 @@ import {
 } from "@/components/ui/select";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, Pencil } from "lucide-react";
-import { useState } from "react";
+import { Pencil } from "lucide-react";
 import {
   environmentHasValue,
   EnvironmentVariable,
@@ -44,22 +44,22 @@ const MODE_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-  {
-    value: "system",
-    label: "System",
-    description: "Value is stored securely and injected by the system",
-  },
-  {
-    value: "user-provided",
-    label: "User",
-    description: "User must provide this value when connecting",
-  },
-  {
-    value: "omitted",
-    label: "Omit",
-    description: "Variable is not included in the configuration",
-  },
-];
+    {
+      value: "system",
+      label: "System",
+      description: "Value is stored securely and injected by the system",
+    },
+    {
+      value: "user-provided",
+      label: "User",
+      description: "User must provide this value when connecting",
+    },
+    {
+      value: "omitted",
+      label: "Omit",
+      description: "Variable is not included in the configuration",
+    },
+  ];
 
 export function EnvironmentVariableRow({
   envVar,
@@ -78,7 +78,6 @@ export function EnvironmentVariableRow({
   onHeaderDisplayNameChange,
   onHeaderBlur,
 }: EnvironmentVariableRowProps) {
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const isEditingHeader = editingHeaderId === envVar.id;
   const headerName = getHeaderDisplayName(
     envVar,
@@ -258,7 +257,7 @@ export function EnvironmentVariableRow({
           </Select>
 
           {/* Value Input or Status Text */}
-          <div className="w-48 h-full">
+          <div className="w-48 h-full flex items-center">
             {envVar.state === "user-provided" ? (
               <div className="h-full flex items-center px-3 text-xs text-muted-foreground font-mono">
                 Set at runtime
@@ -268,27 +267,12 @@ export function EnvironmentVariableRow({
                 Not included
               </div>
             ) : (
-              <div className="relative h-full">
-                <input
-                  type={isPasswordVisible ? "text" : "password"}
-                  value={editingValue}
-                  onChange={(e) => onValueChange(envVar.id, e.target.value)}
-                  placeholder="Enter value..."
-                  className="w-full h-full px-3 pr-9 bg-transparent text-sm font-mono placeholder:text-muted-foreground focus:outline-none"
-                />
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={() => setIsPasswordVisible(!isPasswordVisible)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {isPasswordVisible ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
+              <PrivateInput
+                value={editingValue}
+                onChange={(value) => onValueChange(envVar.id, value)}
+                placeholder="Enter value..."
+                className="w-full h-full px-3 pr-9 bg-transparent text-sm font-mono placeholder:text-muted-foreground focus:outline-none border-0 shadow-none focus-visible:ring-0"
+              />
             )}
           </div>
         </div>
