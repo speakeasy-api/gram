@@ -68,6 +68,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 
+	"github.com/speakeasy-api/gram/server/internal/teams"
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/usage"
@@ -595,6 +596,7 @@ func newStartCommand() *cli.Command {
 				Environment:            c.String("environment"),
 			}))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
+			teams.Attach(mux, teams.NewService(logger, db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient))
 			toolsets.Attach(mux, toolsetsSvc)
