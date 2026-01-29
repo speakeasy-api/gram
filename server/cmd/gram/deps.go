@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -545,6 +546,7 @@ func newFunctionOrchestrator(
 type mcpRegistryClientOptions struct {
 	pulseTenantID string
 	pulseAPIKey   conv.Secret
+	cacheImpl     cache.Cache
 }
 
 func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
@@ -555,5 +557,5 @@ func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvid
 
 	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
 
-	return externalmcp.NewRegistryClient(logger, tracerProvider, backend), nil
+	return externalmcp.NewRegistryClient(logger, tracerProvider, backend, opts.cacheImpl), nil
 }

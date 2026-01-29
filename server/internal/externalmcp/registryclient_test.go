@@ -82,7 +82,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{})
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -124,7 +124,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{})
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -169,7 +169,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{})
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -215,7 +215,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{})
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
