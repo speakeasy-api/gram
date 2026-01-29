@@ -107,7 +107,10 @@ export const GramComposer: FC = () => {
         />
 
         {/* Action buttons */}
-        <div className="relative mx-1 mt-2 mb-2 flex items-center justify-end">
+        <div className="relative mx-1 mt-2 mb-2 flex items-center justify-between">
+          <Type small muted className="ml-2">
+            Powered by <routes.elements.Link className="font-medium">Gram Elements</routes.elements.Link>
+          </Type>
           <ThreadPrimitive.If running={false}>
             <ComposerPrimitive.Send asChild>
               <Tooltip>
