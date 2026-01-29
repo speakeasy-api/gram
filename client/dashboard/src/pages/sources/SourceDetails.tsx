@@ -202,9 +202,9 @@ export default function SourceDetails() {
     return <ExternalMCPDetails />;
   }
 
-  // If source not found, redirect to home
+  // If source not found, redirect to sources index
   if (!isLoadingDeployment && !source) {
-    return <Navigate to={routes.home.href()} replace />;
+    return <Navigate to={routes.sources.href()} replace />;
   }
 
   // Format the updated date from the underlying Asset

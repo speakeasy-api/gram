@@ -99,9 +99,9 @@ export default function ExternalMCPDetails() {
     }
   };
 
-  // If source not found, redirect to home
+  // If source not found, redirect to sources index
   if (!isLoadingDeployment && !source) {
-    return <Navigate to={routes.home.href()} replace />;
+    return <Navigate to={routes.sources.href()} replace />;
   }
 
   // Create asset object for delete dialog
