@@ -253,7 +253,6 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete existing environment configs").Log(ctx, s.logger)
 		}
 
-		// Insert new entries
 		for _, config := range payload.EnvironmentConfigs {
 			var headerDisplayName pgtype.Text
 			if config.HeaderDisplayName != nil {
