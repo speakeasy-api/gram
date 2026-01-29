@@ -13731,6 +13731,10 @@ components:
                 id:
                     type: string
                     description: The ID of the metadata record
+                installation_override_url:
+                    type: string
+                    description: URL to redirect to instead of showing the default installation page
+                    format: uri
                 instructions:
                     type: string
                     description: Server instructions returned in the MCP initialize response
@@ -14879,6 +14883,10 @@ components:
                 external_documentation_url:
                     type: string
                     description: A link to external documentation for the MCP install page
+                installation_override_url:
+                    type: string
+                    description: URL to redirect to instead of showing the default installation page
+                    format: uri
                 instructions:
                     type: string
                     description: Server instructions returned in the MCP initialize response

@@ -226,6 +226,11 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
 	}
 
+	var installationOverrideURL pgtype.Text
+	if payload.InstallationOverrideURL != nil {
+		installationOverrideURL = conv.ToPGText(*payload.InstallationOverrideURL)
+	}
+
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
 		ToolsetID:                toolset.ID,
 		ProjectID:                *authCtx.ProjectID,
@@ -233,6 +238,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		LogoID:                   logoID,
 		Instructions:             instructions,
 		DefaultEnvironmentID:     defaultEnvironmentID,
+		InstallationOverrideUrl:  installationOverrideURL,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
@@ -503,6 +509,7 @@ func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 		LogoAssetID:              conv.FromNullableUUID(record.LogoID),
 		Instructions:             conv.FromPGText[string](record.Instructions),
 		DefaultEnvironmentID:     conv.FromNullableUUID(record.DefaultEnvironmentID),
+		InstallationOverrideURL:  conv.FromPGText[string](record.InstallationOverrideUrl),
 		EnvironmentConfigs:       environmentConfigs,
 	}
 	return metadata, nil
@@ -632,6 +639,12 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			s.logger.WarnContext(ctx, "failed to load MCP install page metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))
 		}
 	} else {
+		// Check for installation override URL and redirect if set
+		if overrideURL := conv.FromPGText[string](metadataRecord.InstallationOverrideUrl); overrideURL != nil {
+			http.Redirect(w, r, *overrideURL, http.StatusFound)
+			return nil
+		}
+
 		if metadataRecord.LogoID.Valid {
 			logoURL := *s.serverURL
 			logoURL.Path = "/rpc/assets.serveImage"
