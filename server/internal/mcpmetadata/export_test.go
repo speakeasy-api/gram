@@ -164,6 +164,16 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 	})
 	require.NoError(t, err, "create custom domain")
 
+	// Activate and verify the custom domain
+	customDomain, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:             customDomain.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "test-ingress", Valid: true},
+		CertSecretName: pgtype.Text{String: "test-cert", Valid: true},
+	})
+	require.NoError(t, err, "activate custom domain")
+
 	// Create a toolset with MCP enabled
 	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,

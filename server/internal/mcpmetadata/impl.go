@@ -292,9 +292,10 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	}
 
 	// Resolve custom domain from the toolset's organization if not already set
+	// Only use domains that are both activated and verified
 	if !toolset.CustomDomainID.Valid {
 		domainRecord, err := s.domainsRepo.GetCustomDomainByOrganization(ctx, toolset.OrganizationID)
-		if err == nil {
+		if err == nil && domainRecord.Activated && domainRecord.Verified {
 			toolset.CustomDomainID = uuid.NullUUID{UUID: domainRecord.ID, Valid: true}
 		}
 		// Ignore errors - custom domain is optional
