@@ -2,7 +2,6 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
-import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert, cn, getCustomDomainCNAME } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
@@ -21,7 +22,7 @@ import {
 } from "@gram/client/react-query/listAPIKeys";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { Column, Stack, Table } from "@speakeasy-api/moonshine";
+import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -34,7 +35,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { SettingsProjectsTable } from "./SettingsProjectsTable";
 
 export default function Settings() {
@@ -42,6 +42,8 @@ export default function Settings() {
   const session = useSession();
   const isAdmin = useIsAdmin();
   const navigate = useNavigate();
+  const client = useSdkClient();
+
   const [orgOverride, setOrgOverride] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
@@ -695,6 +697,16 @@ export default function Settings() {
               />
               <Button type="submit" disabled={!orgOverride.trim()}>
                 Go to Org
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  document.cookie = `gram_admin_override=; path=/; max-age=0;`;
+                  await client.auth.logout();
+                  window.location.href = "/login";
+                }}
+              >
+                Clear override
               </Button>
             </form>
           </div>

@@ -122,7 +122,7 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	return results, nil
 }
 
-func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemPrompt, prompt string, tools []Tool) (*or.Message, error) {
+func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemPrompt, prompt string, tools []Tool, usageSource billing.ModelUsageSource) (*or.Message, error) {
 	var messages []or.Message
 
 	// Optional system prompt
@@ -139,10 +139,10 @@ func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemProm
 		Name:    nil,
 	}))
 
-	return c.GetCompletionFromMessages(ctx, orgID, "", messages, tools, nil, "")
+	return c.GetCompletionFromMessages(ctx, orgID, "", messages, tools, nil, "", usageSource)
 }
 
-func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, projectID string, messages []or.Message, tools []Tool, temperature *float64, model string) (*or.Message, error) {
+func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, projectID string, messages []or.Message, tools []Tool, temperature *float64, model string, usageSource billing.ModelUsageSource) (*or.Message, error) {
 	openrouterKey, err := c.openRouter.ProvisionAPIKey(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
@@ -206,7 +206,7 @@ func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string
 
 	// Track model usage for billing
 	go func() {
-		err = c.openRouter.TriggerModelUsageTracking(context.WithoutCancel(ctx), chatResp.ID, orgID, projectID, billing.ModelUsageSourceAgents, "")
+		err = c.openRouter.TriggerModelUsageTracking(context.WithoutCancel(ctx), chatResp.ID, orgID, projectID, usageSource, "")
 		if err != nil {
 			c.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(err))
 		}

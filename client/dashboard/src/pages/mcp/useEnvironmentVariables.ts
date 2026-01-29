@@ -1,5 +1,5 @@
-import { useMemo } from "react";
 import { Toolset } from "@/lib/toolTypes";
+import { useMemo } from "react";
 import { EnvironmentVariable, EnvVarState } from "./environmentVariableUtils";
 
 interface Environment {
@@ -147,6 +147,30 @@ export function useEnvironmentVariables(
         state,
         isRequired: true,
         description: funcVar.description || "Function environment variable",
+        createdAt: new Date(),
+      });
+    });
+
+    // Get env   vars from external MCP header definitions (these are required for external MCP servers)
+    toolset.externalMcpHeaderDefinitions?.forEach((headerDef) => {
+      requiredVarNames.add(headerDef.name);
+      const valueGroups = getValueGroups(headerDef.name);
+      const id = `ext-${headerDef.name}`;
+      // Check if this variable has an environment entry
+      const entry = findEnvEntry(headerDef.name);
+      const state: EnvVarState =
+        entry?.providedBy === "user"
+          ? "user-provided"
+          : entry?.providedBy === "none"
+            ? "omitted"
+            : "system";
+      existingVars.push({
+        id,
+        key: headerDef.name,
+        valueGroups,
+        state,
+        isRequired: true,
+        description: headerDef.description || "External MCP header",
         createdAt: new Date(),
       });
     });

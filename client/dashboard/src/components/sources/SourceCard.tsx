@@ -14,8 +14,7 @@ import { Badge } from "@speakeasy-api/moonshine";
 import { CircleAlertIcon } from "lucide-react";
 import {
   ExternalMCPIllustration,
-  FunctionIllustration,
-  OpenAPIIllustration,
+  MCPPatternIllustration,
 } from "./SourceCardIllustrations";
 
 export type NamedAsset =
@@ -113,12 +112,20 @@ export function SourceCard({
   const renderIllustration = () => {
     switch (asset.type) {
       case "openapi":
-        return <OpenAPIIllustration />;
       case "function":
-        return <FunctionIllustration />;
+        return (
+          <MCPPatternIllustration
+            toolsetSlug={asset.slug}
+            className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
+          />
+        );
       case "externalmcp":
         return (
-          <ExternalMCPIllustration logoUrl={asset.iconUrl} name={asset.name} />
+          <ExternalMCPIllustration
+            logoUrl={asset.iconUrl}
+            name={asset.name}
+            slug={asset.slug}
+          />
         );
     }
   };
