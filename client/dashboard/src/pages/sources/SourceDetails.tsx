@@ -441,124 +441,200 @@ export default function SourceDetails() {
             <div className="max-w-[1270px] mx-auto px-8 py-6 w-full flex-1 flex flex-col min-h-0">
               {relatedTools.length > 0 ? (
                 <div className="flex flex-col gap-4 flex-1 min-h-0">
-                  {/* Method filter pills */}
-                  <div className="flex gap-2 flex-wrap shrink-0">
-                    <button onClick={() => setMethodFilter(null)}>
-                      <Badge
-                        variant={
-                          methodFilter === null ? "information" : "neutral"
-                        }
-                        className="py-2"
-                      >
-                        <Badge.Text>
-                          All (
-                          {relatedTools.filter((t) => t.type === "http").length}
-                          )
-                        </Badge.Text>
-                      </Badge>
-                    </button>
-                    {["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => {
-                      const count = relatedTools.filter(
-                        (t) => t.type === "http" && t.httpMethod === method,
-                      ).length;
-                      if (count === 0) return null;
-                      const isActive = methodFilter === method;
-                      const variant =
-                        method === "GET"
-                          ? "success"
-                          : method === "POST"
-                            ? "information"
-                            : method === "PUT"
-                              ? "warning"
-                              : method === "PATCH"
-                                ? "neutral"
-                                : "destructive";
-                      return (
-                        <button
-                          key={method}
-                          onClick={() =>
-                            setMethodFilter(isActive ? null : method)
+                  {/* Method filter pills - only for HTTP tools */}
+                  {isOpenAPI && (
+                    <div className="flex gap-2 flex-wrap shrink-0">
+                      <button onClick={() => setMethodFilter(null)}>
+                        <Badge
+                          variant={
+                            methodFilter === null ? "information" : "neutral"
                           }
+                          className="py-2"
                         >
-                          <Badge
-                            variant={variant}
-                            className={`py-2 ${isActive ? "" : "opacity-50 hover:opacity-100"}`}
-                          >
-                            <Badge.Text>
-                              {method} ({count})
-                            </Badge.Text>
-                          </Badge>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          <Badge.Text>
+                            All (
+                            {
+                              relatedTools.filter((t) => t.type === "http")
+                                .length
+                            }
+                            )
+                          </Badge.Text>
+                        </Badge>
+                      </button>
+                      {["GET", "POST", "PUT", "PATCH", "DELETE"].map(
+                        (method) => {
+                          const count = relatedTools.filter(
+                            (t) => t.type === "http" && t.httpMethod === method,
+                          ).length;
+                          if (count === 0) return null;
+                          const isActive = methodFilter === method;
+                          const variant =
+                            method === "GET"
+                              ? "success"
+                              : method === "POST"
+                                ? "information"
+                                : method === "PUT"
+                                  ? "warning"
+                                  : method === "PATCH"
+                                    ? "neutral"
+                                    : "destructive";
+                          return (
+                            <button
+                              key={method}
+                              onClick={() =>
+                                setMethodFilter(isActive ? null : method)
+                              }
+                            >
+                              <Badge
+                                variant={variant}
+                                className={`py-2 ${isActive ? "" : "opacity-50 hover:opacity-100"}`}
+                              >
+                                <Badge.Text>
+                                  {method} ({count})
+                                </Badge.Text>
+                              </Badge>
+                            </button>
+                          );
+                        },
+                      )}
+                    </div>
+                  )}
 
-                  {/* Tools table */}
+                  {/* Tools table - different layout for HTTP vs Function */}
                   <div className="border rounded-lg flex flex-col overflow-hidden flex-1 min-h-0 mb-4">
                     {/* Fixed header */}
                     <div className="border-b bg-muted/50 shrink-0">
-                      <div className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-1">
-                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                          Method
-                        </div>
-                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider pr-3">
-                          Endpoint
-                        </div>
-                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                          <span>Tool Name</span>
-                          <div className="flex items-center">
-                            <div
-                              className={`flex items-center overflow-hidden transition-all duration-200 ${
-                                searchOpen ? "w-48 mr-2" : "w-0"
-                              }`}
-                            >
-                              <input
-                                type="text"
-                                placeholder="Search tools..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                onBlur={() => {
-                                  if (!searchQuery) {
-                                    setSearchOpen(false);
+                      {isOpenAPI ? (
+                        <div className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-1">
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Method
+                          </div>
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider pr-3">
+                            Endpoint
+                          </div>
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                            <span>Tool Name</span>
+                            <div className="flex items-center">
+                              <div
+                                className={`flex items-center overflow-hidden transition-all duration-200 ${
+                                  searchOpen ? "w-48 mr-2" : "w-0"
+                                }`}
+                              >
+                                <input
+                                  type="text"
+                                  placeholder="Search tools..."
+                                  value={searchQuery}
+                                  onChange={(e) =>
+                                    setSearchQuery(e.target.value)
+                                  }
+                                  onBlur={() => {
+                                    if (!searchQuery) {
+                                      setSearchOpen(false);
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 text-sm font-normal normal-case tracking-normal border border-border rounded bg-background focus:outline-none focus:border-muted-foreground"
+                                  autoFocus={searchOpen}
+                                />
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (searchOpen && searchQuery) {
+                                    setSearchQuery("");
+                                  } else {
+                                    setSearchOpen(!searchOpen);
                                   }
                                 }}
-                                className="w-full px-2 py-1 text-sm font-normal normal-case tracking-normal border border-border rounded bg-background focus:outline-none focus:border-muted-foreground"
-                                autoFocus={searchOpen}
-                              />
+                                className="p-1 rounded hover:bg-muted transition-colors"
+                              >
+                                {searchOpen ? (
+                                  <X className="h-4 w-4" />
+                                ) : (
+                                  <Search className="h-4 w-4" />
+                                )}
+                              </button>
                             </div>
-                            <button
-                              onClick={() => {
-                                if (searchOpen && searchQuery) {
-                                  setSearchQuery("");
-                                } else {
-                                  setSearchOpen(!searchOpen);
-                                }
-                              }}
-                              className="p-1 rounded hover:bg-muted transition-colors"
-                            >
-                              {searchOpen ? (
-                                <X className="h-4 w-4" />
-                              ) : (
-                                <Search className="h-4 w-4" />
-                              )}
-                            </button>
                           </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="grid grid-cols-[200px_100px_1fr] items-center px-4 py-1">
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider truncate">
+                            Function Name
+                          </div>
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider truncate">
+                            Runtime
+                          </div>
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                            <span>Description</span>
+                            <div className="flex items-center">
+                              <div
+                                className={`flex items-center overflow-hidden transition-all duration-200 ${
+                                  searchOpen ? "w-48 mr-2" : "w-0"
+                                }`}
+                              >
+                                <input
+                                  type="text"
+                                  placeholder="Search tools..."
+                                  value={searchQuery}
+                                  onChange={(e) =>
+                                    setSearchQuery(e.target.value)
+                                  }
+                                  onBlur={() => {
+                                    if (!searchQuery) {
+                                      setSearchOpen(false);
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 text-sm font-normal normal-case tracking-normal border border-border rounded bg-background focus:outline-none focus:border-muted-foreground"
+                                  autoFocus={searchOpen}
+                                />
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (searchOpen && searchQuery) {
+                                    setSearchQuery("");
+                                  } else {
+                                    setSearchOpen(!searchOpen);
+                                  }
+                                }}
+                                className="p-1 rounded hover:bg-muted transition-colors"
+                              >
+                                {searchOpen ? (
+                                  <X className="h-4 w-4" />
+                                ) : (
+                                  <Search className="h-4 w-4" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {/* Scrollable body */}
                     <div className="flex-1 overflow-y-auto">
                       {(() => {
                         const filteredTools = relatedTools.filter((tool) => {
-                          if (tool.type !== "http") return false;
-                          if (methodFilter && tool.httpMethod !== methodFilter)
-                            return false;
-                          if (searchQuery) {
-                            const query = searchQuery.toLowerCase();
-                            return (
-                              tool.name.toLowerCase().includes(query) ||
-                              tool.path.toLowerCase().includes(query)
-                            );
+                          if (isOpenAPI) {
+                            if (tool.type !== "http") return false;
+                            if (
+                              methodFilter &&
+                              tool.httpMethod !== methodFilter
+                            )
+                              return false;
+                            if (searchQuery) {
+                              const query = searchQuery.toLowerCase();
+                              return (
+                                tool.name.toLowerCase().includes(query) ||
+                                tool.path.toLowerCase().includes(query)
+                              );
+                            }
+                          } else {
+                            if (tool.type !== "function") return false;
+                            if (searchQuery) {
+                              const query = searchQuery.toLowerCase();
+                              return (
+                                tool.name.toLowerCase().includes(query) ||
+                                tool.description.toLowerCase().includes(query)
+                              );
+                            }
                           }
                           return true;
                         });
@@ -572,37 +648,59 @@ export default function SourceDetails() {
                         }
 
                         return filteredTools.map((tool) => {
-                          if (tool.type !== "http") return null;
-                          return (
-                            <div
-                              key={tool.toolUrn}
-                              className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
-                            >
-                              <div>
-                                <Badge
-                                  variant={
-                                    tool.httpMethod === "GET"
-                                      ? "success"
-                                      : tool.httpMethod === "POST"
-                                        ? "information"
-                                        : tool.httpMethod === "PUT"
-                                          ? "warning"
-                                          : tool.httpMethod === "PATCH"
-                                            ? "neutral"
-                                            : "destructive"
-                                  }
-                                >
-                                  <Badge.Text>{tool.httpMethod}</Badge.Text>
-                                </Badge>
+                          if (tool.type === "http") {
+                            return (
+                              <div
+                                key={tool.toolUrn}
+                                className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
+                              >
+                                <div>
+                                  <Badge
+                                    variant={
+                                      tool.httpMethod === "GET"
+                                        ? "success"
+                                        : tool.httpMethod === "POST"
+                                          ? "information"
+                                          : tool.httpMethod === "PUT"
+                                            ? "warning"
+                                            : tool.httpMethod === "PATCH"
+                                              ? "neutral"
+                                              : "destructive"
+                                    }
+                                  >
+                                    <Badge.Text>{tool.httpMethod}</Badge.Text>
+                                  </Badge>
+                                </div>
+                                <div className="font-mono text-sm text-muted-foreground truncate pr-3">
+                                  {tool.path}
+                                </div>
+                                <div className="text-sm truncate">
+                                  {tool.name}
+                                </div>
                               </div>
-                              <div className="font-mono text-sm text-muted-foreground truncate pr-3">
-                                {tool.path}
+                            );
+                          }
+                          if (tool.type === "function") {
+                            return (
+                              <div
+                                key={tool.toolUrn}
+                                className="grid grid-cols-[200px_100px_1fr] items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
+                              >
+                                <div className="font-mono text-sm truncate pr-3">
+                                  {tool.name}
+                                </div>
+                                <div>
+                                  <Badge variant="neutral">
+                                    <Badge.Text>{tool.runtime}</Badge.Text>
+                                  </Badge>
+                                </div>
+                                <div className="text-sm text-muted-foreground truncate">
+                                  {tool.description}
+                                </div>
                               </div>
-                              <div className="text-sm truncate">
-                                {tool.name}
-                              </div>
-                            </div>
-                          );
+                            );
+                          }
+                          return null;
                         });
                       })()}
                     </div>
