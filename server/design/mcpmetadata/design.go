@@ -128,7 +128,7 @@ var _ = Service("mcpMetadata", func() {
 	Method("getMcpMetadata", func() {
 		Description("Fetch the metadata that powers the MCP install page.")
 		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("producer")
+			Scope("consumer")
 		})
 		Security(security.Session, security.ProjectSlug)
 
@@ -163,7 +163,7 @@ var _ = Service("mcpMetadata", func() {
 	Method("setMcpMetadata", func() {
 		Description("Create or update the metadata that powers the MCP install page.")
 		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("producer")
+			Scope("consumer")
 		})
 		Security(security.Session, security.ProjectSlug)
 
@@ -200,7 +200,7 @@ var _ = Service("mcpMetadata", func() {
 	Method("exportMcpMetadata", func() {
 		Description("Export MCP server details as JSON for documentation and integration purposes.")
 		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("producer")
+			Scope("consumer")
 		})
 		Security(security.Session, security.ProjectSlug)
 

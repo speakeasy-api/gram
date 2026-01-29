@@ -4493,10 +4493,10 @@ paths:
                 Export MCP server details as JSON for documentation and integration purposes.
 
                 **Required security scopes for apikey**:
-                  * `producer`
+                  * `consumer`
 
                 **Required security scopes for project_slug**:
-                  * `producer`
+                  * `consumer`
             operationId: mcpMetadata#exportMcpMetadata
             parameters:
                 - description: API Key header
@@ -4587,10 +4587,10 @@ paths:
                 Fetch the metadata that powers the MCP install page.
 
                 **Required security scopes for apikey**:
-                  * `producer`
+                  * `consumer`
 
                 **Required security scopes for project_slug**:
-                  * `producer`
+                  * `consumer`
             operationId: mcpMetadata#getMcpMetadata
             parameters:
                 - description: A short url-friendly label that uniquely identifies a resource.
@@ -4673,10 +4673,10 @@ paths:
                 Create or update the metadata that powers the MCP install page.
 
                 **Required security scopes for apikey**:
-                  * `producer`
+                  * `consumer`
 
                 **Required security scopes for project_slug**:
-                  * `producer`
+                  * `consumer`
             operationId: mcpMetadata#setMcpMetadata
             parameters:
                 - description: API Key header

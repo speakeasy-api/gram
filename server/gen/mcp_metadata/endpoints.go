@@ -48,7 +48,7 @@ func NewGetMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
 			Scopes:         []string{"consumer", "producer", "chat"},
-			RequiredScopes: []string{"producer"},
+			RequiredScopes: []string{"consumer"},
 		}
 		var key string
 		if p.ApikeyToken != nil {
@@ -59,7 +59,7 @@ func NewGetMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{"producer"},
+				RequiredScopes: []string{"consumer"},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
@@ -107,7 +107,7 @@ func NewSetMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
 			Scopes:         []string{"consumer", "producer", "chat"},
-			RequiredScopes: []string{"producer"},
+			RequiredScopes: []string{"consumer"},
 		}
 		var key string
 		if p.ApikeyToken != nil {
@@ -118,7 +118,7 @@ func NewSetMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{"producer"},
+				RequiredScopes: []string{"consumer"},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
@@ -166,7 +166,7 @@ func NewExportMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
 			Scopes:         []string{"consumer", "producer", "chat"},
-			RequiredScopes: []string{"producer"},
+			RequiredScopes: []string{"consumer"},
 		}
 		var key string
 		if p.ApikeyToken != nil {
@@ -177,7 +177,7 @@ func NewExportMcpMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			sc := security.APIKeyScheme{
 				Name:           "project_slug",
 				Scopes:         []string{},
-				RequiredScopes: []string{"producer"},
+				RequiredScopes: []string{"consumer"},
 			}
 			var key string
 			if p.ProjectSlugInput != nil {
