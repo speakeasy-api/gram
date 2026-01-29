@@ -402,6 +402,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		"success":           false,
 		"source":            metadata.Source,
 		"user_agent":        metadata.UserAgent,
+		"origin":            metadata.Origin,
 	}
 
 	defer func() {
