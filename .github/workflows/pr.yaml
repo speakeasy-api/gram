@@ -31,6 +31,7 @@ jobs:
       functions: ${{ steps.gates.outputs.functions }}
       tsframework: ${{ steps.gates.outputs.tsframework }}
       elements: ${{ steps.gates.outputs.elements }}
+      migrations: ${{ steps.gates.outputs.migrations }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
@@ -84,6 +85,13 @@ jobs:
             echo "Elements jobs will run."
           else
             echo "Elements jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.migrations }}" == "true" ]]; then
+            echo "migrations=true" >> $GITHUB_OUTPUT
+            echo "Migrations jobs will run."
+          else
+            echo "Migrations jobs will be skipped."
           fi
 
   docker-build-server:
@@ -144,6 +152,71 @@ jobs:
           echo "Running image..."
           docker run --rm ${{ steps.build.outputs.image-tag }} version
 
+  atlas-lint:
+    name: Lint migrations with Atlas
+    runs-on: ubicloud-standard-4
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: dev
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup Atlas
+        uses: ariga/setup-atlas@1ffa6444093025c9791791f0de623560359acd02 # v0
+        with:
+          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+
+      - name: Generate tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            SHORT_SHA=$(echo "${{ github.event.pull_request.base.sha }}" | cut -c1-8)
+            echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          else
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            echo "tag=sha-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Lint PostgreSQL migrations
+        uses: ariga/atlas-action/migrate/lint@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
+        with:
+          dir: file://server/migrations
+          dir-name: gram
+          dev-url: postgres://postgres:pass@localhost:5432/dev?search_path=public&sslmode=disable
+          config: file://server/atlas.hcl
+          tag: ${{ steps.tag.outputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Lint ClickHouse migrations
+        uses: ariga/atlas-action/migrate/lint@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
+        with:
+          dir: file://server/clickhouse/migrations
+          dir-name: gram-clickhouse
+          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          tag: ${{ steps.tag.outputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   atlas-push:
     name: Push migrations to Atlas Registry
     runs-on: ubicloud-standard-4
@@ -176,7 +249,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Atlas
-        uses: ariga/setup-atlas@v0
+        uses: ariga/setup-atlas@1ffa6444093025c9791791f0de623560359acd02 # v0
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
@@ -192,7 +265,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@v1
+        uses: ariga/atlas-action/migrate/push@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -200,7 +273,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@v1
+        uses: ariga/atlas-action/migrate/push@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
