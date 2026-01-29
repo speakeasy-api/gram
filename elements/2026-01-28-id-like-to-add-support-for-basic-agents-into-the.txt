@@ -1,0 +1,597 @@
+
+ ▐▛███▜▌   Claude Code v2.1.7
+▝▜█████▛▘  Opus 4.5 · Claude Max
+  ▘▘ ▝▝    ~/dev/gram/elements
+══════════════════ Conversation compacted · ctrl+o for history ═════════════════
+  ⎿  Read src/components/assistant-ui/markdown-text.tsx (290 lines)
+  ⎿  Read src/components/assistant-ui/tool-fallback.tsx (142 lines)
+  ⎿  Read src/components/assistant-ui/sub-agent-view.tsx (433 lines)
+  ⎿  Referenced file src/components/assistant-ui/thread.tsx
+  ⎿  Read ../server/internal/chat/agentic.go (498 lines)
+  ⎿  Plan file referenced (~/.claude/plans/synchronous-beaming-wirth.md)
+
+⏺ Let me investigate why the sub-agent views aren't rendering. I need to check the SubAgentContext to understand how events are being processed.
+
+⏺ Read(src/contexts/SubAgentContext.tsx)
+  ⎿  Read 427 lines
+
+⏺ Let me check the type definitions for SubAgentEvent to verify the field names match what the server sends.
+
+⏺ Read(src/types/agents.ts)
+  ⎿  Read 153 lines
+
+⏺ Let me check the ElementsProvider to see how SubAgentProvider is integrated.
+
+⏺ Read(src/contexts/ElementsProvider.tsx)
+  ⎿  Read 695 lines
+
+⏺ I found the issue. The server is executing spawn_agent tool calls and streaming GRAM_AGENT events as content, but it's NOT streaming the actual spawn_agent tool calls to the client. The ToolFallback component never sees toolName === 'spawn_agent' because those tool calls aren't being sent in the SSE stream.
+
+  The writeChunk function in agentic.go only sends content deltas with ToolCalls: nil. I need to add a function to stream tool calls to the client so ToolFallback can render SubAgentToolView components.
+
+⏺ Read(~/dev/gram/server/internal/thirdparty/openrouter/types.go)
+  ⎿  Read 243 lines
+
+⏺ Now I understand - the ChunkDelta type supports ToolCalls but writeChunk always sets it to nil. I need to add a function to stream the spawn_agent tool calls to the client before executing them.
+
+⏺ Update(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Added 45 lines                                                      
+      208      return writeChunk(content, nil)
+      209    }
+      210  
+      211 +  // Write tool calls to the client stream so ToolFallback can
+          + render them                                                  
+      212 +  writeToolCalls := func(toolCalls []or.ChatMessageToolCall) e
+          +rror {                                                        
+      213 +    // Convert to streaming format                            
+      214 +    var streamToolCalls []openrouter.ToolCall                 
+      215 +    for i, tc := range toolCalls {                            
+      216 +      streamToolCalls = append(streamToolCalls, openrouter.Too
+          +lCall{                                                        
+      217 +        Index: i,                                             
+      218 +        ID:    tc.ID,                                         
+      219 +        Type:  "function",                                    
+      220 +        Function: openrouter.ToolCallFunction{                
+      221 +          Name:      tc.Function.Name,                        
+      222 +          Arguments: tc.Function.Arguments,                   
+      223 +        },                                                    
+      224 +      })                                                      
+      225 +    }                                                         
+      226 +                                                              
+      227 +    chunk := openrouter.StreamingChunk{                       
+      228 +      ID:                "chatcmpl-" + uuid.New().String(),   
+      229 +      Object:            "chat.completion.chunk",             
+      230 +      Created:           0,                                   
+      231 +      Model:             chatRequest.Model,                   
+      232 +      SystemFingerprint: "",                                  
+      233 +      Choices: []openrouter.ChunkChoice{                      
+      234 +        {                                                     
+      235 +          Index: 0,                                           
+      236 +          Delta: openrouter.ChunkDelta{                       
+      237 +            Content:   "",                                    
+      238 +            ToolCalls: streamToolCalls,                       
+      239 +          },                                                  
+      240 +          FinishReason: nil,                                  
+      241 +        },                                                    
+      242 +      },                                                      
+      243 +      Usage: nil,                                             
+      244 +    }                                                         
+      245 +    chunkJSON, err := json.Marshal(chunk)                     
+      246 +    if err != nil {                                           
+      247 +      return fmt.Errorf("marshal tool calls chunk: %w", err)  
+      248 +    }                                                         
+      249 +    if _, err := fmt.Fprintf(w, "data: %s\n\n", chunkJSON); er
+          +r != nil {                                                    
+      250 +      return fmt.Errorf("write tool calls chunk: %w", err)    
+      251 +    }                                                         
+      252 +    flush()                                                   
+      253 +    return nil                                                
+      254 +  }                                                           
+      255 +                                                              
+      256    // Agentic loop with iteration limit to prevent infinite loo
+           ps
+      257    const maxIterations = 20
+      258    iteration := 0
+
+❯ you removed the explicit <SubAgent component and said that it would be    
+  integrated into the messag rendering as tool calls by default - can you   
+  expain?                                                                   
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+⏺ Good question. Let me explain the architecture:
+
+  How sub-agents render via tool calls:
+
+  1. When the LLM decides to spawn sub-agents, it makes spawn_agent tool calls (just like any other tool call)
+  2. These tool calls appear as tool-call message parts in the assistant message
+  3. The ToolFallback component in tool-fallback.tsx renders each tool call
+  4. When ToolFallback sees toolName === 'spawn_agent', it renders SubAgentToolView instead of the standard ToolUI
+  5. SubAgentToolView looks up the agent state from SubAgentContext using the tool call ID as the agent ID
+
+  The key insight is that tool calls are already rendered in-order within the message - so spawn_agent tool calls appear exactly where the LLM made them, interleaved with other content. This is better than a separate SubAgentList because:
+  - Agents appear in the natural flow of the conversation
+  - The position is determined by when the LLM decided to spawn them
+  - No separate component needed to track ordering
+
+  The problem is the server wasn't streaming the tool calls themselves to the client - only the GRAM_AGENT progress events. Let me use the writeToolCalls function I just added to send the spawn_agent calls before executing them:
+
+⏺ Read(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Read 100 lines
+
+⏺ Now I need to call writeToolCalls to stream the spawn_agent tool calls before executing them. This lets the client render SubAgentToolView components while the agents execute:
+
+⏺ Update(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Added 10 lines                                                      
+      346  
+      347        // Execute all spawn_agent calls in parallel
+      348        if len(spawnCalls) > 0 {
+      349 +        // Stream the spawn_agent tool calls to the client fir
+          +st                                                            
+      350 +        // This lets ToolFallback render SubAgentToolView comp
+          +onents immediately                                            
+      351 +        spawnToolCalls := make([]or.ChatMessageToolCall, 0, le
+          +n(spawnCalls))                                                
+      352 +        for _, sc := range spawnCalls {                       
+      353 +          spawnToolCalls = append(spawnToolCalls, sc.tc)      
+      354 +        }                                                     
+      355 +        if err := writeToolCalls(spawnToolCalls); err != nil {
+      356 +          h.logger.WarnContext(ctx, "failed to write spawn_age
+          +nt tool calls", attr.SlogError(err))                          
+      357 +        }                                                     
+      358 +                                                              
+      359          var wg sync.WaitGroup
+      360          var mu sync.Mutex // Protects writes to the HTTP respo
+           nse
+      361  
+
+⏺ Let me also add streaming for regular tool calls so they render in ToolFallback as well:
+
+⏺ Read(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Read 80 lines
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+⏺ Update(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Added 7 lines                                                       
+      433        }
+      434  
+      435        // Process regular tool calls sequentially
+      436 +      // Stream regular tool calls to the client first        
+      437 +      if len(regularCalls) > 0 {                              
+      438 +        if err := writeToolCalls(regularCalls); err != nil {  
+      439 +          h.logger.WarnContext(ctx, "failed to write regular t
+          +ool calls", attr.SlogError(err))                              
+      440 +        }                                                     
+      441 +      }                                                       
+      442 +                                                              
+      443        for _, tc := range regularCalls {
+      444          var argsMap map[string]any
+      445          if err := json.Unmarshal([]byte(tc.Function.Arguments)
+           , &argsMap); err != nil {
+
+⏺ Now let me run the linter to make sure the code compiles:
+
+⏺ Bash(mise lint:server 2>&1 | head -50)
+  ⎿  [lint:server] $ ~/dev/gram/.mise-tasks/lint/server.sh
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+⏺ The server code compiles. Now let me verify that the thread.tsx is properly set up to render tool calls through ToolFallback:
+
+⏺ Read(src/components/assistant-ui/thread.tsx)
+  ⎿  Read 150 lines
+
+⏺ Search(pattern: "ToolFallback", path:
+        "src/components/assistant-ui/thread.tsx", output_mode: "content")
+  ⎿  Found 2 lines (ctrl+o to expand)
+
+⏺ Read(src/components/assistant-ui/thread.tsx)
+  ⎿  Read 80 lines
+
+⏺ The architecture looks correct - ToolFallback is used for tool call rendering. The issue was that the server wasn't sending the tool calls in the stream.
+
+  Let me verify the client-side parsing is working. I should check if the markdown preprocessing is actually being called. Let me add some logging to trace the flow:
+
+⏺ Read(src/components/assistant-ui/markdown-text.tsx)
+  ⎿  Read 60 lines
+
+⏺ I notice the tool calls chunk doesn't include a finish_reason. In OpenAI format, when tool calls are returned, the finish_reason should be "tool_calls". Let me also check if that's needed:
+
+⏺ Read(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Read 50 lines
+
+⏺ Let me build and verify the server compiles correctly, then run the client tests to make sure nothing is broken:
+
+⏺ Bash(mise build:server 2>&1)
+  ⎿  [go:tidy] $ ~/dev/gram/.mise-tasks/go/tidy.sh          
+     [build:server] $ ~/dev/gram/.mise-tasks/build/server.sh
+     Finished in 18.13s
+
+❯ i get a runtime error now when the sub agent parts hit the tool fallback  
+                                                                            
+  Tool call argsText can only be appended, not updated: {} does not start   
+  with {"name":"SF Attractions Research","task":"Identify the top 3         
+  must-see attractions in San Francisco with brief descriptions (1 sentence 
+  each)","execution_mode":"parallel                                         
+  The component failed to render properly, likely due to a configuration    
+  issue in Storybook. Here are some common causes and how you can address   
+  them:                                                                     
+                                                                            
+  Missing Context/Providers: You can use decorators to supply specific      
+  contexts or providers, which are sometimes necessary for components to    
+  render correctly. For detailed instructions on using decorators, please   
+  visit the Decorators documentation.                                       
+  Misconfigured Webpack or Vite: Verify that Storybook picks up all         
+  necessary settings for loaders, plugins, and other relevant parameters.   
+  You can find step-by-step guides for configuring Webpack or Vite with     
+  Storybook.                                                                
+  Missing Environment Variables: Your Storybook may require specific        
+  environment variables to function as intended. You can set up custom      
+  environment variables as outlined in the Environment Variables            
+  documentation.                                                            
+  Error: Tool call argsText can only be appended, not updated: {} does not  
+  start with {"name":"SF Attractions Research","task":"Identify the top 3   
+  must-see attractions in San Francisco with brief descriptions (1 sentence 
+  each)","execution_mode":"parallel                                         
+  at https://localhost:6006/node_modules/.cache/storybook/b0f45a0a40d80     
+  119427912c8b94a8ee8cce137ca43eed4912edd431004f1c783/sb-vite/deps/chunk-G5 
+  UXFLIF.js?v=0c9f97bc:3265:27                                              
+  at Array.forEach (<anonymous>)                                            
+  at https://localhost:6006/node_modules/.cache/storybook/b0f45a0a40d80     
+  119427912c8b94a8ee8cce137ca43eed4912edd431004f1c783/sb-vite/deps/chunk-G5 
+  UXFLIF.js?v=0c9f97bc:3233:25                                              
+  at Array.forEach (<anonymous>)                                            
+  at processMessages (https://localhost:6006/node_modules/.cache/storyb     
+  ook/b0f45a0a40d80119427912c8b94a8ee8cce137ca43eed4912edd431004f1c783/sb-v 
+  ite/deps/chunk-G5UXFLIF.js?v=0c9f97bc:3232:16)                            
+  at https://localhost:6006/node_modules/.cache/storybook/b0f45a0a40d80     
+  119427912c8b94a8ee8cce137ca43eed4912edd431004f1c783/sb-vite/deps/chunk-G5 
+  UXFLIF.js?v=0c9f97bc:3303:5                                               
+  at Object.react_stack_bottom_frame (https://localhost:6006/node_modul     
+  es/.cache/storybook/b0f45a0a40d80119427912c8b94a8ee8cce137ca43eed4912edd4 
+  31004f1c783/sb-vite/deps/chunk-HZOQ74IJ.js?v=0c9f97bc:18567:20)           
+  at runWithFiberInDEV (https://localhost:6006/node_modules/.cache/stor     
+  ybook/b0f45a0a40d80119427912c8b94a8ee8cce137ca43eed4912edd431004f1c783/sb 
+  -vite/deps/chunk-HZOQ74IJ.js?v=0c9f97bc:997:72)                           
+  at commitHookEffectListMount (https://localhost:6006/node_modules/.ca     
+  che/storybook/b0f45a0a40d80119427912c8b94a8ee8cce137ca43eed4912edd431004f 
+  1c783/sb-vite/deps/chunk-HZOQ74IJ.js?v=0c9f97bc:9411:163)                 
+  at commitHookPassiveMountEffects (https://localhost:6006/node_modules     
+  /.cache/storybook/b0f45a0a40d80119427912c8b94a8ee8cce137ca43eed4912edd431 
+  004f1c783/sb-vite/deps/chunk-HZOQ74IJ.js?v=0c9f97bc:9465:60)              
+
+⏺ The error shows the AI SDK expects tool call arguments to be streamed incrementally, but I'm sending complete arguments at once. The SDK's accumulation logic fails because {} doesn't start with the full arguments.
+
+  Instead of fighting the AI SDK's streaming protocol, let me use a different approach: embed a special marker in the content stream that the markdown renderer can detect and replace with SubAgentToolView. This is similar to how GRAM_AGENT events work.
+
+  Let me modify the approach:
+
+⏺ Update(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Removed 44 lines                                                    
+      208      return writeChunk(content, nil)
+      209    }
+      210  
+      211 -  // Write tool calls to the client stream so ToolFallback can
+          - render them                                                  
+      212 -  writeToolCalls := func(toolCalls []or.ChatMessageToolCall) e
+          -rror {                                                        
+      213 -    // Convert to streaming format                            
+      214 -    var streamToolCalls []openrouter.ToolCall                 
+      215 -    for i, tc := range toolCalls {                            
+      216 -      streamToolCalls = append(streamToolCalls, openrouter.Too
+          -lCall{                                                        
+      217 -        Index: i,                                             
+      218 -        ID:    tc.ID,                                         
+      219 -        Type:  "function",                                    
+      220 -        Function: openrouter.ToolCallFunction{                
+      221 -          Name:      tc.Function.Name,                        
+      222 -          Arguments: tc.Function.Arguments,                   
+      223 -        },                                                    
+      224 -      })                                                      
+      225 -    }                                                         
+      211  
+      227 -    chunk := openrouter.StreamingChunk{                       
+      228 -      ID:                "chatcmpl-" + uuid.New().String(),   
+      229 -      Object:            "chat.completion.chunk",             
+      230 -      Created:           0,                                   
+      231 -      Model:             chatRequest.Model,                   
+      232 -      SystemFingerprint: "",                                  
+      233 -      Choices: []openrouter.ChunkChoice{                      
+      234 -        {                                                     
+      235 -          Index: 0,                                           
+      236 -          Delta: openrouter.ChunkDelta{                       
+      237 -            Content:   "",                                    
+      238 -            ToolCalls: streamToolCalls,                       
+      239 -          },                                                  
+      240 -          FinishReason: nil,                                  
+      241 -        },                                                    
+      242 -      },                                                      
+      243 -      Usage: nil,                                             
+      244 -    }                                                         
+      245 -    chunkJSON, err := json.Marshal(chunk)                     
+      246 -    if err != nil {                                           
+      247 -      return fmt.Errorf("marshal tool calls chunk: %w", err)  
+      248 -    }                                                         
+      249 -    if _, err := fmt.Fprintf(w, "data: %s\n\n", chunkJSON); er
+          -r != nil {                                                    
+      250 -      return fmt.Errorf("write tool calls chunk: %w", err)    
+      251 -    }                                                         
+      252 -    flush()                                                   
+      253 -    return nil                                                
+      254 -  }                                                           
+      255 -                                                              
+      212    // Agentic loop with iteration limit to prevent infinite loo
+           ps
+      213    const maxIterations = 20
+      214    iteration := 0
+  ⎿  Found 2 new diagnostic issues in 1 file (ctrl+o to expand)
+
+⏺ Read(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Read 50 lines
+
+⏺ Update(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Removed 10 lines                                                    
+      301  
+      302        // Execute all spawn_agent calls in parallel
+      303        if len(spawnCalls) > 0 {
+      304 -        // Stream the spawn_agent tool calls to the client fir
+          -st                                                            
+      305 -        // This lets ToolFallback render SubAgentToolView comp
+          -onents immediately                                            
+      306 -        spawnToolCalls := make([]or.ChatMessageToolCall, 0, le
+          -n(spawnCalls))                                                
+      307 -        for _, sc := range spawnCalls {                       
+      308 -          spawnToolCalls = append(spawnToolCalls, sc.tc)      
+      309 -        }                                                     
+      310 -        if err := writeToolCalls(spawnToolCalls); err != nil {
+      311 -          h.logger.WarnContext(ctx, "failed to write spawn_age
+          -nt tool calls", attr.SlogError(err))                          
+      312 -        }                                                     
+      313 -                                                              
+      304          var wg sync.WaitGroup
+      305          var mu sync.Mutex // Protects writes to the HTTP respo
+           nse
+      306  
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+⏺ Read(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Read 30 lines
+
+⏺ Update(~/dev/gram/server/internal/chat/agentic.go)
+  ⎿  Removed 7 lines                                                     
+      378        }
+      379  
+      380        // Process regular tool calls sequentially
+      381 -      // Stream regular tool calls to the client first        
+      382 -      if len(regularCalls) > 0 {                              
+      383 -        if err := writeToolCalls(regularCalls); err != nil {  
+      384 -          h.logger.WarnContext(ctx, "failed to write regular t
+          -ool calls", attr.SlogError(err))                              
+      385 -        }                                                     
+      386 -      }                                                       
+      387 -                                                              
+      381        for _, tc := range regularCalls {
+      382          var argsMap map[string]any
+      383          if err := json.Unmarshal([]byte(tc.Function.Arguments)
+           , &argsMap); err != nil {
+
+⏺ Now I need to figure out how to render the agents. Since we can't use tool-call parts (due to AI SDK streaming limitations), let me add a SubAgentList component back to AssistantMessage that renders agents from SubAgentContext.
+
+  First let me check the current state of thread.tsx to see how AssistantMessage is structured:
+
+⏺ Read(src/components/assistant-ui/thread.tsx)
+  ⎿  Read 40 lines
+
+⏺ Bash(mise build:server 2>&1)
+  ⎿  [go:tidy] $ ~/dev/gram/.mise-tasks/go/tidy.sh          
+     [build:server] $ ~/dev/gram/.mise-tasks/build/server.sh
+     Finished in 12.91s
+
+⏺ Now let me add a SubAgentList component that renders all root agents from SubAgentContext:
+
+⏺ Read(src/components/assistant-ui/sub-agent-view.tsx)
+  ⎿  Read 19 lines
+
+⏺ Update(src/components/assistant-ui/sub-agent-view.tsx)
+  ⎿  Added 27 lines, removed 1 line                                      
+      419  }
+      420  
+      421  /* -----------------------------------------------------------
+           ------------------
+      422 + * SubAgentList - Renders all root-level agents from context  
+      423 + * -----------------------------------------------------------
+          +--------------- */                                            
+      424 +                                                              
+      425 +interface SubAgentListProps {                                 
+      426 +  /** Additional class names */                               
+      427 +  className?: string                                          
+      428 +}                                                             
+      429 +                                                              
+      430 +export function SubAgentList({ className }: SubAgentListProps)
+          + {                                                            
+      431 +  const { getRootAgents } = useSubAgent()                     
+      432 +  const rootAgents = getRootAgents()                          
+      433 +                                                              
+      434 +  if (rootAgents.length === 0) {                              
+      435 +    return null                                               
+      436 +  }                                                           
+      437 +                                                              
+      438 +  return (                                                    
+      439 +    <div className={cn('space-y-2 my-4', className)}>         
+      440 +      {rootAgents.map((agent) => (                            
+      441 +        <SubAgentView key={agent.id} agentId={agent.id} depth=
+          +{0} />                                                        
+      442 +      ))}                                                     
+      443 +    </div>                                                    
+      444 +  )                                                           
+      445 +}                                                             
+      446 +                                                              
+      447 +/* -----------------------------------------------------------
+          +------------------                                            
+      448   * Exports
+      449   * -----------------------------------------------------------
+           --------------- */
+      450  
+     ...
+      455    AgentStatusIndicator,
+      456    AgentIcon,
+      457  }
+      432 -export type { SubAgentViewProps, SubAgentToolViewProps, SubAge
+          -ntHeaderProps }                                               
+      458 +export type { SubAgentViewProps, SubAgentToolViewProps, SubAge
+          +ntHeaderProps, SubAgentListProps }                            
+
+⏺ Now I need to add SubAgentList to AssistantMessage. Let me create a safe wrapper that only renders when SubAgentProvider is available:
+
+⏺ Update(src/components/assistant-ui/sub-agent-view.tsx)
+  ⎿  Added 15 lines, removed 1 line                                      
+      427    className?: string
+      428  }
+      429  
+      430 -export function SubAgentList({ className }: SubAgentListProps)
+          - {                                                            
+      430 +function SubAgentListInner({ className }: SubAgentListProps) {
+      431    const { getRootAgents } = useSubAgent()
+      432    const rootAgents = getRootAgents()
+      433  
+     ...
+      444    )
+      445  }
+      446  
+      447 +/**                                                           
+      448 + * SubAgentList - Renders all root-level agents from context. 
+      449 + * Safe to use outside SubAgentProvider (returns null).       
+      450 + */                                                           
+      451 +export function SubAgentList({ className }: SubAgentListProps)
+          + {                                                            
+      452 +  const context = useSubAgentOptional()                       
+      453 +                                                              
+      454 +  if (!context) {                                             
+      455 +    return null                                               
+      456 +  }                                                           
+      457 +                                                              
+      458 +  return <SubAgentListInner className={className} />          
+      459 +}                                                             
+      460 +                                                              
+      461  /* -----------------------------------------------------------
+           ------------------
+      462   * Exports
+      463   * -----------------------------------------------------------
+           --------------- */
+
+⏺ Now let me check the imports in sub-agent-view.tsx to ensure useSubAgentOptional is imported:
+
+⏺ Read(src/components/assistant-ui/sub-agent-view.tsx)
+  ⎿  Read 20 lines
+
+⏺ Update(src/components/assistant-ui/sub-agent-view.tsx)
+  ⎿  Added 1 line, removed 1 line                                        
+      12  import remarkGfm from 'remark-gfm'
+      13  import { cn } from '@/lib/utils'
+      14  import type { SubAgentState, SubAgentStatus, SubAgentMessage } 
+          from '@/types'
+      15 -import { useSubAgent } from '@/contexts/SubAgentContext'       
+      15 +import { useSubAgent, useSubAgentOptional } from '@/contexts/Su
+         +bAgentContext'                                                 
+      16  
+      17  /* ------------------------------------------------------------
+          -----------------
+      18   * Status indicator styles
+
+⏺ Now let me add SubAgentList to thread.tsx's AssistantMessage component:
+
+⏺ Read(src/components/assistant-ui/thread.tsx)
+  ⎿  Read 10 lines
+
+⏺ Update(src/components/assistant-ui/thread.tsx)
+  ⎿  Added 1 line                                                        
+      33  import { MarkdownText } from '@/components/assistant-ui/markdow
+          n-text'
+      34  import { Reasoning, ReasoningGroup } from '@/components/assista
+          nt-ui/reasoning'
+      35  import { ToolFallback } from '@/components/assistant-ui/tool-fa
+          llback'
+      36 +import { SubAgentList } from '@/components/assistant-ui/sub-age
+         +nt-view'                                                       
+      37  import { ToolMentionAutocomplete } from '@/components/assistant
+          -ui/tool-mention-autocomplete'
+      38  import { MentionedToolsBadges } from '@/components/assistant-ui
+          /mentioned-tools-badges'
+      39  import { TooltipIconButton } from '@/components/assistant-ui/to
+          oltip-icon-button'
+
+⏺ Now let me add SubAgentList to AssistantMessage:
+
+⏺ Update(src/components/assistant-ui/thread.tsx)
+  ⎿  Added 1 line                                                        
+      597                ToolGroup: components.ToolGroup ?? ToolGroup,
+      598              }}
+      599            />
+      600 +          <SubAgentList />                                    
+      601            <MessageError />
+      602          </div>
+      603  
+
+⏺ Let me run the client tests to verify the code compiles:
+
+⏺ Bash(cd /Users/adambull/dev/gram/elements && pnpm tsc --noEmit     timeout: 1m 
+      2>&1 | head -30)                                               0s
+
+  ⎿  (No content)
+
+⏺ Let me run the tests:
+
+⏺ Bash(pnpm test 2>&1 | tail -30)
+  ⎿  > @gram-ai/elements@1.23.0 test /Users/adambull/dev/gram/elements
+     > vitest run
+     … +11 lines (ctrl+o to expand)
+
+⏺ The tests pass. Now let me verify the Storybook story works. But first, there's an issue - agents accumulate in SubAgentContext across messages. Let me add logic to clear agents when appropriate, or at minimum, let's test what we have:
+
+⏺ Bash(pnpm storybook --ci --port 6007 2>&1 & timeout: 30s
+      sleep 10…)
+  ⎿ > @gram-ai/elements@1.23.0 storybook /Users/adambull/dev/gram/element
+    > storybook dev -p 6007 --no-open --ci --port 6007
+    … +35 lines (ctrl+o to expand)
+
+
+⏺ Storybook is already running. Let me summarize the changes made:
+
+  Summary of Changes
+
+  I've fixed the sub-agent rendering architecture:
+
+  Problem
+
+  The AI SDK's streaming parser expects tool call arguments to be streamed incrementally (character by character). Sending complete arguments at once caused the error: "Tool call argsText can only be appended, not updated".
+
+  Solution
+
+  Instead of trying to stream tool calls directly, I've implemented a different approach:
+
+  1. Server (agentic.go):
+    - Removed the writeToolCalls function that was causing the error
+    - GRAM_AGENT events (spawn, delta, complete) continue to be embedded in the content stream as HTML comments
+  2. Client (sub-agent-view.tsx):
+    - Added SubAgentList component that renders all root-level agents from SubAgentContext
+    - Made it safe to use outside SubAgentProvider (returns null)
+  3. Client (thread.tsx):
+    - Added SubAgentList to AssistantMessage after MessagePrimitive.Parts
+    - Agents are now rendered in the message alongside other content
+
+  Data Flow
+
+  1. LLM makes spawn_agent tool calls
+  2. Server executes spawn_agent and streams GRAM_AGENT events as content
+  3. Client's MarkdownText.preprocess extracts events from content
+  4. Events are queued and processed via useEffect to update SubAgentContext
+  5. SubAgentList renders all agents from context
+
+  Known Limitation
+
+  Agents currently accumulate in SubAgentContext across messages in a conversation. Each SubAgentList shows ALL agents, not just those from its specific message. This can be addressed in a future iteration by adding message-scoped agent tracking.
+
+  Try testing the Storybook agents story now - the agents should render via SubAgentList as GRAM_AGENT events are processed.
+
+✻ Worked for 8m 40s
+
+
+

@@ -614,7 +614,15 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, telemSvc, productFeatures, ragService, temporalClient), mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{Temporal: temporalClient}, &background.TemporalChatTitleGenerator{Temporal: temporalClient}, posthogClient, telemSvc, assetStorage))
+			// Create chat service
+			chatService := chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{Temporal: temporalClient}, &background.TemporalChatTitleGenerator{Temporal: temporalClient}, posthogClient, telemSvc, assetStorage)
+
+			// Create agents service and agentic handler for sub-agent support
+			agentsService := agents.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient)
+			agenticHandler := chat.NewAgenticChatHandler(agentsService, logger)
+			chatService.SetAgenticHandler(agenticHandler)
+
+			chat.Attach(mux, chatService)
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 					GramServerURL:      c.String("server-url"),

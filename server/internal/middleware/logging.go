@@ -42,6 +42,13 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return n, nil
 }
 
+// Flush implements http.Flusher to support SSE streaming.
+func (rw *responseWriter) Flush() {
+	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
 	logger = logger.With(attr.SlogComponent("http"))
 

@@ -9,6 +9,11 @@ import {
   type ToolStatus,
   type ContentItem,
 } from '@/components/ui/tool-ui'
+import { SubAgentToolView } from './sub-agent-view'
+import { useSubAgentOptional } from '@/contexts/SubAgentContext'
+
+/** The special tool name used to spawn sub-agents */
+const SPAWN_AGENT_TOOL_NAME = 'spawn_agent'
 
 export const ToolFallback: ToolCallMessagePartComponent = ({
   toolName,
@@ -17,12 +22,37 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
   result,
   args,
 }) => {
+  const subAgentContext = useSubAgentOptional()
   const {
     pendingApprovals,
     whitelistTool,
     confirmPendingApproval,
     rejectPendingApproval,
   } = useToolApproval()
+
+  // Handle spawn_agent tool calls with the SubAgentToolView
+  if (toolName === SPAWN_AGENT_TOOL_NAME) {
+    // For spawn_agent, we use the toolCallId as the agent identifier
+    const agentId = toolCallId
+
+    // If SubAgentContext is not available, show a placeholder
+    // This can happen if agents aren't enabled in config
+    if (!subAgentContext) {
+      return (
+        <div className="aui-tool-fallback-root flex w-full flex-col">
+          <div className="bg-muted rounded-lg border p-4 text-sm text-muted-foreground">
+            Sub-agent spawned (agents not enabled in config)
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="aui-tool-fallback-root flex w-full flex-col">
+        <SubAgentToolView agentId={agentId} />
+      </div>
+    )
+  }
 
   // Check if this specific tool call has a pending approval
   const pendingApproval = pendingApprovals.get(toolCallId)

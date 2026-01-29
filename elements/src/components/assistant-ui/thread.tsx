@@ -33,6 +33,7 @@ import {
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'
 import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
 import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
+import { SubAgentList } from '@/components/assistant-ui/sub-agent-view'
 import { ToolMentionAutocomplete } from '@/components/assistant-ui/tool-mention-autocomplete'
 import { MentionedToolsBadges } from '@/components/assistant-ui/mentioned-tools-badges'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
@@ -596,6 +597,7 @@ const AssistantMessage: FC = () => {
               ToolGroup: components.ToolGroup ?? ToolGroup,
             }}
           />
+          <SubAgentList />
           <MessageError />
         </div>
 

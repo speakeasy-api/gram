@@ -80,6 +80,7 @@ type Service struct {
 	chatTitleGenerator   ChatTitleGenerator
 	posthog              *posthog.Posthog
 	telemetryService     *telemetry.Service
+	agenticHandler       *AgenticChatHandler // Optional handler for agentic mode
 }
 
 func NewService(
@@ -113,7 +114,14 @@ func NewService(
 		chatTitleGenerator:   chatTitleGenerator,
 		posthog:              posthog,
 		telemetryService:     telemetryService,
+		agenticHandler:       nil, // Set via SetAgenticHandler after agents service is created
 	}
+}
+
+// SetAgenticHandler sets the optional agentic handler for sub-agent support.
+// Call this after creating the Service if agents support is needed.
+func (s *Service) SetAgenticHandler(handler *AgenticChatHandler) {
+	s.agenticHandler = handler
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -440,6 +448,25 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// Validate that the model is in the allowlist
 	if !openrouter.IsModelAllowed(chatRequest.Model) {
 		return oops.E(oops.CodeBadRequest, nil, "model %s is not allowed", chatRequest.Model).Log(ctx, s.logger)
+	}
+
+	// Check for agentic mode and delegate to agentic handler if enabled
+	// The agentic handler wraps sub-agent events in OpenAI-compatible chunks as HTML comments:
+	// <!--GRAM_AGENT:{...}--> so the AI SDK can parse them
+	if ShouldUseAgenticMode(r) && s.agenticHandler != nil {
+		agenticConfig := ParseAgenticConfig(r)
+		if agenticConfig != nil {
+			s.logger.InfoContext(ctx, "routing to agentic handler",
+				attr.SlogProjectID(authCtx.ProjectID.String()),
+				attr.SlogOrganizationID(orgID),
+			)
+			if err := s.agenticHandler.HandleAgenticCompletion(ctx, w, orgID, *authCtx.ProjectID, chatRequest, agenticConfig); err != nil {
+				return oops.E(oops.CodeGatewayError, err, "agentic completion failed").Log(ctx, s.logger)
+			}
+			eventProperties["success"] = true
+			eventProperties["agentic_mode"] = true
+			return nil
+		}
 	}
 
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
