@@ -21,6 +21,8 @@ type Service interface {
 	GetMcpMetadata(context.Context, *GetMcpMetadataPayload) (res *GetMcpMetadataResult, err error)
 	// Create or update the metadata that powers the MCP install page.
 	SetMcpMetadata(context.Context, *SetMcpMetadataPayload) (res *types.McpMetadata, err error)
+	// Export MCP server details as JSON for documentation and integration purposes.
+	ExportMcpMetadata(context.Context, *ExportMcpMetadataPayload) (res *types.McpExport, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -43,13 +45,24 @@ const ServiceName = "mcpMetadata"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"getMcpMetadata", "setMcpMetadata"}
+var MethodNames = [3]string{"getMcpMetadata", "setMcpMetadata", "exportMcpMetadata"}
+
+// ExportMcpMetadataPayload is the payload type of the mcpMetadata service
+// exportMcpMetadata method.
+type ExportMcpMetadataPayload struct {
+	// The MCP server slug (from the install URL)
+	McpSlug          types.Slug
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
 
 // GetMcpMetadataPayload is the payload type of the mcpMetadata service
 // getMcpMetadata method.
 type GetMcpMetadataPayload struct {
 	// The slug of the toolset associated with this install page metadata
 	ToolsetSlug      types.Slug
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -76,6 +89,7 @@ type SetMcpMetadataPayload struct {
 	DefaultEnvironmentID *string
 	// The list of environment variables to configure for this MCP
 	EnvironmentConfigs []*types.McpEnvironmentConfigInput
+	ApikeyToken        *string
 	SessionToken       *string
 	ProjectSlugInput   *string
 }

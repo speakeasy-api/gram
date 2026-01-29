@@ -148,12 +148,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadataPayload) (*gen.GetMcpMetadataResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeForbidden)
 	}
 
 	toolset, err := s.toolsetRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
@@ -187,12 +183,8 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 
 func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadataPayload) (*types.McpMetadata, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeForbidden)
 	}
 
 	toolset, err := s.toolsetRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
@@ -274,6 +266,157 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 
 	return ToMCPMetadata(ctx, s.repo, result)
+}
+
+func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpMetadataPayload) (*types.McpExport, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	mcpSlug := conv.ToLower(payload.McpSlug)
+	toolset, err := s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
+	}
+
+	// Verify the toolset belongs to the user's project
+	if toolset.ProjectID != *authCtx.ProjectID {
+		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
+	}
+
+	if !toolset.McpEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
+	}
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
+	}
+
+	// Load MCP metadata (logo, docs, instructions)
+	var logoURL *string
+	var docsURL *string
+	var instructions *string
+	headerDisplayNames := make(map[string]string)
+
+	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
+	if metadataErr == nil {
+		if metadataRecord.LogoID.Valid {
+			logoURLValue := *s.serverURL
+			logoURLValue.Path = "/rpc/assets.serveImage"
+			q := logoURLValue.Query()
+			q.Set("id", metadataRecord.LogoID.UUID.String())
+			logoURLValue.RawQuery = q.Encode()
+			logoURL = conv.Ptr(logoURLValue.String())
+		}
+		docsURL = conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl)
+		instructions = conv.FromPGText[string](metadataRecord.Instructions)
+		if len(metadataRecord.HeaderDisplayNames) > 0 {
+			if err := json.Unmarshal(metadataRecord.HeaderDisplayNames, &headerDisplayNames); err != nil {
+				s.logger.ErrorContext(ctx, "failed to unmarshal header display names", attr.SlogError(err))
+			}
+		}
+	} else if !errors.Is(metadataErr, pgx.ErrNoRows) {
+		s.logger.WarnContext(ctx, "failed to load MCP metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))
+	}
+
+	// Build MCP URL
+	mcpURL, err := s.resolveMCPURLFromContext(ctx, toolset, s.serverURL.String())
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve MCP URL").Log(ctx, s.logger)
+	}
+
+	// Collect security inputs
+	securityMode := s.resolveSecurityMode(&toolset)
+	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, map[string]bool{})
+
+	// Build tools list
+	exportTools := s.buildExportTools(ctx, toolsetDetails)
+
+	// Build authentication info
+	authRequired := len(securityInputs) > 0
+	authHeaders := make([]*types.McpExportAuthHeader, 0, len(securityInputs))
+	for _, input := range securityInputs {
+		authHeaders = append(authHeaders, &types.McpExportAuthHeader{
+			Name:        toolconfig.ToHTTPHeader(input.SystemName),
+			DisplayName: input.DisplayName,
+		})
+	}
+
+	return &types.McpExport{
+		Name:             toolset.Name,
+		Slug:             toolset.Slug,
+		Description:      conv.FromPGText[string](toolset.Description),
+		ServerURL:        mcpURL,
+		DocumentationURL: docsURL,
+		LogoURL:          logoURL,
+		Instructions:     instructions,
+		Tools:            exportTools,
+		Authentication: &types.McpExportAuthentication{
+			Required: authRequired,
+			Headers:  authHeaders,
+		},
+	}, nil
+}
+
+func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.Toolset) []*types.McpExportTool {
+	tools := make([]*types.McpExportTool, 0, len(toolsetDetails.Tools))
+
+	for _, toolDesc := range toolsetDetails.Tools {
+		// Handle proxy tools (external MCP)
+		if conv.IsProxyTool(toolDesc) {
+			// Parse schema from JSON string to any
+			var inputSchema any
+			if toolDesc.ExternalMcpToolDefinition.Schema != "" {
+				if err := json.Unmarshal([]byte(toolDesc.ExternalMcpToolDefinition.Schema), &inputSchema); err != nil {
+					s.logger.WarnContext(ctx, "failed to unmarshal tool schema",
+						attr.SlogError(err),
+						attr.SlogToolName(toolDesc.ExternalMcpToolDefinition.Name))
+				}
+			}
+			if inputSchema == nil {
+				inputSchema = map[string]any{"type": "object", "properties": map[string]any{}}
+			}
+
+			tools = append(tools, &types.McpExportTool{
+				Name:        toolDesc.ExternalMcpToolDefinition.Name,
+				Description: toolDesc.ExternalMcpToolDefinition.Description,
+				InputSchema: inputSchema,
+			})
+			continue
+		}
+
+		baseTool, err := conv.ToBaseTool(toolDesc)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to convert tool to base tool", attr.SlogError(err))
+			continue
+		}
+
+		// Parse schema from JSON string to any
+		var inputSchema any
+		if baseTool.Schema != "" {
+			if err := json.Unmarshal([]byte(baseTool.Schema), &inputSchema); err != nil {
+				s.logger.WarnContext(ctx, "failed to unmarshal tool schema",
+					attr.SlogError(err),
+					attr.SlogToolName(baseTool.Name))
+			}
+		}
+		if inputSchema == nil {
+			inputSchema = map[string]any{"type": "object", "properties": map[string]any{}}
+		}
+
+		tools = append(tools, &types.McpExportTool{
+			Name:        baseTool.Name,
+			Description: baseTool.Description,
+			InputSchema: inputSchema,
+		})
+	}
+
+	return tools
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
