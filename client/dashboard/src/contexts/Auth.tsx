@@ -10,7 +10,7 @@ import { useSessionInfo } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Navigate, useNavigate, useSearchParams } from "react-router";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -187,9 +187,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { session, error, status } = useSessionData();
 
   const isLoading = status === "pending";
+
+  // Pages that don't require authentication
+  const publicPaths = ["/login", "/register"];
+  const isPublicPage = publicPaths.some((path) =>
+    location.pathname.startsWith(path),
+  );
 
   useIdentifyUserForTelemetry(session?.user);
   usePylonInAppChat(session?.user);
@@ -202,6 +209,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (error || !session || !session.session) {
+    // Redirect to login if not already on a public page
+    if (!isPublicPage) {
+      return <Navigate to="/login" replace />;
+    }
     return (
       <SessionContext.Provider value={emptySession}>
         {children}

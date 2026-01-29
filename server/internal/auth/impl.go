@@ -36,9 +36,8 @@ import (
 type authErr string
 
 const (
-	authErrCodeLookup      authErr = "lookup_error"
-	authErrInit            authErr = "init_error"
-	authErrLocalDevStubbed authErr = "local_dev_stubbed"
+	authErrCodeLookup authErr = "lookup_error"
+	authErrInit       authErr = "init_error"
 )
 
 const gramWaitlistTypeForm = "https://speakeasyapi.typeform.com/to/h6WJdwWr"
@@ -94,7 +93,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.Authenticate(ctx, key, true) // TODO: canStubAuth is a temporary hack to allow us to limit auth stubbing to rpc/auth endpoints
+	// Pass false for canStubAuth - auth endpoints should require a real session
+	// This prevents auto-creating sessions in dev mode when checking auth status
+	return s.sessions.Authenticate(ctx, key, false)
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
@@ -109,6 +110,19 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	if payload.Code == "" {
 		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
+	}
+
+	// Handle local dev mode with special "local-dev" code
+	if payload.Code == "local-dev" && s.sessions.IsUnsafeLocalDevelopment() {
+		sessionID, err := s.sessions.PopulateLocalDevDefaultAuthSession(ctx)
+		if err != nil {
+			return redirectWithError(authErrInit, err)
+		}
+		return &gen.CallbackResult{
+			Location:      s.callbackRedirectURL(ctx, payload),
+			SessionToken:  sessionID,
+			SessionCookie: sessionID,
+		}, nil
 	}
 
 	idToken, err := s.sessions.ExchangeTokenFromSpeakeasy(ctx, payload.Code)
@@ -194,10 +208,15 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
 	if s.sessions.IsUnsafeLocalDevelopment() {
-		err = errors.New("calling rpc.login for local development stubbed auth is not supported because stubbed auth implies always being logged in. Reaching this point suggests a problem with dashboard authentication")
-		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(authErrLocalDevStubbed)))
+		// In local dev mode, redirect to callback with a special code
+		// that will create a stubbed session
+		returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
+		values := url.Values{}
+		values.Add("code", "local-dev")
+		values.Add("state", encodeStateParam(payload))
+		location := returnAddress + "/rpc/auth.callback?" + values.Encode()
 		return &gen.LoginResult{
-			Location: fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, authErrLocalDevStubbed),
+			Location: location,
 		}, nil
 	}
 
