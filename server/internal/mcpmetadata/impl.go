@@ -280,7 +280,10 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	}
 
 	mcpSlug := conv.ToLower(payload.McpSlug)
-	toolset, err := s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
+	toolset, err := s.toolsetRepo.GetToolsetByMcpSlugAndProject(ctx, toolsets_repo.GetToolsetByMcpSlugAndProjectParams{
+		McpSlug:   conv.ToPGText(mcpSlug),
+		ProjectID: *authCtx.ProjectID,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
@@ -288,13 +291,18 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
 	}
 
-	// Verify the toolset belongs to the user's project
-	if toolset.ProjectID != *authCtx.ProjectID {
+	if !toolset.McpEnabled {
 		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
 	}
 
-	if !toolset.McpEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
+	// Resolve custom domain from the toolset's organization if not already set
+	// Only use domains that are both activated and verified
+	if !toolset.CustomDomainID.Valid {
+		domainRecord, err := s.domainsRepo.GetCustomDomainByOrganization(ctx, toolset.OrganizationID)
+		if err == nil && domainRecord.Activated && domainRecord.Verified {
+			toolset.CustomDomainID = uuid.NullUUID{UUID: domainRecord.ID, Valid: true}
+		}
+		// Ignore errors - custom domain is optional
 	}
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
