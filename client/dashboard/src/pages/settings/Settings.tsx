@@ -699,7 +699,7 @@ export default function Settings() {
                   return;
                 }
 
-                document.cookie = `gram_admin_override=${val}; path=/; max-age=31536000;`;
+                document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
                 await client.auth.logout();
                 window.location.href = "/login";
               }}
