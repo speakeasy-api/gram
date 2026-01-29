@@ -26,7 +26,7 @@ FollowUpSuggestions.parameters = {
         defaultOpen: true,
       },
       systemPrompt:
-        'Keep your responses very brief and concise - 2-3 sentences maximum.',
+        'You are a helpful assistant. Keep ALL responses extremely brief - 1-2 sentences only. No lists, no elaboration.',
       welcome: {
         title: 'Explore Paris',
         subtitle: 'Ask me anything about the City of Light',
@@ -58,7 +58,7 @@ FollowUpSuggestionsDisabled.parameters = {
         defaultOpen: true,
       },
       systemPrompt:
-        'Keep your responses very brief and concise - 2-3 sentences maximum.',
+        'You are a helpful assistant. Keep ALL responses extremely brief - 1-2 sentences only. No lists, no elaboration.',
       welcome: {
         title: 'Explore Paris',
         subtitle: 'Ask me anything about the City of Light',
