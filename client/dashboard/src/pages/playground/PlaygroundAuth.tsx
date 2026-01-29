@@ -25,6 +25,7 @@ import {
   getValueForEnvironment,
 } from "../mcp/environmentVariableUtils";
 import { useEnvironmentVariables } from "../mcp/useEnvironmentVariables";
+import { useToolset } from "@/hooks/toolTypes";
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
@@ -93,12 +94,14 @@ export function getAuthStatus(
  * This handles OAuth 2.1 with Dynamic Client Registration (DCR).
  */
 function ExternalMcpOAuthConnection({
-  toolsetId,
+  toolsetSlug,
   mcpOAuthConfig,
 }: {
-  toolsetId: string;
+  toolsetSlug: string;
   mcpOAuthConfig: ExternalMCPToolDefinition;
 }) {
+  const { data: toolset } = useToolset(toolsetSlug);
+
   const queryClient = useQueryClient();
   const apiUrl = getServerURL();
   const session = useSession();
@@ -114,12 +117,13 @@ function ExternalMcpOAuthConnection({
     isLoading: statusLoading,
     refetch: refetchStatus,
   } = useQuery({
-    queryKey: ["mcpOauthStatus", toolsetId, mcpOAuthConfig.slug],
+    queryKey: ["mcpOauthStatus", toolset?.id ?? "", mcpOAuthConfig.slug],
     queryFn: async () => {
       if (!issuer) return { status: "needs_auth" as const };
+      if (!toolset) return { status: "needs_auth" as const };
 
       const params = new URLSearchParams({
-        toolset_id: toolsetId,
+        toolset_id: toolset?.id ?? "",
         issuer: issuer,
       });
 
@@ -146,7 +150,7 @@ function ExternalMcpOAuthConnection({
         expires_at?: string;
       }>;
     },
-    enabled: !!issuer,
+    enabled: !!issuer && !!toolset,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   });
@@ -154,10 +158,13 @@ function ExternalMcpOAuthConnection({
   // Disconnect mutation
   const disconnectMutation = useMutation({
     mutationFn: async () => {
-      if (!issuer) throw new Error("No issuer configured");
+      if (!issuer)
+        throw new Error("Cannot disconnect because no issuer is configured");
+      if (!toolset)
+        throw new Error("Cannot disconnect because toolset is not loaded");
 
       const params = new URLSearchParams({
-        toolset_id: toolsetId,
+        toolset_id: toolset.id,
         issuer: issuer,
       });
 
@@ -178,7 +185,7 @@ function ExternalMcpOAuthConnection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["mcpOauthStatus", toolsetId, mcpOAuthConfig.slug],
+        queryKey: ["mcpOauthStatus", toolset?.id ?? "", mcpOAuthConfig.slug],
       });
       toast.success(
         `Disconnected from ${mcpOAuthConfig.name || mcpOAuthConfig.slug}`,
@@ -194,7 +201,7 @@ function ExternalMcpOAuthConnection({
     if (!mcpOAuthConfig.oauthAuthorizationEndpoint) return;
 
     const params = new URLSearchParams({
-      toolset_id: toolsetId,
+      toolset_id: toolset?.id ?? "",
       external_mcp_slug: mcpOAuthConfig.slug,
       redirect_uri: window.location.href.split("?")[0],
       // Pass session token for popup windows that don't share cookies
@@ -223,6 +230,11 @@ function ExternalMcpOAuthConnection({
         // Small delay to ensure server has processed the callback
         setTimeout(() => {
           refetchStatus();
+          // Also invalidate the token query so GramElementsProvider
+          // re-renders with the new OAuth access token
+          queryClient.invalidateQueries({
+            queryKey: ["oauthToken", "notion"],
+          });
         }, 300);
       }
     }, 500);
@@ -561,7 +573,7 @@ export function PlaygroundAuth({
       {/* External MCP OAuth Connection UI (discovered via MCP protocol) */}
       {hasExternalMcpOAuth && mcpOAuthConfig && (
         <ExternalMcpOAuthConnection
-          toolsetId={toolset.id}
+          toolsetSlug={toolset.slug}
           mcpOAuthConfig={mcpOAuthConfig}
         />
       )}
