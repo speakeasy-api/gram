@@ -28,6 +28,75 @@ func (p *PassthroughBackend) Match(req *http.Request) bool {
 	return false
 }
 
+func TestListServers_FiltersDeletedServers(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := slog.New(slog.DiscardHandler)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := listResponse{
+			Servers: []serverEntry{
+				{
+					Server: serverJSON{
+						Name:        "active-server",
+						Description: "An active server",
+						Version:     "1.0.0",
+					},
+					Meta: serverMeta{
+						Version: serverMetaVersion{
+							Status: "active",
+						},
+					},
+				},
+				{
+					Server: serverJSON{
+						Name:        "deleted-server",
+						Description: "A deleted server",
+						Version:     "1.0.0",
+					},
+					Meta: serverMeta{
+						Version: serverMetaVersion{
+							Status: "deleted",
+						},
+					},
+				},
+				{
+					Server: serverJSON{
+						Name:        "another-active",
+						Description: "Another active server",
+						Version:     "2.0.0",
+					},
+					Meta: serverMeta{
+						Version: serverMetaVersion{
+							Status: "active",
+						},
+					},
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err := json.NewEncoder(w).Encode(response)
+		assert.NoError(t, err)
+	}))
+	defer server.Close()
+
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{})
+	client.httpClient = server.Client()
+	registry := Registry{
+		ID:  uuid.New(),
+		URL: server.URL,
+	}
+
+	result, err := client.ListServers(ctx, registry, ListServersParams{})
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	require.Equal(t, "active-server", result[0].RegistrySpecifier)
+	require.Equal(t, "another-active", result[1].RegistrySpecifier)
+}
+
 func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

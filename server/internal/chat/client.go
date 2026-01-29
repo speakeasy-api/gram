@@ -20,6 +20,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -27,12 +28,12 @@ import (
 	env_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -144,7 +145,7 @@ func (c *ChatClient) AgentChat(
 	}
 
 	for {
-		msg, err := c.chatClient.GetCompletionFromMessages(ctx, orgID, projectID.String(), messages, toolDefs, opts.Temperature, opts.Model)
+		msg, err := c.chatClient.GetCompletionFromMessages(ctx, orgID, projectID.String(), messages, toolDefs, opts.Temperature, opts.Model, billing.ModelUsageSourceChat)
 		if err != nil {
 			return "", fmt.Errorf("failed to get completion: %w", err)
 		}

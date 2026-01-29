@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PrivateInput } from "@/components/ui/private-input";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
-import { useMissingRequiredEnvVars } from "@/hooks/useEnvironmentVariables";
-import { getServerURL } from "@/lib/utils";
+import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
+import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   ExternalMCPToolDefinition,
@@ -31,7 +31,6 @@ interface PlaygroundAuthProps {
   onUserProvidedHeadersChange?: (headers: Record<string, string>) => void;
 }
 
-const SECRET_FIELD_INDICATORS = ["SECRET", "KEY", "TOKEN", "PASSWORD"] as const;
 const PASSWORD_MASK = "••••••••";
 
 /**
@@ -584,11 +583,6 @@ export function PlaygroundAuth({
         );
         const displayName = envConfig?.headerDisplayName || envVar.key;
 
-        // Determine if this is a secret field
-        const isSecret = SECRET_FIELD_INDICATORS.some((indicator) =>
-          envVar.key.toUpperCase().includes(indicator),
-        );
-
         // Determine display value and editability based on state
         let displayValue = "";
         let placeholder = "Not set";
@@ -603,7 +597,7 @@ export function PlaygroundAuth({
           placeholder = "Omitted";
           isEditable = false;
         } else if (envVar.state === "system" && hasValue && value) {
-          displayValue = isSecret ? PASSWORD_MASK : value;
+          displayValue = PASSWORD_MASK;
           placeholder = "Configured";
           isEditable = false;
         }
@@ -616,7 +610,7 @@ export function PlaygroundAuth({
             >
               {displayName}
             </Label>
-            <Input
+            <PrivateInput
               id={`auth-${envVar.id}`}
               value={displayValue}
               onChange={(newValue) => {
@@ -628,7 +622,6 @@ export function PlaygroundAuth({
                 }
               }}
               placeholder={placeholder}
-              type={isSecret ? "password" : "text"}
               className="font-mono text-xs h-7"
               readOnly={!isEditable}
               disabled={!isEditable}
@@ -643,13 +636,12 @@ export function PlaygroundAuth({
         </Type>
       )}
       <Type variant="small" className="text-muted-foreground pt-2">
-        Configure auth in the{" "}
         <routes.mcp.details.Link
           params={[toolset.slug]}
           hash="authentication"
           className="underline hover:text-foreground"
         >
-          MCP settings
+          Configure auth
         </routes.mcp.details.Link>
       </Type>
     </div>

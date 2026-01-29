@@ -576,8 +576,8 @@ export function ToolsetView({
   const filterButton = (
     <MultiSelect
       options={groupFilterItems}
-      defaultValue={groupFilterItems.map((group) => group.value)}
-      onValueChange={setSelectedGroups}
+      selectedValues={selectedGroups}
+      setSelectedValues={setSelectedGroups}
       placeholder="Filter tools"
       className="w-fit mb-4 capitalize"
     />

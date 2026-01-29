@@ -308,6 +308,18 @@ export interface ElementsConfig {
    * }
    */
   errorTracking?: ErrorTrackingConfigOption
+
+  /**
+   * Configuration for the chat thread display and behavior.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   thread: {
+   *     followUpSuggestions: true,
+   *   },
+   * }
+   */
+  thread?: ThreadConfig
 }
 
 /**
@@ -968,31 +980,22 @@ export interface HistoryConfig {
 }
 
 /**
- * OAuth authentication status exposed through Elements context.
- * @internal
+ * Configuration for the chat thread display and behavior.
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   thread: {
+ *     followUpSuggestions: true,
+ *   },
+ * }
  */
-export type OAuthContextState = {
-  /** Current OAuth status */
-  status:
-    | 'authenticated'
-    | 'needs_auth'
-    | 'disconnected'
-    | 'loading'
-    | 'disabled'
-  /** Whether OAuth status is loading */
-  isLoading: boolean
-  /** Error message if status check failed */
-  error: string | null
-  /** OAuth provider name if authenticated */
-  providerName: string | null
-  /** Token expiration time */
-  expiresAt: Date | null
-  /** Start the OAuth authorization flow */
-  startAuthorization: () => void
-  /** Disconnect OAuth */
-  disconnect: () => Promise<void>
-  /** Refresh the OAuth status */
-  refresh: () => Promise<void>
+export interface ThreadConfig {
+  /**
+   * Whether to show AI-generated follow-up question suggestions after each assistant response.
+   * When enabled, suggestions appear below the assistant's message to help guide the conversation.
+   * @default true
+   */
+  followUpSuggestions?: boolean
 }
 
 /**

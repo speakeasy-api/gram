@@ -20,21 +20,26 @@ import {
   ThreadPrimitive,
 } from '@assistant-ui/react'
 
-import { LazyMotion, MotionConfig, domAnimation } from 'motion/react'
+import {
+  AnimatePresence,
+  LazyMotion,
+  MotionConfig,
+  domAnimation,
+} from 'motion/react'
 import * as m from 'motion/react-m'
 import { useEffect, useRef, useState, type FC } from 'react'
-import { AnimatePresence } from 'motion/react'
 
 import {
   ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
 } from '@/components/assistant-ui/attachment'
+import { FollowOnSuggestions } from '@/components/assistant-ui/follow-on-suggestions'
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'
+import { MentionedToolsBadges } from '@/components/assistant-ui/mentioned-tools-badges'
 import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
 import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
 import { ToolMentionAutocomplete } from '@/components/assistant-ui/tool-mention-autocomplete'
-import { MentionedToolsBadges } from '@/components/assistant-ui/mentioned-tools-badges'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import { Button } from '@/components/ui/button'
 import { useToolMentions } from '@/hooks/useToolMentions'
@@ -46,7 +51,6 @@ import { useThemeProps } from '@/hooks/useThemeProps'
 import { EASE_OUT_QUINT } from '@/lib/easing'
 import { MODELS } from '@/lib/models'
 import { cn } from '@/lib/utils'
-import { ConnectionStatusIndicatorSafe } from './connection-status-indicator'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import {
   Tooltip,
@@ -54,6 +58,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip'
+import { ConnectionStatusIndicatorSafe } from './connection-status-indicator'
 import { ToolGroup } from './tool-group'
 
 const StaticSessionWarning = () => (
@@ -117,6 +122,10 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
                   components.AssistantMessage ?? AssistantMessage,
               }}
             />
+
+            <ThreadPrimitive.If empty={false} running={false}>
+              <FollowOnSuggestions />
+            </ThreadPrimitive.If>
 
             <ThreadPrimitive.If empty={false}>
               <div className="aui-thread-viewport-spacer min-h-8 grow" />

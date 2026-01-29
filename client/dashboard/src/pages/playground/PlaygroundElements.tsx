@@ -14,10 +14,12 @@ import {
   GramElementsProvider,
   type Model,
 } from "@gram-ai/elements";
+import { ExternalMCPToolDefinition } from "@gram/client/models/components";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useToolset } from "@gram/client/react-query/toolset.js";
+import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useQuery } from "@tanstack/react-query";
 import { HistoryIcon } from "lucide-react";
-import { useTheme } from "next-themes";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -28,8 +30,6 @@ import {
   GramThreadWelcome,
   PlaygroundAuthWarningContext,
 } from "./PlaygroundElementsOverrides";
-import { useQuery } from "@tanstack/react-query";
-import { ExternalMCPToolDefinition } from "@gram/client/models/components";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -51,7 +51,7 @@ export function PlaygroundElements({
   const session = useSession();
   const project = useProject();
   const createSessionMutation = useChatSessionsCreateMutation();
-  const { resolvedTheme } = useTheme();
+  const { theme: resolvedTheme } = useMoonshineConfig();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [searchParams] = useSearchParams();
 

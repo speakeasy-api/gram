@@ -289,7 +289,7 @@ function AddServerForm({
 
   return (
     <div onKeyDown={handleKeyDown}>
-      <div className="flex flex-col gap-2 py-2">
+      <div className="flex flex-col gap-2 py-4">
         <Label>Source name</Label>
         <Input
           placeholder={server.title || server.registrySpecifier}
@@ -300,7 +300,7 @@ function AddServerForm({
       </div>
       <Dialog.Footer>
         <Button
-          variant="secondary"
+          variant="tertiary"
           onClick={onCancel}
           disabled={addServerMutation.isPending}
         >

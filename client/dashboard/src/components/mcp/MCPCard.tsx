@@ -4,12 +4,43 @@ import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
-import { MCPPatternIllustration } from "../sources/SourceCardIllustrations";
+import { useMemo } from "react";
+import { useCatalogIconMap } from "../sources/Sources";
+import {
+  ExternalMCPIllustration,
+  MCPPatternIllustration,
+} from "../sources/SourceCardIllustrations";
 import { ToolCollectionBadge } from "../tool-collection-badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
   const { url: _mcpUrl } = useMcpUrl(toolset);
+  const catalogIconMap = useCatalogIconMap();
+
+  // Check if this toolset uses an external MCP and get its info
+  const externalMcpInfo = useMemo(() => {
+    const externalMcpUrn = toolset.toolUrns?.find((urn) =>
+      urn.includes(":externalmcp:"),
+    );
+    if (!externalMcpUrn) return null;
+
+    // Extract the external MCP slug from the URN (format: tools:externalmcp:{slug}:proxy)
+    const parts = externalMcpUrn.split(":");
+    const slug = parts[2];
+    if (!slug) return null;
+
+    // Try to find the logo from the catalog
+    // The catalogIconMap uses the registryServerSpecifier as the key
+    // We need to find a matching entry - for now, try common patterns
+    let logoUrl: string | undefined;
+    catalogIconMap.forEach((url, key) => {
+      if (key.includes(slug) || slug.includes(key.split("/").pop() || "")) {
+        logoUrl = url;
+      }
+    });
+
+    return { slug, logoUrl };
+  }, [toolset.toolUrns, catalogIconMap]);
 
   // Pulse indicator for status
   const getStatusConfig = () => {
@@ -60,10 +91,18 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
     >
       {/* Illustration header */}
       <div className="h-36 w-full overflow-hidden border-b">
-        <MCPPatternIllustration
-          toolsetSlug={toolset.slug}
-          className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
-        />
+        {externalMcpInfo ? (
+          <ExternalMCPIllustration
+            slug={toolset.slug}
+            logoUrl={externalMcpInfo.logoUrl}
+            name={toolset.name}
+          />
+        ) : (
+          <MCPPatternIllustration
+            toolsetSlug={toolset.slug}
+            className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
+          />
+        )}
       </div>
 
       {/* Content area */}

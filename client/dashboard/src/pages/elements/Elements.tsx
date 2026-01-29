@@ -4,6 +4,7 @@ import {
 } from "@/components/ai-elements/code-block";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -13,7 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Dialog } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TextArea } from "@/components/ui/textarea";
@@ -22,15 +22,16 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
-import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useListToolsets } from "@gram/client/react-query/index.js";
-import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import {
   Chat,
   GramElementsProvider,
   type ElementsConfig,
 } from "@gram-ai/elements";
+import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
+import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
+import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import {
   ArrowRight,
   Check,
@@ -41,7 +42,6 @@ import {
   Search,
   Server,
 } from "lucide-react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
