@@ -2,6 +2,7 @@ import { assert } from '@/lib/utils'
 import { ToolsFilter } from '@/types'
 import { experimental_createMCPClient as createMCPClient } from '@ai-sdk/mcp'
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { useRef } from 'react'
 import { Auth } from './useAuth'
 
 type MCPToolsResult = Awaited<
@@ -14,21 +15,27 @@ export function useMCPTools({
   environment,
   toolsToInclude,
   gramEnvironment,
-  chatId,
 }: {
   auth: Auth
   mcp: string | undefined
   environment: Record<string, unknown>
   toolsToInclude?: ToolsFilter
   gramEnvironment?: string
-  chatId?: string
-}): UseQueryResult<MCPToolsResult, Error> {
+}): UseQueryResult<MCPToolsResult, Error> & {
+  mcpHeaders: Record<string, string>
+} {
   const envQueryKey = Object.entries(environment ?? {}).map(
     (k, v) => `${k}:${v}`
   )
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
     (k, v) => `${k}:${v}`
   )
+
+  // Mutable headers object shared with the MCP transport. The transport stores
+  // a direct reference (`this.headers = headers`) and spreads it on every
+  // send() call, so mutating properties on this object (e.g. setting
+  // Gram-Chat-ID later) will be picked up by subsequent tool call requests.
+  const mcpHeaders = useRef<Record<string, string>>({}).current
 
   const queryResult = useQuery({
     queryKey: [
@@ -42,17 +49,21 @@ export function useMCPTools({
       assert(!auth.isLoading, 'No auth found')
       assert(mcp, 'No MCP URL found')
 
+      // Populate the shared headers object (mutate in place so the same
+      // reference is used by the transport).
+      Object.keys(mcpHeaders).forEach((k) => delete mcpHeaders[k])
+      Object.assign(mcpHeaders, {
+        ...transformEnvironmentToHeaders(environment ?? {}),
+        ...auth.headers,
+        ...(gramEnvironment && { 'Gram-Environment': gramEnvironment }),
+      })
+
       const mcpClient = await createMCPClient({
         name: 'gram-elements-mcp-client',
         transport: {
           type: 'http',
           url: mcp,
-          headers: {
-            ...transformEnvironmentToHeaders(environment ?? {}),
-            ...auth.headers,
-            ...(gramEnvironment && { 'Gram-Environment': gramEnvironment }),
-            ...(chatId && { 'Gram-Chat-ID': chatId }),
-          },
+          headers: mcpHeaders,
         },
       })
 
@@ -74,7 +85,7 @@ export function useMCPTools({
     gcTime: Infinity,
   })
 
-  return queryResult
+  return { ...queryResult, mcpHeaders }
 }
 
 const HEADER_PREFIX = 'MCP-'
