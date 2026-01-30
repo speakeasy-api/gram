@@ -17,6 +17,10 @@ export type McpMetadata = {
    */
   createdAt: Date;
   /**
+   * Custom text for the external documentation link button
+   */
+  externalDocumentationText?: string | undefined;
+  /**
    * A link to external documentation for the MCP install page
    */
   externalDocumentationUrl?: string | undefined;
@@ -53,6 +57,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  external_documentation_text: z.string().optional(),
   external_documentation_url: z.string().optional(),
   header_display_names: z.record(z.string()).optional(),
   id: z.string(),
@@ -63,6 +68,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
+    "external_documentation_text": "externalDocumentationText",
     "external_documentation_url": "externalDocumentationUrl",
     "header_display_names": "headerDisplayNames",
     "logo_asset_id": "logoAssetId",

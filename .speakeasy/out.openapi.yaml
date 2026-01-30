@@ -13678,6 +13678,9 @@ components:
           type: string
           description: When the metadata entry was created
           format: date-time
+        external_documentation_text:
+          type: string
+          description: Custom text for the external documentation link button
         external_documentation_url:
           type: string
           description: A link to external documentation for the MCP install page
@@ -14826,6 +14829,9 @@ components:
     SetMcpMetadataRequestBody:
       type: object
       properties:
+        external_documentation_text:
+          type: string
+          description: Custom text for the external documentation link button
         external_documentation_url:
           type: string
           description: A link to external documentation for the MCP install page

@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type SetMcpMetadataRequestBody = {
   /**
+   * Custom text for the external documentation link button
+   */
+  externalDocumentationText?: string | undefined;
+  /**
    * A link to external documentation for the MCP install page
    */
   externalDocumentationUrl?: string | undefined;
@@ -26,6 +30,7 @@ export type SetMcpMetadataRequestBody = {
 
 /** @internal */
 export type SetMcpMetadataRequestBody$Outbound = {
+  external_documentation_text?: string | undefined;
   external_documentation_url?: string | undefined;
   instructions?: string | undefined;
   logo_asset_id?: string | undefined;
@@ -38,12 +43,14 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SetMcpMetadataRequestBody
 > = z.object({
+  externalDocumentationText: z.string().optional(),
   externalDocumentationUrl: z.string().optional(),
   instructions: z.string().optional(),
   logoAssetId: z.string().optional(),
   toolsetSlug: z.string(),
 }).transform((v) => {
   return remap$(v, {
+    externalDocumentationText: "external_documentation_text",
     externalDocumentationUrl: "external_documentation_url",
     logoAssetId: "logo_asset_id",
     toolsetSlug: "toolset_slug",
