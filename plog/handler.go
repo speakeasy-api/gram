@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -142,9 +143,7 @@ func slogLevelToLevel(level slog.Level) int {
 func slogAttrToAttr(groups []string, a slog.Attr) Attr {
 	key := a.Key
 	if len(groups) > 0 {
-		for _, g := range groups {
-			key = g + "." + key
-		}
+		key = strings.Join(groups, ".") + "." + key
 	}
 	return Attr{Key: key, Value: slogValueToAny(a.Value)}
 }

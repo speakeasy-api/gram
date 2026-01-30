@@ -48,7 +48,7 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 			Handler: plog.NewHandler(
 				plog.WithAddSource(true),
 				plog.WithHideTimestamp(true),
-				plog.WithLevel(plog.LevelInfo),
+				plog.WithLevel(LogLevels[rl].Plog),
 				plog.WithOmitKeys(
 					string(attr.ServiceEnvKey),
 					"service.*",
