@@ -11,7 +11,7 @@ type FrameProps = {
 /* Layout component for steps */
 const Frame = ({ children, className }: FrameProps) => {
   return (
-    <div className={cn("flex flex-col gap-y-8", className)}>{children}</div>
+    <div className={cn("flex flex-col gap-y-6", className)}>{children}</div>
   );
 };
 

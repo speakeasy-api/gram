@@ -45,6 +45,14 @@
 
 /* Scope ALL variables to .gram-elements instead of :root */
 .gram-elements {
+  /*
+   * tw-shimmer uses @property declarations for --shimmer-track-height and
+   * --shimmer-angle, but @property is document-scoped and ignored inside
+   * shadow roots. Set the initial values here so shimmer works in shadow DOM.
+   */
+  --shimmer-track-height: 200px;
+  --shimmer-angle: 15deg;
+
   /* Scoped preflight/base styles */
   font-family:
     ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
@@ -259,7 +267,10 @@
 .gram-elements
   :where(.aui-md[data-status='running'])
   > :where(:not(ol):not(ul):not(pre)):last-child::after,
-.gram-elements :where(.aui-md[data-status='running']) > pre:last-child code::after,
+.gram-elements
+  :where(.aui-md[data-status='running'])
+  > pre:last-child
+  code::after,
 .gram-elements
   :where(.aui-md[data-status='running'])
   > :where(:is(ol, ul):last-child)
@@ -280,13 +291,8 @@
   > :where(li:last-child)::after {
   animation: aui-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   font-family:
-    ui-sans-serif,
-    system-ui,
-    sans-serif,
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol',
-    'Noto Color Emoji';
+    ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji';
   --aui-content: '\25cf';
   content: var(--aui-content);
   margin-left: 0.25rem;

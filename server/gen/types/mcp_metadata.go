@@ -18,12 +18,14 @@ type McpMetadata struct {
 	LogoAssetID *string
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string
-	// Custom text for the external documentation link button
-	ExternalDocumentationText *string
 	// Server instructions returned in the MCP initialize response
 	Instructions *string
-	// Maps security scheme keys to user-friendly display names
-	HeaderDisplayNames map[string]string
+	// The default environment to load variables from
+	DefaultEnvironmentID *string
+	// URL to redirect to instead of showing the default installation page
+	InstallationOverrideURL *string
+	// The list of environment variables configured for this MCP
+	EnvironmentConfigs []*McpEnvironmentConfig
 	// When the metadata entry was created
 	CreatedAt string
 	// When the metadata entry was last updated

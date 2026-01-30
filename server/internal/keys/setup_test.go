@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -43,6 +44,7 @@ type testInstance struct {
 	service        *keys.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	keyAuth        *auth.ByKey
 }
 
 func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
@@ -67,10 +69,12 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	svc := keys.NewService(logger, conn, sessionManager, "local")
+	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		keyAuth:        keyAuth,
 	}
 }

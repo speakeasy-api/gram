@@ -19,18 +19,17 @@ import (
 
 // Server lists the toolsets service endpoint HTTP handlers.
 type Server struct {
-	Mounts                            []*MountPoint
-	CreateToolset                     http.Handler
-	ListToolsets                      http.Handler
-	UpdateToolset                     http.Handler
-	DeleteToolset                     http.Handler
-	GetToolset                        http.Handler
-	CheckMCPSlugAvailability          http.Handler
-	CloneToolset                      http.Handler
-	AddExternalOAuthServer            http.Handler
-	RemoveOAuthServer                 http.Handler
-	AddOAuthProxyServer               http.Handler
-	UpdateSecurityVariableDisplayName http.Handler
+	Mounts                   []*MountPoint
+	CreateToolset            http.Handler
+	ListToolsets             http.Handler
+	UpdateToolset            http.Handler
+	DeleteToolset            http.Handler
+	GetToolset               http.Handler
+	CheckMCPSlugAvailability http.Handler
+	CloneToolset             http.Handler
+	AddExternalOAuthServer   http.Handler
+	RemoveOAuthServer        http.Handler
+	AddOAuthProxyServer      http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -70,19 +69,17 @@ func New(
 			{"AddExternalOAuthServer", "POST", "/rpc/toolsets.addExternalOAuthServer"},
 			{"RemoveOAuthServer", "POST", "/rpc/toolsets.removeOAuthServer"},
 			{"AddOAuthProxyServer", "POST", "/rpc/toolsets.addOAuthProxyServer"},
-			{"UpdateSecurityVariableDisplayName", "POST", "/rpc/toolsets.updateSecurityVariableDisplayName"},
 		},
-		CreateToolset:                     NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
-		ListToolsets:                      NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
-		UpdateToolset:                     NewUpdateToolsetHandler(e.UpdateToolset, mux, decoder, encoder, errhandler, formatter),
-		DeleteToolset:                     NewDeleteToolsetHandler(e.DeleteToolset, mux, decoder, encoder, errhandler, formatter),
-		GetToolset:                        NewGetToolsetHandler(e.GetToolset, mux, decoder, encoder, errhandler, formatter),
-		CheckMCPSlugAvailability:          NewCheckMCPSlugAvailabilityHandler(e.CheckMCPSlugAvailability, mux, decoder, encoder, errhandler, formatter),
-		CloneToolset:                      NewCloneToolsetHandler(e.CloneToolset, mux, decoder, encoder, errhandler, formatter),
-		AddExternalOAuthServer:            NewAddExternalOAuthServerHandler(e.AddExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
-		RemoveOAuthServer:                 NewRemoveOAuthServerHandler(e.RemoveOAuthServer, mux, decoder, encoder, errhandler, formatter),
-		AddOAuthProxyServer:               NewAddOAuthProxyServerHandler(e.AddOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
-		UpdateSecurityVariableDisplayName: NewUpdateSecurityVariableDisplayNameHandler(e.UpdateSecurityVariableDisplayName, mux, decoder, encoder, errhandler, formatter),
+		CreateToolset:            NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
+		ListToolsets:             NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
+		UpdateToolset:            NewUpdateToolsetHandler(e.UpdateToolset, mux, decoder, encoder, errhandler, formatter),
+		DeleteToolset:            NewDeleteToolsetHandler(e.DeleteToolset, mux, decoder, encoder, errhandler, formatter),
+		GetToolset:               NewGetToolsetHandler(e.GetToolset, mux, decoder, encoder, errhandler, formatter),
+		CheckMCPSlugAvailability: NewCheckMCPSlugAvailabilityHandler(e.CheckMCPSlugAvailability, mux, decoder, encoder, errhandler, formatter),
+		CloneToolset:             NewCloneToolsetHandler(e.CloneToolset, mux, decoder, encoder, errhandler, formatter),
+		AddExternalOAuthServer:   NewAddExternalOAuthServerHandler(e.AddExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
+		RemoveOAuthServer:        NewRemoveOAuthServerHandler(e.RemoveOAuthServer, mux, decoder, encoder, errhandler, formatter),
+		AddOAuthProxyServer:      NewAddOAuthProxyServerHandler(e.AddOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -101,7 +98,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.AddExternalOAuthServer = m(s.AddExternalOAuthServer)
 	s.RemoveOAuthServer = m(s.RemoveOAuthServer)
 	s.AddOAuthProxyServer = m(s.AddOAuthProxyServer)
-	s.UpdateSecurityVariableDisplayName = m(s.UpdateSecurityVariableDisplayName)
 }
 
 // MethodNames returns the methods served.
@@ -119,7 +115,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountAddExternalOAuthServerHandler(mux, h.AddExternalOAuthServer)
 	MountRemoveOAuthServerHandler(mux, h.RemoveOAuthServer)
 	MountAddOAuthProxyServerHandler(mux, h.AddOAuthProxyServer)
-	MountUpdateSecurityVariableDisplayNameHandler(mux, h.UpdateSecurityVariableDisplayName)
 }
 
 // Mount configures the mux to serve the toolsets endpoints.
@@ -635,60 +630,6 @@ func NewAddOAuthProxyServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "addOAuthProxyServer")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountUpdateSecurityVariableDisplayNameHandler configures the mux to serve
-// the "toolsets" service "updateSecurityVariableDisplayName" endpoint.
-func MountUpdateSecurityVariableDisplayNameHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/toolsets.updateSecurityVariableDisplayName", otelhttp.WithRouteTag("/rpc/toolsets.updateSecurityVariableDisplayName", f).ServeHTTP)
-}
-
-// NewUpdateSecurityVariableDisplayNameHandler creates a HTTP handler which
-// loads the HTTP request and calls the "toolsets" service
-// "updateSecurityVariableDisplayName" endpoint.
-func NewUpdateSecurityVariableDisplayNameHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeUpdateSecurityVariableDisplayNameRequest(mux, decoder)
-		encodeResponse = EncodeUpdateSecurityVariableDisplayNameResponse(encoder)
-		encodeError    = EncodeUpdateSecurityVariableDisplayNameError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "updateSecurityVariableDisplayName")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {

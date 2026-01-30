@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  McpEnvironmentConfig,
+  McpEnvironmentConfig$inboundSchema,
+} from "./mcpenvironmentconfig.js";
 
 /**
  * Metadata used to configure the MCP install page.
@@ -17,21 +21,25 @@ export type McpMetadata = {
    */
   createdAt: Date;
   /**
-   * Custom text for the external documentation link button
+   * The default environment to load variables from
    */
-  externalDocumentationText?: string | undefined;
+  defaultEnvironmentId?: string | undefined;
+  /**
+   * The list of environment variables configured for this MCP
+   */
+  environmentConfigs?: Array<McpEnvironmentConfig> | undefined;
   /**
    * A link to external documentation for the MCP install page
    */
   externalDocumentationUrl?: string | undefined;
   /**
-   * Maps security scheme keys to user-friendly display names
-   */
-  headerDisplayNames?: { [k: string]: string } | undefined;
-  /**
    * The ID of the metadata record
    */
   id: string;
+  /**
+   * URL to redirect to instead of showing the default installation page
+   */
+  installationOverrideUrl?: string | undefined;
   /**
    * Server instructions returned in the MCP initialize response
    */
@@ -57,10 +65,11 @@ export const McpMetadata$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
-  external_documentation_text: z.string().optional(),
+  default_environment_id: z.string().optional(),
+  environment_configs: z.array(McpEnvironmentConfig$inboundSchema).optional(),
   external_documentation_url: z.string().optional(),
-  header_display_names: z.record(z.string()).optional(),
   id: z.string(),
+  installation_override_url: z.string().optional(),
   instructions: z.string().optional(),
   logo_asset_id: z.string().optional(),
   toolset_id: z.string(),
@@ -68,9 +77,10 @@ export const McpMetadata$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
-    "external_documentation_text": "externalDocumentationText",
+    "default_environment_id": "defaultEnvironmentId",
+    "environment_configs": "environmentConfigs",
     "external_documentation_url": "externalDocumentationUrl",
-    "header_display_names": "headerDisplayNames",
+    "installation_override_url": "installationOverrideUrl",
     "logo_asset_id": "logoAssetId",
     "toolset_id": "toolsetId",
     "updated_at": "updatedAt",

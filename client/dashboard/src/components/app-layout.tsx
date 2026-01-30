@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { FunctionsAnnouncementModal } from "./functions-announcement-modal/index.tsx";
+import { TopHeader } from "./top-header.tsx";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
@@ -61,17 +62,20 @@ const AppLayoutContent = () => {
   }, [openScreen, hasSeenFunctionsModal, handleModalClose]);
 
   return (
-    <>
-      <AppSidebar variant="inset" />
-      <SidebarInset>
-        <Outlet />
-        <Modal
-          closable
-          className="rounded-sm min-w-auto p-0 h-full 2xl:w-2/3 w-9/12 max-w-[1100px] 2xl:max-w-[1000px] max-h-[450px] min-h-auto"
-          layout="custom"
-          onClose={handleModalClose}
-        />
-      </SidebarInset>
-    </>
+    <div className="flex flex-col h-screen w-full">
+      <TopHeader />
+      <div className="flex flex-1 w-full overflow-hidden pt-2">
+        <AppSidebar variant="inset" />
+        <SidebarInset>
+          <Outlet />
+          <Modal
+            closable
+            className="rounded-sm min-w-auto p-0 h-full 2xl:w-2/3 w-9/12 max-w-[1100px] 2xl:max-w-[1000px] max-h-[450px] min-h-auto"
+            layout="custom"
+            onClose={handleModalClose}
+          />
+        </SidebarInset>
+      </div>
+    </div>
   );
 };

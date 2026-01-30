@@ -1,0 +1,14 @@
+12:00:00.000 INFO  request handled
+    latency_ms: 42.5
+    method: GET
+    path: /api/users
+    status: 200
+
+12:00:01.000 ERROR database error
+    attempts: 3
+    error: "connection timeout"
+    retry: true
+
+12:00:02.000 INFO  user created
+    user: {"id":123,"name":"John Doe"}
+

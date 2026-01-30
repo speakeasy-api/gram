@@ -10,14 +10,14 @@ const trueish = new Set(["true", "1", "yes", "on"]);
 if (trueish.has(process.env["GRAM_SINGLE_PROCESS"] ?? "")) {
   console.log(
     chalk.greenBright(
-      "⚫︎ Server and worker will run as a single process (GRAM_SINGLE_PROCESS)"
-    )
+      "⚫︎ Server and worker will run as a single process (GRAM_SINGLE_PROCESS)",
+    ),
   );
 }
 
 if (trueish.has(process.env["GRAM_LOG_PRETTY"] ?? "")) {
   console.log(
-    chalk.greenBright("⚫︎ Pretty logging is enabled (GRAM_LOG_PRETTY)")
+    chalk.greenBright("⚫︎ Pretty logging is enabled (GRAM_LOG_PRETTY)"),
   );
 } else {
   console.log("⚪︎ Pretty logging is disabled (GRAM_LOG_PRETTY)");
@@ -26,24 +26,22 @@ if (trueish.has(process.env["GRAM_LOG_PRETTY"] ?? "")) {
 if (trueish.has(process.env["GRAM_ENABLE_OTEL_TRACES"] ?? "")) {
   console.log(
     chalk.greenBright(
-      "⚫︎ OpenTelemetry traces are enabled (GRAM_ENABLE_OTEL_TRACES)"
-    )
+      "⚫︎ OpenTelemetry traces are enabled (GRAM_ENABLE_OTEL_TRACES)",
+    ),
   );
 } else {
-  console.log(
-    "⚪︎ OpenTelemetry traces are disabled (GRAM_ENABLE_OTEL_TRACES)"
-  );
+  console.log("⚪︎ OpenTelemetry traces are disabled (GRAM_ENABLE_OTEL_TRACES)");
 }
 
 if (trueish.has(process.env["GRAM_ENABLE_OTEL_METRICS"] ?? "")) {
   console.log(
     chalk.greenBright(
-      "⚫︎ OpenTelemetry metrics are enabled (GRAM_ENABLE_OTEL_METRICS)"
-    )
+      "⚫︎ OpenTelemetry metrics are enabled (GRAM_ENABLE_OTEL_METRICS)",
+    ),
   );
 } else {
   console.log(
-    "⚪︎ OpenTelemetry metrics are disabled (GRAM_ENABLE_OTEL_METRICS)"
+    "⚪︎ OpenTelemetry metrics are disabled (GRAM_ENABLE_OTEL_METRICS)",
   );
 }
 
@@ -66,7 +64,7 @@ async function pokePostgreSQL() {
     }
   } catch (e: unknown) {
     return console.log(
-      `⚪︎ Gram database: unable to get info from docker: ${e}`
+      `⚪︎ Gram database: unable to get info from docker: ${e}`,
     );
   }
 
@@ -85,7 +83,7 @@ async function pokePostgreSQL() {
 
   if (p == null) {
     return console.log(
-      "⚪︎ Gram database: container port 5432 does not appear to be published."
+      "⚪︎ Gram database: container port 5432 does not appear to be published.",
     );
   }
 
@@ -93,21 +91,21 @@ async function pokePostgreSQL() {
     await $`docker compose exec gram-db psql -U ${process.env["DB_USER"]} -d ${process.env["DB_NAME"]} -c "SELECT 1"`;
   if (!result.ok) {
     return console.log(
-      `⚪︎ Gram database: unable to connect to the database: ${result.stderr}`
+      `⚪︎ Gram database: unable to connect to the database: ${result.stderr}`,
     );
   }
 
   console.log(
     chalk.greenBright(
-      `⚫︎ Gram database is running on ${process.env["GRAM_DATABASE_URL"]}`
-    )
+      `⚫︎ Gram database is running on ${process.env["GRAM_DATABASE_URL"]}`,
+    ),
   );
 }
 
-async function pokeGrafana() {
-  const result = await $`docker compose ps grafana --format json`;
+async function pokeOtel() {
+  const result = await $`docker compose ps oteltui --format json`;
   if (!result.ok) {
-    return console.log("⚪︎ Grafana stack: not running.");
+    return console.log("⚪︎ otel-tui: not running.");
   }
 
   let parsed: unknown = {};
@@ -122,9 +120,7 @@ async function pokeGrafana() {
       throw new Error("Unexpected container info");
     }
   } catch (e: unknown) {
-    return console.log(
-      `⚪︎ Grafana stack: unable to get info from docker: ${e}`
-    );
+    return console.log(`⚪︎ otel-tui: unable to get info from docker: ${e}`);
   }
 
   const portspec = parsed.Publishers.find((p) => {
@@ -132,7 +128,7 @@ async function pokeGrafana() {
       typeof p === "object" &&
       p &&
       "TargetPort" in p &&
-      p.TargetPort === 3000 &&
+      p.TargetPort === 4317 &&
       typeof p.PublishedPort === "number"
     );
   });
@@ -142,18 +138,12 @@ async function pokeGrafana() {
 
   if (p == null) {
     return console.log(
-      "⚪︎ Grafana stack: container port 3000 does not appear to be published."
+      "⚪︎ otel-tui: container port 4317 does not appear to be published.",
     );
   }
 
-  const r = await fetch(`http://localhost:${p}/api/health`);
-  let addr = `http://localhost:${p}`;
-  if (!r.ok) {
-    addr = `:${p}`;
-  }
-
-  console.log(chalk.greenBright(`⚫︎ Grafana is running on port ${addr}`));
+  console.log(chalk.greenBright(`⚫︎ otel-tui is running on port ${p}`));
 }
 
-await pokeGrafana();
+await pokeOtel();
 await pokePostgreSQL();

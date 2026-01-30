@@ -37,3 +37,12 @@ SET deleted_at = NOW()
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: UpdateAPIKeyLastAccessedAt :exec
+UPDATE api_keys
+SET last_accessed_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE
+  -- This check reduces writes to the database to at most once per minute per
+  -- key as a way to mitigate excessive write spikes.
+  AND (last_accessed_at IS NULL OR last_accessed_at < clock_timestamp() - interval '1 minute');

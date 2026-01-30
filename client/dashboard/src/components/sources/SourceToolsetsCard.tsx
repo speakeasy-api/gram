@@ -29,7 +29,7 @@ function ToolsetItem({
   ).length;
 
   return (
-    <routes.toolsets.toolset.Link
+    <routes.mcp.details.Link
       key={toolset.slug}
       params={[toolset.slug]}
       className="flex items-center justify-between p-3 rounded-md border bg-surface-secondary hover:bg-surface-tertiary transition-colors"
@@ -45,7 +45,7 @@ function ToolsetItem({
       <Badge variant="neutral" className="ml-2">
         {toolCount} {toolCount === 1 ? "tool" : "tools"}
       </Badge>
-    </routes.toolsets.toolset.Link>
+    </routes.mcp.details.Link>
   );
 }
 

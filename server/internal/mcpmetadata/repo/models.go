@@ -9,16 +9,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type McpMetadatum struct {
-	ID                        uuid.UUID
-	ToolsetID                 uuid.UUID
-	ProjectID                 uuid.UUID
-	ExternalDocumentationUrl  pgtype.Text
-	ExternalDocumentationText pgtype.Text
-	LogoID                    uuid.NullUUID
-	Instructions              pgtype.Text
-	HeaderDisplayNames        []byte
-	DefaultEnvironmentID      uuid.NullUUID
-	CreatedAt                 pgtype.Timestamptz
-	UpdatedAt                 pgtype.Timestamptz
+type McpEnvironmentConfig struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	McpMetadataID     uuid.UUID
+	VariableName      string
+	HeaderDisplayName pgtype.Text
+	ProvidedBy        string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
 }

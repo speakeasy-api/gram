@@ -1,4 +1,4 @@
-h1:Q8bhdED82+uLZ7IkUK4UiWJzYEgH2vBN+KN5MRHDFhs=
+h1:NsGr7B7DbMFd7k85DLhonox1uVwxgeFh+YX6DROmSEE=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -8,3 +8,6 @@ h1:Q8bhdED82+uLZ7IkUK4UiWJzYEgH2vBN+KN5MRHDFhs=
 20251208142627_add-tool-logs-table.sql h1:lyEtubOS46pyIqdjTRsFGrl18Y3SoANNg8Ci8aXlhv8=
 20251209104434_add-id-col-to-tool-logs-table.sql h1:rMg0UYd1a2rL5MDSBGcnJ6strkq9qDvcYnFF8z8DnRo=
 20251217163323_add-telemetry-logs-table.sql h1:XgLYV964jZ5cpFFuHxtgKHI7mkbIpcZhoOzRXXgWaec=
+20260129234443_drop-telemetry-http-indices.sql h1:KlVL49Fbjcbiil+kBlYp2tmks4JnRmv/sMJtwhlIxYY=
+20260129234507_drop-telemetry-http-cols.sql h1:vdBfBpdPHUKcWvATcM441teFxoGlWB32SeeFmwn+5SM=
+20260130010006_add-chat-id-and-timestamp-cols.sql h1:P3uwGaRXUvFH5J/m0J8vPWneq6aB6kghgkychpSg67U=

@@ -41,18 +41,17 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
     copyToClipboard(code)
   }
 
-  if (!messageIsComplete) {
-    return null
-  }
   return (
     <div className="aui-code-header-root bg-muted-foreground/15 text-foreground dark:bg-muted-foreground/20 mt-4 flex items-center justify-between gap-4 rounded-t-lg px-4 py-2 text-sm font-semibold">
       <span className="aui-code-header-language lowercase [&>span]:text-xs">
         {language}
       </span>
-      <TooltipIconButton tooltip="Copy" onClick={onCopy}>
-        {!isCopied && <CopyIcon />}
-        {isCopied && <CheckIcon />}
-      </TooltipIconButton>
+      {messageIsComplete && (
+        <TooltipIconButton tooltip="Copy" onClick={onCopy}>
+          {!isCopied && <CopyIcon />}
+          {isCopied && <CheckIcon />}
+        </TooltipIconButton>
+      )}
     </div>
   )
 }

@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"os"
 
-	charmlog "github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/tracelog"
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
 
+	"github.com/speakeasy-api/gram/plog"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
@@ -45,10 +45,16 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 	if opts.Pretty {
 		return &ContextHandler{
 			DataDogAttr: opts.DataDogAttr,
-			Handler: charmlog.NewWithOptions(os.Stderr, charmlog.Options{
-				ReportCaller: true,
-				Level:        LogLevels[rl].Charm,
-			}),
+			Handler: plog.NewHandler(
+				plog.WithAddSource(true),
+				plog.WithHideTimestamp(true),
+				plog.WithLevel(LogLevels[rl].Plog),
+				plog.WithOmitKeys(
+					string(attr.ServiceEnvKey),
+					"service.*",
+					"git.*",
+				),
+			),
 		}
 	} else {
 		return &ContextHandler{

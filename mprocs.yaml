@@ -13,3 +13,7 @@ procs:
     cmd: ["mise", "run", "start:elements"]
     stop:
       send-keys: ["<C-c>"]
+  otel:
+    cmd: ["docker", "compose", "attach", "oteltui"]
+    stop:
+      send-keys: ["<C-p>", "<C-q>"]

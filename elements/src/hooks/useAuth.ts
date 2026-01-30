@@ -21,6 +21,9 @@ async function defaultGetSession(init: {
     headers: {
       'Gram-Project': init.projectSlug,
     },
+    body: JSON.stringify({
+      embedOrigin: window.location.origin,
+    }),
   })
   const data = await response.json()
   return data.client_token

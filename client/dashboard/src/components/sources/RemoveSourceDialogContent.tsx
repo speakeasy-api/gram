@@ -88,7 +88,7 @@ export function RemoveSourceDialogContent({
         <Input onChange={(v) => setInputMatches(v === sourceSlug)} />
       </div>
 
-      <Alert variant="error" dismissible={false}>
+      <Alert variant="warning" dismissible={false}>
         Deleting {sourceSlug} cannot be undone.
       </Alert>
 

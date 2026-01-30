@@ -165,6 +165,7 @@ func handleResourcesRead(
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
+		logAttrs.RecordTraceContext(ctx)
 
 		params := tm.LogParams{
 			Timestamp: time.Now(),

@@ -80,17 +80,14 @@ export function OpenApiSourceInput({
           From URL
         </TabsTrigger>
       </TabsList>
-      <TabsContent value="upload" className="mt-4 min-h-[174px]">
+      <TabsContent value="upload" className="my-3">
         <FullWidthUpload
           onUpload={onUpload}
           className="max-w-full"
           allowedExtensions={["yaml", "yml", "json"]}
         />
       </TabsContent>
-      <TabsContent
-        value="url"
-        className="mt-4 min-h-[174px] flex flex-col justify-center"
-      >
+      <TabsContent value="url" className="my-3 flex flex-col justify-center">
         <form
           onSubmit={(e) => {
             e.preventDefault();

@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_DATADOG_APPLICATION_ID?: string | undefined
   readonly VITE_DATADOG_CLIENT_TOKEN?: string | undefined
   readonly VITE_DATADOG_SITE?: string | undefined
+  readonly VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING?: string | undefined
 }
 
 interface ImportMeta {

@@ -16,33 +16,31 @@ import (
 
 // Client is the "toolsets" service client.
 type Client struct {
-	CreateToolsetEndpoint                     goa.Endpoint
-	ListToolsetsEndpoint                      goa.Endpoint
-	UpdateToolsetEndpoint                     goa.Endpoint
-	DeleteToolsetEndpoint                     goa.Endpoint
-	GetToolsetEndpoint                        goa.Endpoint
-	CheckMCPSlugAvailabilityEndpoint          goa.Endpoint
-	CloneToolsetEndpoint                      goa.Endpoint
-	AddExternalOAuthServerEndpoint            goa.Endpoint
-	RemoveOAuthServerEndpoint                 goa.Endpoint
-	AddOAuthProxyServerEndpoint               goa.Endpoint
-	UpdateSecurityVariableDisplayNameEndpoint goa.Endpoint
+	CreateToolsetEndpoint            goa.Endpoint
+	ListToolsetsEndpoint             goa.Endpoint
+	UpdateToolsetEndpoint            goa.Endpoint
+	DeleteToolsetEndpoint            goa.Endpoint
+	GetToolsetEndpoint               goa.Endpoint
+	CheckMCPSlugAvailabilityEndpoint goa.Endpoint
+	CloneToolsetEndpoint             goa.Endpoint
+	AddExternalOAuthServerEndpoint   goa.Endpoint
+	RemoveOAuthServerEndpoint        goa.Endpoint
+	AddOAuthProxyServerEndpoint      goa.Endpoint
 }
 
 // NewClient initializes a "toolsets" service client given the endpoints.
-func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolset, checkMCPSlugAvailability, cloneToolset, addExternalOAuthServer, removeOAuthServer, addOAuthProxyServer, updateSecurityVariableDisplayName goa.Endpoint) *Client {
+func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolset, checkMCPSlugAvailability, cloneToolset, addExternalOAuthServer, removeOAuthServer, addOAuthProxyServer goa.Endpoint) *Client {
 	return &Client{
-		CreateToolsetEndpoint:                     createToolset,
-		ListToolsetsEndpoint:                      listToolsets,
-		UpdateToolsetEndpoint:                     updateToolset,
-		DeleteToolsetEndpoint:                     deleteToolset,
-		GetToolsetEndpoint:                        getToolset,
-		CheckMCPSlugAvailabilityEndpoint:          checkMCPSlugAvailability,
-		CloneToolsetEndpoint:                      cloneToolset,
-		AddExternalOAuthServerEndpoint:            addExternalOAuthServer,
-		RemoveOAuthServerEndpoint:                 removeOAuthServer,
-		AddOAuthProxyServerEndpoint:               addOAuthProxyServer,
-		UpdateSecurityVariableDisplayNameEndpoint: updateSecurityVariableDisplayName,
+		CreateToolsetEndpoint:            createToolset,
+		ListToolsetsEndpoint:             listToolsets,
+		UpdateToolsetEndpoint:            updateToolset,
+		DeleteToolsetEndpoint:            deleteToolset,
+		GetToolsetEndpoint:               getToolset,
+		CheckMCPSlugAvailabilityEndpoint: checkMCPSlugAvailability,
+		CloneToolsetEndpoint:             cloneToolset,
+		AddExternalOAuthServerEndpoint:   addExternalOAuthServer,
+		RemoveOAuthServerEndpoint:        removeOAuthServer,
+		AddOAuthProxyServerEndpoint:      addOAuthProxyServer,
 	}
 }
 
@@ -264,27 +262,4 @@ func (c *Client) AddOAuthProxyServer(ctx context.Context, p *AddOAuthProxyServer
 		return
 	}
 	return ires.(*types.Toolset), nil
-}
-
-// UpdateSecurityVariableDisplayName calls the
-// "updateSecurityVariableDisplayName" endpoint of the "toolsets" service.
-// UpdateSecurityVariableDisplayName may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) UpdateSecurityVariableDisplayName(ctx context.Context, p *UpdateSecurityVariableDisplayNamePayload) (res *types.SecurityVariable, err error) {
-	var ires any
-	ires, err = c.UpdateSecurityVariableDisplayNameEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*types.SecurityVariable), nil
 }

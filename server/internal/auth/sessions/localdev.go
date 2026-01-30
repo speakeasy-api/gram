@@ -29,6 +29,7 @@ var unsafeSessionData = []byte(`
 {
   "1245": {
     "user_email": "user@example.com",
+    "display_name": "Local User",
     "admin": false,
     "organizations": [
       {
@@ -108,7 +109,7 @@ func (s *Manager) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, e
 		UserWhitelisted:    true,
 		Email:              userInfo.UserEmail,
 		Admin:              userInfo.Admin,
-		DisplayName:        nil,
+		DisplayName:        userInfo.DisplayName,
 		PhotoURL:           nil,
 		UserPylonSignature: nil,
 		Organizations:      make([]auth.OrganizationEntry, len(userInfo.Organizations)),
@@ -141,10 +142,15 @@ func (s *Manager) PopulateLocalDevDefaultAuthSession(ctx context.Context) (strin
 			s.logger.WarnContext(ctx, "failed to invalidate user info cache", attr.SlogError(err))
 		}
 
+		displayName := "Local User"
+		if userInfo.DisplayName != nil {
+			displayName = *userInfo.DisplayName
+		}
+
 		if _, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
 			ID:          userID,
 			Email:       userInfo.UserEmail,
-			DisplayName: "stubbed user",
+			DisplayName: displayName,
 			PhotoUrl:    conv.PtrToPGText(nil),
 			Admin:       userInfo.Admin,
 		}); err != nil {

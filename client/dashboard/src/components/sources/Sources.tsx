@@ -1,9 +1,9 @@
 import { Page } from "@/components/page-layout";
-import { MiniCards } from "@/components/ui/card-mini";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
+import { useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
 import { useRoutes } from "@/routes";
 import {
@@ -11,47 +11,45 @@ import {
   useListAssets,
   useListTools,
 } from "@gram/client/react-query/index.js";
-// import { Dialog } from "@/components/ui/dialog";
-import { Button, Dialog, Icon } from "@speakeasy-api/moonshine";
-import { Plus } from "lucide-react";
+import {
+  Button,
+  Dialog,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Icon,
+} from "@speakeasy-api/moonshine";
+import { ChevronDown, Code, FileCode, Plus, Server } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
-import AddSourceDialogContent from "./AddSourceDialogContent";
-import { AttachEnvironmentDialogContent } from "./AttachEnvironmentDialogContent";
 import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
-import { NamedAsset, SourceCard } from "./SourceCard";
+import { NamedAsset, SourceCard, SourceCardSkeleton } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
 import { ViewAssetDialogContent } from "./ViewAssetDialogContent";
 
 type DialogState =
   | { type: "closed" }
-  | { type: "add-source" }
   | { type: "remove-source"; asset: NamedAsset }
   | { type: "upload-openapi"; documentSlug: string }
-  | { type: "attach-environment"; asset: NamedAsset }
   | { type: "view-asset"; asset: NamedAsset };
 
 interface DialogStore {
   dialogState: DialogState;
-  openAddSource: () => void;
   openRemoveSource: (asset: NamedAsset) => void;
   openUploadOpenApi: (documentSlug: string) => void;
-  openAttachEnvironment: (asset: NamedAsset) => void;
   openViewAsset: (asset: NamedAsset) => void;
   closeDialog: () => void;
 }
 
 const useDialogStore = create<DialogStore>((set) => ({
   dialogState: { type: "closed" },
-  openAddSource: () => set({ dialogState: { type: "add-source" } }),
   openRemoveSource: (asset) =>
     set({ dialogState: { type: "remove-source", asset } }),
   openUploadOpenApi: (documentSlug) =>
     set({ dialogState: { type: "upload-openapi", documentSlug } }),
-  openAttachEnvironment: (asset) =>
-    set({ dialogState: { type: "attach-environment", asset } }),
   openViewAsset: (asset) => set({ dialogState: { type: "view-asset", asset } }),
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
@@ -73,71 +71,91 @@ export function useDeploymentIsEmpty() {
   );
 }
 
+export const useCatalogIconMap = () => {
+  const { data: catalogData } = useInfiniteListMCPCatalog();
+  return useMemo(() => {
+    if (!catalogData?.pages) {
+      return new Map<string, string>();
+    }
+    return new Map(
+      catalogData.pages.flatMap((page) =>
+        page.servers.map((s) => [s.registrySpecifier, s.iconUrl!]),
+      ),
+    );
+  }, [catalogData]);
+};
+
 export default function Sources() {
   const client = useSdkClient();
+  const routes = useRoutes();
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
 
   const { data: deploymentResult, refetch, isLoading } = useLatestDeployment();
   const { data: assets, refetch: refetchAssets } = useListAssets();
+  const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
 
   const assetsCausingFailure = useUnusedAssetIds();
   const {
     dialogState,
-    openAddSource,
     openRemoveSource,
     openUploadOpenApi,
-    openAttachEnvironment,
     openViewAsset,
     closeDialog,
   } = useDialogStore();
   const deploymentIsEmpty = useDeploymentIsEmpty();
 
   const allSources: NamedAsset[] = useMemo(() => {
-    if (!deployment || !assets) {
+    if (!deployment) {
       return [];
     }
 
-    const openApiSources = deployment.openapiv3Assets
-      .map((deploymentAsset) => {
-        const asset = assets.assets.find(
-          (a) => a.id === deploymentAsset.assetId,
-        );
-        if (!asset) {
-          console.error(`Asset ${deploymentAsset.assetId} not found`);
-          return null;
-        }
-        return {
-          ...asset,
-          deploymentAssetId: deploymentAsset.id,
-          name: deploymentAsset.name,
-          slug: deploymentAsset.slug,
-          type: "openapi" as const,
-        };
-      })
-      .filter((source) => source !== null);
+    // OpenAPI and Function sources need assets data
+    const openApiSources = assets
+      ? deployment.openapiv3Assets
+          .map((deploymentAsset) => {
+            const asset = assets.assets.find(
+              (a) => a.id === deploymentAsset.assetId,
+            );
+            if (!asset) {
+              console.error(`Asset ${deploymentAsset.assetId} not found`);
+              return null;
+            }
+            return {
+              ...asset,
+              deploymentAssetId: deploymentAsset.id,
+              name: deploymentAsset.name,
+              slug: deploymentAsset.slug,
+              type: "openapi" as const,
+            };
+          })
+          .filter((source) => source !== null)
+      : [];
 
-    const functionSources = (deployment.functionsAssets ?? [])
-      .map((deploymentAsset) => {
-        const asset = assets.assets.find(
-          (a) => a.id === deploymentAsset.assetId,
-        );
-        if (!asset) {
-          console.error(`Asset ${deploymentAsset.assetId} not found`);
-          return null;
-        }
-        return {
-          ...asset,
-          deploymentAssetId: deploymentAsset.id,
-          name: deploymentAsset.name,
-          slug: deploymentAsset.slug,
-          type: "function" as const,
-        };
-      })
-      .filter((source) => source !== null);
+    const functionSources = assets
+      ? (deployment.functionsAssets ?? [])
+          .map((deploymentAsset) => {
+            const asset = assets.assets.find(
+              (a) => a.id === deploymentAsset.assetId,
+            );
+            if (!asset) {
+              console.error(`Asset ${deploymentAsset.assetId} not found`);
+              return null;
+            }
+            return {
+              ...asset,
+              deploymentAssetId: deploymentAsset.id,
+              name: deploymentAsset.name,
+              slug: deploymentAsset.slug,
+              type: "function" as const,
+            };
+          })
+          .filter((source) => source !== null)
+      : [];
 
+    // External MCP sources don't need assets data - they come directly from deployment
     const externalMcpSources = (deployment.externalMcps ?? []).map(
       (externalMcp) => ({
         id: externalMcp.id,
@@ -146,11 +164,12 @@ export default function Sources() {
         slug: externalMcp.slug,
         type: "externalmcp" as const,
         registryId: externalMcp.registryId,
+        iconUrl: catalogIconMap.get(externalMcp.registryServerSpecifier),
       }),
     );
 
     return [...openApiSources, ...functionSources, ...externalMcpSources];
-  }, [deployment, assets]);
+  }, [deployment, assets, catalogIconMap]);
 
   const removeSource = async (
     assetId: string,
@@ -192,15 +211,7 @@ export default function Sources() {
   if (!isLoading && deploymentIsEmpty) {
     return (
       <>
-        <SourcesEmptyState onNewUpload={openAddSource} />
-        <Dialog
-          open={dialogState.type === "add-source"}
-          onOpenChange={(open) => !open && closeDialog()}
-        >
-          <Dialog.Content className="max-w-2xl!">
-            <AddSourceDialogContent onCompletion={closeDialog} />
-          </Dialog.Content>
-        </Dialog>
+        <SourcesEmptyState />
         {/* Render remove dialog in empty state to allow graceful close animation when deleting last source */}
         <Dialog
           open={dialogState.type === "remove-source"}
@@ -232,34 +243,94 @@ export default function Sources() {
         <Page.Section.Title>Sources</Page.Section.Title>
         <Page.Section.Description>
           {isFunctionsEnabled
-            ? "OpenAPI documents and Gram Functions providing tools for your toolsets"
-            : "OpenAPI documents providing tools for your toolsets"}
+            ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"
+            : "OpenAPI documents and third-party MCP servers providing tools for your project"}
         </Page.Section.Description>
         <DeploymentHistoryCTA deploymentId={deployment?.id} />
         <Page.Section.CTA>
-          <Button onClick={openAddSource} variant="secondary">
-            <Button.LeftIcon>
-              <Plus className="w-4 h-4" />
-            </Button.LeftIcon>
-            <Button.Text>Add Source</Button.Text>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary">
+                <Button.LeftIcon>
+                  <Plus className="w-4 h-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add Source</Button.Text>
+                <Button.RightIcon>
+                  <ChevronDown className="w-4 h-4" />
+                </Button.RightIcon>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[320px] p-1">
+              <DropdownMenuItem
+                onSelect={() => routes.sources.addOpenAPI.goTo()}
+                className="cursor-pointer flex items-start gap-3 p-2 rounded-md"
+              >
+                <div className="w-10 h-10 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <FileCode className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-medium">From your API</span>
+                  <span className="text-xs text-muted-foreground">
+                    Upload an OpenAPI spec to generate tools
+                  </span>
+                </div>
+              </DropdownMenuItem>
+              {isFunctionsEnabled && (
+                <DropdownMenuItem
+                  onSelect={() => routes.sources.addFunction.goTo()}
+                  className="cursor-pointer flex items-start gap-3 p-2 rounded-md"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+                    <Code className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium">Write custom code</span>
+                    <span className="text-xs text-muted-foreground">
+                      Create tools with TypeScript functions
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onSelect={() => routes.sources.addFromCatalog.goTo()}
+                className="cursor-pointer flex items-start gap-3 p-2 rounded-md"
+              >
+                <div className="w-10 h-10 rounded-lg bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
+                  <Server className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-medium">Third party server</span>
+                  <span className="text-xs text-muted-foreground">
+                    Add pre-built servers from the catalog
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </Page.Section.CTA>
         <Page.Section.Body>
-          <MiniCards isLoading={isLoading}>
-            {allSources?.map((asset: NamedAsset) => (
-              <SourceCard
-                key={asset.id}
-                asset={asset}
-                causingFailure={assetsCausingFailure.has(
-                  asset.deploymentAssetId,
-                )}
-                handleRemove={() => openRemoveSource(asset)}
-                handleAttachEnvironment={() => openAttachEnvironment(asset)}
-                handleViewAsset={() => openViewAsset(asset)}
-                setChangeDocumentTargetSlug={openUploadOpenApi}
-              />
-            ))}
-          </MiniCards>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {isLoading ? (
+              <>
+                <SourceCardSkeleton />
+                <SourceCardSkeleton />
+                <SourceCardSkeleton />
+              </>
+            ) : (
+              allSources?.map((asset: NamedAsset) => (
+                <SourceCard
+                  key={asset.id}
+                  asset={asset}
+                  causingFailure={assetsCausingFailure.has(
+                    asset.deploymentAssetId,
+                  )}
+                  handleRemove={() => openRemoveSource(asset)}
+                  handleViewAsset={() => openViewAsset(asset)}
+                  setChangeDocumentTargetSlug={openUploadOpenApi}
+                />
+              ))
+            )}
+          </div>
           <Dialog
             open={dialogState.type !== "closed"}
             onOpenChange={(open) => !open && closeDialog()}
@@ -271,9 +342,6 @@ export default function Sources() {
                   : "max-w-2xl!"
               }
             >
-              {dialogState.type === "add-source" && (
-                <AddSourceDialogContent onCompletion={closeDialog} />
-              )}
               {dialogState.type === "remove-source" && (
                 <RemoveSourceDialogContent
                   asset={dialogState.asset}
@@ -286,12 +354,6 @@ export default function Sources() {
                   documentSlug={dialogState.documentSlug}
                   onClose={closeDialog}
                   onSuccess={handleDialogSuccess}
-                />
-              )}
-              {dialogState.type === "attach-environment" && (
-                <AttachEnvironmentDialogContent
-                  asset={dialogState.asset}
-                  onClose={closeDialog}
                 />
               )}
               {dialogState.type === "view-asset" && (

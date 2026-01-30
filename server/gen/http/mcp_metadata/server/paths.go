@@ -16,3 +16,8 @@ func GetMcpMetadataMcpMetadataPath() string {
 func SetMcpMetadataMcpMetadataPath() string {
 	return "/rpc/mcpMetadata.set"
 }
+
+// ExportMcpMetadataMcpMetadataPath returns the URL path to the mcpMetadata service exportMcpMetadata HTTP endpoint.
+func ExportMcpMetadataMcpMetadataPath() string {
+	return "/rpc/mcpMetadata.export"
+}

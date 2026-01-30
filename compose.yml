@@ -52,62 +52,14 @@ services:
       timeout: 30s
       retries: 5
 
-  grafana:
-    profiles: [observability]
-    image: grafana/grafana-enterprise:11.6.0
-    restart: unless-stopped
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./local/grafana/grafana.ini:/etc/grafana/grafana.ini
-      - ./local/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+  oteltui:
+    image: ymtdzzz/otel-tui@sha256:67010920b012ee998888cf39a794f32e97ca4b01cd02681f25e8f47c261e305b
+    container_name: otel-tui
+    stdin_open: true
+    tty: true
     ports:
-      - "${GRAFANA_PORT}:3000"
-    environment:
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-      - GF_AUTH_DISABLE_LOGIN_FORM=true
-    depends_on:
-      - alloy
-      - prometheus
-      - tempo
-  tempo:
-    profiles: [observability]
-    image: grafana/tempo:2.7.2
-    restart: unless-stopped
-    command: ["-config.file=/etc/tempo.yaml"]
-    ports:
-      - "${TEMPO_PORT}:3200"
-    volumes:
-      - tempo_data:/var/tempo
-      - ./local/tempo/tempo.yaml:/etc/tempo.yaml
-  alloy:
-    profiles: [observability]
-    image: grafana/alloy:v1.7.5
-    volumes:
-      - ./local/alloy/config.alloy:/etc/alloy/config.alloy
-    command:
-      - run
-      - /etc/alloy/config.alloy
-      - --storage.path=/var/lib/alloy/data
-      - --server.http.listen-addr=0.0.0.0:12345
-    ports:
-      - "${ALLOY_PORT}:12345"
-      - "${OTLP_GRPC_PORT}:4317"
-    depends_on:
-      - tempo
-  prometheus:
-    profiles: [observability]
-    image: prom/prometheus:latest
-    restart: unless-stopped
-    command:
-      - --config.file=/etc/prometheus.yaml
-      - --web.enable-remote-write-receiver
-      - --enable-feature=exemplar-storage
-      - --enable-feature=native-histograms
-    ports:
-      - "${PROMETHEUS_PORT}:9090"
-    volumes:
-      - ./local/prometheus/prometheus.yaml:/etc/prometheus.yaml
+      - "4317:4317"
+
   clickhouse:
     image: clickhouse/clickhouse-server:25.8.3
     restart: unless-stopped
@@ -167,10 +119,6 @@ volumes:
   postgres_data:
     driver: local
   cache_data:
-    driver: local
-  grafana_data:
-    driver: local
-  tempo_data:
     driver: local
   temporal_data:
     driver: local

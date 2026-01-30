@@ -70,6 +70,11 @@ export const TelemetryProvider = (props: { children: ReactNode }) => {
   );
 
   useEffect(() => {
+    // Guard against duplicate initialization (can happen in React StrictMode or component remounts)
+    if (datadogRum.getInitConfiguration()) {
+      return;
+    }
+
     if (getServerURL().includes("getgram.ai")) {
       datadogRum.init({
         applicationId: "93afb64a-dd15-490c-a749-51b4c5c5a171",

@@ -41,6 +41,7 @@ interface MonacoEditorProps {
   className?: string;
   readOnly?: boolean;
   height?: string;
+  wordWrap?: "on" | "off" | "wordWrapColumn" | "bounded";
 }
 
 /**
@@ -56,6 +57,7 @@ export function MonacoEditor({
   className,
   readOnly = true,
   height = "100%",
+  wordWrap = "off",
 }: MonacoEditorProps) {
   const { theme } = useMoonshineConfig();
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -69,12 +71,13 @@ export function MonacoEditor({
       minimap: { enabled: true },
       scrollBeyondLastLine: false,
       renderWhitespace: "selection",
-      fontSize: 14,
+      fontSize: 12,
       fontFamily:
         'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
       lineNumbers: "on",
       folding: true,
       automaticLayout: true,
+      wordWrap,
     });
   };
 
@@ -94,7 +97,7 @@ export function MonacoEditor({
   const EditorComponent = Editor as any;
 
   return (
-    <div className={cn("border rounded-md overflow-hidden", className)}>
+    <div className={cn("overflow-hidden", className)}>
       <EditorComponent
         height={height}
         language={language}
@@ -106,12 +109,13 @@ export function MonacoEditor({
           minimap: { enabled: true },
           scrollBeyondLastLine: false,
           renderWhitespace: "selection",
-          fontSize: 14,
+          fontSize: 12,
           fontFamily:
             'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
           lineNumbers: "on",
           folding: true,
           automaticLayout: true,
+          wordWrap,
         }}
         loading={
           <div className="flex items-center justify-center h-full">

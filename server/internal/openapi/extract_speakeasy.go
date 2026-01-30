@@ -216,6 +216,15 @@ func (p *ToolExtractor) doSpeakeasy(
 				opID = fmt.Sprintf("%s_%s", op.method, path)
 			}
 
+			// Skip deprecated operations - they shouldn't be exposed as tools
+			if op.operation.Deprecated != nil && *op.operation.Deprecated {
+				logger.InfoContext(ctx,
+					fmt.Sprintf("%s: %s: skipping deprecated operation", docInfo.Name, opID),
+					attr.SlogEvent("openapi:deprecated-operation-skipped"),
+				)
+				continue
+			}
+
 			workItems = append(workItems, operationWorkItem{
 				path:             path,
 				method:           op.method,
@@ -549,11 +558,8 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		return empty, deploymentEvents, tagError("invariants-violated", "not enough information to create tool definition: %w", err)
 	}
 
-	switch {
-	case len(op.Servers) > 0:
+	if len(op.Servers) > 0 {
 		return empty, deploymentEvents, tagError("op-servers", "per-operation servers are not currently supported [line: %d]", op.GetCore().Servers.GetKeyNodeOrRootLine(op.GetRootNode()))
-	case op.Deprecated != nil && *op.Deprecated:
-		return empty, deploymentEvents, tagError("deprecated-op", "operation is deprecated [line: %d]", op.GetCore().Deprecated.GetKeyNodeOrRootLine(op.GetRootNode()))
 	}
 
 	defs := sequencedmap.New[string, *oas3.JSONSchema[oas3.Referenceable]]()

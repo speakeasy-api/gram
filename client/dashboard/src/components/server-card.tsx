@@ -59,7 +59,7 @@ export function ServerCard({
     if (onCardClick) {
       onCardClick();
     } else {
-      routes.toolsets.toolset.goTo(toolset.slug);
+      routes.mcp.details.goTo(toolset.slug);
     }
   };
 
@@ -119,7 +119,7 @@ export function ServerCard({
   const defaultActions: Action[] = [
     {
       label: "Manage Tools",
-      onClick: () => routes.toolsets.toolset.goTo(toolset.slug),
+      onClick: () => routes.mcp.details.goTo(toolset.slug),
       icon: "blocks",
     },
     {

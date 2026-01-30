@@ -45,7 +45,6 @@ import (
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -57,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	temporal_client "go.temporal.io/sdk/client"
 )
@@ -110,6 +110,7 @@ type mcpInputs struct {
 	oauthTokenInputs []oauthTokenInputs
 	authenticated    bool
 	sessionID        string
+	chatID           string
 	mode             ToolMode
 }
 
@@ -565,6 +566,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		authenticated:    authenticated,
 		oauthTokenInputs: tokenInputs,
 		sessionID:        sessionID,
+		chatID:           r.Header.Get("Gram-Chat-ID"),
 		mode:             resolveToolMode(r, *toolset),
 	}
 
@@ -715,6 +717,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		authenticated:    true,
 		oauthTokenInputs: []oauthTokenInputs{},
 		sessionID:        sessionID,
+		chatID:           r.Header.Get("Gram-Chat-ID"),
 		mode:             resolveToolMode(r, toolset),
 	}
 
@@ -842,7 +845,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemetryService, s.features, s.vectorToolStore, s.temporal)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemetryService, s.features, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":

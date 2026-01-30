@@ -1,5 +1,25 @@
 # @gram-ai/elements
 
+## 1.24.0
+
+### Minor Changes
+
+- 08e4fb5: Add experimental message feedback UI with like/dislike buttons that appear after assistant messages. Enable with `thread.experimental_showFeedback: true` config option. Allows users to mark conversations as resolved.
+- 2d520cb: Add support for follow-on suggestions within the Elements library
+- 51b9f17: Add replay mode and cassette recording for Elements. The `<Replay>` component plays back pre-recorded conversations with streaming animations — no auth, MCP, or network calls required. The `useRecordCassette` hook and built-in composer recorder button (gated behind `VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING` env var) allow capturing live conversations as cassette JSON files.
+
+### Patch Changes
+
+- c17b9f7: Fix logs page performance, responsive charts, tool output rendering, and streaming indicator
+  - Memoize config objects and callbacks in Logs page and thread to prevent unnecessary re-renders
+  - Fix tool group count using startIndex/endIndex instead of filtering all message parts
+  - Fix shimmer CSS in shadow DOM by setting custom properties on .gram-elements
+  - Auto-size charts to container width via ResizeObserver instead of fixed 400px minimum
+  - Truncate large tool output to 50-line preview, skip shiki for content over 8K chars
+  - Show pulsing dot indicator after tool calls while model is still running
+
+- 438e1a7: Dropped the catalog dependency on react-query in favor of a direct dependency. This allows the elements package to be (p)npm linked into other local projects.
+
 ## 1.23.0
 
 ### Minor Changes

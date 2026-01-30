@@ -623,6 +623,8 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		})
 	}
 
+	println("\n\n\nto upsert: ", len(externalMCPsToUpsert), "\n\n\n")
+
 	externalMCPsToExclude := make([]string, 0, len(form.ExcludeExternalMcps))
 	externalMCPsToExclude = append(externalMCPsToExclude, form.ExcludeExternalMcps...)
 

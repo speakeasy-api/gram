@@ -17,6 +17,7 @@ let value: ListEnvironmentsResult = {
           name: "<value>",
           updatedAt: new Date("2025-02-24T05:54:42.792Z"),
           value: "<value>",
+          valueHash: "<value>",
         },
       ],
       id: "<id>",

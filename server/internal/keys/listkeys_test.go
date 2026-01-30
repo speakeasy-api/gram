@@ -2,6 +2,7 @@ package keys_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -70,6 +71,7 @@ func TestKeysService_ListKeys(t *testing.T) {
 			require.Equal(t, []string{"consumer"}, key.Scopes)
 			require.NotEmpty(t, key.CreatedAt)
 			require.NotEmpty(t, key.UpdatedAt)
+			require.Nil(t, key.LastAccessedAt) // Newly created keys have not been accessed
 
 			// Verify the key prefix follows expected format
 			require.Contains(t, key.KeyPrefix, "gram_local_")
@@ -89,6 +91,7 @@ func TestKeysService_ListKeys(t *testing.T) {
 					require.Equal(t, createdKey.Scopes, listedKey.Scopes)
 					require.Equal(t, createdKey.CreatedAt, listedKey.CreatedAt)
 					require.Equal(t, createdKey.UpdatedAt, listedKey.UpdatedAt)
+					require.Equal(t, createdKey.LastAccessedAt, listedKey.LastAccessedAt)
 					break
 				}
 			}
@@ -112,5 +115,65 @@ func TestKeysService_ListKeys(t *testing.T) {
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+	})
+
+	t.Run("LastAccessedAt is populated after key authentication", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestKeysService(t)
+
+		// Create a key
+		createdKey, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+			SessionToken: nil,
+			Name:         "auth-test-key",
+			Scopes:       []string{"consumer"},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, createdKey.Key)
+
+		// Initially, LastAccessedAt should be nil
+		result, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{
+			SessionToken: nil,
+		})
+		require.NoError(t, err)
+
+		var keyBeforeAuth *gen.Key
+		for _, k := range result.Keys {
+			if k.ID == createdKey.ID {
+				keyBeforeAuth = k
+				break
+			}
+		}
+		require.NotNil(t, keyBeforeAuth)
+		require.Nil(t, keyBeforeAuth.LastAccessedAt)
+
+		// Authenticate using the key (this should update LastAccessedAt)
+		_, err = ti.keyAuth.KeyBasedAuth(ctx, *createdKey.Key, []string{"consumer"})
+		require.NoError(t, err)
+
+		// Now LastAccessedAt should be populated
+		result, err = ti.service.ListKeys(ctx, &gen.ListKeysPayload{
+			SessionToken: nil,
+		})
+		require.NoError(t, err)
+
+		var keyAfterAuth *gen.Key
+		for _, k := range result.Keys {
+			if k.ID == createdKey.ID {
+				keyAfterAuth = k
+				break
+			}
+		}
+		require.NotNil(t, keyAfterAuth)
+		require.NotNil(t, keyAfterAuth.LastAccessedAt)
+
+		// Verify the timestamp is in RFC3339 format and is not zero
+		lastAccessed, err := time.Parse(time.RFC3339, *keyAfterAuth.LastAccessedAt)
+		require.NoError(t, err)
+		require.False(t, lastAccessed.IsZero())
+
+		// Verify the timestamp is truncated to minute precision (no seconds)
+		require.Equal(t, 0, lastAccessed.Second())
+		require.Equal(t, 0, lastAccessed.Nanosecond())
 	})
 }

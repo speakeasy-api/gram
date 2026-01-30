@@ -176,13 +176,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // When history is enabled, the thread adapter manages chat IDs instead
   const chatIdRef = useRef<string | null>(null)
 
-  const { data: mcpTools } = useMCPTools({
+  const { data: mcpTools, mcpHeaders } = useMCPTools({
     auth,
     mcp: config.mcp,
     environment: config.environment ?? {},
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
-    chatId: chatIdRef.current ?? undefined,
   })
 
   // Store approval helpers in ref so they can be used in async contexts
@@ -283,6 +282,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             chatIdRef.current = crypto.randomUUID()
           }
           chatId = chatIdRef.current
+        }
+
+        // Mutate the shared headers object so the MCP transport picks up the
+        // chat ID on subsequent tool call requests.
+        if (chatId) {
+          mcpHeaders['Gram-Chat-ID'] = chatId
         }
 
         const context = runtimeRef.current?.thread.getModelContext()

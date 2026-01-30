@@ -1,376 +1,81 @@
-import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence, useMotionValue } from "motion/react";
-import { GridOverlay } from "./grid-overlay";
-import { cn } from "@/lib/utils";
-import { RefreshCcw } from "lucide-react";
+import { PlatformDiagram } from "./platform-diagram";
 
-// Gram TypeScript function example
-const GRAM_FUNCTION = `import { Gram } from "@gram-ai/functions";
-import { createClient } from "@supabase/supabase-js";
-import * as z from "zod/mini";
-
-const gram = new Gram({
-  envSchema: {
-    SUPABASE_URL: z.string(),
-    SUPABASE_ANON_KEY: z.string()
-  },
-}).tool({
-  name: "top_cities_by_property_sales",
-  description: "Get top N UK cities by sales",
-  inputSchema: {
-    count: z._default(z.number(), 10)
-  },
-  async execute(ctx, input) {
-    const supabase = createClient(
-      ctx.env.SUPABASE_URL,
-      ctx.env.SUPABASE_ANON_KEY
-    );
-
-    const { data, error } = await supabase
-      .from("land_registry_price_paid_uk")
-      .select(\`
-        city::text,
-        count(),
-        price.avg(),
-        price.max()
-      \`)
-      .eq("record_status", "A")
-      .not("city", "is", null)
-      .neq("city", "")
-      .order("count", { ascending: false })
-      .limit(input.count);
-
-    if (error != null) {
-      throw new Error(
-        \`Query failed: \${error.message}\`
-      );
-    }
-
-    return ctx.json(data);
-  },
-});
-
-export default gram;`;
-
-type Tool = {
-  id: string;
-  name: string;
-  method: "GET" | "POST" | "PUT" | "DELETE";
-  path: string;
+// Brand gradient colors for dotted background
+const BRAND_COLORS = {
+  blue: "#2873D7",
 };
 
-const GENERATED_TOOLS: Tool[] = [
-  {
-    id: "1",
-    name: "getCitiesByPropertySales",
-    method: "GET",
-    path: "/cities/by-sales",
-  },
-  {
-    id: "2",
-    name: "getPropertyPrices",
-    method: "GET",
-    path: "/properties/prices",
-  },
-  {
-    id: "3",
-    name: "searchProperties",
-    method: "GET",
-    path: "/properties/search",
-  },
-  { id: "4", name: "getPropertyById", method: "GET", path: "/properties/{id}" },
-  {
-    id: "5",
-    name: "getCityStats",
-    method: "GET",
-    path: "/cities/{city}/stats",
-  },
-];
-
-const getMethodColor = (method: string) => {
-  switch (method) {
-    case "GET":
-      return "text-blue-400";
-    case "POST":
-      return "text-emerald-400";
-    case "PUT":
-      return "text-amber-400";
-    case "DELETE":
-      return "text-red-400";
-    default:
-      return "text-zinc-400";
-  }
-};
+// Dotted background component
+function DottedBackground() {
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <pattern
+          id="login-dots-pattern"
+          x="0"
+          y="0"
+          width="24"
+          height="24"
+          patternUnits="userSpaceOnUse"
+        >
+          <circle
+            cx="12"
+            cy="12"
+            r="1"
+            fill={BRAND_COLORS.blue}
+            opacity="0.07"
+          />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#login-dots-pattern)" />
+    </svg>
+  );
+}
 
 export function JourneyDemo() {
-  const [visibleTools, setVisibleTools] = useState<Tool[]>([]);
-  const [hasMoved, setHasMoved] = useState(false);
-  const [hasChangedFocus, setHasChangedFocus] = useState(false);
-  const [animationComplete, setAnimationComplete] = useState(false);
-  const [focusedWindow, setFocusedWindow] = useState<"spec" | "tools">("spec");
-  const [animationKey, setAnimationKey] = useState(0);
-
-  const specX = useMotionValue(-150);
-  const specY = useMotionValue(50);
-  const toolsX = useMotionValue(150);
-  const toolsY = useMotionValue(-50);
-
-  // Animate tools appearing one by one
-  useEffect(() => {
-    const timers: NodeJS.Timeout[] = [];
-
-    // Initial delay before tools start appearing
-    const initialDelay = 1000;
-
-    GENERATED_TOOLS.forEach((tool, index) => {
-      const timer = setTimeout(
-        () => {
-          setVisibleTools((prev) => [...prev, tool]);
-
-          // Mark complete after last tool appears
-          if (index === GENERATED_TOOLS.length - 1) {
-            const completeTimer = setTimeout(() => {
-              setAnimationComplete(true);
-            }, 500);
-            timers.push(completeTimer);
-          }
-        },
-        initialDelay + index * 600,
-      );
-
-      timers.push(timer);
-    });
-
-    return () => timers.forEach(clearTimeout);
-  }, [animationKey]);
-
-  // Track if windows have been moved
-  useEffect(() => {
-    const unsubscribeSpecX = specX.on("change", (latest) => {
-      if (!hasMoved && Math.abs(latest - -150) > 5) {
-        setHasMoved(true);
-      }
-    });
-    const unsubscribeSpecY = specY.on("change", (latest) => {
-      if (!hasMoved && Math.abs(latest - 50) > 5) {
-        setHasMoved(true);
-      }
-    });
-    const unsubscribeToolsX = toolsX.on("change", (latest) => {
-      if (!hasMoved && Math.abs(latest - 150) > 5) {
-        setHasMoved(true);
-      }
-    });
-    const unsubscribeToolsY = toolsY.on("change", (latest) => {
-      if (!hasMoved && Math.abs(latest - -50) > 5) {
-        setHasMoved(true);
-      }
-    });
-
-    return () => {
-      unsubscribeSpecX();
-      unsubscribeSpecY();
-      unsubscribeToolsX();
-      unsubscribeToolsY();
-    };
-  }, [hasMoved, specX, specY, toolsX, toolsY]);
-
-  const handleReset = useCallback(() => {
-    specX.set(-150);
-    specY.set(50);
-    toolsX.set(150);
-    toolsY.set(-50);
-    setHasMoved(false);
-    setHasChangedFocus(false);
-    setAnimationComplete(false);
-    setFocusedWindow("spec");
-    setVisibleTools([]);
-    setAnimationKey((prev) => prev + 1);
-  }, [specX, specY, toolsX, toolsY]);
-
-  const handleWindowClick = useCallback((window: "spec" | "tools") => {
-    setFocusedWindow(window);
-    setHasChangedFocus(true);
-  }, []);
-
   return (
-    <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen bg-black relative border-gradient-primary border-8 border-t-0 border-x-0 p-8">
-      <GridOverlay />
-      <div className="flex-1 flex items-center justify-center w-full relative overflow-hidden scale-[0.65] lg:scale-75 xl:scale-90">
-        {/* OpenAPI Spec Window - left side */}
-        <motion.div
-          drag
-          dragMomentum={false}
-          dragElastic={0}
-          dragConstraints={{
-            left: -400,
-            right: 400,
-            top: -400,
-            bottom: 400,
-          }}
-          className={cn(
-            "absolute w-[450px] bg-zinc-900 border border-zinc-700 rounded-lg overflow-hidden cursor-pointer",
-            focusedWindow === "spec" ? "z-20 shadow-xl" : "z-10 shadow-sm",
-          )}
-          style={{ x: specX, y: specY }}
-          onClick={() => handleWindowClick("spec")}
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+    <div className="hidden md:flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen relative bg-slate-50 overflow-y-auto">
+      {/* Dotted background pattern */}
+      <DottedBackground />
+
+      {/* Soft gradient overlays for depth */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-emerald-50/30 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-t from-white/60 via-transparent to-white/40 pointer-events-none" />
+
+      {/* Main platform diagram */}
+      <PlatformDiagram className="relative z-10 w-full px-8 py-12" />
+
+      {/* Top/Bottom gradient fades */}
+      <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-slate-50 to-transparent pointer-events-none z-20" />
+      <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-slate-50 to-transparent pointer-events-none z-20" />
+
+      {/* Fixed bottom social links */}
+      <div className="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-4 z-30">
+        <a
+          href="https://x.com/speakeasydev"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-slate-400 hover:text-slate-600 transition-colors"
+          aria-label="Follow us on X"
         >
-          {/* Window header */}
-          <div className="bg-zinc-800 border-b border-zinc-700 px-4 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing">
-            <div className="flex gap-1.5">
-              <div
-                className={cn(
-                  "w-3 h-3 rounded-full",
-                  focusedWindow === "spec" ? "bg-red-500/80" : "bg-zinc-600/50",
-                )}
-              />
-              <div
-                className={cn(
-                  "w-3 h-3 rounded-full",
-                  focusedWindow === "spec"
-                    ? "bg-yellow-500/80"
-                    : "bg-zinc-600/50",
-                )}
-              />
-              <div
-                className={cn(
-                  "w-3 h-3 rounded-full",
-                  focusedWindow === "spec"
-                    ? "bg-green-500/80"
-                    : "bg-zinc-600/50",
-                )}
-              />
-            </div>
-            <span className="text-sm text-zinc-400 absolute left-1/2 -translate-x-1/2 font-mono">
-              gram.ts
-            </span>
-            <div className="w-[42px]" />
-          </div>
-
-          {/* Gram function content */}
-          <div className="p-4 h-[350px] overflow-y-auto">
-            <pre className="font-mono text-xs text-zinc-300 whitespace-pre">
-              {GRAM_FUNCTION}
-            </pre>
-          </div>
-        </motion.div>
-
-        {/* Generated Tools Window - right side */}
-        <motion.div
-          drag
-          dragMomentum={false}
-          dragElastic={0}
-          dragConstraints={{
-            left: -400,
-            right: 400,
-            top: -400,
-            bottom: 400,
-          }}
-          className={cn(
-            "absolute w-[450px] bg-zinc-900 border border-zinc-700 rounded-lg overflow-hidden cursor-pointer",
-            focusedWindow === "tools" ? "z-20 shadow-xl" : "z-10 shadow-sm",
-          )}
-          style={{ x: toolsX, y: toolsY }}
-          onClick={() => handleWindowClick("tools")}
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut", delay: 0.2 }}
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+          </svg>
+        </a>
+        <a
+          href="https://github.com/speakeasy-api/gram"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-slate-400 hover:text-slate-600 transition-colors"
+          aria-label="View on GitHub"
         >
-          {/* Window header */}
-          <div className="bg-zinc-800 border-b border-zinc-700 px-4 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing">
-            <div className="flex gap-1.5">
-              <div
-                className={cn(
-                  "w-3 h-3 rounded-full",
-                  focusedWindow === "tools"
-                    ? "bg-red-500/80"
-                    : "bg-zinc-600/50",
-                )}
-              />
-              <div
-                className={cn(
-                  "w-3 h-3 rounded-full",
-                  focusedWindow === "tools"
-                    ? "bg-yellow-500/80"
-                    : "bg-zinc-600/50",
-                )}
-              />
-              <div
-                className={cn(
-                  "w-3 h-3 rounded-full",
-                  focusedWindow === "tools"
-                    ? "bg-green-500/80"
-                    : "bg-zinc-600/50",
-                )}
-              />
-            </div>
-            <span className="text-sm text-zinc-400 absolute left-1/2 -translate-x-1/2 font-mono">
-              Deployed Tools
-            </span>
-            <div className="w-[42px]" />
-          </div>
-
-          {/* Tools content */}
-          <div className="p-4 h-[350px] overflow-y-auto space-y-2">
-            {visibleTools.length === 0 && (
-              <div className="h-full flex items-center justify-center">
-                <span className="text-zinc-500 text-sm">
-                  Generating tools...
-                </span>
-              </div>
-            )}
-
-            <AnimatePresence>
-              {visibleTools.map((tool) => (
-                <motion.div
-                  key={tool.id}
-                  initial={{ opacity: 0, x: -20, scale: 0.9 }}
-                  animate={{ opacity: 1, x: 0, scale: 1 }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 200,
-                    damping: 20,
-                    delay: 0,
-                  }}
-                  className="border border-zinc-700 rounded-md p-3 bg-zinc-800/50 font-mono text-sm"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-white">{tool.name}()</span>
-                    <span
-                      className={cn(
-                        "text-xs font-semibold",
-                        getMethodColor(tool.method),
-                      )}
-                    >
-                      {tool.method}
-                    </span>
-                  </div>
-                  <div className="text-zinc-400 text-xs mt-1">{tool.path}</div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </motion.div>
-
-        {/* Reset button */}
-        <AnimatePresence>
-          {(animationComplete || hasMoved || hasChangedFocus) && (
-            <motion.button
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.2 }}
-              onClick={handleReset}
-              className="absolute bottom-8 right-8 z-50 flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 rounded-lg text-sm text-zinc-300 transition-colors"
-            >
-              <RefreshCcw className="w-4 h-4" />
-              Reset
-            </motion.button>
-          )}
-        </AnimatePresence>
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+          </svg>
+        </a>
       </div>
     </div>
   );

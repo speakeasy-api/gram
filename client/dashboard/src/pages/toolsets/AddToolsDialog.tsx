@@ -177,11 +177,10 @@ export function AddToolsDialog({
       <Dialog.Content className="min-w-3xl max-h-[80vh] flex flex-col">
         <Dialog.Header>
           <Dialog.Title>
-            Add tools to toolset{" "}
-            <span className="font-bold">{toolset.name}</span>
+            Add tools to <span className="font-bold">{toolset.name}</span>
           </Dialog.Title>
           <Dialog.Description>
-            Select tools from your deployments to add to this toolset
+            Select tools from your deployments to add to this server
           </Dialog.Description>
         </Dialog.Header>
 

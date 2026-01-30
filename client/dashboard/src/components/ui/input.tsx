@@ -26,6 +26,7 @@ function Input({
   validate,
   lines,
   requiredPrefix,
+  children,
   ...props
 }: InputProps) {
   const v = (val: string) => {
@@ -149,6 +150,7 @@ function Input({
       ) : (
         <div className="h-[8px]" />
       )}
+      {children}
     </div>
   );
 }

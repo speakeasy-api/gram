@@ -4,16 +4,29 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  McpEnvironmentConfigInput,
+  McpEnvironmentConfigInput$Outbound,
+  McpEnvironmentConfigInput$outboundSchema,
+} from "./mcpenvironmentconfiginput.js";
 
 export type SetMcpMetadataRequestBody = {
   /**
-   * Custom text for the external documentation link button
+   * The default environment to load variables from
    */
-  externalDocumentationText?: string | undefined;
+  defaultEnvironmentId?: string | undefined;
+  /**
+   * The list of environment variables to configure for this MCP
+   */
+  environmentConfigs?: Array<McpEnvironmentConfigInput> | undefined;
   /**
    * A link to external documentation for the MCP install page
    */
   externalDocumentationUrl?: string | undefined;
+  /**
+   * URL to redirect to instead of showing the default installation page
+   */
+  installationOverrideUrl?: string | undefined;
   /**
    * Server instructions returned in the MCP initialize response
    */
@@ -30,8 +43,10 @@ export type SetMcpMetadataRequestBody = {
 
 /** @internal */
 export type SetMcpMetadataRequestBody$Outbound = {
-  external_documentation_text?: string | undefined;
+  default_environment_id?: string | undefined;
+  environment_configs?: Array<McpEnvironmentConfigInput$Outbound> | undefined;
   external_documentation_url?: string | undefined;
+  installation_override_url?: string | undefined;
   instructions?: string | undefined;
   logo_asset_id?: string | undefined;
   toolset_slug: string;
@@ -43,15 +58,20 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SetMcpMetadataRequestBody
 > = z.object({
-  externalDocumentationText: z.string().optional(),
+  defaultEnvironmentId: z.string().optional(),
+  environmentConfigs: z.array(McpEnvironmentConfigInput$outboundSchema)
+    .optional(),
   externalDocumentationUrl: z.string().optional(),
+  installationOverrideUrl: z.string().optional(),
   instructions: z.string().optional(),
   logoAssetId: z.string().optional(),
   toolsetSlug: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    externalDocumentationText: "external_documentation_text",
+    defaultEnvironmentId: "default_environment_id",
+    environmentConfigs: "environment_configs",
     externalDocumentationUrl: "external_documentation_url",
+    installationOverrideUrl: "installation_override_url",
     logoAssetId: "logo_asset_id",
     toolsetSlug: "toolset_slug",
   });

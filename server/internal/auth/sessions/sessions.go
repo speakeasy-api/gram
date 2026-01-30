@@ -20,8 +20,9 @@ import (
 )
 
 type localEnvFile map[string]struct {
-	UserEmail     string `json:"user_email"`
-	Admin         bool   `json:"admin"`
+	UserEmail   string  `json:"user_email"`
+	DisplayName *string `json:"display_name"`
+	Admin       bool    `json:"admin"`
 	Organizations []struct {
 		OrganizationID   string `json:"organization_id"`
 		OrganizationName string `json:"organization_name"`

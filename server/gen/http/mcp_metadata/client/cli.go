@@ -19,7 +19,7 @@ import (
 
 // BuildGetMcpMetadataPayload builds the payload for the mcpMetadata
 // getMcpMetadata endpoint from CLI flags.
-func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcpMetadataGetMcpMetadataSessionToken string, mcpMetadataGetMcpMetadataProjectSlugInput string) (*mcpmetadata.GetMcpMetadataPayload, error) {
+func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcpMetadataGetMcpMetadataApikeyToken string, mcpMetadataGetMcpMetadataSessionToken string, mcpMetadataGetMcpMetadataProjectSlugInput string) (*mcpmetadata.GetMcpMetadataPayload, error) {
 	var err error
 	var toolsetSlug string
 	{
@@ -30,6 +30,12 @@ func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcp
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpMetadataGetMcpMetadataApikeyToken != "" {
+			apikeyToken = &mcpMetadataGetMcpMetadataApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -46,6 +52,7 @@ func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcp
 	}
 	v := &mcpmetadata.GetMcpMetadataPayload{}
 	v.ToolsetSlug = types.Slug(toolsetSlug)
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -54,20 +61,32 @@ func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcp
 
 // BuildSetMcpMetadataPayload builds the payload for the mcpMetadata
 // setMcpMetadata endpoint from CLI flags.
-func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadataSetMcpMetadataSessionToken string, mcpMetadataSetMcpMetadataProjectSlugInput string) (*mcpmetadata.SetMcpMetadataPayload, error) {
+func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadataSetMcpMetadataApikeyToken string, mcpMetadataSetMcpMetadataSessionToken string, mcpMetadataSetMcpMetadataProjectSlugInput string) (*mcpmetadata.SetMcpMetadataPayload, error) {
 	var err error
 	var body SetMcpMetadataRequestBody
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_text\": \"Hic qui.\",\n      \"external_documentation_url\": \"Autem in quia.\",\n      \"instructions\": \"Maiores eligendi.\",\n      \"logo_asset_id\": \"Et ex tempore.\",\n      \"toolset_slug\": \"0lt\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"55c91b21-cb7d-4997-87b0-3386e83f6f06\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Recusandae ducimus.\",\n            \"provided_by\": \"Est tenetur neque vitae.\",\n            \"variable_name\": \"Officiis dolore et tenetur.\"\n         },\n         {\n            \"header_display_name\": \"Recusandae ducimus.\",\n            \"provided_by\": \"Est tenetur neque vitae.\",\n            \"variable_name\": \"Officiis dolore et tenetur.\"\n         }\n      ],\n      \"external_documentation_url\": \"At quaerat autem.\",\n      \"installation_override_url\": \"http://blick.biz/griffin_champlin\",\n      \"instructions\": \"Non asperiores quidem minima enim placeat voluptatum.\",\n      \"logo_asset_id\": \"Commodi qui.\",\n      \"toolset_slug\": \"maf\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", body.ToolsetSlug, utf8.RuneCountInString(body.ToolsetSlug), 40, false))
 		}
+		if body.DefaultEnvironmentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))
+		}
+		if body.InstallationOverrideURL != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.installation_override_url", *body.InstallationOverrideURL, goa.FormatURI))
+		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpMetadataSetMcpMetadataApikeyToken != "" {
+			apikeyToken = &mcpMetadataSetMcpMetadataApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -83,12 +102,70 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		}
 	}
 	v := &mcpmetadata.SetMcpMetadataPayload{
-		ToolsetSlug:               types.Slug(body.ToolsetSlug),
-		LogoAssetID:               body.LogoAssetID,
-		ExternalDocumentationURL:  body.ExternalDocumentationURL,
-		ExternalDocumentationText: body.ExternalDocumentationText,
-		Instructions:              body.Instructions,
+		ToolsetSlug:              types.Slug(body.ToolsetSlug),
+		LogoAssetID:              body.LogoAssetID,
+		ExternalDocumentationURL: body.ExternalDocumentationURL,
+		Instructions:             body.Instructions,
+		DefaultEnvironmentID:     body.DefaultEnvironmentID,
+		InstallationOverrideURL:  body.InstallationOverrideURL,
 	}
+	if body.EnvironmentConfigs != nil {
+		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfigInput, len(body.EnvironmentConfigs))
+		for i, val := range body.EnvironmentConfigs {
+			if val == nil {
+				v.EnvironmentConfigs[i] = nil
+				continue
+			}
+			v.EnvironmentConfigs[i] = marshalMcpEnvironmentConfigInputRequestBodyToTypesMcpEnvironmentConfigInput(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildExportMcpMetadataPayload builds the payload for the mcpMetadata
+// exportMcpMetadata endpoint from CLI flags.
+func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpMetadataExportMcpMetadataApikeyToken string, mcpMetadataExportMcpMetadataSessionToken string, mcpMetadataExportMcpMetadataProjectSlugInput string) (*mcpmetadata.ExportMcpMetadataPayload, error) {
+	var err error
+	var body ExportMcpMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"l2b\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", body.McpSlug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(body.McpSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", body.McpSlug, utf8.RuneCountInString(body.McpSlug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpMetadataExportMcpMetadataApikeyToken != "" {
+			apikeyToken = &mcpMetadataExportMcpMetadataApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpMetadataExportMcpMetadataSessionToken != "" {
+			sessionToken = &mcpMetadataExportMcpMetadataSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpMetadataExportMcpMetadataProjectSlugInput != "" {
+			projectSlugInput = &mcpMetadataExportMcpMetadataProjectSlugInput
+		}
+	}
+	v := &mcpmetadata.ExportMcpMetadataPayload{
+		McpSlug: types.Slug(body.McpSlug),
+	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

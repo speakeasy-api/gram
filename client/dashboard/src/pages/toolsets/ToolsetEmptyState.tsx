@@ -16,8 +16,8 @@ export function ToolsetEmptyState({
 
   return (
     <EmptyState
-      heading="This toolset is empty"
-      description="Add some tools to your toolset to get started."
+      heading="No tools yet"
+      description="Add some tools to get started."
       nonEmptyProjectCTA={cta}
       graphic={<ToolsetsGraphic />}
       graphicClassName="scale-90"

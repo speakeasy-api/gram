@@ -59,7 +59,6 @@ interface ToolsetSectionProps {
   maxTokens?: number;
   onMaxTokensChange?: (tokens: number) => void;
   toolsetSelector?: React.ReactNode;
-  environmentSelector?: React.ReactNode;
   authSettings?: React.ReactNode;
   toolsetInfo?: ToolsetInfo;
   onToolsetUpdate?: (updates: { name?: string; description?: string }) => void;
@@ -240,7 +239,6 @@ export function PlaygroundConfigPanel({
   maxTokens,
   onMaxTokensChange,
   toolsetSelector,
-  environmentSelector,
   authSettings,
   toolsetInfo: _toolsetInfo,
   onToolsetUpdate: _onToolsetUpdate,
@@ -284,20 +282,10 @@ export function PlaygroundConfigPanel({
       {/* Toolset Selector - Always at top */}
       <div className="px-4 py-3 border-b">
         <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
-          Toolset
+          MCP Server
         </Label>
         {toolsetSelector}
       </div>
-
-      {/* Environment Selector */}
-      {environmentSelector && (
-        <div className="px-4 py-3 border-b">
-          <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
-            Environment
-          </Label>
-          {environmentSelector}
-        </div>
-      )}
 
       {/* Auth Settings Section */}
       {authSettings && (

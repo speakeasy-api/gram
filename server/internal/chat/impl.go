@@ -400,6 +400,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		"organization_slug": authCtx.OrganizationSlug,
 		"project_slug":      *authCtx.ProjectSlug,
 		"success":           false,
+		"source":            metadata.Source,
+		"user_agent":        metadata.UserAgent,
+		"origin":            metadata.Origin,
 	}
 
 	defer func() {
@@ -983,6 +986,15 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 	}
 	if r.externalUserID != "" {
 		attrs[attr.ExternalUserIDKey] = r.externalUserID
+	}
+
+	// Extract trace context from the request context
+	spanCtx := trace.SpanContextFromContext(r.ctx)
+	if spanCtx.HasTraceID() {
+		attrs[attr.TraceIDKey] = spanCtx.TraceID().String()
+	}
+	if spanCtx.HasSpanID() {
+		attrs[attr.SpanIDKey] = spanCtx.SpanID().String()
 	}
 
 	toolInfo := telemetry.ToolInfo{

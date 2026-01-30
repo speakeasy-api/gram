@@ -2087,6 +2087,9 @@ type EnvironmentEntryResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Redacted values of the environment variable
 	Value string `form:"value" json:"value" xml:"value"`
+	// Hash of the value to identify matching values across environments without
+	// exposing the actual value
+	ValueHash string `form:"value_hash" json:"value_hash" xml:"value_hash"`
 	// The creation date of the environment entry
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the environment entry was last updated

@@ -418,6 +418,10 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		attrRecorder.RecordStatusCode(interceptor.statusCode)
 		attrRecorder.RecordRequestBody(requestNumBytes)
 		attrRecorder.RecordResponseBody(outputNumBytes)
+		attrRecorder.RecordTraceContext(ctx)
+		if chatID != "" {
+			attrRecorder[attr.GenAIConversationIDKey] = chatID
+		}
 
 		logParams := tm.LogParams{
 			Timestamp: time.Now(),

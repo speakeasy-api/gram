@@ -10,7 +10,7 @@ let value: SetMcpMetadataSecurity = {};
 
 ## Fields
 
-| Field                          | Type                           | Required                       | Description                    |
-| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ |
-| `projectSlugHeaderGramProject` | *string*                       | :heavy_minus_sign:             | N/A                            |
-| `sessionHeaderGramSession`     | *string*                       | :heavy_minus_sign:             | N/A                            |
+| Field                                                                                                | Type                                                                                                 | Required                                                                                             | Description                                                                                          |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `option1`                                                                                            | [operations.SetMcpMetadataSecurityOption1](../../models/operations/setmcpmetadatasecurityoption1.md) | :heavy_minus_sign:                                                                                   | N/A                                                                                                  |
+| `option2`                                                                                            | [operations.SetMcpMetadataSecurityOption2](../../models/operations/setmcpmetadatasecurityoption2.md) | :heavy_minus_sign:                                                                                   | N/A                                                                                                  |

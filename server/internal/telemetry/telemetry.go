@@ -30,8 +30,11 @@ func (t ToolInfo) AsAttributes() map[attr.Key]any {
 		attr.ToolURNKey:        t.URN,
 		attr.NameKey:           t.Name,
 		attr.ProjectIDKey:      t.ProjectID,
-		attr.DeploymentIDKey:   t.DeploymentID,
 		attr.OrganizationIDKey: t.OrganizationID,
+	}
+
+	if t.DeploymentID != "" {
+		attrs[attr.DeploymentIDKey] = t.DeploymentID
 	}
 
 	if t.FunctionID != nil {

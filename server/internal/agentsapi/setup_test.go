@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -78,7 +79,8 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 	enc := testenv.NewEncryptionClient(t)
 
 	// Create environment entries
-	env := environments.NewEnvironmentEntries(logger, conn, enc)
+	mcpMetadataRepo := mcpmetadata_repo.New(conn)
+	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 
 	// Create cache
 	cacheImpl := cache.NewRedisCacheAdapter(redisClient)

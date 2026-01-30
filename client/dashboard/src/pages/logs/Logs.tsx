@@ -19,7 +19,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Button, Icon, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogDetailSheet } from "./LogDetailSheet";
 import { TraceRow } from "./TraceRow";
 
@@ -39,29 +39,32 @@ export default function LogsPage() {
 
   const gramMcpConfig = useGramMcpConfig();
 
-  const logsElementsConfig: ElementsConfig = {
-    ...gramMcpConfig,
-    variant: "standalone",
-    welcome: {
-      title: "Explore Logs",
-      subtitle: "Ask me about your logs! Powered by Elements + Gram MCP",
-      suggestions: [
-        {
-          title: "Failing Tool Calls",
-          label: "Summarize failing tool calls",
-          prompt: "Summarize failing tool calls",
-        },
-        {
-          title: "Visualize top tool calls",
-          label: "Plot tool call counts",
-          prompt: "Plot a chart of the top tool calls and their counts",
-        },
-      ],
-    },
-    theme: {
-      colorScheme: theme === "dark" ? "dark" : "light",
-    },
-  };
+  const logsElementsConfig = useMemo<ElementsConfig>(
+    () => ({
+      ...gramMcpConfig,
+      variant: "standalone",
+      welcome: {
+        title: "Explore Logs",
+        subtitle: "Ask me about your logs! Powered by Elements + Gram MCP",
+        suggestions: [
+          {
+            title: "Failing Tool Calls",
+            label: "Summarize failing tool calls",
+            prompt: "Summarize failing tool calls",
+          },
+          {
+            title: "Visualize top tool calls",
+            label: "Plot tool call counts",
+            prompt: "Plot a chart of the top tool calls and their counts",
+          },
+        ],
+      },
+      theme: {
+        colorScheme: theme === "dark" ? "dark" : "light",
+      },
+    }),
+    [gramMcpConfig, theme],
+  );
 
   const {
     data,
@@ -360,7 +363,7 @@ const useGramMcpConfig = () => {
     },
   );
 
-  const getSession = async (): Promise<string> => {
+  const getSession = useCallback(async (): Promise<string> => {
     const res = await chatSessionsCreate(
       client,
       {
@@ -376,47 +379,62 @@ const useGramMcpConfig = () => {
       },
     );
     return res.value?.clientToken ?? "";
-  };
+  }, [client, projectSlug]);
 
   const gramToolset = useMemo(() => {
     return toolsets?.toolsets.find((toolset) => toolset.slug === "gram-seed");
   }, [toolsets]);
 
-  const baseConfig: ElementsConfig = {
-    projectSlug: "kitchen-sink",
-    tools: {
-      toolsToInclude: ({ toolName }) => toolName.includes("logs"),
-    },
-    api: {
-      sessionFn: getSession,
-    },
-    environment: {
-      GRAM_SERVER_URL: getServerURL(),
-      GRAM_SESSION_HEADER_GRAM_SESSION: session,
-      GRAM_APIKEY_HEADER_GRAM_KEY: "", // This must be set or else the tool call will fail
-      GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT: projectSlug,
-    },
-  };
+  const toolsToInclude = useCallback(
+    ({ toolName }: { toolName: string }) => toolName.includes("logs"),
+    [],
+  );
 
-  if (isLocal) {
-    if (toolsets && !gramToolset) {
-      throw new Error("No gram-seed toolset found--have you run mise seed?");
+  return useMemo(() => {
+    const baseConfig: ElementsConfig = {
+      projectSlug: "kitchen-sink",
+      tools: {
+        toolsToInclude,
+      },
+      api: {
+        sessionFn: getSession,
+      },
+      environment: {
+        GRAM_SERVER_URL: getServerURL(),
+        GRAM_SESSION_HEADER_GRAM_SESSION: session,
+        GRAM_APIKEY_HEADER_GRAM_KEY: "", // This must be set or else the tool call will fail
+        GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT: projectSlug,
+      },
+    };
+
+    if (isLocal) {
+      if (toolsets && !gramToolset) {
+        throw new Error("No gram-seed toolset found--have you run mise seed?");
+      }
+
+      return {
+        ...baseConfig,
+        ...(gramToolset && {
+          mcp: `${getServerURL()}/mcp/${gramToolset?.mcpSlug}`,
+        }),
+      };
     }
+
+    const mcpUrl = getServerURL().includes("app.getgram.ai")
+      ? "https://app.getgram.ai/mcp/speakeasy-team-gram"
+      : "https://dev.getgram.ai/mcp/speakeasy-team-gram";
 
     return {
       ...baseConfig,
-      ...(gramToolset && {
-        mcp: `${getServerURL()}/mcp/${gramToolset?.mcpSlug}`,
-      }),
+      mcp: mcpUrl,
     };
-  }
-
-  const mcpUrl = getServerURL().includes("app.getgram.ai")
-    ? "https://app.getgram.ai/mcp/speakeasy-team-gram"
-    : "https://dev.getgram.ai/mcp/speakeasy-team-gram";
-
-  return {
-    ...baseConfig,
-    mcp: mcpUrl,
-  };
+  }, [
+    getSession,
+    gramToolset,
+    isLocal,
+    projectSlug,
+    session,
+    toolsets,
+    toolsToInclude,
+  ]);
 };

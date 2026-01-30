@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+
+version: "2"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  relative-path-mode: wd
+
+linters:
+  enable:
+    - bodyclose
+    - containedctx
+    - depguard
+    - durationcheck
+    - errcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - exhaustruct
+    - exptostd
+    - forcetypeassert
+    - gochecksumtype
+    - gocritic
+    - gosec
+    - govet
+    - iface
+    - importas
+    - ineffassign
+    - loggercheck
+    - mirror
+    - nolintlint
+    - paralleltest
+    - predeclared
+    - reassign
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - testifylint
+    - thelper
+    - tparallel
+    - unconvert
+    - unused
+    - usetesting
+    - wrapcheck
+
+  settings:
+    wrapcheck:
+      ignore-sigs:
+        - "errors.New("
+        - "errors.Join("
+        - "fmt.Errorf("
+        - "(net/http.RoundTripper).RoundTrip"
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          deny:
+            - pkg: "math/rand$"
+              desc: use math/rand/v2
+            - pkg: "go.uber.org/zap"
+              desc: Use log/slog
+            - pkg: "github.com/jackc/pgx/v4"
+              desc: Use github.com/jackc/pgx/v5
+            - pkg: "gopkg.in/yaml.v2"
+              desc: Use gopkg.in/yaml.v3
+            - pkg: "github.com/urfave/cli/v3"
+              desc: V3 is not ready yet use github.com/urfave/cli/v2
+            - pkg: "github.com/pkg/errors"
+              desc: Should be replaced by standard lib errors package
+    gosec:
+      config:
+        G301: "0755"
+        G302: "0644"
+        G306: "0644"
+    exhaustive:
+      check:
+        - switch
+        - map
+      default-signifies-exhaustive: true
+
+    exhaustruct:
+      exclude:
+        - '^github.com/speakeasy-api/gram/plog\.Theme$'

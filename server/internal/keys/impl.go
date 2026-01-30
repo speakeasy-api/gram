@@ -152,6 +152,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		CreatedByUserID: createdKey.CreatedByUserID,
 		CreatedAt:       createdKey.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:       createdKey.UpdatedAt.Time.Format(time.RFC3339),
+		LastAccessedAt:  nil,
 	}, nil
 }
 
@@ -168,6 +169,12 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 
 	var result []*gen.Key
 	for _, key := range keys {
+		var lastAccessedAt *string
+		if key.LastAccessedAt.Valid {
+			formatted := key.LastAccessedAt.Time.Truncate(time.Minute).Format(time.RFC3339)
+			lastAccessedAt = &formatted
+		}
+
 		result = append(result, &gen.Key{
 			ID:              key.ID.String(),
 			Name:            key.Name,
@@ -179,6 +186,7 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 			CreatedByUserID: key.CreatedByUserID,
 			CreatedAt:       key.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:       key.UpdatedAt.Time.Format(time.RFC3339),
+			LastAccessedAt:  lastAccessedAt,
 		})
 	}
 

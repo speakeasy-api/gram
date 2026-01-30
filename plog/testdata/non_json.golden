@@ -1,0 +1,5 @@
+12:00:00.000 INFO  valid json
+this is not json
+12:00:01.000 INFO  another valid json
+also not json: some log output
+12:00:02.000 ERROR final json

@@ -1,0 +1,7 @@
+00:00:00.000 INFO  complex values
+    duration: 5s
+    timestamp: 2025-01-30T12:00:00Z
+    count: 42
+    ratio: 0.75
+    enabled: true
+

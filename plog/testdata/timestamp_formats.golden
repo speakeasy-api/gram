@@ -1,0 +1,8 @@
+12:00:00.000 INFO  RFC3339 with Z
+12:00:00.000 INFO  RFC3339Nano
+12:00:00.000 INFO  RFC3339 with offset
+12:00:00.000 INFO  Unix seconds
+12:00:00.000 INFO  Unix milliseconds
+12:00:00.000 INFO  Unix microseconds
+12:00:00.000 INFO  Unix nanoseconds
+12:00:00.000 INFO  timestamp key

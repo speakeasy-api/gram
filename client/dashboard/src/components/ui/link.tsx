@@ -13,13 +13,11 @@ export function Link({
 }: LinkProps & { external?: boolean; className?: string; noIcon?: boolean }) {
   let content = children || (typeof to === "string" ? to : undefined);
 
-  if (external) {
+  if (external && !noIcon) {
     content = (
       <Stack direction="horizontal" gap={1} align="center">
         {content}
-        {!noIcon && (
-          <ExternalLinkIcon className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
-        )}
+        <ExternalLinkIcon className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
       </Stack>
     );
   }

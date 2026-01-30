@@ -2,6 +2,10 @@
 
 This document provides an overview of the key directories in the Gram project to help you understand the codebase organization.
 
+<tip>
+If you've just cloned this repository, then consider running `./zero --agent` to get your development environment set up.
+</tip>
+
 ## Boyd's Law of Iteration
 
 > Speed of iteration beats quality of iteration.
@@ -166,12 +170,14 @@ The `server/internal/telemetry` package uses ClickHouse for high-performance ana
 When asked to add a new ClickHouse query to the telemetry package:
 
 1. **Add the query to `queries.sql`** with sqlc formatting:
+
    ```sql
    -- name: GetMetrics :many
    select * from metrics where project_id = ? limit ?;
    ```
 
 2. **Implement in `queries.sql.go`** following the pattern:
+
    ```go
    const getMetrics = `-- name: GetMetrics :many
    select * from metrics where project_id = ? limit ?

@@ -34,8 +34,14 @@ import {
   useLatestDeployment,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
+import { Heading } from "@/components/ui/heading";
 import { Alert, Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
-import { ArrowRightIcon, CheckIcon, RefreshCcwIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CheckIcon,
+  FileTextIcon,
+  RefreshCcwIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router";
 
@@ -46,46 +52,77 @@ export default function UploadOpenAPI() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <UploadAssetStepper.Provider step={1}>
-          <UploadAssetStepper.Frame className="max-w-2xl">
-            <UploadAssetStep step={1}>
-              <UploadAssetStep.Indicator />
-              <UploadAssetStep.Header
-                title="Upload OpenAPI Specification"
-                description="Upload your OpenAPI specification to get started."
-              />
-              <UploadAssetStep.Content>
-                <UploadFileStep />
-              </UploadAssetStep.Content>
-            </UploadAssetStep>
-
-            <UploadAssetStep step={2}>
-              <UploadAssetStep.Indicator />
-              <UploadAssetStep.Header
-                title="Name Your API"
-                description="The tools generated will be scoped under this name."
-              />
-              <UploadAssetStep.Content>
-                <NameDeploymentStep />
-              </UploadAssetStep.Content>
-            </UploadAssetStep>
-
-            <UploadAssetStep step={3}>
-              <UploadAssetStep.Indicator />
-              <UploadAssetStep.Header
-                title="Generate Tools"
-                description="Gram will generate tools for your API."
-              />
-              <UploadAssetStep.Content>
-                <DeployStep />
-              </UploadAssetStep.Content>
-            </UploadAssetStep>
-
-            <Stack direction="horizontal" justify="start">
-              <FooterActions />
+        <div className="max-w-2xl">
+          {/* Header */}
+          <Stack gap={3} className="mb-8">
+            <Stack direction="horizontal" gap={3} align="center">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                <FileTextIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <Heading variant="h3">Import OpenAPI Specification</Heading>
             </Stack>
-          </UploadAssetStepper.Frame>
-        </UploadAssetStepper.Provider>
+            <Type muted>
+              Upload your OpenAPI spec to automatically generate tools for every
+              endpoint. Supports JSON and YAML formats.
+            </Type>
+          </Stack>
+
+          {/* Stepper */}
+          <UploadAssetStepper.Provider step={1}>
+            <UploadAssetStepper.Frame>
+              <UploadAssetStep step={1}>
+                <UploadAssetStep.Indicator />
+                <UploadAssetStep.Header
+                  title="Upload OpenAPI Specification"
+                  description="Upload your OpenAPI specification to get started."
+                />
+                <UploadAssetStep.Content>
+                  <UploadFileStep />
+                </UploadAssetStep.Content>
+              </UploadAssetStep>
+
+              <UploadAssetStep step={2}>
+                <UploadAssetStep.Indicator />
+                <UploadAssetStep.Header
+                  title="Name Your API"
+                  description="The tools generated will be scoped under this name."
+                />
+                <UploadAssetStep.Content>
+                  <NameDeploymentStep />
+                </UploadAssetStep.Content>
+              </UploadAssetStep>
+
+              <UploadAssetStep step={3}>
+                <UploadAssetStep.Indicator />
+                <UploadAssetStep.Header
+                  title="Generate Tools"
+                  description="Gram will generate tools for your API."
+                />
+                <UploadAssetStep.Content>
+                  <DeployStep />
+                </UploadAssetStep.Content>
+              </UploadAssetStep>
+
+              <Stack direction="horizontal" justify="start">
+                <FooterActions />
+              </Stack>
+            </UploadAssetStepper.Frame>
+          </UploadAssetStepper.Provider>
+
+          {/* Help text */}
+          <Type small muted className="mt-6">
+            Don't have an OpenAPI spec?{" "}
+            <a
+              href="https://www.speakeasy.com/docs/gram"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Learn how to create one
+            </a>{" "}
+            or try our sample specs.
+          </Type>
+        </div>
       </Page.Body>
     </Page>
   );
@@ -102,7 +139,7 @@ function FooterActions() {
       return null;
     case "completed":
       return (
-        <Button variant="primary" onClick={() => routes.toolsets.goTo()}>
+        <Button variant="primary" onClick={() => routes.mcp.goTo()}>
           Continue
           <ArrowRightIcon className="size-4" />
         </Button>

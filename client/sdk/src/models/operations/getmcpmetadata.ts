@@ -5,9 +5,19 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 
+export type GetMcpMetadataSecurityOption1 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type GetMcpMetadataSecurityOption2 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
 export type GetMcpMetadataSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: GetMcpMetadataSecurityOption1 | undefined;
+  option2?: GetMcpMetadataSecurityOption2 | undefined;
 };
 
 export type GetMcpMetadataRequest = {
@@ -15,6 +25,10 @@ export type GetMcpMetadataRequest = {
    * The slug of the toolset associated with this install page metadata
    */
   toolsetSlug: string;
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -26,9 +40,71 @@ export type GetMcpMetadataRequest = {
 };
 
 /** @internal */
+export type GetMcpMetadataSecurityOption1$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const GetMcpMetadataSecurityOption1$outboundSchema: z.ZodType<
+  GetMcpMetadataSecurityOption1$Outbound,
+  z.ZodTypeDef,
+  GetMcpMetadataSecurityOption1
+> = z.object({
+  apikeyHeaderGramKey: z.string(),
+  projectSlugHeaderGramProject: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+  });
+});
+
+export function getMcpMetadataSecurityOption1ToJSON(
+  getMcpMetadataSecurityOption1: GetMcpMetadataSecurityOption1,
+): string {
+  return JSON.stringify(
+    GetMcpMetadataSecurityOption1$outboundSchema.parse(
+      getMcpMetadataSecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type GetMcpMetadataSecurityOption2$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const GetMcpMetadataSecurityOption2$outboundSchema: z.ZodType<
+  GetMcpMetadataSecurityOption2$Outbound,
+  z.ZodTypeDef,
+  GetMcpMetadataSecurityOption2
+> = z.object({
+  projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
+}).transform((v) => {
+  return remap$(v, {
+    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
+  });
+});
+
+export function getMcpMetadataSecurityOption2ToJSON(
+  getMcpMetadataSecurityOption2: GetMcpMetadataSecurityOption2,
+): string {
+  return JSON.stringify(
+    GetMcpMetadataSecurityOption2$outboundSchema.parse(
+      getMcpMetadataSecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type GetMcpMetadataSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: GetMcpMetadataSecurityOption1$Outbound | undefined;
+  Option2?: GetMcpMetadataSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -37,12 +113,14 @@ export const GetMcpMetadataSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   GetMcpMetadataSecurity
 > = z.object({
-  projectSlugHeaderGramProject: z.string().optional(),
-  sessionHeaderGramSession: z.string().optional(),
+  option1: z.lazy(() => GetMcpMetadataSecurityOption1$outboundSchema)
+    .optional(),
+  option2: z.lazy(() => GetMcpMetadataSecurityOption2$outboundSchema)
+    .optional(),
 }).transform((v) => {
   return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+    option1: "Option1",
+    option2: "Option2",
   });
 });
 
@@ -57,6 +135,7 @@ export function getMcpMetadataSecurityToJSON(
 /** @internal */
 export type GetMcpMetadataRequest$Outbound = {
   toolset_slug: string;
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
@@ -68,11 +147,13 @@ export const GetMcpMetadataRequest$outboundSchema: z.ZodType<
   GetMcpMetadataRequest
 > = z.object({
   toolsetSlug: z.string(),
+  gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     toolsetSlug: "toolset_slug",
+    gramKey: "Gram-Key",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
   });

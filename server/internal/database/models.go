@@ -38,6 +38,7 @@ type ApiKey struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	Deleted         bool
+	LastAccessedAt  pgtype.Timestamptz
 }
 
 type Asset struct {
@@ -396,6 +397,7 @@ type McpMetadatum struct {
 	Instructions              pgtype.Text
 	HeaderDisplayNames        []byte
 	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 }

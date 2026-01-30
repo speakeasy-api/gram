@@ -16,7 +16,7 @@ interface ViewSourceDialogContentProps {
   isOpenAPI: boolean;
 }
 
-function useFetchSourceContent(
+export function useFetchSourceContent(
   source: { assetId: string } | null,
   isOpenAPI: boolean,
   project: { id: string },

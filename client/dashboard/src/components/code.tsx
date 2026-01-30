@@ -87,6 +87,9 @@ export function CodeBlock({
               <Copy className="w-4 h-4" />
             )}
           </Button.LeftIcon>
+          <Button.Text className="sr-only">
+            {copied ? "Copied" : "Copy code"}
+          </Button.Text>
         </Button>
       )}
     </div>

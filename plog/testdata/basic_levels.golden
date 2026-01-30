@@ -1,0 +1,6 @@
+12:00:00.000 TRACE trace message
+12:00:01.000 DEBUG debug message
+12:00:02.000 INFO  info message
+12:00:03.000 WARN  warning message
+12:00:04.000 ERROR error message
+12:00:05.000 FATAL fatal message

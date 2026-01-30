@@ -44,6 +44,8 @@ type CreateKeyResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// When the key was last accessed.
+	LastAccessedAt *string `form:"last_accessed_at,omitempty" json:"last_accessed_at,omitempty" xml:"last_accessed_at,omitempty"`
 }
 
 // ListKeysResponseBody is the type of the "keys" service "listKeys" endpoint
@@ -805,6 +807,8 @@ type KeyResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// When the key was last accessed.
+	LastAccessedAt *string `form:"last_accessed_at,omitempty" json:"last_accessed_at,omitempty" xml:"last_accessed_at,omitempty"`
 }
 
 // ValidateKeyOrganizationResponseBody is used to define fields on response
@@ -859,6 +863,7 @@ func NewCreateKeyKeyOK(body *CreateKeyResponseBody) *keys.Key {
 		Key:             body.Key,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
+		LastAccessedAt:  body.LastAccessedAt,
 	}
 	v.Scopes = make([]string, len(body.Scopes))
 	for i, val := range body.Scopes {
@@ -1527,6 +1532,9 @@ func ValidateCreateKeyResponseBody(body *CreateKeyResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.LastAccessedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_accessed_at", *body.LastAccessedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -2565,6 +2573,9 @@ func ValidateKeyResponseBody(body *KeyResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.LastAccessedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_accessed_at", *body.LastAccessedAt, goa.FormatDateTime))
 	}
 	return
 }

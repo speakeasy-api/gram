@@ -19,9 +19,10 @@ import (
 
 // Server lists the mcpMetadata service endpoint HTTP handlers.
 type Server struct {
-	Mounts         []*MountPoint
-	GetMcpMetadata http.Handler
-	SetMcpMetadata http.Handler
+	Mounts            []*MountPoint
+	GetMcpMetadata    http.Handler
+	SetMcpMetadata    http.Handler
+	ExportMcpMetadata http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -53,9 +54,11 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetMcpMetadata", "GET", "/rpc/mcpMetadata.get"},
 			{"SetMcpMetadata", "POST", "/rpc/mcpMetadata.set"},
+			{"ExportMcpMetadata", "POST", "/rpc/mcpMetadata.export"},
 		},
-		GetMcpMetadata: NewGetMcpMetadataHandler(e.GetMcpMetadata, mux, decoder, encoder, errhandler, formatter),
-		SetMcpMetadata: NewSetMcpMetadataHandler(e.SetMcpMetadata, mux, decoder, encoder, errhandler, formatter),
+		GetMcpMetadata:    NewGetMcpMetadataHandler(e.GetMcpMetadata, mux, decoder, encoder, errhandler, formatter),
+		SetMcpMetadata:    NewSetMcpMetadataHandler(e.SetMcpMetadata, mux, decoder, encoder, errhandler, formatter),
+		ExportMcpMetadata: NewExportMcpMetadataHandler(e.ExportMcpMetadata, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -66,6 +69,7 @@ func (s *Server) Service() string { return "mcpMetadata" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetMcpMetadata = m(s.GetMcpMetadata)
 	s.SetMcpMetadata = m(s.SetMcpMetadata)
+	s.ExportMcpMetadata = m(s.ExportMcpMetadata)
 }
 
 // MethodNames returns the methods served.
@@ -75,6 +79,7 @@ func (s *Server) MethodNames() []string { return mcpmetadata.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetMcpMetadataHandler(mux, h.GetMcpMetadata)
 	MountSetMcpMetadataHandler(mux, h.SetMcpMetadata)
+	MountExportMcpMetadataHandler(mux, h.ExportMcpMetadata)
 }
 
 // Mount configures the mux to serve the mcpMetadata endpoints.
@@ -165,6 +170,59 @@ func NewSetMcpMetadataHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setMcpMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpMetadata")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountExportMcpMetadataHandler configures the mux to serve the "mcpMetadata"
+// service "exportMcpMetadata" endpoint.
+func MountExportMcpMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpMetadata.export", otelhttp.WithRouteTag("/rpc/mcpMetadata.export", f).ServeHTTP)
+}
+
+// NewExportMcpMetadataHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpMetadata" service "exportMcpMetadata" endpoint.
+func NewExportMcpMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeExportMcpMetadataRequest(mux, decoder)
+		encodeResponse = EncodeExportMcpMetadataResponse(encoder)
+		encodeError    = EncodeExportMcpMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "exportMcpMetadata")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpMetadata")
 		payload, err := decodeRequest(r)
 		if err != nil {

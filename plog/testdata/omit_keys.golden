@@ -1,0 +1,6 @@
+12:00:00.000 INFO  user login
+    path: /login
+
+12:00:01.000 INFO  api call
+    endpoint: /api/users
+

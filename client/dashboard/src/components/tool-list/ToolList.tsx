@@ -878,7 +878,7 @@ export function ToolList({
 
                     return (
                       <ToolRow
-                        key={tool.canonicalName}
+                        key={tool.toolUrn}
                         groupName={group.title}
                         availableToolUrns={toolset?.tools
                           ?.map((t) => t.toolUrn)

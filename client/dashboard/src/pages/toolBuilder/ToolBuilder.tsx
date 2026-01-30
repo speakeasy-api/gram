@@ -762,9 +762,9 @@ const StepCard = ({
                 className="mr-[-4px]"
                 aria-label="Move up"
               >
-                <Button.Icon>
+                <Button.LeftIcon>
                   <Icon name="arrow-up" className="h-3 w-3" />
-                </Button.Icon>
+                </Button.LeftIcon>
               </Button>
             )}
             {moveDown && (
@@ -775,9 +775,9 @@ const StepCard = ({
                 className="mr-[-4px]"
                 aria-label="Move down"
               >
-                <Button.Icon>
+                <Button.LeftIcon>
                   <Icon name="arrow-down" className="h-3 w-3" />
-                </Button.Icon>
+                </Button.LeftIcon>
               </Button>
             )}
             <DeleteButton size="sm" tooltip="Delete step" onClick={remove} />

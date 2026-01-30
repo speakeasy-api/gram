@@ -29,7 +29,7 @@ INSERT INTO api_keys (
   , $6
   , $7::text[]
 )
-RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
 `
 
 type CreateAPIKeyParams struct {
@@ -66,6 +66,7 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+		&i.LastAccessedAt,
 	)
 	return i, err
 }
@@ -89,7 +90,7 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) erro
 }
 
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
-SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys
 WHERE key_hash = $1
   AND deleted IS FALSE
@@ -111,12 +112,13 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (ApiKe
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+		&i.LastAccessedAt,
 	)
 	return i, err
 }
 
 const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
-SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -145,6 +147,7 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+			&i.LastAccessedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -154,4 +157,19 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec
+UPDATE api_keys
+SET last_accessed_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS FALSE
+  -- This check reduces writes to the database to at most once per minute per
+  -- key as a way to mitigate excessive write spikes.
+  AND (last_accessed_at IS NULL OR last_accessed_at < clock_timestamp() - interval '1 minute')
+`
+
+func (q *Queries) UpdateAPIKeyLastAccessedAt(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, updateAPIKeyLastAccessedAt, id)
+	return err
 }

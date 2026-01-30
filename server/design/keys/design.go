@@ -132,6 +132,10 @@ var KeyModel = Type("Key", func() {
 		Description("When the key was last updated.")
 		Format(FormatDateTime)
 	})
+	Attribute("last_accessed_at", String, func() {
+		Description("When the key was last accessed.")
+		Format(FormatDateTime)
+	})
 })
 
 var VerifyKeyResult = Type("ValidateKeyResult", func() {

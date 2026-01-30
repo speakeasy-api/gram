@@ -79,7 +79,8 @@ export function ToolsList(props: { deploymentId?: string }) {
   const tagsFilter = (
     <MultiSelect
       options={tagFilterItems}
-      onValueChange={setTagFilters}
+      selectedValues={tagFilters}
+      setSelectedValues={setTagFilters}
       placeholder="Filter by tag"
       className="w-fit capitalize"
     />
