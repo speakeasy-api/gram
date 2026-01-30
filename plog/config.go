@@ -114,6 +114,7 @@ func DefaultConfig() *Config {
 		Theme:         DefaultTheme(),
 		OmitKeys:      []string{},
 		AddSource:     false,
+		HideTimestamp: false,
 		omitMatcher:   nil,
 	}
 }
