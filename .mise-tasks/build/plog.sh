@@ -19,4 +19,4 @@ CGO_ENABLED=0 go \
     -trimpath \
     -ldflags="-s -w" \
     -o bin/plog \
-    ./cmd
+    ./cmd/plog
