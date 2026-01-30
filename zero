@@ -58,6 +58,7 @@ if $agent_mode && ! command -v mise &> /dev/null; then
     echo "⏳ Installing mise..."
     curl -fsSL https://mise.run | sh
     export PATH="$HOME/.local/bin:$PATH"
+    mise trust
 else
     check_command "mise" "
     Install it from here: https://mise.jdx.dev/
