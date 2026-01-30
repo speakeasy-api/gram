@@ -7,6 +7,9 @@
 ## Interfaces
 
 - [ShareButtonProps](interfaces/ShareButtonProps.md)
+- [CassetteMessage](interfaces/CassetteMessage.md)
+- [Cassette](interfaces/Cassette.md)
+- [ReplayOptions](interfaces/ReplayOptions.md)
 - [ErrorContext](interfaces/ErrorContext.md)
 - [ElementsConfig](interfaces/ElementsConfig.md)
 - [ErrorTrackingConfigOption](interfaces/ErrorTrackingConfigOption.md)
@@ -28,6 +31,7 @@
 
 ## Type Aliases
 
+- [CassettePart](type-aliases/CassettePart.md)
 - [FrontendTool](type-aliases/FrontendTool.md)
 - [GetSessionFn](type-aliases/GetSessionFn.md)
 - [VARIANTS](type-aliases/VARIANTS.md)
@@ -49,8 +53,10 @@
 
 - [Chat](functions/Chat.md)
 - [ChatHistory](functions/ChatHistory.md)
+- [Replay](functions/Replay.md)
 - [ShareButton](functions/ShareButton.md)
 - [GramElementsProvider](functions/GramElementsProvider.md)
+- [useRecordCassette](functions/useRecordCassette.md)
 - [useThreadId](functions/useThreadId.md)
 - [trackError](functions/trackError.md)
 - [defineFrontendTool](functions/defineFrontendTool.md)
