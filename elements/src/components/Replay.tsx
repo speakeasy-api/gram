@@ -69,7 +69,7 @@ export const Replay = ({
 
   const transport = useMemo(
     () => createReplayTransport(cassette, replayOptions),
-    [cassette]
+    [cassette, typingSpeed, userMessageDelay, assistantStartDelay, onComplete]
   )
 
   const runtime = useChatRuntime({ transport })
@@ -176,6 +176,11 @@ async function waitForRunComplete(
           resolve()
         }
       })
+      // Re-check in case it stopped between getState and subscribe
+      if (!runtime.getState().isRunning) {
+        unsub()
+        resolve()
+      }
     })
   }
 }
