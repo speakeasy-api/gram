@@ -240,7 +240,7 @@ function SyntaxHighlightedCode({
     }
   }, [displayText, language, canHighlight])
 
-  const showMoreButton = (preview.truncated && !expanded) && (
+  const showMoreButton = preview.truncated && !expanded && (
     <button
       type="button"
       onClick={() => setExpanded(true)}
@@ -253,9 +253,7 @@ function SyntaxHighlightedCode({
   if (!canHighlight || !highlightedCode) {
     return (
       <div className={cn('w-full', className)}>
-        <pre
-          className="w-full max-h-[300px] overflow-y-auto bg-slate-800/90 px-4 py-3 text-sm whitespace-pre-wrap text-slate-100"
-        >
+        <pre className="max-h-[300px] w-full overflow-y-auto bg-slate-800/90 px-4 py-3 text-sm whitespace-pre-wrap text-slate-100">
           {displayText}
         </pre>
         {showMoreButton}

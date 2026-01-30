@@ -428,5 +428,13 @@ const useGramMcpConfig = () => {
       ...baseConfig,
       mcp: mcpUrl,
     };
-  }, [getSession, gramToolset, isLocal, projectSlug, session, toolsets, toolsToInclude]);
+  }, [
+    getSession,
+    gramToolset,
+    isLocal,
+    projectSlug,
+    session,
+    toolsets,
+    toolsToInclude,
+  ]);
 };
