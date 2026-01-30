@@ -4,7 +4,9 @@ import {
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CircleIcon,
   CopyIcon,
+  DownloadIcon,
   PencilIcon,
   Settings2,
   Square,
@@ -55,6 +57,8 @@ import { useThemeProps } from '@/hooks/useThemeProps'
 import { EASE_OUT_QUINT } from '@/lib/easing'
 import { MODELS } from '@/lib/models'
 import { cn } from '@/lib/utils'
+import { useRecordCassette } from '@/hooks/useRecordCassette'
+import { useReplayContext } from '@/contexts/ReplayContext'
 import { ConnectionStatusIndicatorSafe } from './connection-status-indicator'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import {
@@ -468,6 +472,9 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
   const { isResolved, setUnresolved } = useChatResolution()
   const r = useRadius()
   const d = useDensity()
+  const replayCtx = useReplayContext()
+
+  const isReplay = replayCtx?.isReplay ?? false
   const composerConfig = config.composer ?? {
     placeholder: 'Send a message...',
     attachments: true,
@@ -522,7 +529,8 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
           ref={composerRootRef}
           className={cn(
             'aui-composer-root group/input-group border-input bg-background has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-ring/5 dark:bg-background relative flex min-h-[118px] w-full flex-col border px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:ring-1',
-            r('xl')
+            r('xl'),
+            isReplay && 'pointer-events-none opacity-50'
           )}
         >
           {composerConfig.attachments && <ComposerAttachments />}
@@ -537,7 +545,8 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
               d('text-base')
             )}
             rows={1}
-            autoFocus
+            autoFocus={!isReplay}
+            disabled={isReplay}
             aria-label="Message input"
           />
           <ComposerAction />
@@ -637,13 +646,90 @@ const ComposerModelPicker: FC = () => {
   )
 }
 
+const CASSETTE_RECORDING_ENABLED =
+  import.meta.env.VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING === 'true'
+
+const ComposerCassetteRecorder: FC = () => {
+  const [popoverOpen, setPopoverOpen] = useState(false)
+  const [tooltipOpen, setTooltipOpen] = useState(false)
+  const { isRecording, messageCount, startRecording, stopRecording, download } =
+    useRecordCassette()
+
+  useEffect(() => {
+    if (popoverOpen) setTooltipOpen(false)
+  }, [popoverOpen])
+
+  return (
+    <TooltipProvider>
+      <Tooltip open={tooltipOpen && !popoverOpen} onOpenChange={setTooltipOpen}>
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                data-state={popoverOpen ? 'open' : 'closed'}
+                className={cn(
+                  'aui-composer-cassette-recorder data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30 flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold',
+                  isRecording && 'text-red-500'
+                )}
+                aria-label="Cassette Recorder"
+              >
+                <CircleIcon
+                  className={cn(
+                    'size-5 stroke-[1.5px]',
+                    isRecording && 'animate-pulse fill-red-500 text-red-500'
+                  )}
+                />
+              </Button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <PopoverContent side="top" align="start" className="w-64 p-3">
+            <div className="flex flex-col gap-3">
+              <div className="text-sm font-medium">Cassette Recorder</div>
+              {!isRecording ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full justify-start gap-2"
+                  onClick={startRecording}
+                >
+                  <CircleIcon className="size-3 fill-red-500 text-red-500" />
+                  Start Recording
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full justify-start gap-2"
+                  onClick={() => {
+                    stopRecording()
+                    download()
+                    setPopoverOpen(false)
+                  }}
+                >
+                  <DownloadIcon className="size-3" />
+                  Stop &amp; Download
+                </Button>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+        <TooltipContent side="bottom" align="start">
+          {isRecording ? 'Recording…' : 'Cassette Recorder'}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 const ComposerAction: FC = () => {
   const { config } = useElements()
   const r = useRadius()
   const composerConfig = config.composer ?? { attachments: true }
   return (
     <div className="aui-composer-action-wrapper relative mx-1 mt-2 mb-2 flex items-center justify-between">
-      <div className="aui-composer-action-wrapper-inner flex items-center">
+      <div className="aui-composer-action-wrapper-inner text-muted-foreground flex items-center">
         {composerConfig.attachments ? (
           <ComposerAddAttachment />
         ) : (
@@ -653,6 +739,8 @@ const ComposerAction: FC = () => {
         {config.model?.showModelPicker && !config.languageModel && (
           <ComposerModelPicker />
         )}
+
+        {CASSETTE_RECORDING_ENABLED && <ComposerCassetteRecorder />}
       </div>
 
       <ThreadPrimitive.If running={false}>
