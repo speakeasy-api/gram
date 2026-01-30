@@ -69,8 +69,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
 
     -- OTel Timestamp fields
     time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock.' CODEC(Delta, ZSTD),
-    observed_timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(observed_time_unix_nano) COMMENT 'Human-readable timestamp derived from observed_time_unix_nano.',
     observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system.' CODEC(Delta, ZSTD),
+    observed_timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(observed_time_unix_nano) COMMENT 'Human-readable timestamp derived from observed_time_unix_nano.',
     
     -- OTel Severity
     severity_text LowCardinality(Nullable(String)) COMMENT 'Text representation of severity (DEBUG, INFO, WARN, ERROR, FATAL).',
