@@ -23,8 +23,9 @@ INSERT INTO telemetry_logs (
     gram_function_id,
     gram_urn,
     service_name,
-    service_version
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    service_version,
+    gram_chat_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertTelemetryLogParams struct {
@@ -43,6 +44,7 @@ type InsertTelemetryLogParams struct {
 	GramURN        string
 	ServiceName    string
 	ServiceVersion *string
+	GramChatID     *string
 }
 
 //nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -66,6 +68,7 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 		arg.GramURN,
 		arg.ServiceName,
 		arg.ServiceVersion,
+		arg.GramChatID,
 	)
 }
 
@@ -85,7 +88,8 @@ SELECT
     gram_function_id,
     gram_urn,
     service_name,
-    service_version
+    service_version,
+    gram_chat_id
 FROM telemetry_logs
 WHERE gram_project_id = ?
     AND time_unix_nano >= ?

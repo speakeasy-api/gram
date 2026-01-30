@@ -63,6 +63,7 @@ type TelemetryLog struct {
 	GramURN          string  `ch:"gram_urn"`           // String
 	ServiceName      string  `ch:"service_name"`       // LowCardinality(String)
 	ServiceVersion   *string `ch:"service_version"`    // Nullable(String)
+	GramChatID       *string `ch:"gram_chat_id"`       // Nullable(String)
 }
 
 // TraceSummary represents an aggregated view of a trace (one row per trace).

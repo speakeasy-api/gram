@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/stretchr/testify/require"
@@ -301,6 +302,108 @@ func TestCreateLog_NoOpWhenFeatureDisabled(t *testing.T) {
 		})
 		return err == nil && len(logs) > 0
 	}, 300*time.Millisecond, 50*time.Millisecond, "expected no logs when feature is disabled")
+}
+
+func TestCreateLog_EmptyDeploymentIDNotInAttributes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("GET")
+	attrs.RecordStatusCode(200)
+
+	toolInfo := newTestToolInfo(ti.orgID)
+	toolInfo.DeploymentID = ""
+	timestamp := time.Now().UTC()
+
+	ti.service.CreateLog(telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.Nil(t, log.GramDeploymentID)
+	// The deployment ID key should not appear in resource_attributes when empty
+	require.NotContains(t, log.ResourceAttributes, "gram.deployment.id")
+}
+
+func TestCreateLog_ChatIDColumn(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	chatID := uuid.New().String()
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("GET")
+	attrs.RecordStatusCode(200)
+	attrs[attr.GenAIConversationIDKey] = chatID
+
+	toolInfo := newTestToolInfo(ti.orgID)
+	timestamp := time.Now().UTC()
+
+	ti.service.CreateLog(telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.NotNil(t, log.GramChatID)
+	require.Equal(t, chatID, *log.GramChatID)
+}
+
+func TestCreateLog_NilChatIDWhenNotProvided(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("GET")
+	attrs.RecordStatusCode(200)
+
+	toolInfo := newTestToolInfo(ti.orgID)
+	timestamp := time.Now().UTC()
+
+	ti.service.CreateLog(telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.Nil(t, log.GramChatID)
+}
+
+func TestCreateLog_TraceAndSpanIDColumns(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	traceID := "0af7651916cd43dd8448eb211c80319c" // 32 hex chars
+	spanID := "b7ad6b7169203331"                   // 16 hex chars
+
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("GET")
+	attrs.RecordStatusCode(200)
+	attrs[attr.TraceIDKey] = traceID
+	attrs[attr.SpanIDKey] = spanID
+
+	toolInfo := newTestToolInfo(ti.orgID)
+	timestamp := time.Now().UTC()
+
+	ti.service.CreateLog(telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.NotNil(t, log.TraceID)
+	require.Equal(t, traceID, *log.TraceID)
+	require.NotNil(t, log.SpanID)
+	require.Equal(t, spanID, *log.SpanID)
 }
 
 func newTestToolInfo(orgID string) telemetry.ToolInfo {

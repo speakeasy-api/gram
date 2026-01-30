@@ -988,6 +988,15 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 		attrs[attr.ExternalUserIDKey] = r.externalUserID
 	}
 
+	// Extract trace context from the request context
+	spanCtx := trace.SpanContextFromContext(r.ctx)
+	if spanCtx.HasTraceID() {
+		attrs[attr.TraceIDKey] = spanCtx.TraceID().String()
+	}
+	if spanCtx.HasSpanID() {
+		attrs[attr.SpanIDKey] = spanCtx.SpanID().String()
+	}
+
 	toolInfo := telemetry.ToolInfo{
 		ID:             r.chatID.String(),
 		URN:            r.chatID.URN(),
