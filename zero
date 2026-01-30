@@ -2,6 +2,23 @@
 
 set -e
 
+# Parse command line arguments
+agent_mode=false
+for arg in "$@"; do
+    case $arg in
+        --agent)
+            agent_mode=true
+            shift
+            ;;
+    esac
+done
+
+interactive_only() {
+    if ! $agent_mode; then
+        "$@"
+    fi
+}
+
 onboarding_pass=true
 
 # region: Onboarding checks
@@ -36,15 +53,25 @@ check_command() {
     fi
 }
 
-check_command "mise" "
-Install it from here: https://mise.jdx.dev/
-- Make sure to update your .zprofile (zsh), .profile (bash), ...
-- Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion
-"
+# Install mise automatically in agent mode
+if $agent_mode && ! command -v mise &> /dev/null; then
+    echo "⏳ Installing mise..."
+    curl -fsSL https://mise.run | sh
+    export PATH="$HOME/.local/bin:$PATH"
+else
+    check_command "mise" "
+    Install it from here: https://mise.jdx.dev/
+    - Make sure to update your .zprofile (zsh), .profile (bash), ...
+    - Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion
+    "
+fi
 
-check_command "docker" "
-Install it from here: https://www.docker.com/
-"
+
+if ! $agent_mode; then
+    check_command "docker" "
+    Install it from here: https://www.docker.com/
+    "
+fi
 
 if [ $onboarding_pass = "false" ]; then
     echo "❌ Onboarding checks failed. Please fix the issues above and rerun this script."
@@ -60,12 +87,12 @@ echo -e "\n⏳ Installing dependencies"
 mise run install
 
 echo -e "\n⏳ Setting up API keys and secrets"
-mise run zero:github
-mise run zero:openrouter
+interactive_only mise run zero:github
+interactive_only mise run zero:openrouter
+interactive_only mise run zero:melange
+interactive_only mise run zero:fly
 mise run zero:encryption
 mise run zero:tls
-mise run zero:melange
-mise run zero:fly
 
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk
@@ -84,10 +111,13 @@ mise clickhouse:migrate
 mise zero:summary
 
 echo -e "\n✅ All set up!"
-echo "Want me to start the server and dashboard (\`mise run start\`)?"
-echo -n "[y/N] "
-read -r answer
-answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
-if [ "$answer" = "y" ]; then
-  exec mise run start
+
+if ! $agent_mode; then
+    echo "Want me to start the server and dashboard (\`mise run start\`)?"
+    echo -n "[y/N] "
+    read -r answer
+    answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
+    if [ "$answer" = "y" ]; then
+    exec mise run start
+    fi
 fi
