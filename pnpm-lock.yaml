@@ -428,9 +428,6 @@ importers:
       '@json-render/react':
         specifier: ^0.2.0
         version: 0.2.0(react@19.2.3)(zod@4.2.1)
-      '@modelcontextprotocol/sdk':
-        specifier: 'catalog:'
-        version: 1.25.1(hono@4.11.1)(zod@4.2.1)
       '@openrouter/ai-sdk-provider':
         specifier: ^1.4.1
         version: 1.5.4(ai@5.0.90(zod@4.2.1))(zod@4.2.1)
