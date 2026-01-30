@@ -1,0 +1,4 @@
+12:00:00.000 INFO  <server.go:42> string source
+12:00:01.000 INFO  <handler.go:128> object source
+12:00:02.000 INFO  <service.go:256> object with function
+12:00:03.000 INFO  <middleware.go:64> caller key

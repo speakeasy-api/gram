@@ -32,6 +32,7 @@ jobs:
       tsframework: ${{ steps.gates.outputs.tsframework }}
       elements: ${{ steps.gates.outputs.elements }}
       migrations: ${{ steps.gates.outputs.migrations }}
+      plog: ${{ steps.gates.outputs.plog }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
@@ -92,6 +93,13 @@ jobs:
             echo "Migrations jobs will run."
           else
             echo "Migrations jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.plog }}" == "true" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "plog=true" >> $GITHUB_OUTPUT
+            echo "Plog jobs will run."
+          else
+            echo "Plog jobs will be skipped."
           fi
 
   docker-build-server:
@@ -464,6 +472,67 @@ jobs:
 
       - name: Check for dirty files
         if: ${{ needs.changes.outputs.cli == 'true' }}
+        run: mise run git:porcelain
+
+  plog-build-lint:
+    runs-on: ubicloud-standard-4
+    needs: changes
+    env:
+      GOMAXPROCS: 4
+    steps:
+      - name: Skip if no plog changes exist
+        if: ${{ needs.changes.outputs.plog != 'true' }}
+        run: echo "No plog changes detected — skipping plog-build-lint job."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        uses: jdx/mise-action@6d1e696aa24c1aa1bcc1adea0212707c71ab78a8 # v3.6.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: mise run github
+
+      - name: Cache Go
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Build
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: mise run build:plog --readonly
+
+      - name: Lint with golangci-lint
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          install-mode: none
+          working-directory: plog
+
+      - name: Test
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: mise run test:plog
+
+      - name: Run "go mod tidy"
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: mise run go:tidy
+
+      - name: Check for dirty files
+        if: ${{ needs.changes.outputs.plog == 'true' }}
         run: mise run git:porcelain
 
   server-test:
