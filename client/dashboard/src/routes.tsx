@@ -19,6 +19,7 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
+import Conversations from "./pages/conversations/Conversations";
 import Logs from "./pages/logs/Logs";
 import Metrics from "./pages/metrics/Metrics";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
@@ -262,6 +263,12 @@ const ROUTE_STRUCTURE = {
     url: "metrics",
     icon: "chart-no-axes-combined",
     component: Metrics,
+  },
+  conversations: {
+    title: "Conversations",
+    url: "conversations",
+    icon: "message-square-text",
+    component: Conversations,
   },
   sdks: {
     title: "SDKs",
