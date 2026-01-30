@@ -102,7 +102,7 @@ echo -e "\n⏳ Updating VS Code and Cursor editor settings"
 mise run install:vscode
 
 echo -e "\n⏳ Starting infra"
-mise infra:start
+interactive_only mise infra:start
 
 echo -e "\n⏳ Running migrations"
 mise run zero:migrations
