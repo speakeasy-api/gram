@@ -512,6 +512,11 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
+      - name: Install Go tools
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: go install tool
+        working-directory: plog
+
       - name: Build
         if: ${{ needs.changes.outputs.plog == 'true' }}
         run: mise run build:plog --readonly
