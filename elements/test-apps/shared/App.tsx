@@ -13,9 +13,6 @@ export function App() {
     <ElementsProvider
       config={{
         projectSlug: import.meta.env.VITE_GRAM_PROJECT_SLUG ?? 'test',
-        api: {
-          sessionEndpoint: '/api/session',
-        },
       }}
     >
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>

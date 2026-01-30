@@ -20,7 +20,7 @@ export function startTestServer(port: number, label: string) {
       return
     }
 
-    if (req.url === '/api/session' && req.method === 'POST') {
+    if (req.url === '/chat/session' && req.method === 'POST') {
       await handlers.session(req, res, {
         embedOrigin: 'http://localhost:5173',
         userIdentifier: `${label}-test-user`,
@@ -34,7 +34,7 @@ export function startTestServer(port: number, label: string) {
 
   server.listen(port, () => {
     console.log(`${label} test server running on http://localhost:${port}`)
-    console.log(`Session endpoint: POST http://localhost:${port}/api/session`)
+    console.log(`Session endpoint: POST http://localhost:${port}/chat/session`)
   })
 
   return server
