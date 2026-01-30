@@ -1388,7 +1388,6 @@ func marshalTelemetrySearchChatsFilterToSearchChatsFilterRequestBody(v *telemetr
 		From:         v.From,
 		To:           v.To,
 		DeploymentID: v.DeploymentID,
-		FunctionID:   v.FunctionID,
 		GramUrn:      v.GramUrn,
 	}
 
@@ -1406,7 +1405,6 @@ func marshalSearchChatsFilterRequestBodyToTelemetrySearchChatsFilter(v *SearchCh
 		From:         v.From,
 		To:           v.To,
 		DeploymentID: v.DeploymentID,
-		FunctionID:   v.FunctionID,
 		GramUrn:      v.GramUrn,
 	}
 

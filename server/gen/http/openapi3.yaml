@@ -8031,7 +8031,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SearchToolCallsPayload'
+                            $ref: '#/components/schemas/SearchChatsPayload'
                 required: true
             responses:
                 "200":
@@ -14678,10 +14678,6 @@ components:
                     description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
                     example: "2025-12-19T10:00:00Z"
                     format: date-time
-                function_id:
-                    type: string
-                    description: Function ID filter
-                    format: uuid
                 gram_urn:
                     type: string
                     description: Gram URN filter (single URN, use gram_urns for multiple)

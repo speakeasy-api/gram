@@ -180,8 +180,6 @@ type SearchChatsFilter struct {
 	To *string
 	// Deployment ID filter
 	DeploymentID *string
-	// Function ID filter
-	FunctionID *string
 	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
 }

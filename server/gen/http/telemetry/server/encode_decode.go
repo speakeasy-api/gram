@@ -1319,7 +1319,6 @@ func unmarshalSearchChatsFilterRequestBodyToTelemetrySearchChatsFilter(v *Search
 		From:         v.From,
 		To:           v.To,
 		DeploymentID: v.DeploymentID,
-		FunctionID:   v.FunctionID,
 		GramUrn:      v.GramUrn,
 	}
 

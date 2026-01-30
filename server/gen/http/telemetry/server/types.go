@@ -1231,8 +1231,6 @@ type SearchChatsFilterRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Deployment ID filter
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
-	// Function ID filter
-	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
 	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
@@ -2331,9 +2329,6 @@ func ValidateSearchChatsFilterRequestBody(body *SearchChatsFilterRequestBody) (e
 	}
 	if body.DeploymentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
-	}
-	if body.FunctionID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
 	}
 	return
 }
