@@ -37,7 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/templatefuncs"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -45,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -374,6 +374,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	logoAssetURL := s.siteURL.String() + "/external/sticker-logo.png"
 
 	var docsURL string
+	var docsBtnText string
 	var instructions string
 	headerDisplayNames := make(map[string]string)
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
@@ -392,6 +393,9 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
+		}
+		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationText); docs != nil {
+			docsBtnText = strings.TrimSpace(*docs)
 		}
 		if inst := conv.FromPGText[string](metadataRecord.Instructions); inst != nil {
 			instructions = strings.TrimSpace(*inst)
@@ -474,7 +478,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		SiteURL:           s.siteURL.String(),
 		LogoAssetURL:      logoAssetURL,
 		DocsURL:           docsURL,
-		DocsSlug:          "",
+		DocsBtnText:       docsBtnText,
 		Instructions:      instructions,
 		IsPublic:          toolset.McpIsPublic,
 	}
