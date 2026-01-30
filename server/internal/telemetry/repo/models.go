@@ -76,6 +76,19 @@ type TraceSummary struct {
 	GramURN           string `ch:"gram_urn"`             // String - any gram_urn from the trace
 }
 
+// ChatSummary represents an aggregated view of a chat session (one row per gram_chat_id).
+// Used for displaying a list of chat sessions in the UI.
+type ChatSummary struct {
+	GramChatID        string  `ch:"gram_chat_id"`
+	StartTimeUnixNano int64   `ch:"start_time_unix_nano"`
+	EndTimeUnixNano   int64   `ch:"end_time_unix_nano"`
+	LogCount          uint64  `ch:"log_count"`
+	ToolCallCount     uint64  `ch:"tool_call_count"`
+	UserID            *string `ch:"user_id"`
+	TotalInputTokens  int64   `ch:"total_input_tokens"`
+	TotalOutputTokens int64   `ch:"total_output_tokens"`
+}
+
 // MetricsSummaryRow represents aggregated AI metrics from ClickHouse.
 // Used for the getAIMetrics endpoint.
 type MetricsSummaryRow struct {

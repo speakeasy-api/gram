@@ -104,7 +104,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}
 
 	// Extract SearchLogs-specific filter fields
-	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName string
+	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID string
 	var httpStatusCode int32
 	var gramURNs []string
 	if payload.Filter != nil {
@@ -118,6 +118,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		httpRoute = conv.PtrValOr(payload.Filter.HTTPRoute, "")
 		httpMethod = conv.PtrValOr(payload.Filter.HTTPMethod, "")
 		serviceName = conv.PtrValOr(payload.Filter.ServiceName, "")
+		gramChatID = conv.PtrValOr(payload.Filter.GramChatID, "")
 	}
 
 	// Query with limit+1 to detect if there are more results
@@ -134,6 +135,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		HTTPRoute:              httpRoute,
 		HTTPRequestMethod:      httpMethod,
 		ServiceName:            serviceName,
+		GramChatID:             gramChatID,
 		SortOrder:              params.sortOrder,
 		Cursor:                 params.cursor,
 		Limit:                  params.limit + 1,
@@ -227,6 +229,69 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 
 	return &telem_gen.SearchToolCallsResult{
 		ToolCalls:  toolCalls,
+		Enabled:    true,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+// SearchChats retrieves chat session summaries with pagination.
+func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChatsPayload) (res *telem_gen.SearchChatsResult, err error) {
+	var from, to *string
+	if payload.Filter != nil {
+		from, to = payload.Filter.From, payload.Filter.To
+	}
+
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	if !params.enabled {
+		return &telem_gen.SearchChatsResult{Chats: []*telem_gen.ChatSummary{}, Enabled: false, NextCursor: nil}, nil
+	}
+
+	var deploymentID, gramURN string
+	if payload.Filter != nil {
+		deploymentID = conv.PtrValOr(payload.Filter.DeploymentID, "")
+		gramURN = conv.PtrValOr(payload.Filter.GramUrn, "")
+	}
+
+	items, err := s.chRepo.ListChats(ctx, repo.ListChatsParams{
+		GramProjectID:    params.projectID,
+		TimeStart:        params.timeStart,
+		TimeEnd:          params.timeEnd,
+		GramDeploymentID: deploymentID,
+		GramURN:          gramURN,
+		SortOrder:        params.sortOrder,
+		Cursor:           params.cursor,
+		Limit:            params.limit + 1,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing chats")
+	}
+
+	var nextCursor *string
+	if len(items) > params.limit {
+		nextCursor = &items[params.limit-1].GramChatID
+		items = items[:params.limit]
+	}
+
+	chats := make([]*telem_gen.ChatSummary, len(items))
+	for i, item := range items {
+		chats[i] = &telem_gen.ChatSummary{
+			GramChatID:        item.GramChatID,
+			StartTimeUnixNano: item.StartTimeUnixNano,
+			EndTimeUnixNano:   item.EndTimeUnixNano,
+			LogCount:          item.LogCount,
+			ToolCallCount:     item.ToolCallCount,
+			UserID:            item.UserID,
+			TotalInputTokens:  item.TotalInputTokens,
+			TotalOutputTokens: item.TotalOutputTokens,
+		}
+	}
+
+	return &telem_gen.SearchChatsResult{
+		Chats:      chats,
 		Enabled:    true,
 		NextCursor: nextCursor,
 	}, nil

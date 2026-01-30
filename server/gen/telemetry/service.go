@@ -20,6 +20,8 @@ type Service interface {
 	SearchLogs(context.Context, *SearchLogsPayload) (res *SearchLogsResult, err error)
 	// Search and list tool calls that match a search filter
 	SearchToolCalls(context.Context, *SearchToolCallsPayload) (res *SearchToolCallsResult, err error)
+	// Search and list chat session summaries that match a search filter
+	SearchChats(context.Context, *SearchChatsPayload) (res *SearchChatsResult, err error)
 	// Capture a telemetry event and forward it to PostHog
 	CaptureEvent(context.Context, *CaptureEventPayload) (res *CaptureEventResult, err error)
 	// Get aggregated metrics summary for an entire project
@@ -48,7 +50,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"searchLogs", "searchToolCalls", "captureEvent", "getProjectMetricsSummary"}
+var MethodNames = [5]string{"searchLogs", "searchToolCalls", "searchChats", "captureEvent", "getProjectMetricsSummary"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -71,6 +73,26 @@ type CaptureEventPayload struct {
 type CaptureEventResult struct {
 	// Whether the event was successfully captured
 	Success bool
+}
+
+// Summary information for a chat session
+type ChatSummary struct {
+	// Chat session ID
+	GramChatID string
+	// Earliest log timestamp in Unix nanoseconds
+	StartTimeUnixNano int64
+	// Latest log timestamp in Unix nanoseconds
+	EndTimeUnixNano int64
+	// Total number of logs in this chat session
+	LogCount uint64
+	// Number of tool calls in this chat session
+	ToolCallCount uint64
+	// User ID associated with this chat session
+	UserID *string
+	// Total input tokens used
+	TotalInputTokens int64
+	// Total output tokens used
+	TotalOutputTokens int64
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -140,6 +162,47 @@ type ModelUsage struct {
 	Count int64
 }
 
+// Filter criteria for searching chat sessions
+type SearchChatsFilter struct {
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string
+	// Deployment ID filter
+	DeploymentID *string
+	// Function ID filter
+	FunctionID *string
+	// Gram URN filter (single URN, use gram_urns for multiple)
+	GramUrn *string
+}
+
+// SearchChatsPayload is the payload type of the telemetry service searchChats
+// method.
+type SearchChatsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Filter criteria for the search
+	Filter *SearchChatsFilter
+	// Cursor for pagination
+	Cursor *string
+	// Sort order
+	Sort string
+	// Number of items to return (1-1000)
+	Limit int
+}
+
+// SearchChatsResult is the result type of the telemetry service searchChats
+// method.
+type SearchChatsResult struct {
+	// List of chat session summaries
+	Chats []*ChatSummary
+	// Cursor for next page
+	NextCursor *string
+	// Whether tool metrics are enabled for the organization
+	Enabled bool
+}
+
 // Filter criteria for searching logs
 type SearchLogsFilter struct {
 	// Trace ID filter (32 hex characters)
@@ -156,6 +219,8 @@ type SearchLogsFilter struct {
 	ServiceName *string
 	// Gram URN filter (one or more URNs)
 	GramUrns []string
+	// Chat ID filter
+	GramChatID *string
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')

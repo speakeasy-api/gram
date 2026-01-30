@@ -81,6 +81,39 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SearchToolCalls"}`)
 	})
 
+	Method("searchChats", func() {
+		Description("Search and list chat session summaries that match a search filter")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
+		Security(security.ByKey, security.ProjectSlug)
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(SearchChatsPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SearchChatsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.searchChats")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "searchChats")
+		Meta("openapi:extension:x-speakeasy-name-override", "searchChats")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SearchChats"}`)
+	})
+
 	Method("captureEvent", func() {
 		Description("Capture a telemetry event and forward it to PostHog")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -187,6 +220,7 @@ var SearchLogsFilter = Type("SearchLogsFilter", func() {
 	})
 	Attribute("service_name", String, "Service name filter")
 	Attribute("gram_urns", ArrayOf(String), "Gram URN filter (one or more URNs)")
+	Attribute("gram_chat_id", String, "Chat ID filter")
 })
 
 var SearchLogsPayload = Type("SearchLogsPayload", func() {
@@ -299,6 +333,61 @@ var ToolCallSummary = Type("ToolCallSummary", func() {
 		"start_time_unix_nano",
 		"log_count",
 		"gram_urn",
+	)
+})
+
+var SearchChatsFilter = Type("SearchChatsFilter", func() {
+	Description("Filter criteria for searching chat sessions")
+
+	Extend(TelemetryFilter)
+})
+
+var SearchChatsPayload = Type("SearchChatsPayload", func() {
+	Description("Payload for searching chat session summaries")
+
+	Attribute("filter", SearchChatsFilter, "Filter criteria for the search")
+	Attribute("cursor", String, "Cursor for pagination")
+	Attribute("sort", String, "Sort order", func() {
+		Enum("asc", "desc")
+		Default("desc")
+	})
+	Attribute("limit", Int, "Number of items to return (1-1000)", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(50)
+	})
+})
+
+var SearchChatsResult = Type("SearchChatsResult", func() {
+	Description("Result of searching chat session summaries")
+
+	Attribute("chats", ArrayOf(ChatSummaryType), "List of chat session summaries")
+	Attribute("next_cursor", String, "Cursor for next page")
+	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
+
+	Required("chats", "enabled")
+})
+
+var ChatSummaryType = Type("ChatSummary", func() {
+	Description("Summary information for a chat session")
+
+	Attribute("gram_chat_id", String, "Chat session ID")
+	Attribute("start_time_unix_nano", Int64, "Earliest log timestamp in Unix nanoseconds")
+	Attribute("end_time_unix_nano", Int64, "Latest log timestamp in Unix nanoseconds")
+	Attribute("log_count", UInt64, "Total number of logs in this chat session")
+	Attribute("tool_call_count", UInt64, "Number of tool calls in this chat session")
+	Attribute("user_id", String, "User ID associated with this chat session")
+	Attribute("total_input_tokens", Int64, "Total input tokens used")
+	Attribute("total_output_tokens", Int64, "Total output tokens used")
+
+	Required(
+		"gram_chat_id",
+		"start_time_unix_nano",
+		"end_time_unix_nano",
+		"log_count",
+		"tool_call_count",
+		"total_input_tokens",
+		"total_output_tokens",
 	)
 })
 

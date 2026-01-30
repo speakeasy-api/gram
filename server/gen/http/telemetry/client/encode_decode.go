@@ -502,6 +502,248 @@ func DecodeSearchToolCallsResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildSearchChatsRequest instantiates a HTTP request object with method and
+// path set to call the "telemetry" service "searchChats" endpoint
+func (c *Client) BuildSearchChatsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SearchChatsTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "searchChats", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSearchChatsRequest returns an encoder for requests sent to the
+// telemetry searchChats server.
+func EncodeSearchChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.SearchChatsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "searchChats", "*telemetry.SearchChatsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSearchChatsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "searchChats", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSearchChatsResponse returns a decoder for responses returned by the
+// telemetry searchChats endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeSearchChatsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSearchChatsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SearchChatsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+			}
+			err = ValidateSearchChatsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+			}
+			res := NewSearchChatsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SearchChatsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+			}
+			err = ValidateSearchChatsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+			}
+			return nil, NewSearchChatsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SearchChatsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+			}
+			err = ValidateSearchChatsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+			}
+			return nil, NewSearchChatsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SearchChatsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+			}
+			err = ValidateSearchChatsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+			}
+			return nil, NewSearchChatsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SearchChatsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+			}
+			err = ValidateSearchChatsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+			}
+			return nil, NewSearchChatsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SearchChatsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+			}
+			err = ValidateSearchChatsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+			}
+			return nil, NewSearchChatsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SearchChatsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+			}
+			err = ValidateSearchChatsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+			}
+			return nil, NewSearchChatsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SearchChatsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+			}
+			err = ValidateSearchChatsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+			}
+			return nil, NewSearchChatsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SearchChatsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+				}
+				err = ValidateSearchChatsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+				}
+				return nil, NewSearchChatsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SearchChatsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+				}
+				err = ValidateSearchChatsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+				}
+				return nil, NewSearchChatsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "searchChats", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SearchChatsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
+			}
+			err = ValidateSearchChatsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+			}
+			return nil, NewSearchChatsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "searchChats", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCaptureEventRequest instantiates a HTTP request object with method and
 // path set to call the "telemetry" service "captureEvent" endpoint
 func (c *Client) BuildCaptureEventRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1005,6 +1247,7 @@ func marshalTelemetrySearchLogsFilterToSearchLogsFilterRequestBody(v *telemetry.
 		HTTPRoute:      v.HTTPRoute,
 		HTTPMethod:     v.HTTPMethod,
 		ServiceName:    v.ServiceName,
+		GramChatID:     v.GramChatID,
 		From:           v.From,
 		To:             v.To,
 		DeploymentID:   v.DeploymentID,
@@ -1035,6 +1278,7 @@ func marshalSearchLogsFilterRequestBodyToTelemetrySearchLogsFilter(v *SearchLogs
 		HTTPRoute:      v.HTTPRoute,
 		HTTPMethod:     v.HTTPMethod,
 		ServiceName:    v.ServiceName,
+		GramChatID:     v.GramChatID,
 		From:           v.From,
 		To:             v.To,
 		DeploymentID:   v.DeploymentID,
@@ -1128,6 +1372,59 @@ func unmarshalToolCallSummaryResponseBodyToTelemetryToolCallSummary(v *ToolCallS
 		LogCount:          *v.LogCount,
 		HTTPStatusCode:    v.HTTPStatusCode,
 		GramUrn:           *v.GramUrn,
+	}
+
+	return res
+}
+
+// marshalTelemetrySearchChatsFilterToSearchChatsFilterRequestBody builds a
+// value of type *SearchChatsFilterRequestBody from a value of type
+// *telemetry.SearchChatsFilter.
+func marshalTelemetrySearchChatsFilterToSearchChatsFilterRequestBody(v *telemetry.SearchChatsFilter) *SearchChatsFilterRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &SearchChatsFilterRequestBody{
+		From:         v.From,
+		To:           v.To,
+		DeploymentID: v.DeploymentID,
+		FunctionID:   v.FunctionID,
+		GramUrn:      v.GramUrn,
+	}
+
+	return res
+}
+
+// marshalSearchChatsFilterRequestBodyToTelemetrySearchChatsFilter builds a
+// value of type *telemetry.SearchChatsFilter from a value of type
+// *SearchChatsFilterRequestBody.
+func marshalSearchChatsFilterRequestBodyToTelemetrySearchChatsFilter(v *SearchChatsFilterRequestBody) *telemetry.SearchChatsFilter {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.SearchChatsFilter{
+		From:         v.From,
+		To:           v.To,
+		DeploymentID: v.DeploymentID,
+		FunctionID:   v.FunctionID,
+		GramUrn:      v.GramUrn,
+	}
+
+	return res
+}
+
+// unmarshalChatSummaryResponseBodyToTelemetryChatSummary builds a value of
+// type *telemetry.ChatSummary from a value of type *ChatSummaryResponseBody.
+func unmarshalChatSummaryResponseBodyToTelemetryChatSummary(v *ChatSummaryResponseBody) *telemetry.ChatSummary {
+	res := &telemetry.ChatSummary{
+		GramChatID:        *v.GramChatID,
+		StartTimeUnixNano: *v.StartTimeUnixNano,
+		EndTimeUnixNano:   *v.EndTimeUnixNano,
+		LogCount:          *v.LogCount,
+		ToolCallCount:     *v.ToolCallCount,
+		UserID:            v.UserID,
+		TotalInputTokens:  *v.TotalInputTokens,
+		TotalOutputTokens: *v.TotalOutputTokens,
 	}
 
 	return res

@@ -103,6 +103,7 @@ WHERE gram_project_id = ?
     AND (? = '' OR toString(attributes.` + "`http.route`" + `) = ?)
     AND (? = '' OR toString(attributes.` + "`http.request.method`" + `) = ?)
     AND (? = '' OR service_name = ?)
+    AND (? = '' OR gram_chat_id = ?)
     -- Cursor pagination: empty string = first page, otherwise compare based on sort direction
     AND if(
         ? = '',
@@ -134,6 +135,7 @@ type ListTelemetryLogsParams struct {
 	HTTPRoute              string
 	HTTPRequestMethod      string
 	ServiceName            string
+	GramChatID             string
 	SortOrder              string
 	Cursor                 string
 	Limit                  int
@@ -154,15 +156,16 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		arg.HTTPRoute, arg.HTTPRoute, // 16,17: http_route filter
 		arg.HTTPRequestMethod, arg.HTTPRequestMethod, // 18,19: http_request_method filter
 		arg.ServiceName, arg.ServiceName, // 20,21: service_name filter
-		arg.Cursor,    // 22: cursor empty string check
-		arg.SortOrder, // 23: ASC or DESC for comparison
-		arg.Cursor,    // 24: ASC cursor subquery
-		arg.Cursor,    // 25: DESC cursor subquery
-		arg.SortOrder, // 26: ORDER BY time_unix_nano ASC
-		arg.SortOrder, // 27: ORDER BY id ASC
-		arg.SortOrder, // 28: ORDER BY time_unix_nano DESC
-		arg.SortOrder, // 29: ORDER BY id DESC
-		arg.Limit,     // 30: LIMIT
+		arg.GramChatID, arg.GramChatID, // 22,23: gram_chat_id filter
+		arg.Cursor,    // 24: cursor empty string check
+		arg.SortOrder, // 25: ASC or DESC for comparison
+		arg.Cursor,    // 26: ASC cursor subquery
+		arg.Cursor,    // 27: DESC cursor subquery
+		arg.SortOrder, // 28: ORDER BY time_unix_nano ASC
+		arg.SortOrder, // 29: ORDER BY id ASC
+		arg.SortOrder, // 30: ORDER BY time_unix_nano DESC
+		arg.SortOrder, // 31: ORDER BY id DESC
+		arg.Limit,     // 32: LIMIT
 	)
 	if err != nil {
 		return nil, err
@@ -382,4 +385,87 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 	}
 
 	return &metrics, nil
+}
+
+const listChats = `-- name: ListChats :many
+SELECT
+    gram_chat_id,
+    min(time_unix_nano) as start_time_unix_nano,
+    max(time_unix_nano) as end_time_unix_nano,
+    count(*) as log_count,
+    countIf(startsWith(gram_urn, 'tools:')) as tool_call_count,
+    anyIf(toString(attributes.` + "`user.id`" + `), toString(attributes.` + "`user.id`" + `) != '') as user_id,
+    sumIf(toInt64OrZero(toString(attributes.` + "`gen_ai.usage.input_tokens`" + `)),
+          toString(attributes.` + "`gram.resource.urn`" + `) = 'agents:chat:completion') as total_input_tokens,
+    sumIf(toInt64OrZero(toString(attributes.` + "`gen_ai.usage.output_tokens`" + `)),
+          toString(attributes.` + "`gram.resource.urn`" + `) = 'agents:chat:completion') as total_output_tokens
+FROM telemetry_logs
+WHERE gram_project_id = ?
+    AND time_unix_nano >= ?
+    AND time_unix_nano <= ?
+    AND gram_chat_id IS NOT NULL
+    AND gram_chat_id != ''
+    AND (? = '' OR gram_deployment_id = toUUIDOrNull(?))
+    AND if(? = '', true, position(telemetry_logs.gram_urn, ?) > 0)
+GROUP BY gram_chat_id
+HAVING if(
+        ? = '',
+        true,
+        if(
+            ? = 'asc',
+            min(time_unix_nano) > (SELECT min(time_unix_nano) FROM telemetry_logs WHERE gram_chat_id = ? GROUP BY gram_chat_id LIMIT 1),
+            min(time_unix_nano) < (SELECT min(time_unix_nano) FROM telemetry_logs WHERE gram_chat_id = ? GROUP BY gram_chat_id LIMIT 1)
+        )
+    )
+ORDER BY
+    IF(? = 'asc', start_time_unix_nano, 0) ASC,
+    IF(? = 'desc', start_time_unix_nano, 0) DESC
+LIMIT ?
+`
+
+type ListChatsParams struct {
+	GramProjectID    string
+	TimeStart        int64
+	TimeEnd          int64
+	GramDeploymentID string
+	GramURN          string
+	SortOrder        string
+	Cursor           string // gram_chat_id to paginate from
+	Limit            int
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSummary, error) {
+	rows, err := q.conn.Query(ctx, listChats,
+		arg.GramProjectID,                          // 1: gram_project_id
+		arg.TimeStart,                              // 2: time_unix_nano >=
+		arg.TimeEnd,                                // 3: time_unix_nano <=
+		arg.GramDeploymentID, arg.GramDeploymentID, // 4,5: deployment_id filter
+		arg.GramURN, arg.GramURN, // 6,7: gram_urn filter
+		arg.Cursor,    // 8: cursor empty string check
+		arg.SortOrder, // 9: ASC or DESC for comparison
+		arg.Cursor,    // 10: ASC cursor subquery
+		arg.Cursor,    // 11: DESC cursor subquery
+		arg.SortOrder, // 12: ORDER BY start_time ASC
+		arg.SortOrder, // 13: ORDER BY start_time DESC
+		arg.Limit,     // 14: LIMIT
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var chats []ChatSummary
+	for rows.Next() {
+		var chat ChatSummary
+		if err = rows.ScanStruct(&chat); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		chats = append(chats, chat)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return chats, nil
 }
