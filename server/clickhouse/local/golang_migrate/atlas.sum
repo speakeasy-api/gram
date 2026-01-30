@@ -1,7 +1,8 @@
-h1:x9cyb+HQt1ACjjZGHxaG+R4c2symWcWmfSDq6Ny/aes=
+h1:QuTUMGkvZ3/a6VeXrMXzgUTSIaOQgqBI1sxT8XMxDgA=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
 20251217163326_add-telemetry-logs-table.up.sql h1:9nsauxhOm4lo/DddEKbpJy+ZeVdbT1FQYUi6rw82V1A=
 20260129234446_drop-telemetry-http-indices.up.sql h1:L18/S7TPIDosAB8a+0zNdvNbGxy+cGhfCJpzrxTFC6E=
 20260129234510_drop-telemetry-http-cols.up.sql h1:c/0WDD+1s4WC2eyN2YKrRPnPxoU+tX+SPPxG+XnJ22k=
+20260130003315_add-chat-id-and-timestamp-cols.up.sql h1:G7VqnyxPLOT7ROSNTcn2aGpSS3IRbxUXPxX7KUOV8Fg=
