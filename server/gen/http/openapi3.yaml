@@ -11565,6 +11565,10 @@ components:
         ChatSummary:
             type: object
             properties:
+                duration_seconds:
+                    type: number
+                    description: Chat session duration in seconds
+                    format: double
                 end_time_unix_nano:
                     type: integer
                     description: Latest log timestamp in Unix nanoseconds
@@ -11576,10 +11580,23 @@ components:
                     type: integer
                     description: Total number of logs in this chat session
                     format: int64
+                message_count:
+                    type: integer
+                    description: Number of LLM completion messages in this chat session
+                    format: int64
+                model:
+                    type: string
+                    description: LLM model used in this chat session
                 start_time_unix_nano:
                     type: integer
                     description: Earliest log timestamp in Unix nanoseconds
                     format: int64
+                status:
+                    type: string
+                    description: Chat session status
+                    enum:
+                        - success
+                        - error
                 tool_call_count:
                     type: integer
                     description: Number of tool calls in this chat session
@@ -11592,6 +11609,10 @@ components:
                     type: integer
                     description: Total output tokens used
                     format: int64
+                total_tokens:
+                    type: integer
+                    description: Total tokens used (input + output)
+                    format: int64
                 user_id:
                     type: string
                     description: User ID associated with this chat session
@@ -11602,8 +11623,12 @@ components:
                 - end_time_unix_nano
                 - log_count
                 - tool_call_count
+                - message_count
+                - duration_seconds
+                - status
                 - total_input_tokens
                 - total_output_tokens
+                - total_tokens
         CreateDeploymentForm:
             type: object
             properties:

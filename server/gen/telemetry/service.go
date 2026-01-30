@@ -87,12 +87,22 @@ type ChatSummary struct {
 	LogCount uint64
 	// Number of tool calls in this chat session
 	ToolCallCount uint64
+	// Number of LLM completion messages in this chat session
+	MessageCount uint64
+	// Chat session duration in seconds
+	DurationSeconds float64
+	// Chat session status
+	Status string
 	// User ID associated with this chat session
 	UserID *string
+	// LLM model used in this chat session
+	Model *string
 	// Total input tokens used
 	TotalInputTokens int64
 	// Total output tokens used
 	TotalOutputTokens int64
+	// Total tokens used (input + output)
+	TotalTokens int64
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service

@@ -1159,12 +1159,22 @@ type ChatSummaryResponseBody struct {
 	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
 	// Number of tool calls in this chat session
 	ToolCallCount *uint64 `form:"tool_call_count,omitempty" json:"tool_call_count,omitempty" xml:"tool_call_count,omitempty"`
+	// Number of LLM completion messages in this chat session
+	MessageCount *uint64 `form:"message_count,omitempty" json:"message_count,omitempty" xml:"message_count,omitempty"`
+	// Chat session duration in seconds
+	DurationSeconds *float64 `form:"duration_seconds,omitempty" json:"duration_seconds,omitempty" xml:"duration_seconds,omitempty"`
+	// Chat session status
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// User ID associated with this chat session
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// LLM model used in this chat session
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// Total input tokens used
 	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
 	// Total output tokens used
 	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
+	// Total tokens used (input + output)
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
 }
 
 // MetricsResponseBody is used to define fields on response body types.
@@ -3595,11 +3605,28 @@ func ValidateChatSummaryResponseBody(body *ChatSummaryResponseBody) (err error) 
 	if body.ToolCallCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_call_count", "body"))
 	}
+	if body.MessageCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message_count", "body"))
+	}
+	if body.DurationSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("duration_seconds", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
 	if body.TotalInputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_input_tokens", "body"))
 	}
 	if body.TotalOutputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_output_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "success" || *body.Status == "error") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"success", "error"}))
+		}
 	}
 	return
 }

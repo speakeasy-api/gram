@@ -1335,9 +1335,14 @@ func marshalTelemetryChatSummaryToChatSummaryResponseBody(v *telemetry.ChatSumma
 		EndTimeUnixNano:   v.EndTimeUnixNano,
 		LogCount:          v.LogCount,
 		ToolCallCount:     v.ToolCallCount,
+		MessageCount:      v.MessageCount,
+		DurationSeconds:   v.DurationSeconds,
+		Status:            v.Status,
 		UserID:            v.UserID,
+		Model:             v.Model,
 		TotalInputTokens:  v.TotalInputTokens,
 		TotalOutputTokens: v.TotalOutputTokens,
+		TotalTokens:       v.TotalTokens,
 	}
 
 	return res

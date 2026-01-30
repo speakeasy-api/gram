@@ -1102,12 +1102,22 @@ type ChatSummaryResponseBody struct {
 	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
 	// Number of tool calls in this chat session
 	ToolCallCount uint64 `form:"tool_call_count" json:"tool_call_count" xml:"tool_call_count"`
+	// Number of LLM completion messages in this chat session
+	MessageCount uint64 `form:"message_count" json:"message_count" xml:"message_count"`
+	// Chat session duration in seconds
+	DurationSeconds float64 `form:"duration_seconds" json:"duration_seconds" xml:"duration_seconds"`
+	// Chat session status
+	Status string `form:"status" json:"status" xml:"status"`
 	// User ID associated with this chat session
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// LLM model used in this chat session
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// Total input tokens used
 	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`
 	// Total output tokens used
 	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
+	// Total tokens used (input + output)
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
 }
 
 // MetricsResponseBody is used to define fields on response body types.
