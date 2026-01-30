@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 2077213ebe3b2ba7a02145c9fd3d7d0a
+  docChecksum: 8ca9e26bd9f65a438fc2ce0be048c5fd
   docVersion: 0.0.1
   speakeasyVersion: 1.700.1
   generationVersion: 2.801.0
-  releaseVersion: 0.26.9
-  configChecksum: ab3da76998ff4e7202cd05d37f123eb4
+  releaseVersion: 0.26.10
+  configChecksum: 1bd4326a5b663d9ada97129351a7e3c6
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -634,6 +634,10 @@ trackedFiles:
     id: 728959fb8f67
     last_write_checksum: sha1:0c3d3b8bffe28ce8638776c1291b8b322baea905
     pristine_git_object: 183e57914a50f032af86a66d245efb88344e4795
+  docs/models/components/searchchatsfilter.md:
+    last_write_checksum: sha1:fc4a2c768d6871ab7d5bf0e13c04a052fc417a2d
+  docs/models/components/searchchatspayload.md:
+    last_write_checksum: sha1:9fda8003b2f5fd89950dd014e9f14f641a10323e
   docs/models/components/searchchatsresult.md:
     last_write_checksum: sha1:b4c16b9ed7a20fc38ec10e53ebaec255534d5e5d
   docs/models/components/searchlogsfilter.md:
@@ -656,8 +660,10 @@ trackedFiles:
     pristine_git_object: 7e1645df9ef3798af9e401aec43a6fbef563b619
   docs/models/components/searchtoolcallspayload.md:
     id: cb47f2552c7e
-    last_write_checksum: sha1:a4b52642672e287b00de0f4f7b51a91f4a981358
+    last_write_checksum: sha1:828f1e1bdeccc580c0c20dc0df08ebf5b96ae199
     pristine_git_object: e52e4a1b3c1b09020ddb32966e307316b98384c4
+  docs/models/components/searchtoolcallspayloadsort.md:
+    last_write_checksum: sha1:0dba6f981ac972a7a2bde0abf61f97e9d0487506
   docs/models/components/searchtoolcallsresult.md:
     id: c84c9e4cab4d
     last_write_checksum: sha1:7a5f2ca336ddacffb2b374570021dd08f59aa43f
@@ -1879,7 +1885,7 @@ trackedFiles:
     last_write_checksum: sha1:d0d238def6c2e97cb47a063044b936612e13e949
     pristine_git_object: 984f58eb68b7614400cd32ea089363dbc5718497
   docs/models/operations/searchchatsrequest.md:
-    last_write_checksum: sha1:b22cb079e85d3eec0fb1579e28767a15b55237f7
+    last_write_checksum: sha1:41b07c102a4dd518b6a031f1421013e6045164a1
   docs/models/operations/searchchatssecurity.md:
     last_write_checksum: sha1:5097e0ff23935729fc5f12220f5f5d3cdc21943c
   docs/models/operations/searchchatssecurityoption1.md:
@@ -2340,7 +2346,7 @@ trackedFiles:
     pristine_git_object: 4dc86c7f6d683f71ee8c4f36990ad5b3529b0917
   docs/sdks/telemetry/README.md:
     id: 8d2702351464
-    last_write_checksum: sha1:e6e1443b6cba2edcb5240af5e1037311c4fd407d
+    last_write_checksum: sha1:268aa0a346eadb82452e2be5b69f3fc1e027e979
     pristine_git_object: e098660b9103b197aae11879f5bb9fd76f2445ea
   docs/sdks/templates/README.md:
     id: baedad2f2f11
@@ -2384,11 +2390,11 @@ trackedFiles:
     pristine_git_object: 8a33dbb4b9cb9cefaa43e10ddf535cbcd13c9e72
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:3046710e8a40bfb6db27708c3930758e78e48bac
+    last_write_checksum: sha1:05a7d72b5f84c9ef39b22c396b4b9ce66e69816d
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:31ce0242a2ae65a0cb79744c1c2ebacc3ac7498f
+    last_write_checksum: sha1:48d1a7589d71741677c617afd636512534e931cd
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2711,7 +2717,7 @@ trackedFiles:
   src/funcs/telemetryGetProjectMetricsSummary.ts:
     last_write_checksum: sha1:910e4723e05130ebf66abba64eaf9ebdb910525a
   src/funcs/telemetrySearchChats.ts:
-    last_write_checksum: sha1:16974256cd9741b1ee13aeef800fd782ff40c569
+    last_write_checksum: sha1:72424a50decd97e90c3dfea011c27ec497b25480
   src/funcs/telemetrySearchLogs.ts:
     id: f9ab1621b5e8
     last_write_checksum: sha1:cbf69567413cb9ca2145bb26c9cfba74e4e38609
@@ -2842,7 +2848,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:03952f54d29deb7efd8775f1d23d0c03caa5ca8e
+    last_write_checksum: sha1:77cacaba649abe80d1a0c6759f00cb0eae8c3a95
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3202,7 +3208,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:4de2e8eb6d9f122ac7683df152d8862f30ff0d0b
+    last_write_checksum: sha1:2c906b563414bd93b22c563a355bab1e6abd5568
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3412,6 +3418,10 @@ trackedFiles:
     id: b4923c9a510e
     last_write_checksum: sha1:0209d15f85dacadfc8e80e78f269ad3b5cc03f28
     pristine_git_object: 793ba3a7716049cdd68b99eb5fcce7e64ad0234d
+  src/models/components/searchchatsfilter.ts:
+    last_write_checksum: sha1:57447bdf7c09b5d1edf84f8acaf176161b061640
+  src/models/components/searchchatspayload.ts:
+    last_write_checksum: sha1:9a867ed548cc5ebcaf4b85c725ebfab642b89b1d
   src/models/components/searchchatsresult.ts:
     last_write_checksum: sha1:3ec06c35e9b48b77456936050e9f30ad4733327c
   src/models/components/searchlogsfilter.ts:
@@ -3432,7 +3442,7 @@ trackedFiles:
     pristine_git_object: b66c63b3247cac5a4106ddb5083cd0bb6539b891
   src/models/components/searchtoolcallspayload.ts:
     id: 1a507692e094
-    last_write_checksum: sha1:f0693d60f5799ccb0ddea332d552f3efda87328d
+    last_write_checksum: sha1:d25938a9e7f49aac30ec8c2ffb90960dfb1a773f
     pristine_git_object: f27ebaf81c350c77df71785a86829d70ccbf93c4
   src/models/components/searchtoolcallsresult.ts:
     id: f05310ed0be9
@@ -3933,7 +3943,7 @@ trackedFiles:
     last_write_checksum: sha1:8153961b4a9677773e86a81916c0a1647f3700fa
     pristine_git_object: b7820ace16325a38fedb556b26f71553396419f2
   src/models/operations/searchchats.ts:
-    last_write_checksum: sha1:b675bd43d20dae795b8eb4e4cbc969a2159b158c
+    last_write_checksum: sha1:878da1aac7da628bdfeb71e07201991b2b026ae3
   src/models/operations/searchlogs.ts:
     id: e995a2e2f425
     last_write_checksum: sha1:14d96d2a4ff79b6f5a79335945fecc62afb9c2af

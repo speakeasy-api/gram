@@ -224,7 +224,7 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.telemetry.searchChats({
-    searchToolCallsPayload: {
+    searchChatsPayload: {
       filter: {
         from: new Date("2025-12-19T10:00:00Z"),
         to: new Date("2025-12-19T11:00:00Z"),
@@ -252,7 +252,7 @@ const gram = new GramCore();
 
 async function run() {
   const res = await telemetrySearchChats(gram, {
-    searchToolCallsPayload: {
+    searchChatsPayload: {
       filter: {
         from: new Date("2025-12-19T10:00:00Z"),
         to: new Date("2025-12-19T11:00:00Z"),

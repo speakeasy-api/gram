@@ -46,7 +46,7 @@ export type SearchChatsRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  searchToolCallsPayload: components.SearchToolCallsPayload;
+  searchChatsPayload: components.SearchChatsPayload;
 };
 
 /** @internal */
@@ -205,7 +205,7 @@ export type SearchChatsRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SearchToolCallsPayload: components.SearchToolCallsPayload$Outbound;
+  SearchChatsPayload: components.SearchChatsPayload$Outbound;
 };
 
 /** @internal */
@@ -217,13 +217,13 @@ export const SearchChatsRequest$outboundSchema: z.ZodType<
   gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
-  searchToolCallsPayload: components.SearchToolCallsPayload$outboundSchema,
+  searchChatsPayload: components.SearchChatsPayload$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
     gramKey: "Gram-Key",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
-    searchToolCallsPayload: "SearchToolCallsPayload",
+    searchChatsPayload: "SearchChatsPayload",
   });
 });
 

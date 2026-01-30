@@ -90,7 +90,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.SearchToolCallsPayload, {
+  const body = encodeJSON("body", payload.SearchChatsPayload, {
     explode: true,
   });
 

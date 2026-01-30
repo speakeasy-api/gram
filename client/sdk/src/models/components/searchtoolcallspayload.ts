@@ -13,14 +13,16 @@ import {
 /**
  * Sort order
  */
-export const Sort = {
+export const SearchToolCallsPayloadSort = {
   Asc: "asc",
   Desc: "desc",
 } as const;
 /**
  * Sort order
  */
-export type Sort = ClosedEnum<typeof Sort>;
+export type SearchToolCallsPayloadSort = ClosedEnum<
+  typeof SearchToolCallsPayloadSort
+>;
 
 /**
  * Payload for searching tool call summaries
@@ -41,13 +43,13 @@ export type SearchToolCallsPayload = {
   /**
    * Sort order
    */
-  sort?: Sort | undefined;
+  sort?: SearchToolCallsPayloadSort | undefined;
 };
 
 /** @internal */
-export const Sort$outboundSchema: z.ZodNativeEnum<typeof Sort> = z.nativeEnum(
-  Sort,
-);
+export const SearchToolCallsPayloadSort$outboundSchema: z.ZodNativeEnum<
+  typeof SearchToolCallsPayloadSort
+> = z.nativeEnum(SearchToolCallsPayloadSort);
 
 /** @internal */
 export type SearchToolCallsPayload$Outbound = {
@@ -66,7 +68,7 @@ export const SearchToolCallsPayload$outboundSchema: z.ZodType<
   cursor: z.string().optional(),
   filter: SearchToolCallsFilter$outboundSchema.optional(),
   limit: z.number().int().default(50),
-  sort: Sort$outboundSchema.default("desc"),
+  sort: SearchToolCallsPayloadSort$outboundSchema.default("desc"),
 });
 
 export function searchToolCallsPayloadToJSON(

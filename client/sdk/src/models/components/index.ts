@@ -136,6 +136,8 @@ export * from "./rendertemplateresult.js";
 export * from "./resource.js";
 export * from "./resourceentry.js";
 export * from "./responsefilter.js";
+export * from "./searchchatsfilter.js";
+export * from "./searchchatspayload.js";
 export * from "./searchchatsresult.js";
 export * from "./searchlogsfilter.js";
 export * from "./searchlogspayload.js";
