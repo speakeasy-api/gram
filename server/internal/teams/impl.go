@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
 
 	genAuth "github.com/speakeasy-api/gram/server/gen/auth"
 	srv "github.com/speakeasy-api/gram/server/gen/http/teams/server"
@@ -40,6 +41,11 @@ type Service struct {
 }
 
 var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
+
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
+}
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("teams"))

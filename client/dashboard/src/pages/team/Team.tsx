@@ -345,7 +345,7 @@ export default function Team() {
                 name="email"
                 type="email"
                 value={inviteEmail}
-                onChange={setInviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="colleague@company.com"
                 required
                 autoFocus
