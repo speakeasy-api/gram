@@ -29,7 +29,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
   const message = useAssistantState(({ message }) => message)
   const toolParts = message.parts.filter((part) => part.type === 'tool-call')
   const matchingMessagePartIndex = toolParts.findIndex(
-    (part) => part.toolName === toolName
+    (part) => part.toolCallId === toolCallId
   )
 
   const handleApproveOnce = () => {
