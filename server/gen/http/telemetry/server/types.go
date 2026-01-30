@@ -40,6 +40,19 @@ type SearchToolCallsRequestBody struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
 }
 
+// SearchChatsRequestBody is the type of the "telemetry" service "searchChats"
+// endpoint HTTP request body.
+type SearchChatsRequestBody struct {
+	// Filter criteria for the search
+	Filter *SearchChatsFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
+	// Cursor for pagination
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
+	// Number of items to return (1-1000)
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
 // CaptureEventRequestBody is the type of the "telemetry" service
 // "captureEvent" endpoint HTTP request body.
 type CaptureEventRequestBody struct {
@@ -77,6 +90,17 @@ type SearchLogsResponseBody struct {
 type SearchToolCallsResponseBody struct {
 	// List of tool call summaries
 	ToolCalls []*ToolCallSummaryResponseBody `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
+	// Cursor for next page
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Whether tool metrics are enabled for the organization
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+}
+
+// SearchChatsResponseBody is the type of the "telemetry" service "searchChats"
+// endpoint HTTP response body.
+type SearchChatsResponseBody struct {
+	// List of chat session summaries
+	Chats []*ChatSummaryResponseBody `form:"chats" json:"chats" xml:"chats"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// Whether tool metrics are enabled for the organization
@@ -450,6 +474,188 @@ type SearchToolCallsUnexpectedResponseBody struct {
 // service "searchToolCalls" endpoint HTTP response body for the
 // "gateway_error" error.
 type SearchToolCallsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchChatsUnauthorizedResponseBody is the type of the "telemetry" service
+// "searchChats" endpoint HTTP response body for the "unauthorized" error.
+type SearchChatsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchChatsForbiddenResponseBody is the type of the "telemetry" service
+// "searchChats" endpoint HTTP response body for the "forbidden" error.
+type SearchChatsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchChatsBadRequestResponseBody is the type of the "telemetry" service
+// "searchChats" endpoint HTTP response body for the "bad_request" error.
+type SearchChatsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchChatsNotFoundResponseBody is the type of the "telemetry" service
+// "searchChats" endpoint HTTP response body for the "not_found" error.
+type SearchChatsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchChatsConflictResponseBody is the type of the "telemetry" service
+// "searchChats" endpoint HTTP response body for the "conflict" error.
+type SearchChatsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchChatsUnsupportedMediaResponseBody is the type of the "telemetry"
+// service "searchChats" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SearchChatsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchChatsInvalidResponseBody is the type of the "telemetry" service
+// "searchChats" endpoint HTTP response body for the "invalid" error.
+type SearchChatsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchChatsInvariantViolationResponseBody is the type of the "telemetry"
+// service "searchChats" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SearchChatsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchChatsUnexpectedResponseBody is the type of the "telemetry" service
+// "searchChats" endpoint HTTP response body for the "unexpected" error.
+type SearchChatsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchChatsGatewayErrorResponseBody is the type of the "telemetry" service
+// "searchChats" endpoint HTTP response body for the "gateway_error" error.
+type SearchChatsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -884,6 +1090,36 @@ type ToolCallSummaryResponseBody struct {
 	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
 }
 
+// ChatSummaryResponseBody is used to define fields on response body types.
+type ChatSummaryResponseBody struct {
+	// Chat session ID
+	GramChatID string `form:"gram_chat_id" json:"gram_chat_id" xml:"gram_chat_id"`
+	// Earliest log timestamp in Unix nanoseconds
+	StartTimeUnixNano int64 `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
+	// Latest log timestamp in Unix nanoseconds
+	EndTimeUnixNano int64 `form:"end_time_unix_nano" json:"end_time_unix_nano" xml:"end_time_unix_nano"`
+	// Total number of logs in this chat session
+	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
+	// Number of tool calls in this chat session
+	ToolCallCount uint64 `form:"tool_call_count" json:"tool_call_count" xml:"tool_call_count"`
+	// Number of LLM completion messages in this chat session
+	MessageCount uint64 `form:"message_count" json:"message_count" xml:"message_count"`
+	// Chat session duration in seconds
+	DurationSeconds float64 `form:"duration_seconds" json:"duration_seconds" xml:"duration_seconds"`
+	// Chat session status
+	Status string `form:"status" json:"status" xml:"status"`
+	// User ID associated with this chat session
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// LLM model used in this chat session
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Total input tokens used
+	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`
+	// Total output tokens used
+	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
+	// Total tokens used (input + output)
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+}
+
 // MetricsResponseBody is used to define fields on response body types.
 type MetricsResponseBody struct {
 	// Sum of input tokens used
@@ -958,6 +1194,8 @@ type SearchLogsFilterRequestBody struct {
 	ServiceName *string `form:"service_name,omitempty" json:"service_name,omitempty" xml:"service_name,omitempty"`
 	// Gram URN filter (one or more URNs)
 	GramUrns []string `form:"gram_urns,omitempty" json:"gram_urns,omitempty" xml:"gram_urns,omitempty"`
+	// Chat ID filter
+	GramChatID *string `form:"gram_chat_id,omitempty" json:"gram_chat_id,omitempty" xml:"gram_chat_id,omitempty"`
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -981,6 +1219,18 @@ type SearchToolCallsFilterRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Function ID filter
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+	// Gram URN filter (single URN, use gram_urns for multiple)
+	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
+// SearchChatsFilterRequestBody is used to define fields on request body types.
+type SearchChatsFilterRequestBody struct {
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Deployment ID filter
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
@@ -1025,6 +1275,28 @@ func NewSearchToolCallsResponseBody(res *telemetry.SearchToolCallsResult) *Searc
 		}
 	} else {
 		body.ToolCalls = []*ToolCallSummaryResponseBody{}
+	}
+	return body
+}
+
+// NewSearchChatsResponseBody builds the HTTP response body from the result of
+// the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsResponseBody(res *telemetry.SearchChatsResult) *SearchChatsResponseBody {
+	body := &SearchChatsResponseBody{
+		NextCursor: res.NextCursor,
+		Enabled:    res.Enabled,
+	}
+	if res.Chats != nil {
+		body.Chats = make([]*ChatSummaryResponseBody, len(res.Chats))
+		for i, val := range res.Chats {
+			if val == nil {
+				body.Chats[i] = nil
+				continue
+			}
+			body.Chats[i] = marshalTelemetryChatSummaryToChatSummaryResponseBody(val)
+		}
+	} else {
+		body.Chats = []*ChatSummaryResponseBody{}
 	}
 	return body
 }
@@ -1322,6 +1594,146 @@ func NewSearchToolCallsUnexpectedResponseBody(res *goa.ServiceError) *SearchTool
 // from the result of the "searchToolCalls" endpoint of the "telemetry" service.
 func NewSearchToolCallsGatewayErrorResponseBody(res *goa.ServiceError) *SearchToolCallsGatewayErrorResponseBody {
 	body := &SearchToolCallsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchChatsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsUnauthorizedResponseBody(res *goa.ServiceError) *SearchChatsUnauthorizedResponseBody {
+	body := &SearchChatsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchChatsForbiddenResponseBody builds the HTTP response body from the
+// result of the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsForbiddenResponseBody(res *goa.ServiceError) *SearchChatsForbiddenResponseBody {
+	body := &SearchChatsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchChatsBadRequestResponseBody builds the HTTP response body from the
+// result of the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsBadRequestResponseBody(res *goa.ServiceError) *SearchChatsBadRequestResponseBody {
+	body := &SearchChatsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchChatsNotFoundResponseBody builds the HTTP response body from the
+// result of the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsNotFoundResponseBody(res *goa.ServiceError) *SearchChatsNotFoundResponseBody {
+	body := &SearchChatsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchChatsConflictResponseBody builds the HTTP response body from the
+// result of the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsConflictResponseBody(res *goa.ServiceError) *SearchChatsConflictResponseBody {
+	body := &SearchChatsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchChatsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsUnsupportedMediaResponseBody(res *goa.ServiceError) *SearchChatsUnsupportedMediaResponseBody {
+	body := &SearchChatsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchChatsInvalidResponseBody builds the HTTP response body from the
+// result of the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsInvalidResponseBody(res *goa.ServiceError) *SearchChatsInvalidResponseBody {
+	body := &SearchChatsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchChatsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsInvariantViolationResponseBody(res *goa.ServiceError) *SearchChatsInvariantViolationResponseBody {
+	body := &SearchChatsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchChatsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsUnexpectedResponseBody(res *goa.ServiceError) *SearchChatsUnexpectedResponseBody {
+	body := &SearchChatsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchChatsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "searchChats" endpoint of the "telemetry" service.
+func NewSearchChatsGatewayErrorResponseBody(res *goa.ServiceError) *SearchChatsGatewayErrorResponseBody {
+	body := &SearchChatsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1677,6 +2089,34 @@ func NewSearchToolCallsPayload(body *SearchToolCallsRequestBody, apikeyToken *st
 	return v
 }
 
+// NewSearchChatsPayload builds a telemetry service searchChats endpoint
+// payload.
+func NewSearchChatsPayload(body *SearchChatsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.SearchChatsPayload {
+	v := &telemetry.SearchChatsPayload{
+		Cursor: body.Cursor,
+	}
+	if body.Sort != nil {
+		v.Sort = *body.Sort
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.Filter != nil {
+		v.Filter = unmarshalSearchChatsFilterRequestBodyToTelemetrySearchChatsFilter(body.Filter)
+	}
+	if body.Sort == nil {
+		v.Sort = "desc"
+	}
+	if body.Limit == nil {
+		v.Limit = 50
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewCaptureEventPayload builds a telemetry service captureEvent endpoint
 // payload.
 func NewCaptureEventPayload(body *CaptureEventRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *telemetry.CaptureEventPayload {
@@ -1745,6 +2185,32 @@ func ValidateSearchLogsRequestBody(body *SearchLogsRequestBody) (err error) {
 func ValidateSearchToolCallsRequestBody(body *SearchToolCallsRequestBody) (err error) {
 	if body.Filter != nil {
 		if err2 := ValidateSearchToolCallsFilterRequestBody(body.Filter); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Sort != nil {
+		if !(*body.Sort == "asc" || *body.Sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", *body.Sort, []any{"asc", "desc"}))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
+		}
+	}
+	return
+}
+
+// ValidateSearchChatsRequestBody runs the validations defined on
+// SearchChatsRequestBody
+func ValidateSearchChatsRequestBody(body *SearchChatsRequestBody) (err error) {
+	if body.Filter != nil {
+		if err2 := ValidateSearchChatsFilterRequestBody(body.Filter); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -1848,6 +2314,21 @@ func ValidateSearchToolCallsFilterRequestBody(body *SearchToolCallsFilterRequest
 	}
 	if body.FunctionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSearchChatsFilterRequestBody runs the validations defined on
+// SearchChatsFilterRequestBody
+func ValidateSearchChatsFilterRequestBody(body *SearchChatsFilterRequestBody) (err error) {
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
 	}
 	return
 }

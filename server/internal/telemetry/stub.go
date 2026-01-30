@@ -16,6 +16,10 @@ func (n *StubToolMetricsClient) ListTraces(_ context.Context, _ repo.ListTracesP
 	return nil, nil
 }
 
+func (n *StubToolMetricsClient) ListChats(_ context.Context, _ repo.ListChatsParams) ([]repo.ChatSummary, error) {
+	return nil, nil
+}
+
 func (n *StubToolMetricsClient) InsertTelemetryLog(_ context.Context, _ repo.InsertTelemetryLogParams) error {
 	return nil
 }

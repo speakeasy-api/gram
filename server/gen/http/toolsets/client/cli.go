@@ -25,7 +25,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"5sx\",\n      \"description\": \"Aut magni nobis illum placeat ut possimus.\",\n      \"name\": \"Aperiam molestiae ducimus sit animi cum eius.\",\n      \"resource_urns\": [\n         \"Eligendi tempora pariatur nostrum ut voluptates.\",\n         \"Esse fuga vitae possimus et alias.\",\n         \"Consequatur eligendi.\"\n      ],\n      \"tool_urns\": [\n         \"Perspiciatis ut aspernatur ea dolores veritatis consectetur.\",\n         \"Enim autem cumque sint provident laborum.\",\n         \"Praesentium et minus suscipit.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"a8u\",\n      \"description\": \"Autem tempore autem quis blanditiis.\",\n      \"name\": \"Architecto quos ad ut omnis.\",\n      \"resource_urns\": [\n         \"Eum pariatur.\",\n         \"Aliquid et qui est consequatur provident ut.\",\n         \"Laborum quae ad nihil.\"\n      ],\n      \"tool_urns\": [\n         \"Eaque occaecati facere nostrum itaque mollitia.\",\n         \"Quis quidem beatae necessitatibus.\",\n         \"Itaque voluptatem.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -121,7 +121,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Nisi modi ex qui cumque.\",\n      \"default_environment_slug\": \"l31\",\n      \"description\": \"Tempora aliquid.\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"8tt\",\n      \"name\": \"Vel magnam quos quasi quidem.\",\n      \"prompt_template_names\": [\n         \"Sapiente iste hic velit dolorem ut.\",\n         \"At quia a quos sunt reiciendis velit.\",\n         \"Enim dolor dolores blanditiis tenetur sunt saepe.\",\n         \"Occaecati quasi at explicabo.\"\n      ],\n      \"resource_urns\": [\n         \"Sit et ad veniam dicta nihil voluptates.\",\n         \"Architecto iste officia eligendi eos.\",\n         \"Totam dignissimos necessitatibus.\",\n         \"Cupiditate aliquam sit.\"\n      ],\n      \"tool_selection_mode\": \"Earum voluptas quo consequatur.\",\n      \"tool_urns\": [\n         \"Voluptatem voluptatem porro nam iure et.\",\n         \"Id perferendis.\",\n         \"Optio porro provident.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Enim molestias ut qui et.\",\n      \"default_environment_slug\": \"y8d\",\n      \"description\": \"Id sit iure iure minus dolorem.\",\n      \"mcp_enabled\": true,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"wii\",\n      \"name\": \"Adipisci sed.\",\n      \"prompt_template_names\": [\n         \"Molestias fugiat.\",\n         \"Et debitis iusto magnam.\"\n      ],\n      \"resource_urns\": [\n         \"Deleniti blanditiis.\",\n         \"Fugit laudantium consequuntur quasi repudiandae labore esse.\",\n         \"Velit quo.\"\n      ],\n      \"tool_selection_mode\": \"Aspernatur iure voluptas sit perferendis.\",\n      \"tool_urns\": [\n         \"Omnis aut et nobis.\",\n         \"Molestiae laboriosam animi ex veniam.\",\n         \"Quaerat libero cum omnis cum qui labore.\",\n         \"Tempora quas fugit totam in consectetur non.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -390,7 +390,7 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 	{
 		err = json.Unmarshal([]byte(toolsetsAddExternalOAuthServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Atque in voluptate voluptatum nemo a.\",\n         \"slug\": \"s8q\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Soluta aut.\",\n         \"slug\": \"opx\"\n      }\n   }'")
 		}
 		if body.ExternalOauthServer == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("external_oauth_server", "body"))
@@ -495,7 +495,7 @@ func BuildAddOAuthProxyServerPayload(toolsetsAddOAuthProxyServerBody string, too
 	{
 		err = json.Unmarshal([]byte(toolsetsAddOAuthProxyServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"oauth_proxy_server\": {\n         \"authorization_endpoint\": \"Perferendis occaecati doloribus sunt consequuntur.\",\n         \"environment_slug\": \"jio\",\n         \"provider_type\": \"custom\",\n         \"scopes_supported\": [\n            \"Aperiam ab est.\",\n            \"Deleniti et.\",\n            \"Eum voluptatum illo sequi rerum facere saepe.\"\n         ],\n         \"slug\": \"yr6\",\n         \"token_endpoint\": \"Corrupti et.\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"Qui laudantium.\",\n            \"Et ipsam non itaque omnis.\"\n         ]\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"oauth_proxy_server\": {\n         \"authorization_endpoint\": \"Amet natus magni ut voluptatem.\",\n         \"environment_slug\": \"olp\",\n         \"provider_type\": \"gram\",\n         \"scopes_supported\": [\n            \"Minus sunt rerum est dicta ea inventore.\",\n            \"Mollitia dolore.\",\n            \"Reprehenderit facilis sed.\"\n         ],\n         \"slug\": \"fgp\",\n         \"token_endpoint\": \"Alias explicabo cupiditate incidunt nobis illo veniam.\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"Nemo autem repudiandae ex.\",\n            \"Similique sapiente suscipit quis minus.\",\n            \"Est quia.\",\n            \"Enim aspernatur.\"\n         ]\n      }\n   }'")
 		}
 		if body.OauthProxyServer == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("oauth_proxy_server", "body"))
