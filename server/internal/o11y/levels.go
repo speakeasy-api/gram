@@ -3,22 +3,20 @@ package o11y
 import (
 	"log/slog"
 
-	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/speakeasy-api/gram/plog"
 )
 
 type LevelMapping struct {
-	Slog  slog.Level
-	Charm log.Level
-	Plog  int
+	Slog slog.Level
+	Plog int
 }
 
 var LogLevels = map[string]LevelMapping{
-	"debug": {Slog: slog.LevelDebug, Charm: log.DebugLevel, Plog: plog.LevelDebug},
-	"info":  {Slog: slog.LevelInfo, Charm: log.InfoLevel, Plog: plog.LevelInfo},
-	"warn":  {Slog: slog.LevelWarn, Charm: log.WarnLevel, Plog: plog.LevelWarn},
-	"error": {Slog: slog.LevelError, Charm: log.ErrorLevel, Plog: plog.LevelError},
+	"debug": {Slog: slog.LevelDebug, Plog: plog.LevelDebug},
+	"info":  {Slog: slog.LevelInfo, Plog: plog.LevelInfo},
+	"warn":  {Slog: slog.LevelWarn, Plog: plog.LevelWarn},
+	"error": {Slog: slog.LevelError, Plog: plog.LevelError},
 }
 
 var pgxLevels = map[tracelog.LogLevel]slog.Level{
