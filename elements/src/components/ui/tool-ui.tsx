@@ -181,6 +181,22 @@ function CopyButton({ content }: { content: string }) {
  * SyntaxHighlightedCode - Code block with shiki syntax highlighting
  * -------------------------------------------------------------------------- */
 
+/** Max characters to send through shiki — above this we skip highlighting. */
+const SHIKI_CHAR_LIMIT = 8_000
+/** Max lines shown in the collapsed preview. */
+const PREVIEW_LINE_LIMIT = 50
+
+function truncateToLines(text: string, maxLines: number) {
+  let pos = 0
+  for (let i = 0; i < maxLines; i++) {
+    const next = text.indexOf('\n', pos)
+    if (next === -1) return { text, truncated: false, totalLines: i + 1 }
+    pos = next + 1
+  }
+  const totalLines = text.split('\n').length
+  return { text: text.slice(0, pos), truncated: true, totalLines }
+}
+
 function SyntaxHighlightedCode({
   text,
   language,
@@ -191,10 +207,20 @@ function SyntaxHighlightedCode({
   className?: string
 }) {
   const [highlightedCode, setHighlightedCode] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+
+  const preview = React.useMemo(
+    () => truncateToLines(text, PREVIEW_LINE_LIMIT),
+    [text]
+  )
+  const displayText = expanded ? text : preview.text
+  const canHighlight = displayText.length <= SHIKI_CHAR_LIMIT
 
   useEffect(() => {
-    if (!language) return
-    codeToHtml(text, {
+    setHighlightedCode(null)
+    if (!language || !canHighlight) return
+    let cancelled = false
+    codeToHtml(displayText, {
       lang: language,
       theme: 'github-dark-default',
       rootStyle: 'background-color: transparent;',
@@ -206,27 +232,45 @@ function SyntaxHighlightedCode({
           },
         },
       ],
-    }).then(setHighlightedCode)
-  }, [text, language])
+    }).then((html) => {
+      if (!cancelled) setHighlightedCode(html)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [displayText, language, canHighlight])
 
-  if (!highlightedCode) {
+  const showMoreButton = (preview.truncated && !expanded) && (
+    <button
+      type="button"
+      onClick={() => setExpanded(true)}
+      className="w-full bg-slate-800/90 px-4 py-2 text-left text-xs text-slate-400 transition-colors hover:text-slate-200"
+    >
+      Show all {preview.totalLines} lines…
+    </button>
+  )
+
+  if (!canHighlight || !highlightedCode) {
     return (
-      <pre
-        className={cn(
-          'w-full bg-slate-800/90 px-4 py-3 text-sm whitespace-pre-wrap text-slate-100',
-          className
-        )}
-      >
-        {text}
-      </pre>
+      <div className={cn('w-full', className)}>
+        <pre
+          className="w-full max-h-[300px] overflow-y-auto bg-slate-800/90 px-4 py-3 text-sm whitespace-pre-wrap text-slate-100"
+        >
+          {displayText}
+        </pre>
+        {showMoreButton}
+      </div>
     )
   }
 
   return (
-    <div
-      className={cn('w-full bg-slate-800/90', className)}
-      dangerouslySetInnerHTML={{ __html: highlightedCode }}
-    />
+    <div className={cn('w-full', className)}>
+      <div
+        className="w-full bg-slate-800/90"
+        dangerouslySetInnerHTML={{ __html: highlightedCode }}
+      />
+      {showMoreButton}
+    </div>
   )
 }
 

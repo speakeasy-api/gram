@@ -18,6 +18,7 @@ import {
   ImageMessagePartProps,
   MessagePrimitive,
   ThreadPrimitive,
+  useAssistantState,
 } from '@assistant-ui/react'
 
 import { LazyMotion, MotionConfig, domAnimation } from 'motion/react'
@@ -702,6 +703,21 @@ const MessageError: FC = () => {
   )
 }
 
+/**
+ * Shows the pulsing dot indicator when the message is still running but the
+ * last rendered part is a tool call (not text). Without this, there's no
+ * visual feedback that the model is still working after a tool call.
+ */
+const ToolCallStreamingIndicator: FC = () => {
+  const show = useAssistantState(({ message }) => {
+    if (message.status.type !== 'running') return false
+    const lastPart = message.parts[message.parts.length - 1]
+    return lastPart?.type === 'tool-call'
+  })
+  if (!show) return null
+  return <div className="aui-md mt-2" data-status="running" />
+}
+
 const AssistantMessage: FC = () => {
   const { config } = useElements()
   const toolsConfig = config.tools ?? {}
@@ -730,6 +746,7 @@ const AssistantMessage: FC = () => {
       >
         <div className="aui-assistant-message-content text-foreground mx-2 leading-7 wrap-break-word">
           <MessagePrimitive.Parts components={partsComponents} />
+          <ToolCallStreamingIndicator />
           <MessageError />
         </div>
 

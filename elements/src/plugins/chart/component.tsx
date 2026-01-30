@@ -12,10 +12,23 @@ import { expressionInterpreter } from 'vega-interpreter'
 export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<View | null>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [chartReady, setChartReady] = useState(false)
+  const [containerWidth, setContainerWidth] = useState(0)
   const r = useRadius()
   const d = useDensity()
+
+  // Track container width so the Vega view can fill available space
+  useEffect(() => {
+    const el = wrapperRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      setContainerWidth(entry.contentRect.width)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // Parse and validate JSON in useMemo - only recomputes when code changes
   const parsedSpec = useMemo(() => {
@@ -43,8 +56,21 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
   // Only render when we have valid JSON
   const shouldRender = parsedSpec !== null
 
+  // Build the spec with autosize and width derived from the container
+  const sizedSpec = useMemo(() => {
+    if (!parsedSpec || containerWidth === 0) return null
+    // Padding used by the outer wrapper (p-lg ≈ 24px each side)
+    const padding = 48
+    const availableWidth = Math.max(containerWidth - padding, 100)
+    return {
+      ...parsedSpec,
+      width: availableWidth,
+      autosize: { type: 'fit', contains: 'padding' },
+    }
+  }, [parsedSpec, containerWidth])
+
   useEffect(() => {
-    if (!containerRef.current || !shouldRender) {
+    if (!containerRef.current || !shouldRender || !sizedSpec) {
       return
     }
 
@@ -59,7 +85,7 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
           viewRef.current = null
         }
 
-        const chart = parse(parsedSpec, undefined, { ast: true })
+        const chart = parse(sizedSpec, undefined, { ast: true })
         const view = new View(chart, {
           container: containerRef.current ?? undefined,
           renderer: 'svg',
@@ -85,15 +111,16 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
         viewRef.current = null
       }
     }
-  }, [shouldRender, parsedSpec])
+  }, [shouldRender, sizedSpec])
 
   const showLoading = !chartReady && !error
 
   return (
     <div
+      ref={wrapperRef}
       className={cn(
         // the after:hidden is to prevent assistant-ui from showing its default code block loading indicator
-        'border-border relative min-h-[400px] w-fit max-w-full min-w-[400px] overflow-hidden border after:hidden',
+        'border-border relative min-h-[400px] w-full overflow-hidden border after:hidden',
         r('lg'),
         showLoading ? '' : d('p-lg')
       )}
