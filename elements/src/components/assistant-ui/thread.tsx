@@ -710,7 +710,7 @@ const MessageError: FC = () => {
  */
 const ToolCallStreamingIndicator: FC = () => {
   const show = useAssistantState(({ message }) => {
-    if (message.status.type !== 'running') return false
+    if (message.status?.type !== 'running') return false
     const lastPart = message.parts[message.parts.length - 1]
     return lastPart?.type === 'tool-call'
   })

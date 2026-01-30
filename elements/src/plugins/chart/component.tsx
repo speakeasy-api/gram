@@ -65,7 +65,7 @@ export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
     return {
       ...parsedSpec,
       width: availableWidth,
-      autosize: { type: 'fit', contains: 'padding' },
+      autosize: { type: 'fit' as const, contains: 'padding' as const },
     }
   }, [parsedSpec, containerWidth])
 
