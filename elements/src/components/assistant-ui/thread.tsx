@@ -18,6 +18,7 @@ import {
   ImageMessagePartProps,
   MessagePrimitive,
   ThreadPrimitive,
+  useAssistantState,
 } from '@assistant-ui/react'
 
 import { LazyMotion, MotionConfig, domAnimation } from 'motion/react'
@@ -26,6 +27,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FC,
@@ -701,10 +703,41 @@ const MessageError: FC = () => {
   )
 }
 
+/**
+ * Shows the pulsing dot indicator when the message is still running but the
+ * last rendered part is a tool call (not text). Without this, there's no
+ * visual feedback that the model is still working after a tool call.
+ */
+const ToolCallStreamingIndicator: FC = () => {
+  const show = useAssistantState(({ message }) => {
+    if (message.status?.type !== 'running') return false
+    const lastPart = message.parts[message.parts.length - 1]
+    return lastPart?.type === 'tool-call'
+  })
+  if (!show) return null
+  return <div className="aui-md mt-2" data-status="running" />
+}
+
 const AssistantMessage: FC = () => {
   const { config } = useElements()
   const toolsConfig = config.tools ?? {}
   const components = config.components ?? {}
+
+  const partsComponents = useMemo(
+    () => ({
+      Text: components.Text ?? MarkdownText,
+      Image: components.Image ?? Image,
+      tools: {
+        by_name: toolsConfig.components,
+        Fallback: components.ToolFallback ?? ToolFallback,
+      },
+      Reasoning: components.Reasoning ?? Reasoning,
+      ReasoningGroup: components.ReasoningGroup ?? ReasoningGroup,
+      ToolGroup: components.ToolGroup ?? ToolGroup,
+    }),
+    [components, toolsConfig.components]
+  )
+
   return (
     <MessagePrimitive.Root asChild>
       <div
@@ -712,19 +745,8 @@ const AssistantMessage: FC = () => {
         data-role="assistant"
       >
         <div className="aui-assistant-message-content text-foreground mx-2 leading-7 wrap-break-word">
-          <MessagePrimitive.Parts
-            components={{
-              Text: components.Text ?? MarkdownText,
-              Image: components.Image ?? Image,
-              tools: {
-                by_name: toolsConfig.components,
-                Fallback: components.ToolFallback ?? ToolFallback,
-              },
-              Reasoning: components.Reasoning ?? Reasoning,
-              ReasoningGroup: components.ReasoningGroup ?? ReasoningGroup,
-              ToolGroup: components.ToolGroup ?? ToolGroup,
-            }}
-          />
+          <MessagePrimitive.Parts components={partsComponents} />
+          <ToolCallStreamingIndicator />
           <MessageError />
         </div>
 
