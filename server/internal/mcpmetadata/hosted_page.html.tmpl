@@ -959,7 +959,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {{- if .DocsSlug }}{{ .DocsSlug }}{{- else }}View Docs{{- end }}
+                {{- if .DocsBtnText }}{{ .DocsBtnText }}{{- else }}View Docs{{- end }}
               </a>
               {{- end }}
               <div class="popover">
