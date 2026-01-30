@@ -1,5 +1,31 @@
 # dashboard
 
+## 0.27.0
+
+### Minor Changes
+
+- 0a550bc: Adds experimental metrics insights to dashboard.
+- 567289d: Major UX overhaul with redesigned MCP cards, pattern-based illustrations, and improved environment variable management
+- b85bfd5: Last accessed date is now available for Gram API keys and can be viewed via the
+  API and dashboard settings page.
+
+### Patch Changes
+
+- 75eff56: Restored the organization override feature for admin users and ensures that both organization and project IDs are also displayed.
+- 6a35424: Various UX improvements to the new dashboard
+- 73304b3: UX improvements for Sources and MCP pages: tabbed interfaces, function tools table with runtime column, dynamic tab validation, softer delete warning styling
+- 90ad1ba: Add support for install page redirect URLs
+- Updated dependencies [659d955]
+- Updated dependencies [c17b9f7]
+- Updated dependencies [08e4fb5]
+- Updated dependencies [438e1a7]
+- Updated dependencies [2d520cb]
+- Updated dependencies [afb9fbb]
+- Updated dependencies [51b9f17]
+- Updated dependencies [90ad1ba]
+  - @gram/client@0.26.9
+  - @gram-ai/elements@1.24.0
+
 ## 0.26.19
 
 ### Patch Changes
