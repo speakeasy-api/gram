@@ -652,7 +652,7 @@ const CASSETTE_RECORDING_ENABLED =
 const ComposerCassetteRecorder: FC = () => {
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [tooltipOpen, setTooltipOpen] = useState(false)
-  const { isRecording, messageCount, startRecording, stopRecording, download } =
+  const { isRecording, startRecording, stopRecording, download } =
     useRecordCassette()
 
   useEffect(() => {
