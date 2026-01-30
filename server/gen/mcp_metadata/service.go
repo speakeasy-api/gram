@@ -70,6 +70,8 @@ type SetMcpMetadataPayload struct {
 	LogoAssetID *string
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string
+	// Custom text for the external documentation link button
+	ExternalDocumentationText *string
 	// Server instructions returned in the MCP initialize response
 	Instructions     *string
 	SessionToken     *string

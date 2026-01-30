@@ -22,6 +22,8 @@ type SetMcpMetadataRequestBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// Custom text for the external documentation link button
+	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 }
@@ -44,6 +46,8 @@ type SetMcpMetadataResponseBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// Custom text for the external documentation link button
+	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Maps security scheme keys to user-friendly display names
@@ -436,6 +440,8 @@ type McpMetadataResponseBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// Custom text for the external documentation link button
+	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Maps security scheme keys to user-friendly display names
@@ -450,10 +456,11 @@ type McpMetadataResponseBody struct {
 // of the "setMcpMetadata" endpoint of the "mcpMetadata" service.
 func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpMetadataRequestBody {
 	body := &SetMcpMetadataRequestBody{
-		ToolsetSlug:              string(p.ToolsetSlug),
-		LogoAssetID:              p.LogoAssetID,
-		ExternalDocumentationURL: p.ExternalDocumentationURL,
-		Instructions:             p.Instructions,
+		ToolsetSlug:               string(p.ToolsetSlug),
+		LogoAssetID:               p.LogoAssetID,
+		ExternalDocumentationURL:  p.ExternalDocumentationURL,
+		ExternalDocumentationText: p.ExternalDocumentationText,
+		Instructions:              p.Instructions,
 	}
 	return body
 }
@@ -623,13 +630,14 @@ func NewGetMcpMetadataGatewayError(body *GetMcpMetadataGatewayErrorResponseBody)
 // "setMcpMetadata" endpoint result from a HTTP "OK" response.
 func NewSetMcpMetadataMcpMetadataOK(body *SetMcpMetadataResponseBody) *types.McpMetadata {
 	v := &types.McpMetadata{
-		ID:                       *body.ID,
-		ToolsetID:                *body.ToolsetID,
-		LogoAssetID:              body.LogoAssetID,
-		ExternalDocumentationURL: body.ExternalDocumentationURL,
-		Instructions:             body.Instructions,
-		CreatedAt:                *body.CreatedAt,
-		UpdatedAt:                *body.UpdatedAt,
+		ID:                        *body.ID,
+		ToolsetID:                 *body.ToolsetID,
+		LogoAssetID:               body.LogoAssetID,
+		ExternalDocumentationURL:  body.ExternalDocumentationURL,
+		ExternalDocumentationText: body.ExternalDocumentationText,
+		Instructions:              body.Instructions,
+		CreatedAt:                 *body.CreatedAt,
+		UpdatedAt:                 *body.UpdatedAt,
 	}
 	if body.HeaderDisplayNames != nil {
 		v.HeaderDisplayNames = make(map[string]string, len(body.HeaderDisplayNames))

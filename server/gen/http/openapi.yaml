@@ -21922,24 +21922,24 @@ definitions:
                 $ref: '#/definitions/Package'
         example:
             package:
-                created_at: "1980-04-09T22:24:25Z"
-                deleted_at: "1987-10-19T20:23:42Z"
-                description: Exercitationem omnis dolor explicabo cupiditate similique et.
-                description_raw: Rerum voluptatibus omnis quasi reprehenderit facere.
-                id: Rerum porro velit est enim occaecati vel.
-                image_asset_id: Vero dolorum dolor occaecati placeat.
+                created_at: "1987-04-09T03:37:53Z"
+                deleted_at: "1983-02-09T23:27:03Z"
+                description: Voluptatem fugiat amet id.
+                description_raw: Dolorum dolor occaecati placeat occaecati.
+                id: Explicabo cupiditate similique et.
+                image_asset_id: Non fugit repellendus excepturi.
                 keywords:
-                    - Doloribus minima.
-                    - Quia aliquam aut.
-                    - Et expedita deleniti.
-                latest_version: Ut optio.
-                name: Consequatur ab qui ea nihil distinctio.
-                organization_id: Libero quisquam molestiae ut atque nisi.
-                project_id: Officiis modi praesentium assumenda maxime.
-                summary: Quod voluptate suscipit culpa.
-                title: Voluptatum officia quod qui est aperiam.
-                updated_at: "1994-11-05T22:13:36Z"
-                url: Et voluptates laudantium voluptatem voluptatem fugiat amet.
+                    - Error non nobis cumque.
+                    - Aut aspernatur id illum.
+                    - Quaerat earum delectus nam vero et autem.
+                latest_version: Nesciunt natus.
+                name: Aliquam aut voluptas.
+                organization_id: Aliquam doloribus minima libero.
+                project_id: Rerum voluptatibus omnis quasi reprehenderit facere.
+                summary: Voluptates laudantium.
+                title: Expedita deleniti autem.
+                updated_at: "1970-08-28T02:05:39Z"
+                url: Aperiam sit consequatur harum.
         required:
             - package
     CreateProjectResult:
@@ -21950,13 +21950,13 @@ definitions:
                 $ref: '#/definitions/Project'
         example:
             project:
-                created_at: "2009-07-19T16:37:52Z"
-                id: Vel maiores dolor dolorum maxime.
-                logo_asset_id: Aut accusantium reiciendis qui.
-                name: Eius accusamus earum saepe.
-                organization_id: Perferendis quod dolores qui reiciendis magnam inventore.
-                slug: swo
-                updated_at: "1978-10-01T02:24:59Z"
+                created_at: "2002-07-01T16:34:57Z"
+                id: Eum sequi aut rerum.
+                logo_asset_id: Pariatur voluptatem eos aut laudantium.
+                name: Et possimus et.
+                organization_id: Perferendis eaque adipisci.
+                slug: ov9
+                updated_at: "1986-10-20T05:29:29Z"
         required:
             - project
     CreatePromptTemplateResult:
@@ -35569,39 +35569,45 @@ definitions:
         example:
             enabled: true
             metrics:
-                avg_chat_duration_ms: 0.26521967869880964
-                avg_tokens_per_request: 0.18054303645309833
-                avg_tool_duration_ms: 0.02959924232126125
-                distinct_models: 1617798187287574016
-                distinct_providers: 6592377339751938116
-                finish_reason_stop: 2086722968569490470
-                finish_reason_tool_calls: 4486852026293650136
+                avg_chat_duration_ms: 0.48138683014983835
+                avg_tokens_per_request: 0.6722160811684205
+                avg_tool_duration_ms: 0.8780846757895341
+                distinct_models: 3138825885362008739
+                distinct_providers: 3433420715599080593
+                finish_reason_stop: 9219327905867729727
+                finish_reason_tool_calls: 1061599449526500645
                 models:
-                    - count: 5664664030289770402
-                      name: Quam maxime et velit voluptatem.
-                    - count: 5664664030289770402
-                      name: Quam maxime et velit voluptatem.
-                    - count: 5664664030289770402
-                      name: Quam maxime et velit voluptatem.
-                    - count: 5664664030289770402
-                      name: Quam maxime et velit voluptatem.
-                tool_call_failure: 4183684330591348897
-                tool_call_success: 8112444218684143237
+                    - count: 4625255923817562965
+                      name: Aliquid dolorem itaque consequatur.
+                    - count: 4625255923817562965
+                      name: Aliquid dolorem itaque consequatur.
+                    - count: 4625255923817562965
+                      name: Aliquid dolorem itaque consequatur.
+                tool_call_failure: 1634241341592004871
+                tool_call_success: 2243774122566848943
                 tools:
-                    - count: 5980287113071002446
-                      failure_count: 9017910234015526541
-                      success_count: 1227610923685059771
-                      urn: Voluptas possimus consequuntur.
-                    - count: 5980287113071002446
-                      failure_count: 9017910234015526541
-                      success_count: 1227610923685059771
-                      urn: Voluptas possimus consequuntur.
-                total_chat_requests: 5249201277274274630
-                total_chats: 936197538762490670
-                total_input_tokens: 5299542200723969085
-                total_output_tokens: 8223564560387296877
-                total_tokens: 9036546067034356121
-                total_tool_calls: 8471379324999880674
+                    - count: 2226693748559069587
+                      failure_count: 629532768623347114
+                      success_count: 7026629859263232142
+                      urn: Sed libero sint est voluptatibus voluptate commodi.
+                    - count: 2226693748559069587
+                      failure_count: 629532768623347114
+                      success_count: 7026629859263232142
+                      urn: Sed libero sint est voluptatibus voluptate commodi.
+                    - count: 2226693748559069587
+                      failure_count: 629532768623347114
+                      success_count: 7026629859263232142
+                      urn: Sed libero sint est voluptatibus voluptate commodi.
+                    - count: 2226693748559069587
+                      failure_count: 629532768623347114
+                      success_count: 7026629859263232142
+                      urn: Sed libero sint est voluptatibus voluptate commodi.
+                total_chat_requests: 2245249288567998390
+                total_chats: 7347398275527011639
+                total_input_tokens: 7211519749693741178
+                total_output_tokens: 1655721037568550573
+                total_tokens: 5991217423379531482
+                total_tool_calls: 1741178741018250788
         required:
             - metrics
             - enabled
@@ -35613,13 +35619,13 @@ definitions:
                 $ref: '#/definitions/Project'
         example:
             project:
-                created_at: "2009-07-19T16:37:52Z"
-                id: Vel maiores dolor dolorum maxime.
-                logo_asset_id: Aut accusantium reiciendis qui.
-                name: Eius accusamus earum saepe.
-                organization_id: Perferendis quod dolores qui reiciendis magnam inventore.
-                slug: swo
-                updated_at: "1978-10-01T02:24:59Z"
+                created_at: "2002-07-01T16:34:57Z"
+                id: Eum sequi aut rerum.
+                logo_asset_id: Pariatur voluptatem eos aut laudantium.
+                name: Et possimus et.
+                organization_id: Perferendis eaque adipisci.
+                slug: ov9
+                updated_at: "1986-10-20T05:29:29Z"
         required:
             - project
     GetPromptTemplateResult:
@@ -39219,44 +39225,44 @@ definitions:
                     $ref: '#/definitions/AllowedOrigin'
                 description: The list of allowed origins
                 example:
-                    - created_at: "1980-07-23T03:44:34Z"
-                      id: Sed soluta quas.
-                      origin: Adipisci dolor voluptas labore voluptas.
-                      project_id: Id deleniti soluta magnam praesentium voluptatum.
+                    - created_at: "1998-04-15T07:59:43Z"
+                      id: Corrupti rerum ipsa laboriosam placeat illo adipisci.
+                      origin: Ducimus error repellat.
+                      project_id: Ea voluptas tempore et.
                       status: rejected
-                      updated_at: "1972-10-24T23:55:48Z"
-                    - created_at: "1980-07-23T03:44:34Z"
-                      id: Sed soluta quas.
-                      origin: Adipisci dolor voluptas labore voluptas.
-                      project_id: Id deleniti soluta magnam praesentium voluptatum.
+                      updated_at: "1979-12-15T22:14:55Z"
+                    - created_at: "1998-04-15T07:59:43Z"
+                      id: Corrupti rerum ipsa laboriosam placeat illo adipisci.
+                      origin: Ducimus error repellat.
+                      project_id: Ea voluptas tempore et.
                       status: rejected
-                      updated_at: "1972-10-24T23:55:48Z"
-                    - created_at: "1980-07-23T03:44:34Z"
-                      id: Sed soluta quas.
-                      origin: Adipisci dolor voluptas labore voluptas.
-                      project_id: Id deleniti soluta magnam praesentium voluptatum.
+                      updated_at: "1979-12-15T22:14:55Z"
+                    - created_at: "1998-04-15T07:59:43Z"
+                      id: Corrupti rerum ipsa laboriosam placeat illo adipisci.
+                      origin: Ducimus error repellat.
+                      project_id: Ea voluptas tempore et.
                       status: rejected
-                      updated_at: "1972-10-24T23:55:48Z"
-                    - created_at: "1980-07-23T03:44:34Z"
-                      id: Sed soluta quas.
-                      origin: Adipisci dolor voluptas labore voluptas.
-                      project_id: Id deleniti soluta magnam praesentium voluptatum.
+                      updated_at: "1979-12-15T22:14:55Z"
+                    - created_at: "1998-04-15T07:59:43Z"
+                      id: Corrupti rerum ipsa laboriosam placeat illo adipisci.
+                      origin: Ducimus error repellat.
+                      project_id: Ea voluptas tempore et.
                       status: rejected
-                      updated_at: "1972-10-24T23:55:48Z"
+                      updated_at: "1979-12-15T22:14:55Z"
         example:
             allowed_origins:
-                - created_at: "1980-07-23T03:44:34Z"
-                  id: Sed soluta quas.
-                  origin: Adipisci dolor voluptas labore voluptas.
-                  project_id: Id deleniti soluta magnam praesentium voluptatum.
+                - created_at: "1998-04-15T07:59:43Z"
+                  id: Corrupti rerum ipsa laboriosam placeat illo adipisci.
+                  origin: Ducimus error repellat.
+                  project_id: Ea voluptas tempore et.
                   status: rejected
-                  updated_at: "1972-10-24T23:55:48Z"
-                - created_at: "1980-07-23T03:44:34Z"
-                  id: Sed soluta quas.
-                  origin: Adipisci dolor voluptas labore voluptas.
-                  project_id: Id deleniti soluta magnam praesentium voluptatum.
+                  updated_at: "1979-12-15T22:14:55Z"
+                - created_at: "1998-04-15T07:59:43Z"
+                  id: Corrupti rerum ipsa laboriosam placeat illo adipisci.
+                  origin: Ducimus error repellat.
+                  project_id: Ea voluptas tempore et.
                   status: rejected
-                  updated_at: "1972-10-24T23:55:48Z"
+                  updated_at: "1979-12-15T22:14:55Z"
         required:
             - allowed_origins
     ListAssetsResult:
@@ -39835,80 +39841,80 @@ definitions:
                     $ref: '#/definitions/Package'
                 description: The list of packages
                 example:
-                    - created_at: "1980-04-09T22:24:25Z"
-                      deleted_at: "1987-10-19T20:23:42Z"
-                      description: Exercitationem omnis dolor explicabo cupiditate similique et.
-                      description_raw: Rerum voluptatibus omnis quasi reprehenderit facere.
-                      id: Rerum porro velit est enim occaecati vel.
-                      image_asset_id: Vero dolorum dolor occaecati placeat.
+                    - created_at: "1987-04-09T03:37:53Z"
+                      deleted_at: "1983-02-09T23:27:03Z"
+                      description: Voluptatem fugiat amet id.
+                      description_raw: Dolorum dolor occaecati placeat occaecati.
+                      id: Explicabo cupiditate similique et.
+                      image_asset_id: Non fugit repellendus excepturi.
                       keywords:
-                        - Doloribus minima.
-                        - Quia aliquam aut.
-                        - Et expedita deleniti.
-                      latest_version: Ut optio.
-                      name: Consequatur ab qui ea nihil distinctio.
-                      organization_id: Libero quisquam molestiae ut atque nisi.
-                      project_id: Officiis modi praesentium assumenda maxime.
-                      summary: Quod voluptate suscipit culpa.
-                      title: Voluptatum officia quod qui est aperiam.
-                      updated_at: "1994-11-05T22:13:36Z"
-                      url: Et voluptates laudantium voluptatem voluptatem fugiat amet.
-                    - created_at: "1980-04-09T22:24:25Z"
-                      deleted_at: "1987-10-19T20:23:42Z"
-                      description: Exercitationem omnis dolor explicabo cupiditate similique et.
-                      description_raw: Rerum voluptatibus omnis quasi reprehenderit facere.
-                      id: Rerum porro velit est enim occaecati vel.
-                      image_asset_id: Vero dolorum dolor occaecati placeat.
+                        - Error non nobis cumque.
+                        - Aut aspernatur id illum.
+                        - Quaerat earum delectus nam vero et autem.
+                      latest_version: Nesciunt natus.
+                      name: Aliquam aut voluptas.
+                      organization_id: Aliquam doloribus minima libero.
+                      project_id: Rerum voluptatibus omnis quasi reprehenderit facere.
+                      summary: Voluptates laudantium.
+                      title: Expedita deleniti autem.
+                      updated_at: "1970-08-28T02:05:39Z"
+                      url: Aperiam sit consequatur harum.
+                    - created_at: "1987-04-09T03:37:53Z"
+                      deleted_at: "1983-02-09T23:27:03Z"
+                      description: Voluptatem fugiat amet id.
+                      description_raw: Dolorum dolor occaecati placeat occaecati.
+                      id: Explicabo cupiditate similique et.
+                      image_asset_id: Non fugit repellendus excepturi.
                       keywords:
-                        - Doloribus minima.
-                        - Quia aliquam aut.
-                        - Et expedita deleniti.
-                      latest_version: Ut optio.
-                      name: Consequatur ab qui ea nihil distinctio.
-                      organization_id: Libero quisquam molestiae ut atque nisi.
-                      project_id: Officiis modi praesentium assumenda maxime.
-                      summary: Quod voluptate suscipit culpa.
-                      title: Voluptatum officia quod qui est aperiam.
-                      updated_at: "1994-11-05T22:13:36Z"
-                      url: Et voluptates laudantium voluptatem voluptatem fugiat amet.
+                        - Error non nobis cumque.
+                        - Aut aspernatur id illum.
+                        - Quaerat earum delectus nam vero et autem.
+                      latest_version: Nesciunt natus.
+                      name: Aliquam aut voluptas.
+                      organization_id: Aliquam doloribus minima libero.
+                      project_id: Rerum voluptatibus omnis quasi reprehenderit facere.
+                      summary: Voluptates laudantium.
+                      title: Expedita deleniti autem.
+                      updated_at: "1970-08-28T02:05:39Z"
+                      url: Aperiam sit consequatur harum.
         example:
             packages:
-                - created_at: "1980-04-09T22:24:25Z"
-                  deleted_at: "1987-10-19T20:23:42Z"
-                  description: Exercitationem omnis dolor explicabo cupiditate similique et.
-                  description_raw: Rerum voluptatibus omnis quasi reprehenderit facere.
-                  id: Rerum porro velit est enim occaecati vel.
-                  image_asset_id: Vero dolorum dolor occaecati placeat.
+                - created_at: "1987-04-09T03:37:53Z"
+                  deleted_at: "1983-02-09T23:27:03Z"
+                  description: Voluptatem fugiat amet id.
+                  description_raw: Dolorum dolor occaecati placeat occaecati.
+                  id: Explicabo cupiditate similique et.
+                  image_asset_id: Non fugit repellendus excepturi.
                   keywords:
-                    - Doloribus minima.
-                    - Quia aliquam aut.
-                    - Et expedita deleniti.
-                  latest_version: Ut optio.
-                  name: Consequatur ab qui ea nihil distinctio.
-                  organization_id: Libero quisquam molestiae ut atque nisi.
-                  project_id: Officiis modi praesentium assumenda maxime.
-                  summary: Quod voluptate suscipit culpa.
-                  title: Voluptatum officia quod qui est aperiam.
-                  updated_at: "1994-11-05T22:13:36Z"
-                  url: Et voluptates laudantium voluptatem voluptatem fugiat amet.
-                - created_at: "1980-04-09T22:24:25Z"
-                  deleted_at: "1987-10-19T20:23:42Z"
-                  description: Exercitationem omnis dolor explicabo cupiditate similique et.
-                  description_raw: Rerum voluptatibus omnis quasi reprehenderit facere.
-                  id: Rerum porro velit est enim occaecati vel.
-                  image_asset_id: Vero dolorum dolor occaecati placeat.
+                    - Error non nobis cumque.
+                    - Aut aspernatur id illum.
+                    - Quaerat earum delectus nam vero et autem.
+                  latest_version: Nesciunt natus.
+                  name: Aliquam aut voluptas.
+                  organization_id: Aliquam doloribus minima libero.
+                  project_id: Rerum voluptatibus omnis quasi reprehenderit facere.
+                  summary: Voluptates laudantium.
+                  title: Expedita deleniti autem.
+                  updated_at: "1970-08-28T02:05:39Z"
+                  url: Aperiam sit consequatur harum.
+                - created_at: "1987-04-09T03:37:53Z"
+                  deleted_at: "1983-02-09T23:27:03Z"
+                  description: Voluptatem fugiat amet id.
+                  description_raw: Dolorum dolor occaecati placeat occaecati.
+                  id: Explicabo cupiditate similique et.
+                  image_asset_id: Non fugit repellendus excepturi.
                   keywords:
-                    - Doloribus minima.
-                    - Quia aliquam aut.
-                    - Et expedita deleniti.
-                  latest_version: Ut optio.
-                  name: Consequatur ab qui ea nihil distinctio.
-                  organization_id: Libero quisquam molestiae ut atque nisi.
-                  project_id: Officiis modi praesentium assumenda maxime.
-                  summary: Quod voluptate suscipit culpa.
-                  title: Voluptatum officia quod qui est aperiam.
-                  updated_at: "1994-11-05T22:13:36Z"
-                  url: Et voluptates laudantium voluptatem voluptatem fugiat amet.
+                    - Error non nobis cumque.
+                    - Aut aspernatur id illum.
+                    - Quaerat earum delectus nam vero et autem.
+                  latest_version: Nesciunt natus.
+                  name: Aliquam aut voluptas.
+                  organization_id: Aliquam doloribus minima libero.
+                  project_id: Rerum voluptatibus omnis quasi reprehenderit facere.
+                  summary: Voluptates laudantium.
+                  title: Expedita deleniti autem.
+                  updated_at: "1970-08-28T02:05:39Z"
+                  url: Aperiam sit consequatur harum.
         required:
             - packages
     ListProjectsResult:
@@ -40287,141 +40293,141 @@ definitions:
                 description: The list of resources
                 example:
                     - function_resource_definition:
-                        created_at: "1992-09-04T10:15:03Z"
-                        deployment_id: Et distinctio eius.
-                        description: Ab tempore at sed.
-                        function_id: Officiis vitae aut veritatis amet quidem et.
-                        id: Ut natus.
+                        created_at: "2005-03-16T20:18:20Z"
+                        deployment_id: In pariatur non nam.
+                        description: Quisquam facere.
+                        function_id: Quibusdam aut maiores velit.
+                        id: Harum sequi non.
                         meta:
-                            Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                            Est rem ab.: In pariatur non nam.
-                            Quibusdam aut maiores velit.: Tempore non totam totam.
-                        mime_type: Harum sequi non.
-                        name: Non quia dolore modi autem.
-                        project_id: Ipsa qui aspernatur libero consectetur culpa.
-                        resource_urn: Dolorum molestiae.
-                        runtime: Amet omnis.
-                        title: Et perferendis debitis aut quia sit et.
-                        updated_at: "1995-11-25T21:33:17Z"
-                        uri: Dolorum accusamus.
-                        variables: Qui qui modi quia tempora earum hic.
+                            Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                            Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                            Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                        mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                        name: Laudantium pariatur esse consequatur et.
+                        project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                        resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                        runtime: Tempore non totam totam.
+                        title: Cumque minus modi repellat voluptas.
+                        updated_at: "1976-10-01T21:46:38Z"
+                        uri: Voluptatibus magnam sint occaecati quo aut.
+                        variables: Doloribus pariatur et omnis.
                     - function_resource_definition:
-                        created_at: "1992-09-04T10:15:03Z"
-                        deployment_id: Et distinctio eius.
-                        description: Ab tempore at sed.
-                        function_id: Officiis vitae aut veritatis amet quidem et.
-                        id: Ut natus.
+                        created_at: "2005-03-16T20:18:20Z"
+                        deployment_id: In pariatur non nam.
+                        description: Quisquam facere.
+                        function_id: Quibusdam aut maiores velit.
+                        id: Harum sequi non.
                         meta:
-                            Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                            Est rem ab.: In pariatur non nam.
-                            Quibusdam aut maiores velit.: Tempore non totam totam.
-                        mime_type: Harum sequi non.
-                        name: Non quia dolore modi autem.
-                        project_id: Ipsa qui aspernatur libero consectetur culpa.
-                        resource_urn: Dolorum molestiae.
-                        runtime: Amet omnis.
-                        title: Et perferendis debitis aut quia sit et.
-                        updated_at: "1995-11-25T21:33:17Z"
-                        uri: Dolorum accusamus.
-                        variables: Qui qui modi quia tempora earum hic.
+                            Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                            Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                            Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                        mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                        name: Laudantium pariatur esse consequatur et.
+                        project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                        resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                        runtime: Tempore non totam totam.
+                        title: Cumque minus modi repellat voluptas.
+                        updated_at: "1976-10-01T21:46:38Z"
+                        uri: Voluptatibus magnam sint occaecati quo aut.
+                        variables: Doloribus pariatur et omnis.
                     - function_resource_definition:
-                        created_at: "1992-09-04T10:15:03Z"
-                        deployment_id: Et distinctio eius.
-                        description: Ab tempore at sed.
-                        function_id: Officiis vitae aut veritatis amet quidem et.
-                        id: Ut natus.
+                        created_at: "2005-03-16T20:18:20Z"
+                        deployment_id: In pariatur non nam.
+                        description: Quisquam facere.
+                        function_id: Quibusdam aut maiores velit.
+                        id: Harum sequi non.
                         meta:
-                            Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                            Est rem ab.: In pariatur non nam.
-                            Quibusdam aut maiores velit.: Tempore non totam totam.
-                        mime_type: Harum sequi non.
-                        name: Non quia dolore modi autem.
-                        project_id: Ipsa qui aspernatur libero consectetur culpa.
-                        resource_urn: Dolorum molestiae.
-                        runtime: Amet omnis.
-                        title: Et perferendis debitis aut quia sit et.
-                        updated_at: "1995-11-25T21:33:17Z"
-                        uri: Dolorum accusamus.
-                        variables: Qui qui modi quia tempora earum hic.
+                            Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                            Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                            Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                        mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                        name: Laudantium pariatur esse consequatur et.
+                        project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                        resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                        runtime: Tempore non totam totam.
+                        title: Cumque minus modi repellat voluptas.
+                        updated_at: "1976-10-01T21:46:38Z"
+                        uri: Voluptatibus magnam sint occaecati quo aut.
+                        variables: Doloribus pariatur et omnis.
         example:
             next_cursor: Rem velit qui dolores enim est qui.
             resources:
                 - function_resource_definition:
-                    created_at: "1992-09-04T10:15:03Z"
-                    deployment_id: Et distinctio eius.
-                    description: Ab tempore at sed.
-                    function_id: Officiis vitae aut veritatis amet quidem et.
-                    id: Ut natus.
+                    created_at: "2005-03-16T20:18:20Z"
+                    deployment_id: In pariatur non nam.
+                    description: Quisquam facere.
+                    function_id: Quibusdam aut maiores velit.
+                    id: Harum sequi non.
                     meta:
-                        Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                        Est rem ab.: In pariatur non nam.
-                        Quibusdam aut maiores velit.: Tempore non totam totam.
-                    mime_type: Harum sequi non.
-                    name: Non quia dolore modi autem.
-                    project_id: Ipsa qui aspernatur libero consectetur culpa.
-                    resource_urn: Dolorum molestiae.
-                    runtime: Amet omnis.
-                    title: Et perferendis debitis aut quia sit et.
-                    updated_at: "1995-11-25T21:33:17Z"
-                    uri: Dolorum accusamus.
-                    variables: Qui qui modi quia tempora earum hic.
+                        Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                        Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                        Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                    mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                    name: Laudantium pariatur esse consequatur et.
+                    project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                    resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                    runtime: Tempore non totam totam.
+                    title: Cumque minus modi repellat voluptas.
+                    updated_at: "1976-10-01T21:46:38Z"
+                    uri: Voluptatibus magnam sint occaecati quo aut.
+                    variables: Doloribus pariatur et omnis.
                 - function_resource_definition:
-                    created_at: "1992-09-04T10:15:03Z"
-                    deployment_id: Et distinctio eius.
-                    description: Ab tempore at sed.
-                    function_id: Officiis vitae aut veritatis amet quidem et.
-                    id: Ut natus.
+                    created_at: "2005-03-16T20:18:20Z"
+                    deployment_id: In pariatur non nam.
+                    description: Quisquam facere.
+                    function_id: Quibusdam aut maiores velit.
+                    id: Harum sequi non.
                     meta:
-                        Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                        Est rem ab.: In pariatur non nam.
-                        Quibusdam aut maiores velit.: Tempore non totam totam.
-                    mime_type: Harum sequi non.
-                    name: Non quia dolore modi autem.
-                    project_id: Ipsa qui aspernatur libero consectetur culpa.
-                    resource_urn: Dolorum molestiae.
-                    runtime: Amet omnis.
-                    title: Et perferendis debitis aut quia sit et.
-                    updated_at: "1995-11-25T21:33:17Z"
-                    uri: Dolorum accusamus.
-                    variables: Qui qui modi quia tempora earum hic.
+                        Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                        Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                        Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                    mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                    name: Laudantium pariatur esse consequatur et.
+                    project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                    resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                    runtime: Tempore non totam totam.
+                    title: Cumque minus modi repellat voluptas.
+                    updated_at: "1976-10-01T21:46:38Z"
+                    uri: Voluptatibus magnam sint occaecati quo aut.
+                    variables: Doloribus pariatur et omnis.
                 - function_resource_definition:
-                    created_at: "1992-09-04T10:15:03Z"
-                    deployment_id: Et distinctio eius.
-                    description: Ab tempore at sed.
-                    function_id: Officiis vitae aut veritatis amet quidem et.
-                    id: Ut natus.
+                    created_at: "2005-03-16T20:18:20Z"
+                    deployment_id: In pariatur non nam.
+                    description: Quisquam facere.
+                    function_id: Quibusdam aut maiores velit.
+                    id: Harum sequi non.
                     meta:
-                        Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                        Est rem ab.: In pariatur non nam.
-                        Quibusdam aut maiores velit.: Tempore non totam totam.
-                    mime_type: Harum sequi non.
-                    name: Non quia dolore modi autem.
-                    project_id: Ipsa qui aspernatur libero consectetur culpa.
-                    resource_urn: Dolorum molestiae.
-                    runtime: Amet omnis.
-                    title: Et perferendis debitis aut quia sit et.
-                    updated_at: "1995-11-25T21:33:17Z"
-                    uri: Dolorum accusamus.
-                    variables: Qui qui modi quia tempora earum hic.
+                        Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                        Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                        Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                    mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                    name: Laudantium pariatur esse consequatur et.
+                    project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                    resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                    runtime: Tempore non totam totam.
+                    title: Cumque minus modi repellat voluptas.
+                    updated_at: "1976-10-01T21:46:38Z"
+                    uri: Voluptatibus magnam sint occaecati quo aut.
+                    variables: Doloribus pariatur et omnis.
                 - function_resource_definition:
-                    created_at: "1992-09-04T10:15:03Z"
-                    deployment_id: Et distinctio eius.
-                    description: Ab tempore at sed.
-                    function_id: Officiis vitae aut veritatis amet quidem et.
-                    id: Ut natus.
+                    created_at: "2005-03-16T20:18:20Z"
+                    deployment_id: In pariatur non nam.
+                    description: Quisquam facere.
+                    function_id: Quibusdam aut maiores velit.
+                    id: Harum sequi non.
                     meta:
-                        Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                        Est rem ab.: In pariatur non nam.
-                        Quibusdam aut maiores velit.: Tempore non totam totam.
-                    mime_type: Harum sequi non.
-                    name: Non quia dolore modi autem.
-                    project_id: Ipsa qui aspernatur libero consectetur culpa.
-                    resource_urn: Dolorum molestiae.
-                    runtime: Amet omnis.
-                    title: Et perferendis debitis aut quia sit et.
-                    updated_at: "1995-11-25T21:33:17Z"
-                    uri: Dolorum accusamus.
-                    variables: Qui qui modi quia tempora earum hic.
+                        Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                        Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                        Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                    mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                    name: Laudantium pariatur esse consequatur et.
+                    project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                    resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                    runtime: Tempore non totam totam.
+                    title: Cumque minus modi repellat voluptas.
+                    updated_at: "1976-10-01T21:46:38Z"
+                    uri: Voluptatibus magnam sint occaecati quo aut.
+                    variables: Doloribus pariatur et omnis.
         required:
             - resources
     ListToolsResult:
@@ -42927,69 +42933,69 @@ definitions:
                 items:
                     $ref: '#/definitions/PackageVersion'
                 example:
-                    - created_at: "1981-06-22T19:58:29Z"
-                      deployment_id: Sint perspiciatis rerum velit temporibus.
-                      id: Quam repellat ratione nihil qui.
-                      package_id: Dolorem excepturi voluptas quis.
-                      semver: In cumque molestias possimus autem deserunt dolor.
-                      visibility: Est optio quibusdam.
-                    - created_at: "1981-06-22T19:58:29Z"
-                      deployment_id: Sint perspiciatis rerum velit temporibus.
-                      id: Quam repellat ratione nihil qui.
-                      package_id: Dolorem excepturi voluptas quis.
-                      semver: In cumque molestias possimus autem deserunt dolor.
-                      visibility: Est optio quibusdam.
-                    - created_at: "1981-06-22T19:58:29Z"
-                      deployment_id: Sint perspiciatis rerum velit temporibus.
-                      id: Quam repellat ratione nihil qui.
-                      package_id: Dolorem excepturi voluptas quis.
-                      semver: In cumque molestias possimus autem deserunt dolor.
-                      visibility: Est optio quibusdam.
-                    - created_at: "1981-06-22T19:58:29Z"
-                      deployment_id: Sint perspiciatis rerum velit temporibus.
-                      id: Quam repellat ratione nihil qui.
-                      package_id: Dolorem excepturi voluptas quis.
-                      semver: In cumque molestias possimus autem deserunt dolor.
-                      visibility: Est optio quibusdam.
+                    - created_at: "2002-04-22T15:06:49Z"
+                      deployment_id: Dolor consequatur possimus molestias est.
+                      id: Ut aut unde.
+                      package_id: Nostrum et aut autem sed quibusdam esse.
+                      semver: Qui ab est sapiente excepturi voluptatum.
+                      visibility: Ut ullam.
+                    - created_at: "2002-04-22T15:06:49Z"
+                      deployment_id: Dolor consequatur possimus molestias est.
+                      id: Ut aut unde.
+                      package_id: Nostrum et aut autem sed quibusdam esse.
+                      semver: Qui ab est sapiente excepturi voluptatum.
+                      visibility: Ut ullam.
+                    - created_at: "2002-04-22T15:06:49Z"
+                      deployment_id: Dolor consequatur possimus molestias est.
+                      id: Ut aut unde.
+                      package_id: Nostrum et aut autem sed quibusdam esse.
+                      semver: Qui ab est sapiente excepturi voluptatum.
+                      visibility: Ut ullam.
+                    - created_at: "2002-04-22T15:06:49Z"
+                      deployment_id: Dolor consequatur possimus molestias est.
+                      id: Ut aut unde.
+                      package_id: Nostrum et aut autem sed quibusdam esse.
+                      semver: Qui ab est sapiente excepturi voluptatum.
+                      visibility: Ut ullam.
         example:
             package:
-                created_at: "1980-04-09T22:24:25Z"
-                deleted_at: "1987-10-19T20:23:42Z"
-                description: Exercitationem omnis dolor explicabo cupiditate similique et.
-                description_raw: Rerum voluptatibus omnis quasi reprehenderit facere.
-                id: Rerum porro velit est enim occaecati vel.
-                image_asset_id: Vero dolorum dolor occaecati placeat.
+                created_at: "1987-04-09T03:37:53Z"
+                deleted_at: "1983-02-09T23:27:03Z"
+                description: Voluptatem fugiat amet id.
+                description_raw: Dolorum dolor occaecati placeat occaecati.
+                id: Explicabo cupiditate similique et.
+                image_asset_id: Non fugit repellendus excepturi.
                 keywords:
-                    - Doloribus minima.
-                    - Quia aliquam aut.
-                    - Et expedita deleniti.
-                latest_version: Ut optio.
-                name: Consequatur ab qui ea nihil distinctio.
-                organization_id: Libero quisquam molestiae ut atque nisi.
-                project_id: Officiis modi praesentium assumenda maxime.
-                summary: Quod voluptate suscipit culpa.
-                title: Voluptatum officia quod qui est aperiam.
-                updated_at: "1994-11-05T22:13:36Z"
-                url: Et voluptates laudantium voluptatem voluptatem fugiat amet.
+                    - Error non nobis cumque.
+                    - Aut aspernatur id illum.
+                    - Quaerat earum delectus nam vero et autem.
+                latest_version: Nesciunt natus.
+                name: Aliquam aut voluptas.
+                organization_id: Aliquam doloribus minima libero.
+                project_id: Rerum voluptatibus omnis quasi reprehenderit facere.
+                summary: Voluptates laudantium.
+                title: Expedita deleniti autem.
+                updated_at: "1970-08-28T02:05:39Z"
+                url: Aperiam sit consequatur harum.
             versions:
-                - created_at: "1981-06-22T19:58:29Z"
-                  deployment_id: Sint perspiciatis rerum velit temporibus.
-                  id: Quam repellat ratione nihil qui.
-                  package_id: Dolorem excepturi voluptas quis.
-                  semver: In cumque molestias possimus autem deserunt dolor.
-                  visibility: Est optio quibusdam.
-                - created_at: "1981-06-22T19:58:29Z"
-                  deployment_id: Sint perspiciatis rerum velit temporibus.
-                  id: Quam repellat ratione nihil qui.
-                  package_id: Dolorem excepturi voluptas quis.
-                  semver: In cumque molestias possimus autem deserunt dolor.
-                  visibility: Est optio quibusdam.
-                - created_at: "1981-06-22T19:58:29Z"
-                  deployment_id: Sint perspiciatis rerum velit temporibus.
-                  id: Quam repellat ratione nihil qui.
-                  package_id: Dolorem excepturi voluptas quis.
-                  semver: In cumque molestias possimus autem deserunt dolor.
-                  visibility: Est optio quibusdam.
+                - created_at: "2002-04-22T15:06:49Z"
+                  deployment_id: Dolor consequatur possimus molestias est.
+                  id: Ut aut unde.
+                  package_id: Nostrum et aut autem sed quibusdam esse.
+                  semver: Qui ab est sapiente excepturi voluptatum.
+                  visibility: Ut ullam.
+                - created_at: "2002-04-22T15:06:49Z"
+                  deployment_id: Dolor consequatur possimus molestias est.
+                  id: Ut aut unde.
+                  package_id: Nostrum et aut autem sed quibusdam esse.
+                  semver: Qui ab est sapiente excepturi voluptatum.
+                  visibility: Ut ullam.
+                - created_at: "2002-04-22T15:06:49Z"
+                  deployment_id: Dolor consequatur possimus molestias est.
+                  id: Ut aut unde.
+                  package_id: Nostrum et aut autem sed quibusdam esse.
+                  semver: Qui ab est sapiente excepturi voluptatum.
+                  visibility: Ut ullam.
         required:
             - package
             - versions
@@ -43000,8 +43006,12 @@ definitions:
             created_at:
                 type: string
                 description: When the metadata entry was created
-                example: "1974-06-20T18:27:24Z"
+                example: "1992-03-20T14:40:46Z"
                 format: date-time
+            external_documentation_text:
+                type: string
+                description: Custom text for the external documentation link button
+                example: Dolores nobis quis saepe ab.
             external_documentation_url:
                 type: string
                 description: A link to external documentation for the MCP install page
@@ -43011,11 +43021,10 @@ definitions:
                 type: object
                 description: Maps security scheme keys to user-friendly display names
                 example:
-                    Eos minus maiores nesciunt optio hic est.: Molestias similique aliquid totam totam.
-                    Placeat sunt esse ipsum.: Amet eveniet dolores.
+                    Similique molestias similique.: Totam totam voluptas placeat sunt.
                 additionalProperties:
                     type: string
-                    example: Esse neque molestiae et aspernatur.
+                    example: Distinctio eos minus maiores nesciunt optio.
             id:
                 type: string
                 description: The ID of the metadata record
@@ -43023,7 +43032,7 @@ definitions:
             instructions:
                 type: string
                 description: Server instructions returned in the MCP initialize response
-                example: Dolores nobis quis saepe ab.
+                example: Esse neque molestiae et aspernatur.
             logo_asset_id:
                 type: string
                 description: The asset ID for the MCP install page logo
@@ -43037,20 +43046,20 @@ definitions:
             updated_at:
                 type: string
                 description: When the metadata entry was last updated
-                example: "1996-12-24T05:18:55Z"
+                example: "1995-11-04T18:12:37Z"
                 format: date-time
         description: Metadata used to configure the MCP install page.
         example:
-            created_at: "1989-09-25T23:54:04Z"
-            external_documentation_url: http://quigley.org/ivy_schumm
+            created_at: "1985-07-28T19:09:08Z"
+            external_documentation_text: Sit consequatur aut fuga voluptatum vel non.
+            external_documentation_url: http://schneider.com/brooke_bayer
             header_display_names:
-                Quia tempore ut dolores.: Repellat quo.
-                Reiciendis ea ut qui corrupti.: Alias ipsam provident impedit animi est rerum.
-            id: Id repellat voluptates laudantium.
-            instructions: Fuga voluptatum vel non qui.
-            logo_asset_id: 4f26b7f6-8b07-47de-bcb3-4ef2e9a98237
-            toolset_id: 220ada9f-c6bc-4b48-89d0-2d1e15032ced
-            updated_at: "2013-04-16T20:17:49Z"
+                Repellendus reiciendis ea.: Qui corrupti in alias ipsam provident.
+            id: Magni velit ipsa.
+            instructions: Molestias labore quia tempore ut dolores commodi.
+            logo_asset_id: 4b0053c9-e025-4ecc-9039-de26868f8a85
+            toolset_id: c5b7b137-f6f2-463a-9afe-8eccc5c1100e
+            updated_at: "1976-11-27T20:37:07Z"
         required:
             - id
             - toolset_id
@@ -43086,12 +43095,12 @@ definitions:
                 example: true
         description: request is invalid (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -43106,7 +43115,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -43126,15 +43135,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: resource already exists (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -43177,7 +43186,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -43208,19 +43217,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -43251,19 +43260,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -43278,7 +43287,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -43294,19 +43303,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -43348,8 +43357,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -43365,15 +43374,18 @@ definitions:
                 $ref: '#/definitions/McpMetadata'
         example:
             metadata:
-                created_at: "2011-07-07T23:43:10Z"
+                created_at: "1995-05-27T12:47:37Z"
+                external_documentation_text: Quidem dolorum fugiat magni placeat aut autem.
                 external_documentation_url: http://hartmannlubowitz.org/alessandra
                 header_display_names:
-                    Ut magnam et perferendis repudiandae.: Aspernatur corporis sed.
+                    Id sit adipisci qui ea laboriosam quam.: Quia totam.
+                    Iure cumque velit.: Porro aliquam odit architecto id voluptate.
+                    Repudiandae cupiditate aspernatur corporis sed.: Nemo natus.
                 id: Iure corrupti officiis autem aperiam optio.
-                instructions: Quidem dolorum fugiat magni placeat aut autem.
+                instructions: Aliquid ut magnam.
                 logo_asset_id: f5db5d60-94cc-43b1-88a6-ee8ee4d4e65e
                 toolset_id: a0cd6405-9d5e-49ef-9b20-21324d8478dc
-                updated_at: "1971-10-01T17:09:27Z"
+                updated_at: "2002-08-15T20:25:19Z"
     McpMetadataGetMcpMetadataUnauthorizedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
@@ -43404,7 +43416,7 @@ definitions:
                 example: true
         description: unauthorized access (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -43440,18 +43452,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -43490,12 +43502,12 @@ definitions:
                 example: false
         description: unsupported media type (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -43510,7 +43522,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -43537,7 +43549,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -43569,18 +43581,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: resource already exists (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: true
         required:
             - name
@@ -43596,7 +43608,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -43612,7 +43624,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -43623,7 +43635,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: true
         required:
             - name
@@ -43639,7 +43651,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -43655,19 +43667,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
             fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -43698,19 +43710,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request contains one or more invalidation fields (default view)
         example:
             fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -43741,19 +43753,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -43784,7 +43796,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -43795,8 +43807,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -43808,29 +43820,34 @@ definitions:
         title: McpMetadataSetMcpMetadataRequestBody
         type: object
         properties:
+            external_documentation_text:
+                type: string
+                description: Custom text for the external documentation link button
+                example: Et molestiae beatae delectus.
             external_documentation_url:
                 type: string
                 description: A link to external documentation for the MCP install page
-                example: Beatae delectus fugit.
+                example: Expedita aut.
             instructions:
                 type: string
                 description: Server instructions returned in the MCP initialize response
-                example: Eum natus doloribus aspernatur.
+                example: Assumenda eum natus doloribus aspernatur delectus.
             logo_asset_id:
                 type: string
                 description: The asset ID for the MCP install page logo
-                example: Velit aut expedita aut maiores et.
+                example: Voluptatem eveniet quasi culpa libero velit.
             toolset_slug:
                 type: string
                 description: The slug of the toolset associated with this install page metadata
-                example: mpo
+                example: cqj
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
-            external_documentation_url: Minima et fugiat velit voluptas nulla.
-            instructions: Dolore placeat.
-            logo_asset_id: Incidunt sit sed est aut.
-            toolset_slug: 3zz
+            external_documentation_text: Fugiat velit voluptas nulla alias.
+            external_documentation_url: Aut porro minima.
+            instructions: Placeat officiis error.
+            logo_asset_id: Sit sed.
+            toolset_slug: zzz
         required:
             - toolset_slug
     McpMetadataSetMcpMetadataUnauthorizedResponseBody:
@@ -43856,18 +43873,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: unauthorized access (default view)
         example:
             fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -43899,11 +43916,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
             fault: true
@@ -43926,7 +43943,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -43942,11 +43959,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unsupported media type (default view)
         example:
             fault: true
@@ -44576,10 +44593,10 @@ definitions:
                     $ref: '#/definitions/ModelUsage'
                 description: List of models used with call counts
                 example:
-                    - count: 5664664030289770402
-                      name: Quam maxime et velit voluptatem.
-                    - count: 5664664030289770402
-                      name: Quam maxime et velit voluptatem.
+                    - count: 4625255923817562965
+                      name: Aliquid dolorem itaque consequatur.
+                    - count: 4625255923817562965
+                      name: Aliquid dolorem itaque consequatur.
             tool_call_failure:
                 type: integer
                 description: Failed tool calls (4xx/5xx status)
@@ -44596,18 +44613,18 @@ definitions:
                     $ref: '#/definitions/ToolUsage'
                 description: List of tools used with success/failure counts
                 example:
-                    - count: 5980287113071002446
-                      failure_count: 9017910234015526541
-                      success_count: 1227610923685059771
-                      urn: Voluptas possimus consequuntur.
-                    - count: 5980287113071002446
-                      failure_count: 9017910234015526541
-                      success_count: 1227610923685059771
-                      urn: Voluptas possimus consequuntur.
-                    - count: 5980287113071002446
-                      failure_count: 9017910234015526541
-                      success_count: 1227610923685059771
-                      urn: Voluptas possimus consequuntur.
+                    - count: 2226693748559069587
+                      failure_count: 629532768623347114
+                      success_count: 7026629859263232142
+                      urn: Sed libero sint est voluptatibus voluptate commodi.
+                    - count: 2226693748559069587
+                      failure_count: 629532768623347114
+                      success_count: 7026629859263232142
+                      urn: Sed libero sint est voluptatibus voluptate commodi.
+                    - count: 2226693748559069587
+                      failure_count: 629532768623347114
+                      success_count: 7026629859263232142
+                      urn: Sed libero sint est voluptatibus voluptate commodi.
             total_chat_requests:
                 type: integer
                 description: Total number of chat requests
@@ -44648,29 +44665,29 @@ definitions:
             finish_reason_stop: 1777971354791550360
             finish_reason_tool_calls: 8875008304027538061
             models:
-                - count: 5664664030289770402
-                  name: Quam maxime et velit voluptatem.
-                - count: 5664664030289770402
-                  name: Quam maxime et velit voluptatem.
+                - count: 4625255923817562965
+                  name: Aliquid dolorem itaque consequatur.
+                - count: 4625255923817562965
+                  name: Aliquid dolorem itaque consequatur.
             tool_call_failure: 7375590317318480967
             tool_call_success: 2083290054556014027
             tools:
-                - count: 5980287113071002446
-                  failure_count: 9017910234015526541
-                  success_count: 1227610923685059771
-                  urn: Voluptas possimus consequuntur.
-                - count: 5980287113071002446
-                  failure_count: 9017910234015526541
-                  success_count: 1227610923685059771
-                  urn: Voluptas possimus consequuntur.
-                - count: 5980287113071002446
-                  failure_count: 9017910234015526541
-                  success_count: 1227610923685059771
-                  urn: Voluptas possimus consequuntur.
-                - count: 5980287113071002446
-                  failure_count: 9017910234015526541
-                  success_count: 1227610923685059771
-                  urn: Voluptas possimus consequuntur.
+                - count: 2226693748559069587
+                  failure_count: 629532768623347114
+                  success_count: 7026629859263232142
+                  urn: Sed libero sint est voluptatibus voluptate commodi.
+                - count: 2226693748559069587
+                  failure_count: 629532768623347114
+                  success_count: 7026629859263232142
+                  urn: Sed libero sint est voluptatibus voluptate commodi.
+                - count: 2226693748559069587
+                  failure_count: 629532768623347114
+                  success_count: 7026629859263232142
+                  urn: Sed libero sint est voluptatibus voluptate commodi.
+                - count: 2226693748559069587
+                  failure_count: 629532768623347114
+                  success_count: 7026629859263232142
+                  urn: Sed libero sint est voluptatibus voluptate commodi.
             total_chat_requests: 7045129207139351934
             total_chats: 4834296626860733017
             total_input_tokens: 1528727821852676064
@@ -44859,7 +44876,7 @@ definitions:
                         - Qui molestias beatae et rem voluptatem.
                         - Commodi non consequatur et sint id.
                         - Adipisci perspiciatis voluptates.
-                      id: Voluptas deserunt.
+                      id: Corporis nisi esse sint voluptas deserunt.
                       provider_type: gram
                       scopes_supported:
                         - Id tempora minus.
@@ -44879,7 +44896,7 @@ definitions:
                         - Qui molestias beatae et rem voluptatem.
                         - Commodi non consequatur et sint id.
                         - Adipisci perspiciatis voluptates.
-                      id: Voluptas deserunt.
+                      id: Corporis nisi esse sint voluptas deserunt.
                       provider_type: gram
                       scopes_supported:
                         - Id tempora minus.
@@ -44918,7 +44935,7 @@ definitions:
                     - Qui molestias beatae et rem voluptatem.
                     - Commodi non consequatur et sint id.
                     - Adipisci perspiciatis voluptates.
-                  id: Voluptas deserunt.
+                  id: Corporis nisi esse sint voluptas deserunt.
                   provider_type: gram
                   scopes_supported:
                     - Id tempora minus.
@@ -44938,7 +44955,7 @@ definitions:
                     - Qui molestias beatae et rem voluptatem.
                     - Commodi non consequatur et sint id.
                     - Adipisci perspiciatis voluptates.
-                  id: Voluptas deserunt.
+                  id: Corporis nisi esse sint voluptas deserunt.
                   provider_type: gram
                   scopes_supported:
                     - Id tempora minus.
@@ -44958,7 +44975,7 @@ definitions:
                     - Qui molestias beatae et rem voluptatem.
                     - Commodi non consequatur et sint id.
                     - Adipisci perspiciatis voluptates.
-                  id: Voluptas deserunt.
+                  id: Corporis nisi esse sint voluptas deserunt.
                   provider_type: gram
                   scopes_supported:
                     - Id tempora minus.
@@ -44978,7 +44995,7 @@ definitions:
                     - Qui molestias beatae et rem voluptatem.
                     - Commodi non consequatur et sint id.
                     - Adipisci perspiciatis voluptates.
-                  id: Voluptas deserunt.
+                  id: Corporis nisi esse sint voluptas deserunt.
                   provider_type: gram
                   scopes_supported:
                     - Id tempora minus.
@@ -45177,7 +45194,7 @@ definitions:
             description:
                 type: string
                 description: The description of the package. This contains HTML content.
-                example: Eos eveniet minus.
+                example: Ea exercitationem eos eveniet minus.
             description_raw:
                 type: string
                 description: The unsanitized, user-supplied description of the package. Limited markdown syntax is supported.
@@ -45185,7 +45202,7 @@ definitions:
             id:
                 type: string
                 description: The ID of the package
-                example: Error ex dolor.
+                example: Dolor odit et.
             image_asset_id:
                 type: string
                 description: The asset ID of the image to show for this package
@@ -45208,23 +45225,23 @@ definitions:
             name:
                 type: string
                 description: The name of the package
-                example: Sint ipsum non blanditiis.
+                example: Eius dolor sint ipsum.
             organization_id:
                 type: string
                 description: The ID of the organization that owns the package
-                example: Quo quis eius.
+                example: Eos nisi a quo.
             project_id:
                 type: string
                 description: The ID of the project that owns the package
-                example: Et quia velit quia ut eos nisi.
+                example: Velit quia.
             summary:
                 type: string
                 description: The summary of the package
-                example: Voluptas sapiente accusantium consequatur nulla ea.
+                example: Voluptatem ea voluptas sapiente accusantium consequatur.
             title:
                 type: string
                 description: The title of the package
-                example: In et rerum commodi vel voluptatem.
+                example: Blanditiis illo in et rerum commodi.
             updated_at:
                 type: string
                 description: The last update date of the package
@@ -51004,31 +51021,31 @@ definitions:
                 $ref: '#/definitions/PackageVersion'
         example:
             package:
-                created_at: "1980-04-09T22:24:25Z"
-                deleted_at: "1987-10-19T20:23:42Z"
-                description: Exercitationem omnis dolor explicabo cupiditate similique et.
-                description_raw: Rerum voluptatibus omnis quasi reprehenderit facere.
-                id: Rerum porro velit est enim occaecati vel.
-                image_asset_id: Vero dolorum dolor occaecati placeat.
+                created_at: "1987-04-09T03:37:53Z"
+                deleted_at: "1983-02-09T23:27:03Z"
+                description: Voluptatem fugiat amet id.
+                description_raw: Dolorum dolor occaecati placeat occaecati.
+                id: Explicabo cupiditate similique et.
+                image_asset_id: Non fugit repellendus excepturi.
                 keywords:
-                    - Doloribus minima.
-                    - Quia aliquam aut.
-                    - Et expedita deleniti.
-                latest_version: Ut optio.
-                name: Consequatur ab qui ea nihil distinctio.
-                organization_id: Libero quisquam molestiae ut atque nisi.
-                project_id: Officiis modi praesentium assumenda maxime.
-                summary: Quod voluptate suscipit culpa.
-                title: Voluptatum officia quod qui est aperiam.
-                updated_at: "1994-11-05T22:13:36Z"
-                url: Et voluptates laudantium voluptatem voluptatem fugiat amet.
+                    - Error non nobis cumque.
+                    - Aut aspernatur id illum.
+                    - Quaerat earum delectus nam vero et autem.
+                latest_version: Nesciunt natus.
+                name: Aliquam aut voluptas.
+                organization_id: Aliquam doloribus minima libero.
+                project_id: Rerum voluptatibus omnis quasi reprehenderit facere.
+                summary: Voluptates laudantium.
+                title: Expedita deleniti autem.
+                updated_at: "1970-08-28T02:05:39Z"
+                url: Aperiam sit consequatur harum.
             version:
-                created_at: "1981-06-22T19:58:29Z"
-                deployment_id: Sint perspiciatis rerum velit temporibus.
-                id: Quam repellat ratione nihil qui.
-                package_id: Dolorem excepturi voluptas quis.
-                semver: In cumque molestias possimus autem deserunt dolor.
-                visibility: Est optio quibusdam.
+                created_at: "2002-04-22T15:06:49Z"
+                deployment_id: Dolor consequatur possimus molestias est.
+                id: Ut aut unde.
+                package_id: Nostrum et aut autem sed quibusdam esse.
+                semver: Qui ab est sapiente excepturi voluptatum.
+                visibility: Ut ullam.
         required:
             - package
             - version
@@ -51060,24 +51077,24 @@ definitions:
         description: A polymorphic resource - currently only function resources are supported
         example:
             function_resource_definition:
-                created_at: "1992-09-04T10:15:03Z"
-                deployment_id: Et distinctio eius.
-                description: Ab tempore at sed.
-                function_id: Officiis vitae aut veritatis amet quidem et.
-                id: Ut natus.
+                created_at: "2005-03-16T20:18:20Z"
+                deployment_id: In pariatur non nam.
+                description: Quisquam facere.
+                function_id: Quibusdam aut maiores velit.
+                id: Harum sequi non.
                 meta:
-                    Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                    Est rem ab.: In pariatur non nam.
-                    Quibusdam aut maiores velit.: Tempore non totam totam.
-                mime_type: Harum sequi non.
-                name: Non quia dolore modi autem.
-                project_id: Ipsa qui aspernatur libero consectetur culpa.
-                resource_urn: Dolorum molestiae.
-                runtime: Amet omnis.
-                title: Et perferendis debitis aut quia sit et.
-                updated_at: "1995-11-25T21:33:17Z"
-                uri: Dolorum accusamus.
-                variables: Qui qui modi quia tempora earum hic.
+                    Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                    Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                    Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                name: Laudantium pariatur esse consequatur et.
+                project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                runtime: Tempore non totam totam.
+                title: Cumque minus modi repellat voluptas.
+                updated_at: "1976-10-01T21:46:38Z"
+                uri: Voluptatibus magnam sint occaecati quo aut.
+                variables: Doloribus pariatur et omnis.
     ResourceEntry:
         title: ResourceEntry
         type: object
@@ -51699,30 +51716,30 @@ definitions:
                     $ref: '#/definitions/TelemetryLogRecord'
                 description: List of telemetry log records
                 example:
-                    - attributes: Sint ut ducimus aut dignissimos sint aut.
-                      body: Occaecati nulla sint.
-                      id: 8a39bddd-ba7e-4f09-a1c8-2a3e1f0175bb
-                      observed_time_unix_nano: 5968025329574703178
-                      resource_attributes: Ut debitis ut est quia possimus.
+                    - attributes: Alias ut dignissimos quasi.
+                      body: Quia nostrum illum.
+                      id: 43f0557d-368b-4019-9e8e-ef572eab9de0
+                      observed_time_unix_nano: 6384384132119063199
+                      resource_attributes: Et illum quaerat unde officiis.
                       service:
-                        name: Sit nobis est quia.
-                        version: Illum quos.
-                      severity_text: Et illo.
-                      span_id: Doloremque repellendus et neque temporibus ea.
-                      time_unix_nano: 2619251247378445485
-                      trace_id: Quia iure ea.
-                    - attributes: Sint ut ducimus aut dignissimos sint aut.
-                      body: Occaecati nulla sint.
-                      id: 8a39bddd-ba7e-4f09-a1c8-2a3e1f0175bb
-                      observed_time_unix_nano: 5968025329574703178
-                      resource_attributes: Ut debitis ut est quia possimus.
+                        name: Et eius voluptates officiis nostrum.
+                        version: Ratione vel.
+                      severity_text: Ut est quia possimus distinctio sit nobis.
+                      span_id: Et asperiores sed nisi doloremque aut.
+                      time_unix_nano: 2508315751453145122
+                      trace_id: Quis autem accusamus rerum.
+                    - attributes: Alias ut dignissimos quasi.
+                      body: Quia nostrum illum.
+                      id: 43f0557d-368b-4019-9e8e-ef572eab9de0
+                      observed_time_unix_nano: 6384384132119063199
+                      resource_attributes: Et illum quaerat unde officiis.
                       service:
-                        name: Sit nobis est quia.
-                        version: Illum quos.
-                      severity_text: Et illo.
-                      span_id: Doloremque repellendus et neque temporibus ea.
-                      time_unix_nano: 2619251247378445485
-                      trace_id: Quia iure ea.
+                        name: Et eius voluptates officiis nostrum.
+                        version: Ratione vel.
+                      severity_text: Ut est quia possimus distinctio sit nobis.
+                      span_id: Et asperiores sed nisi doloremque aut.
+                      time_unix_nano: 2508315751453145122
+                      trace_id: Quis autem accusamus rerum.
             next_cursor:
                 type: string
                 description: Cursor for next page
@@ -51730,30 +51747,30 @@ definitions:
         example:
             enabled: true
             logs:
-                - attributes: Sint ut ducimus aut dignissimos sint aut.
-                  body: Occaecati nulla sint.
-                  id: 8a39bddd-ba7e-4f09-a1c8-2a3e1f0175bb
-                  observed_time_unix_nano: 5968025329574703178
-                  resource_attributes: Ut debitis ut est quia possimus.
+                - attributes: Alias ut dignissimos quasi.
+                  body: Quia nostrum illum.
+                  id: 43f0557d-368b-4019-9e8e-ef572eab9de0
+                  observed_time_unix_nano: 6384384132119063199
+                  resource_attributes: Et illum quaerat unde officiis.
                   service:
-                    name: Sit nobis est quia.
-                    version: Illum quos.
-                  severity_text: Et illo.
-                  span_id: Doloremque repellendus et neque temporibus ea.
-                  time_unix_nano: 2619251247378445485
-                  trace_id: Quia iure ea.
-                - attributes: Sint ut ducimus aut dignissimos sint aut.
-                  body: Occaecati nulla sint.
-                  id: 8a39bddd-ba7e-4f09-a1c8-2a3e1f0175bb
-                  observed_time_unix_nano: 5968025329574703178
-                  resource_attributes: Ut debitis ut est quia possimus.
+                    name: Et eius voluptates officiis nostrum.
+                    version: Ratione vel.
+                  severity_text: Ut est quia possimus distinctio sit nobis.
+                  span_id: Et asperiores sed nisi doloremque aut.
+                  time_unix_nano: 2508315751453145122
+                  trace_id: Quis autem accusamus rerum.
+                - attributes: Alias ut dignissimos quasi.
+                  body: Quia nostrum illum.
+                  id: 43f0557d-368b-4019-9e8e-ef572eab9de0
+                  observed_time_unix_nano: 6384384132119063199
+                  resource_attributes: Et illum quaerat unde officiis.
                   service:
-                    name: Sit nobis est quia.
-                    version: Illum quos.
-                  severity_text: Et illo.
-                  span_id: Doloremque repellendus et neque temporibus ea.
-                  time_unix_nano: 2619251247378445485
-                  trace_id: Quia iure ea.
+                    name: Et eius voluptates officiis nostrum.
+                    version: Ratione vel.
+                  severity_text: Ut est quia possimus distinctio sit nobis.
+                  span_id: Et asperiores sed nisi doloremque aut.
+                  time_unix_nano: 2508315751453145122
+                  trace_id: Quis autem accusamus rerum.
             next_cursor: Et molestiae ipsum iusto recusandae minus.
         required:
             - logs
@@ -51811,35 +51828,35 @@ definitions:
                     $ref: '#/definitions/ToolCallSummary'
                 description: List of tool call summaries
                 example:
-                    - gram_urn: Asperiores harum dolor.
-                      http_status_code: 2104234190
-                      log_count: 167800979323599641
-                      start_time_unix_nano: 1447414407132328872
-                      trace_id: 0dd287020910864e91f66bb73564759f
-                    - gram_urn: Asperiores harum dolor.
-                      http_status_code: 2104234190
-                      log_count: 167800979323599641
-                      start_time_unix_nano: 1447414407132328872
-                      trace_id: 0dd287020910864e91f66bb73564759f
+                    - gram_urn: Amet voluptates eveniet quos molestiae.
+                      http_status_code: 1057468972
+                      log_count: 1055300606716851501
+                      start_time_unix_nano: 2591240140203267365
+                      trace_id: 4e64e5d89610d29f84075d41960ea06a
+                    - gram_urn: Amet voluptates eveniet quos molestiae.
+                      http_status_code: 1057468972
+                      log_count: 1055300606716851501
+                      start_time_unix_nano: 2591240140203267365
+                      trace_id: 4e64e5d89610d29f84075d41960ea06a
         example:
             enabled: true
             next_cursor: Voluptatem vero.
             tool_calls:
-                - gram_urn: Asperiores harum dolor.
-                  http_status_code: 2104234190
-                  log_count: 167800979323599641
-                  start_time_unix_nano: 1447414407132328872
-                  trace_id: 0dd287020910864e91f66bb73564759f
-                - gram_urn: Asperiores harum dolor.
-                  http_status_code: 2104234190
-                  log_count: 167800979323599641
-                  start_time_unix_nano: 1447414407132328872
-                  trace_id: 0dd287020910864e91f66bb73564759f
-                - gram_urn: Asperiores harum dolor.
-                  http_status_code: 2104234190
-                  log_count: 167800979323599641
-                  start_time_unix_nano: 1447414407132328872
-                  trace_id: 0dd287020910864e91f66bb73564759f
+                - gram_urn: Amet voluptates eveniet quos molestiae.
+                  http_status_code: 1057468972
+                  log_count: 1055300606716851501
+                  start_time_unix_nano: 2591240140203267365
+                  trace_id: 4e64e5d89610d29f84075d41960ea06a
+                - gram_urn: Amet voluptates eveniet quos molestiae.
+                  http_status_code: 1057468972
+                  log_count: 1055300606716851501
+                  start_time_unix_nano: 2591240140203267365
+                  trace_id: 4e64e5d89610d29f84075d41960ea06a
+                - gram_urn: Amet voluptates eveniet quos molestiae.
+                  http_status_code: 1057468972
+                  log_count: 1055300606716851501
+                  start_time_unix_nano: 2591240140203267365
+                  trace_id: 4e64e5d89610d29f84075d41960ea06a
         required:
             - tool_calls
             - enabled
@@ -52021,13 +52038,13 @@ definitions:
                 $ref: '#/definitions/Project'
         example:
             project:
-                created_at: "2009-07-19T16:37:52Z"
-                id: Vel maiores dolor dolorum maxime.
-                logo_asset_id: Aut accusantium reiciendis qui.
-                name: Eius accusamus earum saepe.
-                organization_id: Perferendis quod dolores qui reiciendis magnam inventore.
-                slug: swo
-                updated_at: "1978-10-01T02:24:59Z"
+                created_at: "2002-07-01T16:34:57Z"
+                id: Eum sequi aut rerum.
+                logo_asset_id: Pariatur voluptatem eos aut laudantium.
+                name: Et possimus et.
+                organization_id: Perferendis eaque adipisci.
+                slug: ov9
+                updated_at: "1986-10-20T05:29:29Z"
         required:
             - project
     SlackCallbackBadRequestResponseBody:
@@ -55189,8 +55206,8 @@ definitions:
             observed_time_unix_nano: 4111470643595998776
             resource_attributes: Dignissimos est tenetur consectetur non ipsa.
             service:
-                name: Sit nobis est quia.
-                version: Illum quos.
+                name: Et eius voluptates officiis nostrum.
+                version: Ratione vel.
             severity_text: Saepe ipsa quod voluptatem commodi enim.
             span_id: Voluptates ut vel.
             time_unix_nano: 5943771483161678786
@@ -55533,22 +55550,21 @@ definitions:
         example:
             cursor: Voluptates possimus quae est velit ut sint.
             filter:
-                deployment_id: 3e84c9c5-a90d-40f1-9b79-be14624f2186
+                deployment_id: c7179e46-2267-456d-853a-24ca64507b7a
                 from: "2025-12-19T10:00:00Z"
-                function_id: 54c40c65-d85e-43d7-b00f-586e8f37983b
-                gram_urn: Qui ab dolor eum magnam consequatur.
+                function_id: a6db7cd0-acd0-43e6-be42-808543456202
+                gram_urn: Molestiae sed atque enim consequatur.
                 gram_urns:
-                    - Sequi magni illum nulla vitae.
-                    - Aut nemo veniam aut enim.
-                    - Maxime ab aut.
-                    - Dolor omnis nam soluta.
-                http_method: HEAD
-                http_route: Laudantium excepturi voluptatem accusamus sit reprehenderit.
-                http_status_code: 1051759332
-                service_name: Tempora temporibus.
-                severity_text: WARN
+                    - Repudiandae quod itaque sed atque explicabo ipsa.
+                    - Et ut.
+                    - Ea placeat quidem ab.
+                http_method: PUT
+                http_route: Soluta ullam officia assumenda voluptatem.
+                http_status_code: 2138052135
+                service_name: Enim quidem reprehenderit.
+                severity_text: DEBUG
                 to: "2025-12-19T11:00:00Z"
-                trace_id: 8ef516a489e4c3a8c87cd5c77d8d1d11
+                trace_id: 1defb241dbfe3df30a71633faeb891eb
             limit: 261
             sort: asc
     TelemetrySearchLogsUnauthorizedResponseBody:
@@ -56010,10 +56026,10 @@ definitions:
         example:
             cursor: Aliquid aut.
             filter:
-                deployment_id: 49498e21-3bf7-4900-b6d5-90226ca954ef
+                deployment_id: 4fbf9ef8-8f3c-49f2-a5cf-f6824d87cd0e
                 from: "2025-12-19T10:00:00Z"
-                function_id: 174c0abd-0849-4404-a32d-0cf4731b54c6
-                gram_urn: Impedit ea error alias sit.
+                function_id: 00bb39ca-b52d-448d-8961-8ee8f52dfde5
+                gram_urn: Alias aut dolor beatae omnis.
                 to: "2025-12-19T11:00:00Z"
             limit: 431
             sort: asc
@@ -60484,81 +60500,81 @@ definitions:
                 description: The resources in this toolset
                 example:
                     - function_resource_definition:
-                        created_at: "1992-09-04T10:15:03Z"
-                        deployment_id: Et distinctio eius.
-                        description: Ab tempore at sed.
-                        function_id: Officiis vitae aut veritatis amet quidem et.
-                        id: Ut natus.
+                        created_at: "2005-03-16T20:18:20Z"
+                        deployment_id: In pariatur non nam.
+                        description: Quisquam facere.
+                        function_id: Quibusdam aut maiores velit.
+                        id: Harum sequi non.
                         meta:
-                            Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                            Est rem ab.: In pariatur non nam.
-                            Quibusdam aut maiores velit.: Tempore non totam totam.
-                        mime_type: Harum sequi non.
-                        name: Non quia dolore modi autem.
-                        project_id: Ipsa qui aspernatur libero consectetur culpa.
-                        resource_urn: Dolorum molestiae.
-                        runtime: Amet omnis.
-                        title: Et perferendis debitis aut quia sit et.
-                        updated_at: "1995-11-25T21:33:17Z"
-                        uri: Dolorum accusamus.
-                        variables: Qui qui modi quia tempora earum hic.
+                            Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                            Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                            Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                        mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                        name: Laudantium pariatur esse consequatur et.
+                        project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                        resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                        runtime: Tempore non totam totam.
+                        title: Cumque minus modi repellat voluptas.
+                        updated_at: "1976-10-01T21:46:38Z"
+                        uri: Voluptatibus magnam sint occaecati quo aut.
+                        variables: Doloribus pariatur et omnis.
                     - function_resource_definition:
-                        created_at: "1992-09-04T10:15:03Z"
-                        deployment_id: Et distinctio eius.
-                        description: Ab tempore at sed.
-                        function_id: Officiis vitae aut veritatis amet quidem et.
-                        id: Ut natus.
+                        created_at: "2005-03-16T20:18:20Z"
+                        deployment_id: In pariatur non nam.
+                        description: Quisquam facere.
+                        function_id: Quibusdam aut maiores velit.
+                        id: Harum sequi non.
                         meta:
-                            Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                            Est rem ab.: In pariatur non nam.
-                            Quibusdam aut maiores velit.: Tempore non totam totam.
-                        mime_type: Harum sequi non.
-                        name: Non quia dolore modi autem.
-                        project_id: Ipsa qui aspernatur libero consectetur culpa.
-                        resource_urn: Dolorum molestiae.
-                        runtime: Amet omnis.
-                        title: Et perferendis debitis aut quia sit et.
-                        updated_at: "1995-11-25T21:33:17Z"
-                        uri: Dolorum accusamus.
-                        variables: Qui qui modi quia tempora earum hic.
+                            Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                            Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                            Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                        mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                        name: Laudantium pariatur esse consequatur et.
+                        project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                        resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                        runtime: Tempore non totam totam.
+                        title: Cumque minus modi repellat voluptas.
+                        updated_at: "1976-10-01T21:46:38Z"
+                        uri: Voluptatibus magnam sint occaecati quo aut.
+                        variables: Doloribus pariatur et omnis.
                     - function_resource_definition:
-                        created_at: "1992-09-04T10:15:03Z"
-                        deployment_id: Et distinctio eius.
-                        description: Ab tempore at sed.
-                        function_id: Officiis vitae aut veritatis amet quidem et.
-                        id: Ut natus.
+                        created_at: "2005-03-16T20:18:20Z"
+                        deployment_id: In pariatur non nam.
+                        description: Quisquam facere.
+                        function_id: Quibusdam aut maiores velit.
+                        id: Harum sequi non.
                         meta:
-                            Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                            Est rem ab.: In pariatur non nam.
-                            Quibusdam aut maiores velit.: Tempore non totam totam.
-                        mime_type: Harum sequi non.
-                        name: Non quia dolore modi autem.
-                        project_id: Ipsa qui aspernatur libero consectetur culpa.
-                        resource_urn: Dolorum molestiae.
-                        runtime: Amet omnis.
-                        title: Et perferendis debitis aut quia sit et.
-                        updated_at: "1995-11-25T21:33:17Z"
-                        uri: Dolorum accusamus.
-                        variables: Qui qui modi quia tempora earum hic.
+                            Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                            Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                            Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                        mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                        name: Laudantium pariatur esse consequatur et.
+                        project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                        resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                        runtime: Tempore non totam totam.
+                        title: Cumque minus modi repellat voluptas.
+                        updated_at: "1976-10-01T21:46:38Z"
+                        uri: Voluptatibus magnam sint occaecati quo aut.
+                        variables: Doloribus pariatur et omnis.
                     - function_resource_definition:
-                        created_at: "1992-09-04T10:15:03Z"
-                        deployment_id: Et distinctio eius.
-                        description: Ab tempore at sed.
-                        function_id: Officiis vitae aut veritatis amet quidem et.
-                        id: Ut natus.
+                        created_at: "2005-03-16T20:18:20Z"
+                        deployment_id: In pariatur non nam.
+                        description: Quisquam facere.
+                        function_id: Quibusdam aut maiores velit.
+                        id: Harum sequi non.
                         meta:
-                            Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                            Est rem ab.: In pariatur non nam.
-                            Quibusdam aut maiores velit.: Tempore non totam totam.
-                        mime_type: Harum sequi non.
-                        name: Non quia dolore modi autem.
-                        project_id: Ipsa qui aspernatur libero consectetur culpa.
-                        resource_urn: Dolorum molestiae.
-                        runtime: Amet omnis.
-                        title: Et perferendis debitis aut quia sit et.
-                        updated_at: "1995-11-25T21:33:17Z"
-                        uri: Dolorum accusamus.
-                        variables: Qui qui modi quia tempora earum hic.
+                            Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                            Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                            Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                        mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                        name: Laudantium pariatur esse consequatur et.
+                        project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                        resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                        runtime: Tempore non totam totam.
+                        title: Cumque minus modi repellat voluptas.
+                        updated_at: "1976-10-01T21:46:38Z"
+                        uri: Voluptatibus magnam sint occaecati quo aut.
+                        variables: Doloribus pariatur et omnis.
             security_variables:
                 type: array
                 items:
@@ -61173,12 +61189,12 @@ definitions:
                   required: false
                   secret: true
             external_oauth_server:
-                created_at: "1985-12-23T06:30:03Z"
-                id: Sit perferendis.
-                metadata: Et illum harum pariatur.
-                project_id: Dolorem omnis quia consequatur delectus aut ea.
-                slug: hp3
-                updated_at: "1989-10-09T02:19:15Z"
+                created_at: "2001-04-10T07:10:35Z"
+                id: Optio animi earum.
+                metadata: Totam qui molestiae id sit perferendis odit.
+                project_id: Quia quia et dolorem veniam ut.
+                slug: srt
+                updated_at: "1989-05-16T03:26:48Z"
             function_environment_variables:
                 - auth_input_type: Totam minus omnis debitis rerum est est.
                   description: Sapiente nihil assumenda.
@@ -61195,10 +61211,10 @@ definitions:
             mcp_slug: w8k
             name: Dolor non commodi qui quibusdam dolorum.
             oauth_enablement_metadata:
-                oauth2_security_count: 1040284569186614106
+                oauth2_security_count: 2131366680645926893
             oauth_proxy_server:
                 created_at: "2007-12-13T19:15:48Z"
-                id: Provident sunt.
+                id: Ullam et sint cupiditate alias.
                 oauth_proxy_providers:
                     - authorization_endpoint: Iste veniam molestias temporibus.
                       created_at: "1999-03-26T01:21:27Z"
@@ -61208,7 +61224,7 @@ definitions:
                         - Qui molestias beatae et rem voluptatem.
                         - Commodi non consequatur et sint id.
                         - Adipisci perspiciatis voluptates.
-                      id: Voluptas deserunt.
+                      id: Corporis nisi esse sint voluptas deserunt.
                       provider_type: gram
                       scopes_supported:
                         - Id tempora minus.
@@ -61228,7 +61244,7 @@ definitions:
                         - Qui molestias beatae et rem voluptatem.
                         - Commodi non consequatur et sint id.
                         - Adipisci perspiciatis voluptates.
-                      id: Voluptas deserunt.
+                      id: Corporis nisi esse sint voluptas deserunt.
                       provider_type: gram
                       scopes_supported:
                         - Id tempora minus.
@@ -61240,8 +61256,8 @@ definitions:
                         - Eos similique.
                         - Dolore soluta qui rerum voluptates.
                       updated_at: "1987-03-23T01:45:12Z"
-                project_id: Rerum maiores.
-                slug: 8y4
+                project_id: Asperiores beatae magnam et amet ipsum provident.
+                slug: tez
                 updated_at: "1988-04-22T10:10:40Z"
             organization_id: Aut non asperiores quam fuga praesentium nihil.
             project_id: Dolor et hic accusantium necessitatibus dolores doloremque.
@@ -61432,81 +61448,81 @@ definitions:
                 - Dolorum facilis eligendi.
             resources:
                 - function_resource_definition:
-                    created_at: "1992-09-04T10:15:03Z"
-                    deployment_id: Et distinctio eius.
-                    description: Ab tempore at sed.
-                    function_id: Officiis vitae aut veritatis amet quidem et.
-                    id: Ut natus.
+                    created_at: "2005-03-16T20:18:20Z"
+                    deployment_id: In pariatur non nam.
+                    description: Quisquam facere.
+                    function_id: Quibusdam aut maiores velit.
+                    id: Harum sequi non.
                     meta:
-                        Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                        Est rem ab.: In pariatur non nam.
-                        Quibusdam aut maiores velit.: Tempore non totam totam.
-                    mime_type: Harum sequi non.
-                    name: Non quia dolore modi autem.
-                    project_id: Ipsa qui aspernatur libero consectetur culpa.
-                    resource_urn: Dolorum molestiae.
-                    runtime: Amet omnis.
-                    title: Et perferendis debitis aut quia sit et.
-                    updated_at: "1995-11-25T21:33:17Z"
-                    uri: Dolorum accusamus.
-                    variables: Qui qui modi quia tempora earum hic.
+                        Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                        Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                        Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                    mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                    name: Laudantium pariatur esse consequatur et.
+                    project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                    resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                    runtime: Tempore non totam totam.
+                    title: Cumque minus modi repellat voluptas.
+                    updated_at: "1976-10-01T21:46:38Z"
+                    uri: Voluptatibus magnam sint occaecati quo aut.
+                    variables: Doloribus pariatur et omnis.
                 - function_resource_definition:
-                    created_at: "1992-09-04T10:15:03Z"
-                    deployment_id: Et distinctio eius.
-                    description: Ab tempore at sed.
-                    function_id: Officiis vitae aut veritatis amet quidem et.
-                    id: Ut natus.
+                    created_at: "2005-03-16T20:18:20Z"
+                    deployment_id: In pariatur non nam.
+                    description: Quisquam facere.
+                    function_id: Quibusdam aut maiores velit.
+                    id: Harum sequi non.
                     meta:
-                        Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                        Est rem ab.: In pariatur non nam.
-                        Quibusdam aut maiores velit.: Tempore non totam totam.
-                    mime_type: Harum sequi non.
-                    name: Non quia dolore modi autem.
-                    project_id: Ipsa qui aspernatur libero consectetur culpa.
-                    resource_urn: Dolorum molestiae.
-                    runtime: Amet omnis.
-                    title: Et perferendis debitis aut quia sit et.
-                    updated_at: "1995-11-25T21:33:17Z"
-                    uri: Dolorum accusamus.
-                    variables: Qui qui modi quia tempora earum hic.
+                        Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                        Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                        Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                    mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                    name: Laudantium pariatur esse consequatur et.
+                    project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                    resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                    runtime: Tempore non totam totam.
+                    title: Cumque minus modi repellat voluptas.
+                    updated_at: "1976-10-01T21:46:38Z"
+                    uri: Voluptatibus magnam sint occaecati quo aut.
+                    variables: Doloribus pariatur et omnis.
                 - function_resource_definition:
-                    created_at: "1992-09-04T10:15:03Z"
-                    deployment_id: Et distinctio eius.
-                    description: Ab tempore at sed.
-                    function_id: Officiis vitae aut veritatis amet quidem et.
-                    id: Ut natus.
+                    created_at: "2005-03-16T20:18:20Z"
+                    deployment_id: In pariatur non nam.
+                    description: Quisquam facere.
+                    function_id: Quibusdam aut maiores velit.
+                    id: Harum sequi non.
                     meta:
-                        Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                        Est rem ab.: In pariatur non nam.
-                        Quibusdam aut maiores velit.: Tempore non totam totam.
-                    mime_type: Harum sequi non.
-                    name: Non quia dolore modi autem.
-                    project_id: Ipsa qui aspernatur libero consectetur culpa.
-                    resource_urn: Dolorum molestiae.
-                    runtime: Amet omnis.
-                    title: Et perferendis debitis aut quia sit et.
-                    updated_at: "1995-11-25T21:33:17Z"
-                    uri: Dolorum accusamus.
-                    variables: Qui qui modi quia tempora earum hic.
+                        Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                        Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                        Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                    mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                    name: Laudantium pariatur esse consequatur et.
+                    project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                    resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                    runtime: Tempore non totam totam.
+                    title: Cumque minus modi repellat voluptas.
+                    updated_at: "1976-10-01T21:46:38Z"
+                    uri: Voluptatibus magnam sint occaecati quo aut.
+                    variables: Doloribus pariatur et omnis.
                 - function_resource_definition:
-                    created_at: "1992-09-04T10:15:03Z"
-                    deployment_id: Et distinctio eius.
-                    description: Ab tempore at sed.
-                    function_id: Officiis vitae aut veritatis amet quidem et.
-                    id: Ut natus.
+                    created_at: "2005-03-16T20:18:20Z"
+                    deployment_id: In pariatur non nam.
+                    description: Quisquam facere.
+                    function_id: Quibusdam aut maiores velit.
+                    id: Harum sequi non.
                     meta:
-                        Doloribus pariatur et omnis.: Aut molestiae repellendus et.
-                        Est rem ab.: In pariatur non nam.
-                        Quibusdam aut maiores velit.: Tempore non totam totam.
-                    mime_type: Harum sequi non.
-                    name: Non quia dolore modi autem.
-                    project_id: Ipsa qui aspernatur libero consectetur culpa.
-                    resource_urn: Dolorum molestiae.
-                    runtime: Amet omnis.
-                    title: Et perferendis debitis aut quia sit et.
-                    updated_at: "1995-11-25T21:33:17Z"
-                    uri: Dolorum accusamus.
-                    variables: Qui qui modi quia tempora earum hic.
+                        Culpa est non quia dolore modi autem.: Ab tempore at sed.
+                        Dolorum accusamus.: Et perferendis debitis aut quia sit et.
+                        Molestiae repellendus et consequatur ut natus iure.: Molestiae rerum ipsa qui aspernatur libero.
+                    mime_type: Nesciunt aspernatur qui sit facilis officiis.
+                    name: Laudantium pariatur esse consequatur et.
+                    project_id: Rerum temporibus deleniti voluptatem dolor beatae enim.
+                    resource_urn: Corrupti rem voluptatem illum numquam autem rem.
+                    runtime: Tempore non totam totam.
+                    title: Cumque minus modi repellat voluptas.
+                    updated_at: "1976-10-01T21:46:38Z"
+                    uri: Voluptatibus magnam sint occaecati quo aut.
+                    variables: Doloribus pariatur et omnis.
             security_variables:
                 - bearer_format: Sit libero animi doloribus doloremque quis.
                   display_name: Sed velit ea velit quia ea error.
@@ -67554,24 +67570,24 @@ definitions:
                 $ref: '#/definitions/Package'
         example:
             package:
-                created_at: "1980-04-09T22:24:25Z"
-                deleted_at: "1987-10-19T20:23:42Z"
-                description: Exercitationem omnis dolor explicabo cupiditate similique et.
-                description_raw: Rerum voluptatibus omnis quasi reprehenderit facere.
-                id: Rerum porro velit est enim occaecati vel.
-                image_asset_id: Vero dolorum dolor occaecati placeat.
+                created_at: "1987-04-09T03:37:53Z"
+                deleted_at: "1983-02-09T23:27:03Z"
+                description: Voluptatem fugiat amet id.
+                description_raw: Dolorum dolor occaecati placeat occaecati.
+                id: Explicabo cupiditate similique et.
+                image_asset_id: Non fugit repellendus excepturi.
                 keywords:
-                    - Doloribus minima.
-                    - Quia aliquam aut.
-                    - Et expedita deleniti.
-                latest_version: Ut optio.
-                name: Consequatur ab qui ea nihil distinctio.
-                organization_id: Libero quisquam molestiae ut atque nisi.
-                project_id: Officiis modi praesentium assumenda maxime.
-                summary: Quod voluptate suscipit culpa.
-                title: Voluptatum officia quod qui est aperiam.
-                updated_at: "1994-11-05T22:13:36Z"
-                url: Et voluptates laudantium voluptatem voluptatem fugiat amet.
+                    - Error non nobis cumque.
+                    - Aut aspernatur id illum.
+                    - Quaerat earum delectus nam vero et autem.
+                latest_version: Nesciunt natus.
+                name: Aliquam aut voluptas.
+                organization_id: Aliquam doloribus minima libero.
+                project_id: Rerum voluptatibus omnis quasi reprehenderit facere.
+                summary: Voluptates laudantium.
+                title: Expedita deleniti autem.
+                updated_at: "1970-08-28T02:05:39Z"
+                url: Aperiam sit consequatur harum.
         required:
             - package
     UpdatePromptTemplateResult:
@@ -67711,12 +67727,12 @@ definitions:
                 $ref: '#/definitions/AllowedOrigin'
         example:
             allowed_origin:
-                created_at: "1980-07-23T03:44:34Z"
-                id: Sed soluta quas.
-                origin: Adipisci dolor voluptas labore voluptas.
-                project_id: Id deleniti soluta magnam praesentium voluptatum.
+                created_at: "1998-04-15T07:59:43Z"
+                id: Corrupti rerum ipsa laboriosam placeat illo adipisci.
+                origin: Ducimus error repellat.
+                project_id: Ea voluptas tempore et.
                 status: rejected
-                updated_at: "1972-10-24T23:55:48Z"
+                updated_at: "1979-12-15T22:14:55Z"
         required:
             - allowed_origin
     UpsertGlobalToolVariationResult:
