@@ -87,6 +87,8 @@ export const Replay = ({
       plugins,
       composer: partialConfig?.composer,
       tools: partialConfig?.tools,
+      modal: partialConfig?.modal,
+      sidecar: partialConfig?.sidecar,
     }),
     [partialConfig, plugins]
   )
