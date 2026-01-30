@@ -24,7 +24,7 @@ func (f *Formatter) Format(w io.Writer, record *Record) error {
 	var parts []string
 
 	// Timestamp
-	if !record.Time.IsZero() {
+	if !f.cfg.HideTimestamp && !record.Time.IsZero() {
 		ts := record.Time.Format("15:04:05.000")
 		ts = f.style(f.cfg.Theme.Timestamp, ts)
 		parts = append(parts, ts)
@@ -33,16 +33,6 @@ func (f *Formatter) Format(w io.Writer, record *Record) error {
 	// Level
 	levelStr := f.formatLevel(record)
 	parts = append(parts, levelStr)
-
-	// Source
-	if record.Source != nil {
-		srcStr := record.Source.RelativePath(f.cfg.WorkingDir)
-		if record.Source.Line > 0 {
-			srcStr = fmt.Sprintf("%s:%d", srcStr, record.Source.Line)
-		}
-		srcStr = "<" + f.style(f.cfg.Theme.Source, srcStr) + ">"
-		parts = append(parts, srcStr)
-	}
 
 	// Message
 	if record.Message != "" {
@@ -55,8 +45,22 @@ func (f *Formatter) Format(w io.Writer, record *Record) error {
 		return fmt.Errorf("writing log line: %w", err)
 	}
 
-	// Write attributes on separate lines
-	if len(record.Attrs) > 0 {
+	// Write source and attributes on separate indented lines
+	hasDetails := record.Source != nil || len(record.Attrs) > 0
+	if hasDetails {
+		// Source
+		if record.Source != nil {
+			srcStr := record.Source.RelativePath(f.cfg.WorkingDir)
+			if record.Source.Line > 0 {
+				srcStr = fmt.Sprintf("%s:%d", srcStr, record.Source.Line)
+			}
+			srcStr = f.style(f.cfg.Theme.Source, srcStr)
+			if _, err := fmt.Fprintf(w, "    %s\n", srcStr); err != nil {
+				return fmt.Errorf("writing source: %w", err)
+			}
+		}
+
+		// Attributes
 		for _, attr := range record.Attrs {
 			key := f.style(f.cfg.Theme.AttrKey, attr.Key)
 			value := f.formatValue(attr.Value)
@@ -64,7 +68,8 @@ func (f *Formatter) Format(w io.Writer, record *Record) error {
 				return fmt.Errorf("writing attribute: %w", err)
 			}
 		}
-		// Blank line after attributes
+
+		// Blank line after details
 		if _, err := fmt.Fprintln(w); err != nil {
 			return fmt.Errorf("writing blank line: %w", err)
 		}

@@ -46,6 +46,8 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 		return &ContextHandler{
 			DataDogAttr: opts.DataDogAttr,
 			Handler: plog.NewHandler(
+				plog.WithAddSource(true),
+				plog.WithHideTimestamp(true),
 				plog.WithLevel(plog.LevelInfo),
 				plog.WithOmitKeys(
 					string(attr.ServiceEnvKey),

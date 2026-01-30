@@ -65,18 +65,18 @@ func (t Theme) mergeWithDefault() Theme {
 // DefaultTheme returns a theme with hex colors.
 func DefaultTheme() Theme {
 	return Theme{
-		Timestamp:   lipgloss.NewStyle().Foreground(lipgloss.Color("#808080")),            // gray
-		LevelTrace:  lipgloss.NewStyle().Foreground(lipgloss.Color("#808080")).Bold(true), // gray, bold
-		LevelDebug:  lipgloss.NewStyle().Foreground(lipgloss.Color("#00AAAA")).Bold(true), // cyan, bold
-		LevelInfo:   lipgloss.NewStyle().Foreground(lipgloss.Color("#00FFFF")).Bold(true), // bright cyan, bold
-		LevelWarn:   lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFF00")).Bold(true), // bright yellow, bold
-		LevelError:  lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Bold(true), // bright red, bold
-		LevelFatal:  lipgloss.NewStyle().Foreground(lipgloss.Color("#FF00FF")).Bold(true), // bright magenta, bold
-		Message:     lipgloss.NewStyle(),                                                  // default
-		Source:      lipgloss.NewStyle().Foreground(lipgloss.Color("#5555FF")),            // blue
-		AttrKey:     lipgloss.NewStyle().Foreground(lipgloss.Color("#00AAAA")),            // cyan
-		AttrValue:   lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")),            // light gray
-		AttrBracket: lipgloss.NewStyle().Foreground(lipgloss.Color("#808080")),            // gray
+		Timestamp:   lipgloss.NewStyle().Foreground(lipgloss.Color("#808080")),
+		LevelTrace:  lipgloss.NewStyle().Foreground(lipgloss.Color("#808080")).Bold(true),
+		LevelDebug:  lipgloss.NewStyle().Foreground(lipgloss.Color("#00AAAA")).Bold(true),
+		LevelInfo:   lipgloss.NewStyle().Foreground(lipgloss.Color("#00FFFF")).Bold(true),
+		LevelWarn:   lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFF00")).Bold(true),
+		LevelError:  lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Bold(true),
+		LevelFatal:  lipgloss.NewStyle().Foreground(lipgloss.Color("#FF00FF")).Bold(true),
+		Message:     lipgloss.NewStyle(),
+		Source:      lipgloss.NewStyle().Foreground(lipgloss.Color("#84A59D")),
+		AttrKey:     lipgloss.NewStyle().Foreground(lipgloss.Color("#00AAAA")),
+		AttrValue:   lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")),
+		AttrBracket: lipgloss.NewStyle().Foreground(lipgloss.Color("#808080")),
 	}
 }
 
@@ -91,6 +91,7 @@ type Config struct {
 	WorkingDir    string
 	Output        io.Writer
 	NoColor       bool
+	HideTimestamp bool
 	AddSource     bool
 	Level         int
 	Theme         Theme
@@ -185,6 +186,13 @@ func WithOutput(w io.Writer) Option {
 func WithNoColor(noColor bool) Option {
 	return func(c *Config) {
 		c.NoColor = noColor
+	}
+}
+
+// WithHideTimestamp disables timestamp rendering.
+func WithHideTimestamp(hide bool) Option {
+	return func(c *Config) {
+		c.HideTimestamp = hide
 	}
 }
 

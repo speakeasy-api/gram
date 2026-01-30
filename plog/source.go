@@ -1,6 +1,8 @@
 package plog
 
 import (
+	"go/build"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -100,11 +102,67 @@ func parseSourceObject(m map[string]any) *Source {
 	return src
 }
 
+// goModCache returns the Go module cache directory.
+// It checks GOMODCACHE first, then falls back to GOPATH/pkg/mod.
+func goModCache() string {
+	if modCache := os.Getenv("GOMODCACHE"); modCache != "" {
+		return modCache
+	}
+	gopath := build.Default.GOPATH
+	if gopath == "" {
+		return ""
+	}
+	// GOPATH can contain multiple paths; use the first one
+	if idx := strings.Index(gopath, string(filepath.ListSeparator)); idx != -1 {
+		gopath = gopath[:idx]
+	}
+	return filepath.Join(gopath, "pkg", "mod")
+}
+
+// formatModulePath checks if the path is in the Go module cache and returns
+// a formatted version like "go.temporal.io/sdk@v1.39.0:log/with_logger.go".
+// Returns empty string if not a module cache path.
+func formatModulePath(path, modCache string) string {
+	if modCache == "" || !strings.HasPrefix(path, modCache) {
+		return ""
+	}
+
+	// Extract the part after the module cache directory
+	modPart := strings.TrimPrefix(path, modCache)
+	modPart = strings.TrimPrefix(modPart, string(filepath.Separator))
+
+	// Find the @ that marks the version
+	atIdx := strings.Index(modPart, "@")
+	if atIdx == -1 {
+		return ""
+	}
+
+	// Find the first / after the @ (separates version from path in module)
+	slashAfterVersion := strings.Index(modPart[atIdx:], string(filepath.Separator))
+	if slashAfterVersion == -1 {
+		// No path after version, just return module@version
+		return modPart
+	}
+
+	// Split into module@version and relative path
+	moduleVersion := modPart[:atIdx+slashAfterVersion]
+	relativePath := modPart[atIdx+slashAfterVersion+1:]
+
+	return moduleVersion + ":" + relativePath
+}
+
 // RelativePath returns the source file path relative to the working directory.
+// For paths in the Go module cache, it formats them as "module@version:path/in/module".
 func (s *Source) RelativePath(workingDir string) string {
 	if s == nil || s.File == "" {
 		return ""
 	}
+
+	// Check if this is a Go module cache path and format it elegantly
+	if modPath := formatModulePath(s.File, goModCache()); modPath != "" {
+		return modPath
+	}
+
 	if workingDir == "" {
 		return s.File
 	}

@@ -19,6 +19,7 @@ func main() {
 		omitKeys      string
 		level         string
 		noColor       bool
+		hideTimestamp bool
 	)
 
 	flag.StringVar(&levelKeys, "level-keys", "level", "comma-separated keys to look for log level")
@@ -28,10 +29,12 @@ func main() {
 	flag.StringVar(&omitKeys, "omit", "", "comma-separated field patterns to omit (supports globs, e.g., \"*_id,secret*\")")
 	flag.StringVar(&level, "level", "info", "minimum level to display (trace, debug, info, warn, error, fatal)")
 	flag.BoolVar(&noColor, "no-color", false, "disable colorized output")
+	flag.BoolVar(&hideTimestamp, "hide-timestamp", false, "hide timestamp from output")
 	flag.Parse()
 
 	opts := []plog.Option{
 		plog.WithNoColor(noColor),
+		plog.WithHideTimestamp(hideTimestamp),
 		plog.WithLevel(parseLevel(level)),
 	}
 
