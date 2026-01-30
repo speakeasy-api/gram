@@ -394,11 +394,23 @@ SELECT
     max(time_unix_nano) as end_time_unix_nano,
     count(*) as log_count,
     countIf(startsWith(gram_urn, 'tools:')) as tool_call_count,
+    -- Message count: number of LLM completion events in this chat
+    countIf(toString(attributes.` + "`gram.resource.urn`" + `) = 'agents:chat:completion') as message_count,
+    -- Duration in seconds (max event time - min event time)
+    toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0 as duration_seconds,
+    -- Status: failed if any tool call returned 4xx/5xx, otherwise success
+    if(countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.` + "`http.response.status_code`" + `)) >= 400) > 0, 'error', 'success') as status,
     anyIf(toString(attributes.` + "`user.id`" + `), toString(attributes.` + "`user.id`" + `) != '') as user_id,
+    -- Model used (pick any non-empty response model from completion events)
+    anyIf(toString(attributes.` + "`gen_ai.response.model`" + `),
+          toString(attributes.` + "`gram.resource.urn`" + `) = 'agents:chat:completion'
+          AND toString(attributes.` + "`gen_ai.response.model`" + `) != '') as model,
     sumIf(toInt64OrZero(toString(attributes.` + "`gen_ai.usage.input_tokens`" + `)),
           toString(attributes.` + "`gram.resource.urn`" + `) = 'agents:chat:completion') as total_input_tokens,
     sumIf(toInt64OrZero(toString(attributes.` + "`gen_ai.usage.output_tokens`" + `)),
-          toString(attributes.` + "`gram.resource.urn`" + `) = 'agents:chat:completion') as total_output_tokens
+          toString(attributes.` + "`gram.resource.urn`" + `) = 'agents:chat:completion') as total_output_tokens,
+    sumIf(toInt64OrZero(toString(attributes.` + "`gen_ai.usage.total_tokens`" + `)),
+          toString(attributes.` + "`gram.resource.urn`" + `) = 'agents:chat:completion') as total_tokens
 FROM telemetry_logs
 WHERE gram_project_id = ?
     AND time_unix_nano >= ?

@@ -376,9 +376,16 @@ var ChatSummaryType = Type("ChatSummary", func() {
 	Attribute("end_time_unix_nano", Int64, "Latest log timestamp in Unix nanoseconds")
 	Attribute("log_count", UInt64, "Total number of logs in this chat session")
 	Attribute("tool_call_count", UInt64, "Number of tool calls in this chat session")
+	Attribute("message_count", UInt64, "Number of LLM completion messages in this chat session")
+	Attribute("duration_seconds", Float64, "Chat session duration in seconds")
+	Attribute("status", String, "Chat session status", func() {
+		Enum("success", "error")
+	})
 	Attribute("user_id", String, "User ID associated with this chat session")
+	Attribute("model", String, "LLM model used in this chat session")
 	Attribute("total_input_tokens", Int64, "Total input tokens used")
 	Attribute("total_output_tokens", Int64, "Total output tokens used")
+	Attribute("total_tokens", Int64, "Total tokens used (input + output)")
 
 	Required(
 		"gram_chat_id",
@@ -386,8 +393,12 @@ var ChatSummaryType = Type("ChatSummary", func() {
 		"end_time_unix_nano",
 		"log_count",
 		"tool_call_count",
+		"message_count",
+		"duration_seconds",
+		"status",
 		"total_input_tokens",
 		"total_output_tokens",
+		"total_tokens",
 	)
 })
 

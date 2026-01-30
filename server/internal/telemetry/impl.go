@@ -284,9 +284,14 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 			EndTimeUnixNano:   item.EndTimeUnixNano,
 			LogCount:          item.LogCount,
 			ToolCallCount:     item.ToolCallCount,
+			MessageCount:      item.MessageCount,
+			DurationSeconds:   sanitizeFloat64(item.DurationSeconds),
+			Status:            item.Status,
 			UserID:            item.UserID,
+			Model:             item.Model,
 			TotalInputTokens:  item.TotalInputTokens,
 			TotalOutputTokens: item.TotalOutputTokens,
+			TotalTokens:       item.TotalTokens,
 		}
 	}
 
