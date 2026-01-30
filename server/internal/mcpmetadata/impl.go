@@ -111,7 +111,7 @@ type hostedPageData struct {
 	SiteURL           string
 	LogoAssetURL      string
 	DocsURL           string
-	DocsSlug          string
+	DocsBtnText       string
 	Instructions      string
 	IsPublic          bool
 }
