@@ -6,7 +6,11 @@
 import http from 'node:http'
 import { createElementsServerHandlers } from '@gram-ai/elements/server'
 
-export function startTestServer(port: number, label: string) {
+export function startTestServer(
+  port: number,
+  label: string,
+  embedOrigin = 'http://localhost:5173',
+) {
   const handlers = createElementsServerHandlers()
 
   const server = http.createServer(async (req, res) => {
@@ -22,7 +26,7 @@ export function startTestServer(port: number, label: string) {
 
     if (req.url === '/chat/session' && req.method === 'POST') {
       await handlers.session(req, res, {
-        embedOrigin: 'http://localhost:5173',
+        embedOrigin,
         userIdentifier: `${label}-test-user`,
       })
       return
