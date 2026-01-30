@@ -339,7 +339,18 @@ var ToolCallSummary = Type("ToolCallSummary", func() {
 var SearchChatsFilter = Type("SearchChatsFilter", func() {
 	Description("Filter criteria for searching chat sessions")
 
-	Extend(TelemetryFilter)
+	Attribute("from", String, "Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("deployment_id", String, "Deployment ID filter", func() {
+		Format(FormatUUID)
+	})
+	Attribute("gram_urn", String, "Gram URN filter (single URN, use gram_urns for multiple)")
 })
 
 var SearchChatsPayload = Type("SearchChatsPayload", func() {

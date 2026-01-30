@@ -431,7 +431,8 @@ HAVING if(
     )
 ORDER BY
     IF(? = 'asc', start_time_unix_nano, 0) ASC,
-    IF(? = 'desc', start_time_unix_nano, 0) DESC
+    IF(? = 'desc', start_time_unix_nano, 0) DESC,
+    gram_chat_id ASC
 LIMIT ?
 `
 
