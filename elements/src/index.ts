@@ -66,3 +66,20 @@ export type {
 export { MODELS } from './lib/models'
 
 export type { Plugin } from './types/plugins'
+
+// CommandBar
+export { CommandBar } from '@/components/CommandBar'
+export {
+  CommandBarProvider,
+  useCommandBar,
+} from './contexts/CommandBarContext'
+export { useCommandBarActions } from './hooks/useCommandBarActions'
+export type {
+  CommandBarConfig,
+  CommandBarAction,
+  CommandBarToolMeta,
+  CommandBarToolCallEvent,
+  CommandBarMessageEvent,
+  CommandBarActionEvent,
+  CommandBarContextType,
+} from './types'

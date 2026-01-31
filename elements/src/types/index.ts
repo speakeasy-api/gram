@@ -922,6 +922,163 @@ export interface HistoryConfig {
   initialThreadId?: string
 }
 
+// --------------- CommandBar Types ---------------
+
+/**
+ * A single action that can be selected in the CommandBar.
+ *
+ * @example
+ * ```ts
+ * const action: CommandBarAction = {
+ *   id: 'navigate-settings',
+ *   label: 'Go to Settings',
+ *   group: 'Navigation',
+ *   icon: <SettingsIcon className="size-4" />,
+ *   onSelect: () => router.push('/settings'),
+ * }
+ * ```
+ */
+export interface CommandBarAction {
+  /** Unique identifier for this action */
+  id: string
+  /** Display label shown in the command list */
+  label: string
+  /** Optional secondary description text */
+  description?: string
+  /** Group name for grouping actions (e.g., "Navigation", "Tools") */
+  group?: string
+  /** Icon rendered to the left of the label */
+  icon?: ReactNode
+  /** Additional keywords for fuzzy search matching */
+  keywords?: string[]
+  /** Keyboard shortcut hint displayed on the right (display only) */
+  shortcut?: string
+  /**
+   * Handler when the action is selected.
+   * - Function: called directly
+   * - String: treated as a prompt sent to the AI fallback
+   */
+  onSelect: (() => void | Promise<unknown>) | string
+  /** Whether the action is currently disabled */
+  disabled?: boolean
+  /** Priority for ordering (higher = shown first). @default 0 */
+  priority?: number
+  /**
+   * When present, the action represents a tool that can be executed
+   * via a direct parameter form instead of through AI.
+   */
+  toolMeta?: CommandBarToolMeta
+}
+
+/** Metadata for a tool that can be executed directly from the command bar. */
+export interface CommandBarToolMeta {
+  /** Tool name as registered in the MCP or frontend tools config */
+  toolName: string
+  /** JSON Schema describing the tool's input parameters */
+  parameters: Record<string, unknown>
+  /** Description of what the tool does */
+  description?: string
+  /** Execute the tool with the given arguments */
+  execute: (args: Record<string, unknown>) => Promise<unknown>
+  /** Whether this is an MCP tool or a frontend tool */
+  source: 'mcp' | 'frontend'
+}
+
+/** Fired when a tool call occurs via the AI fallback */
+export interface CommandBarToolCallEvent {
+  toolName: string
+  args: Record<string, unknown>
+  result?: unknown
+}
+
+/** Fired when the AI produces a message */
+export interface CommandBarMessageEvent {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+/** Fired when any action is executed */
+export interface CommandBarActionEvent {
+  action: CommandBarAction
+  result?: unknown
+  error?: string
+}
+
+/**
+ * Configuration for the CommandBar component.
+ *
+ * @example
+ * ```tsx
+ * <CommandBarProvider config={{
+ *   shortcut: 'meta+k',
+ *   placeholder: 'Search or ask anything...',
+ *   actions: [
+ *     { id: 'home', label: 'Go Home', onSelect: () => navigate('/') },
+ *   ],
+ * }}>
+ *   <CommandBar />
+ * </CommandBarProvider>
+ * ```
+ */
+export interface CommandBarConfig {
+  /**
+   * Keyboard shortcut to toggle the command bar.
+   * Format: modifier+key, e.g. "meta+k", "ctrl+shift+p"
+   * @default "meta+k"
+   */
+  shortcut?: string
+
+  /**
+   * Placeholder text for the search input.
+   * @default "Type a command or ask anything..."
+   */
+  placeholder?: string
+
+  /** Static actions always available in the command bar */
+  actions?: CommandBarAction[]
+
+  /**
+   * Auto-surface MCP and frontend tools as selectable actions.
+   * Requires the CommandBar to be inside an ElementsProvider.
+   * @default true
+   */
+  surfaceMCPTools?: boolean
+
+  /**
+   * Close immediately after action selection without waiting for result.
+   * @default true
+   */
+  fireAndForget?: boolean
+
+  /**
+   * Maximum number of visible items before scrolling.
+   * @default 8
+   */
+  maxVisible?: number
+
+  /** Called when an MCP tool is invoked via the AI fallback */
+  onToolCall?: (event: CommandBarToolCallEvent) => void
+
+  /** Called when the AI produces a message */
+  onMessage?: (event: CommandBarMessageEvent) => void
+
+  /** Called when any action is executed */
+  onAction?: (event: CommandBarActionEvent) => void
+}
+
+/** The context value exposed by useCommandBar() */
+export interface CommandBarContextType {
+  isOpen: boolean
+  open: () => void
+  close: () => void
+  toggle: () => void
+  query: string
+  setQuery: (query: string) => void
+  actions: CommandBarAction[]
+  registerActions: (actions: CommandBarAction[]) => () => void
+  config: CommandBarConfig
+}
+
 /**
  * @internal
  */

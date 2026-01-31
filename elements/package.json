@@ -127,6 +127,7 @@
     "ai": "5.0.90",
     "assistant-stream": "^0.2.46",
     "class-variance-authority": "^0.7.1",
+    "cmdk": "^1.0.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",
     "tailwind-merge": "^3.3.1",

@@ -309,6 +309,47 @@
   }
 }
 
+/* cmdk internal element styles — these elements are rendered by cmdk
+   and cannot receive className props directly */
+.gram-elements [cmdk-root] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+}
+
+.gram-elements [cmdk-list] {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.gram-elements [cmdk-list-sizer] {
+  display: flex;
+  flex-direction: column;
+}
+
+.gram-elements [cmdk-group] {
+  overflow: hidden;
+}
+
+.gram-elements [cmdk-group-items] {
+  display: flex;
+  flex-direction: column;
+}
+
+.gram-elements [cmdk-separator] {
+  height: 1px;
+  width: 100%;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.gram-elements [cmdk-empty] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .gram-elements .title-shimmer {
   background: linear-gradient(
     90deg,
