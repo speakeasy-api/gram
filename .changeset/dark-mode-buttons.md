@@ -2,4 +2,4 @@
 "@gram-ai/elements": patch
 ---
 
-Fix dark mode visibility for scroll-to-bottom arrow, tool approval button text colors, and Prettier formatting fixes
+Fix dark mode text colors for approval and deny buttons in tool approval UI
