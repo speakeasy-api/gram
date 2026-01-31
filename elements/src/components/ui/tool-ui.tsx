@@ -536,7 +536,7 @@ function ToolUI({
               variant="outline"
               size="sm"
               onClick={onDeny}
-              className="text-destructive hover:bg-destructive/10"
+              className="text-destructive hover:bg-destructive/10 dark:text-rose-400"
             >
               <XIcon className="mr-1 size-3" />
               Deny
@@ -549,10 +549,10 @@ function ToolUI({
                 onClick={handleApprove}
                 className="flex cursor-pointer justify-between gap-1 rounded-r-none bg-emerald-600 hover:bg-emerald-700"
               >
-                <CheckIcon className="mr-1 size-3" />
+                <CheckIcon className="dark:text-foreground mr-1 size-3" />
 
                 {/* The min-width is needed to prevent the button from shifting when the text changes */}
-                <span className="min-w-[110px]">
+                <span className="dark:text-foreground min-w-[110px]">
                   {approvalMode === 'one-time'
                     ? 'Approve this time'
                     : 'Approve always'}
@@ -565,7 +565,7 @@ function ToolUI({
                     size="sm"
                     className="cursor-pointer rounded-l-none border-l border-emerald-700 bg-emerald-600 px-2 hover:bg-emerald-700"
                   >
-                    <ChevronDownIcon className="size-3" />
+                    <ChevronDownIcon className="dark:text-foreground size-3" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-64 p-1" sideOffset={4}>
