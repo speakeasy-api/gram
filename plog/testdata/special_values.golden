@@ -1,0 +1,13 @@
+12:00:00.000 INFO  special values
+    array: [1,2,3]
+    bool_false: false
+    bool_true: true
+    empty_string: 
+    null_val: null
+
+12:00:01.000 INFO  string with spaces
+    description: "this has spaces"
+
+12:00:02.000 INFO  string with quotes
+    query: "SELECT * FROM \"users\""
+

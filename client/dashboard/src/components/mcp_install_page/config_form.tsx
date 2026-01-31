@@ -34,6 +34,7 @@ interface MetadataParams {
   logoAssetId: string | undefined;
   externalDocumentationUrl: string | undefined;
   instructions: string | undefined;
+  installationOverrideUrl: string | undefined;
 }
 
 type ValidationResult =
@@ -64,6 +65,11 @@ interface UseMcpMetadataMetadataFormResult {
     value: string | undefined;
     onChange: ChangeEventHandler<HTMLTextAreaElement>;
   };
+  installationOverrideUrlInputHandlers: {
+    value: string | undefined;
+    error?: boolean;
+    onChange: ChangeEventHandler<HTMLInputElement>;
+  };
   reset: () => void;
   save: () => void;
 }
@@ -87,6 +93,8 @@ function useMcpMetadataMetadataForm(
   const queryClient = useQueryClient();
 
   const [metadataParams, setMetadataParams] = useState<MetadataParams>({
+    installationOverrideUrl:
+      currentMetadata?.installationOverrideUrl ?? undefined,
     externalDocumentationUrl:
       currentMetadata?.externalDocumentationUrl ?? undefined,
     logoAssetId: currentMetadata?.logoAssetId ?? undefined,
@@ -107,6 +115,7 @@ function useMcpMetadataMetadataForm(
       !equalsServerState(metadataParams, currentMetadata)
     ) {
       setMetadataParams({
+        installationOverrideUrl: currentMetadata?.installationOverrideUrl,
         externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
         logoAssetId: currentMetadata?.logoAssetId,
         instructions: currentMetadata?.instructions,
@@ -172,6 +181,7 @@ function useMcpMetadataMetadataForm(
       logoAssetId: currentMetadata?.logoAssetId,
       externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
       instructions: currentMetadata?.instructions,
+      installationOverrideUrl: currentMetadata?.installationOverrideUrl,
     });
   }, [currentMetadata]);
 
@@ -215,6 +225,15 @@ function useMcpMetadataMetadataForm(
             e.target.value === "" ? undefined : e.target.value,
         })),
     },
+    installationOverrideUrlInputHandlers: {
+      value: metadataParams.installationOverrideUrl ?? "",
+      onChange: (e) =>
+        setMetadataParams((prev) => ({
+          ...prev,
+          installationOverrideUrl:
+            e.target.value === "" ? undefined : e.target.value,
+        })),
+    },
     instructionsHandlers: {
       value: metadataParams.instructions ?? "",
       onChange: (e) =>
@@ -228,7 +247,7 @@ function useMcpMetadataMetadataForm(
   };
 }
 
-export function ConfigForm({ toolset }: ConfigFormProps) {
+export function InstallPageConfigForm({ toolset }: ConfigFormProps) {
   const { installPageUrl } = useMcpUrl(toolset);
   const [open, setOpen] = useState(false);
 
@@ -307,6 +326,26 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
                 placeholder="https://my-documentation.link"
                 className="w-full"
                 {...form.urlInputHandlers}
+              />
+              {form.valid.message && (
+                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                  {form.valid.message}
+                </span>
+              )}
+            </div>
+            <div>
+              <Heading> Installation Override URL </Heading>
+              <Type muted small className="max-w-2xl">
+                A URL to redirect to instead of the default installation page
+                when someone navigates to your MCP URL in their browser.
+              </Type>
+            </div>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Leave unset to use the default installation page"
+                className="w-full"
+                {...form.installationOverrideUrlInputHandlers}
               />
               {form.valid.message && (
                 <span className="absolute -bottom-4 left-0 text-xs text-destructive">

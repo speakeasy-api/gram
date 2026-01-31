@@ -44,6 +44,8 @@ type CreateKeyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When the key was last accessed.
+	LastAccessedAt *string `form:"last_accessed_at,omitempty" json:"last_accessed_at,omitempty" xml:"last_accessed_at,omitempty"`
 }
 
 // ListKeysResponseBody is the type of the "keys" service "listKeys" endpoint
@@ -805,6 +807,8 @@ type KeyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When the key was last accessed.
+	LastAccessedAt *string `form:"last_accessed_at,omitempty" json:"last_accessed_at,omitempty" xml:"last_accessed_at,omitempty"`
 }
 
 // ValidateKeyOrganizationResponseBody is used to define fields on response
@@ -842,6 +846,7 @@ func NewCreateKeyResponseBody(res *keys.Key) *CreateKeyResponseBody {
 		Key:             res.Key,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
+		LastAccessedAt:  res.LastAccessedAt,
 	}
 	if res.Scopes != nil {
 		body.Scopes = make([]string, len(res.Scopes))

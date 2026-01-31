@@ -2,7 +2,6 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
-import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,14 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import {
+  useIsAdmin,
+  useOrganization,
+  useProject,
+  useSession,
+} from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert, cn, getCustomDomainCNAME } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
@@ -21,7 +27,7 @@ import {
 } from "@gram/client/react-query/listAPIKeys";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { Column, Stack, Table } from "@speakeasy-api/moonshine";
+import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -33,16 +39,15 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
-import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { SettingsProjectsTable } from "./SettingsProjectsTable";
 
 export default function Settings() {
   const organization = useOrganization();
   const session = useSession();
   const isAdmin = useIsAdmin();
-  const navigate = useNavigate();
-  const [orgOverride, setOrgOverride] = useState("");
+  const client = useSdkClient();
+  const project = useProject();
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
@@ -232,6 +237,17 @@ export default function Settings() {
       header: "Created At",
       width: "1fr",
       render: (key: Key) => <HumanizeDateTime date={key.createdAt} />,
+    },
+    {
+      key: "lastAccessedAt",
+      header: "Last Accessed At",
+      width: "1fr",
+      render: (key: Key) =>
+        key.lastAccessedAt ? (
+          <HumanizeDateTime date={key.lastAccessedAt} />
+        ) : (
+          "-"
+        ),
     },
     {
       key: "actions",
@@ -675,26 +691,48 @@ export default function Settings() {
                 Admin Only
               </Heading>
             </Stack>
+            <dl className="grid grid-cols-[max-content_auto] gap-x-6 gap-y-2 mb-8">
+              <dt className="text-end">Organization ID</dt>
+              <dd className="font-mono">{organization.id}</dd>
+              <dt className="text-end">Project ID</dt>
+              <dd className="font-mono">{project.id}</dd>
+            </dl>
+
             <Type variant="body" className="text-muted-foreground mb-4">
               Override to a different organization by entering its slug below.
             </Type>
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                if (orgOverride.trim()) {
-                  navigate(`/${orgOverride.trim()}`);
+                const formData = new FormData(e.currentTarget);
+                const val = formData.get("gram_admin_override");
+                if (typeof val !== "string" || !val.trim()) {
+                  return;
                 }
+
+                document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
+                await client.auth.logout();
+                window.location.href = "/login";
               }}
               className="flex gap-2 max-w-md"
             >
               <Input
                 placeholder="organization-slug"
-                value={orgOverride}
-                onChange={setOrgOverride}
+                name="gram_admin_override"
                 className="flex-1"
+                required
               />
-              <Button type="submit" disabled={!orgOverride.trim()}>
-                Go to Org
+              <Button type="submit">Go to Org</Button>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={async () => {
+                  document.cookie = `gram_admin_override=; path=/; max-age=0;`;
+                  await client.auth.logout();
+                  window.location.href = "/login";
+                }}
+              >
+                Clear override
               </Button>
             </form>
           </div>

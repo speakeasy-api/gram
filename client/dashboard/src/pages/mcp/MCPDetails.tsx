@@ -1,7 +1,7 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { ConfigForm } from "@/components/mcp_install_page/config_form";
+import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
@@ -444,7 +444,7 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
-          <ConfigForm toolset={toolset} />
+          <InstallPageConfigForm toolset={toolset} />
         </Stack>
       </PageSection>
     </Stack>

@@ -67,7 +67,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"ab67be27-e905-43ef-a7a4-ac59a7c814f1\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Amet suscipit id voluptatem consectetur tenetur.\",\n            \"provided_by\": \"Voluptas aut.\",\n            \"variable_name\": \"Architecto consectetur.\"\n         },\n         {\n            \"header_display_name\": \"Amet suscipit id voluptatem consectetur tenetur.\",\n            \"provided_by\": \"Voluptas aut.\",\n            \"variable_name\": \"Architecto consectetur.\"\n         },\n         {\n            \"header_display_name\": \"Amet suscipit id voluptatem consectetur tenetur.\",\n            \"provided_by\": \"Voluptas aut.\",\n            \"variable_name\": \"Architecto consectetur.\"\n         }\n      ],\n      \"external_documentation_url\": \"Rerum culpa omnis ea libero.\",\n      \"instructions\": \"Sint in et.\",\n      \"logo_asset_id\": \"Omnis deleniti facilis quia dolorum.\",\n      \"toolset_slug\": \"509\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"55c91b21-cb7d-4997-87b0-3386e83f6f06\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Recusandae ducimus.\",\n            \"provided_by\": \"Est tenetur neque vitae.\",\n            \"variable_name\": \"Officiis dolore et tenetur.\"\n         },\n         {\n            \"header_display_name\": \"Recusandae ducimus.\",\n            \"provided_by\": \"Est tenetur neque vitae.\",\n            \"variable_name\": \"Officiis dolore et tenetur.\"\n         }\n      ],\n      \"external_documentation_url\": \"At quaerat autem.\",\n      \"installation_override_url\": \"http://blick.biz/griffin_champlin\",\n      \"instructions\": \"Non asperiores quidem minima enim placeat voluptatum.\",\n      \"logo_asset_id\": \"Commodi qui.\",\n      \"toolset_slug\": \"maf\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
@@ -75,6 +75,9 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		}
 		if body.DefaultEnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))
+		}
+		if body.InstallationOverrideURL != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.installation_override_url", *body.InstallationOverrideURL, goa.FormatURI))
 		}
 		if err != nil {
 			return nil, err
@@ -104,6 +107,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 		Instructions:             body.Instructions,
 		DefaultEnvironmentID:     body.DefaultEnvironmentID,
+		InstallationOverrideURL:  body.InstallationOverrideURL,
 	}
 	if body.EnvironmentConfigs != nil {
 		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfigInput, len(body.EnvironmentConfigs))
@@ -130,7 +134,7 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 	{
 		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"gfk\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"l2b\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.McpSlug) > 40 {

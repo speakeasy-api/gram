@@ -247,7 +247,7 @@ func handleToolsCall(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
-			ChatID:                nil,
+			ChatID:                conv.PtrEmpty(payload.chatID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
 			FunctionCPUUsage:      functionCPU,
@@ -258,6 +258,10 @@ func handleToolsCall(
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
+		logAttrs.RecordTraceContext(ctx)
+		if payload.chatID != "" {
+			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
+		}
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{

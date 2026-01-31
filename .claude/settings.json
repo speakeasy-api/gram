@@ -23,8 +23,13 @@
       "Update(server:*)",
       "WebFetch"
     ],
-    "deny": ["Read(mise.local.toml)"]
+    "deny": [
+      "Read(mise.local.toml)"
+    ]
   },
   "preferredLineLength": 120,
-  "notes": "Only use kubectl and terraform commands for validation/dry-run as defined in CLAUDE.md. Only run mise commands for local iteration (helm:up, helm:update, k8s:refresh). Do not automatically run commands that make real infrastructure changes without specific user request."
+  "notes": "Only use kubectl and terraform commands for validation/dry-run as defined in CLAUDE.md. Only run mise commands for local iteration (helm:up, helm:update, k8s:refresh). Do not automatically run commands that make real infrastructure changes without specific user request.",
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
+  }
 }

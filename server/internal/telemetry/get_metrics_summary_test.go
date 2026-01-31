@@ -193,6 +193,7 @@ func insertToolCallLog(t *testing.T, ctx context.Context, projectID, deploymentI
 	attributes := map[string]any{
 		"gram.tool.urn":                toolURN,
 		"http.server.request.duration": durationSec,
+		"http.response.status_code":    statusCode,
 	}
 
 	attrsJSON, err := json.Marshal(attributes)
@@ -202,12 +203,10 @@ func insertToolCallLog(t *testing.T, ctx context.Context, projectID, deploymentI
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
 			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_deployment_id, gram_urn, service_name,
-			http_response_status_code
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool call",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, toolURN, "gram-tools",
-		statusCode)
+		projectID, deploymentID, toolURN, "gram-tools")
 	require.NoError(t, err)
 }

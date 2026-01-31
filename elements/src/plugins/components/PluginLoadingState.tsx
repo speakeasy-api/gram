@@ -27,8 +27,8 @@ export const PluginLoadingState: FC<PluginLoadingStateProps> = ({
         className
       )}
     >
-      <div className="shimmer text-muted-foreground absolute inset-0 flex items-center justify-center">
-        {text}
+      <div className="bg-muted absolute inset-0 flex items-center justify-center">
+        <span className="shimmer text-muted-foreground text-sm">{text}</span>
       </div>
     </div>
   )
