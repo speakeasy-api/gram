@@ -1,3 +1,6 @@
+// Polyfill React 18 APIs for older React versions — must be the first import
+import './compat'
+
 // Side-effect import to include CSS in build (consumers import via @gram-ai/elements/elements.css)
 import './global.css'
 
