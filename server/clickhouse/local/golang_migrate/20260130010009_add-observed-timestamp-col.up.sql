@@ -1,0 +1,1 @@
+ALTER TABLE `telemetry_logs` ADD COLUMN `observed_timestamp` DateTime64(9) DEFAULT fromUnixTimestamp64Nano(observed_time_unix_nano) COMMENT 'Human-readable timestamp derived from observed_time_unix_nano.';
