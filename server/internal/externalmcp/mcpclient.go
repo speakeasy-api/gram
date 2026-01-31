@@ -138,11 +138,21 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// ToolAnnotations contains MCP tool behavior hints.
+type ToolAnnotations struct {
+	Title          string `json:"title,omitempty"`
+	ReadOnlyHint   *bool  `json:"readOnlyHint,omitempty"`
+	DestructiveHint *bool `json:"destructiveHint,omitempty"`
+	IdempotentHint *bool  `json:"idempotentHint,omitempty"`
+	OpenWorldHint  *bool  `json:"openWorldHint,omitempty"`
+}
+
 // Tool represents a tool discovered from an external MCP server.
 type Tool struct {
 	Name        string
 	Description string
 	Schema      json.RawMessage
+	Annotations *ToolAnnotations
 }
 
 // ListTools lists available tools from the external MCP server.
@@ -175,10 +185,23 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 			schema = []byte("{}")
 		}
 
+		// Extract annotations from MCP tool response
+		var annotations *ToolAnnotations
+		if tool.Annotations != nil {
+			annotations = &ToolAnnotations{
+				Title:           tool.Annotations.Title,
+				ReadOnlyHint:    tool.Annotations.ReadOnlyHint,
+				DestructiveHint: tool.Annotations.DestructiveHint,
+				IdempotentHint:  tool.Annotations.IdempotentHint,
+				OpenWorldHint:   tool.Annotations.OpenWorldHint,
+			}
+		}
+
 		tools = append(tools, Tool{
 			Name:        tool.Name,
 			Description: tool.Description,
 			Schema:      schema,
+			Annotations: annotations,
 		})
 	}
 

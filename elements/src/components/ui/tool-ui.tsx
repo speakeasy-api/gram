@@ -46,6 +46,20 @@ type ContentItem =
   | { type: 'text'; text: string; _meta?: { 'getgram.ai/mime-type'?: string } }
   | { type: 'image'; data: string; _meta?: { 'getgram.ai/mime-type'?: string } }
 
+/** MCP tool annotations providing hints about tool behavior */
+interface ToolAnnotations {
+  /** Human-readable display name for the tool */
+  title?: string
+  /** If true, the tool does not modify its environment */
+  readOnlyHint?: boolean
+  /** If true, the tool may perform destructive updates */
+  destructiveHint?: boolean
+  /** If true, repeated calls with same args have no additional effect */
+  idempotentHint?: boolean
+  /** If true, tool interacts with external entities */
+  openWorldHint?: boolean
+}
+
 interface ToolUIProps {
   /** Display name of the tool */
   name: string
@@ -63,6 +77,8 @@ interface ToolUIProps {
   defaultExpanded?: boolean
   /** Additional class names */
   className?: string
+  /** MCP tool annotations */
+  annotations?: ToolAnnotations
   /** Approval callbacks */
   onApproveOnce?: () => void
   onApproveForSession?: () => void
@@ -409,10 +425,13 @@ function ToolUI({
   result,
   defaultExpanded = false,
   className,
+  annotations,
   onApproveOnce,
   onApproveForSession,
   onDeny,
 }: ToolUIProps) {
+  // Use annotation title if available, otherwise fall back to name
+  const displayName = annotations?.title || name
   const isApprovalPending =
     status === 'approval' && onApproveOnce !== undefined && onDeny !== undefined
   // Auto-expand when approval is pending, collapse when approved
@@ -484,7 +503,7 @@ function ToolUI({
             !provider && isApprovalPending && 'shimmer'
           )}
         >
-          {name}
+          {displayName}
         </span>
         {hasContent && (
           <ChevronDownIcon
@@ -524,12 +543,22 @@ function ToolUI({
       {isApprovalPending && (
         <div
           data-slot="tool-ui-approval-actions"
-          className="border-border flex items-center justify-end gap-2 border-t px-4 py-3"
+          className="border-border flex flex-col gap-2 border-t px-4 py-3"
         >
-          <div>
+          <div className="flex items-center gap-2">
             <span className="text-muted-foreground text-sm">
               This tool requires approval
             </span>
+            {annotations?.readOnlyHint && (
+              <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs">
+                Read-only
+              </span>
+            )}
+            {annotations?.destructiveHint && !annotations?.readOnlyHint && (
+              <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded px-1.5 py-0.5 text-xs">
+                Destructive
+              </span>
+            )}
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Button
