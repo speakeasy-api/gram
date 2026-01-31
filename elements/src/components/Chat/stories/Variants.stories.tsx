@@ -40,7 +40,7 @@ export const StandaloneWithHistory: StoryObj<typeof Chat> = {
   args: {},
   render: () => (
     <div className="bg-background flex h-10/12 max-h-[800px] w-1/2 flex-row gap-4 overflow-hidden rounded-lg border shadow-xl sm:w-3/4">
-      <ThreadList className="w-56 flex-none shrink-0 border-r" />
+      <ThreadList className="w-56 shrink min-w-0 border-r" />
       <Chat className="flex-3 grow" />
     </div>
   ),
@@ -59,6 +59,10 @@ StandaloneWithHistory.parameters = {
     config: {
       variant: 'standalone',
       history: { enabled: true, showThreadList: true },
+      model: { showModelPicker: true },
+      tools: {
+        toolsRequiringApproval: ['kitchen_sink_get_salutation'],
+      },
     },
   },
 }
