@@ -107,7 +107,7 @@ const ThreadListItem: FC = () => {
     >
       <ThreadListItemPrimitive.Trigger
         className={cn(
-          'aui-thread-list-item-trigger flex grow cursor-pointer items-center text-start',
+          'aui-thread-list-item-trigger flex min-w-0 grow cursor-pointer items-center text-start',
           d('px-lg'),
           d('py-sm')
         )}
@@ -122,7 +122,7 @@ const ThreadListItem: FC = () => {
 
 const ThreadListItemTitle: FC = () => {
   return (
-    <span className="aui-thread-list-item-title text-foreground text-sm">
+    <span className="aui-thread-list-item-title text-foreground text-sm break-words">
       <ThreadListItemPrimitive.Title fallback="New Chat" />
     </span>
   )
