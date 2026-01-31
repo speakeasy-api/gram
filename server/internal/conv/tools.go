@@ -3,6 +3,7 @@ package conv
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -250,6 +251,15 @@ func variedToolSchema(baseSchema string, summarizer *string) (string, error) {
 	return schema, nil
 }
 
+// ToolAnnotations contains MCP tool behavior hints.
+type ToolAnnotations struct {
+	Title           string `json:"title,omitempty"`
+	ReadOnlyHint    *bool  `json:"readOnlyHint,omitempty"`
+	DestructiveHint *bool  `json:"destructiveHint,omitempty"`
+	IdempotentHint  *bool  `json:"idempotentHint,omitempty"`
+	OpenWorldHint   *bool  `json:"openWorldHint,omitempty"`
+}
+
 // ToToolListEntry converts a Tool to basic list entry fields.
 // ToolListEntry contains the fields needed for a tool list entry.
 type ToolListEntry struct {
@@ -257,6 +267,7 @@ type ToolListEntry struct {
 	Description string
 	InputSchema json.RawMessage
 	Meta        map[string]any
+	Annotations *ToolAnnotations
 }
 
 // ToToolListEntry extracts tool list entry fields from a tool.
@@ -281,12 +292,92 @@ func ToToolListEntry(tool *types.Tool) (ToolListEntry, error) {
 		return ToolListEntry{}, err
 	}
 
+	// Build annotations - start with stored annotations or infer from HTTP method
+	annotations := getToolAnnotations(tool)
+
 	return ToolListEntry{
 		Name:        baseTool.Name,
 		Description: baseTool.Description,
 		InputSchema: json.RawMessage(baseTool.Schema),
 		Meta:        meta,
+		Annotations: annotations,
 	}, nil
+}
+
+// getToolAnnotations extracts or infers annotations for a tool.
+// For HTTP tools without explicit annotations, infers from HTTP method.
+func getToolAnnotations(tool *types.Tool) *ToolAnnotations {
+	// Check for stored annotations first
+	if tool.HTTPToolDefinition != nil && tool.HTTPToolDefinition.Annotations != nil {
+		return convertStoredAnnotations(tool.HTTPToolDefinition.Annotations)
+	}
+	if tool.FunctionToolDefinition != nil && tool.FunctionToolDefinition.Annotations != nil {
+		return convertStoredAnnotations(tool.FunctionToolDefinition.Annotations)
+	}
+
+	// For HTTP tools without explicit annotations, infer from HTTP method
+	if tool.HTTPToolDefinition != nil && tool.HTTPToolDefinition.HTTPMethod != nil {
+		return inferAnnotationsFromHTTPMethod(*tool.HTTPToolDefinition.HTTPMethod)
+	}
+
+	return nil
+}
+
+// convertStoredAnnotations converts stored types.ToolAnnotations to conv.ToolAnnotations.
+func convertStoredAnnotations(stored *types.ToolAnnotations) *ToolAnnotations {
+	if stored == nil {
+		return nil
+	}
+	var title string
+	if stored.Title != nil {
+		title = *stored.Title
+	}
+	return &ToolAnnotations{
+		Title:           title,
+		ReadOnlyHint:    stored.ReadOnlyHint,
+		DestructiveHint: stored.DestructiveHint,
+		IdempotentHint:  stored.IdempotentHint,
+		OpenWorldHint:   stored.OpenWorldHint,
+	}
+}
+
+// inferAnnotationsFromHTTPMethod returns inferred annotations based on HTTP method semantics.
+func inferAnnotationsFromHTTPMethod(method string) *ToolAnnotations {
+	t := true
+	f := false
+
+	switch strings.ToUpper(method) {
+	case "GET", "HEAD", "OPTIONS":
+		// Read-only methods
+		return &ToolAnnotations{
+			ReadOnlyHint:    &t,
+			DestructiveHint: &f,
+			IdempotentHint:  &t,
+		}
+	case "PUT":
+		// Idempotent write
+		return &ToolAnnotations{
+			ReadOnlyHint:    &f,
+			DestructiveHint: &f,
+			IdempotentHint:  &t,
+		}
+	case "DELETE":
+		// Destructive and idempotent
+		return &ToolAnnotations{
+			ReadOnlyHint:    &f,
+			DestructiveHint: &t,
+			IdempotentHint:  &t,
+		}
+	case "POST", "PATCH":
+		// Non-idempotent writes
+		return &ToolAnnotations{
+			ReadOnlyHint:    &f,
+			DestructiveHint: &f,
+			IdempotentHint:  &f,
+		}
+	default:
+		return nil
+	}
 }
 
 // ResolvedExternalTool contains the tool metadata resolved from an external MCP server.

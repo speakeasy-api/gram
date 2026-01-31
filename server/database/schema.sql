@@ -301,6 +301,9 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   request_content_type TEXT,
   response_filter JSONB NULL,
 
+  -- MCP tool annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title)
+  annotations JSONB,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -372,6 +375,9 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   auth_input JSONB,
   -- Record<string, string>
   meta JSONB,
+
+  -- MCP tool annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title)
+  annotations JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
