@@ -5,6 +5,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
   CopyIcon,
   LoaderIcon,
   XIcon,
@@ -12,7 +13,7 @@ import {
 import { cn } from '@/lib/utils'
 import { codeToHtml, BundledLanguage } from 'shiki'
 import { Button } from './button'
-import { Popover, PopoverContent, PopoverTrigger } from './popover'
+import { Popover, PopoverAnchor, PopoverContent } from './popover'
 
 /* -----------------------------------------------------------------------------
  * Status indicator styles
@@ -422,6 +423,7 @@ function ToolUI({
   // Track approval mode: 'one-time' or 'for-session'
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>('one-time')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const dropdownTriggerRef = React.useRef<HTMLButtonElement>(null)
 
   // Collapse when transitioning from approval to non-approval (i.e., when approved/denied)
   useEffect(() => {
@@ -443,7 +445,7 @@ function ToolUI({
     <div
       data-slot="tool-ui"
       className={cn(
-        'border-border bg-card overflow-hidden rounded-lg border',
+        'border-border bg-card @container overflow-hidden rounded-lg border',
         className
       )}
     >
@@ -524,22 +526,22 @@ function ToolUI({
       {isApprovalPending && (
         <div
           data-slot="tool-ui-approval-actions"
-          className="border-border flex items-center justify-end gap-2 border-t px-4 py-3"
+          className="border-border flex flex-col gap-2 border-t px-4 py-3 @[320px]:flex-row @[320px]:items-center @[320px]:justify-end"
         >
-          <div>
+          <div className="@[320px]:mr-auto">
             <span className="text-muted-foreground text-sm">
               This tool requires approval
             </span>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end">
             <Button
               variant="outline"
               size="sm"
               onClick={onDeny}
               className="text-destructive hover:bg-destructive/10 dark:text-rose-400"
             >
-              <XIcon className="mr-1 size-3" />
-              Deny
+              <XIcon className="size-3 @[320px]:mr-1" />
+              <span className="hidden @[320px]:inline">Deny</span>
             </Button>
             {/* Split button: main approve + dropdown for options */}
             <div className="flex items-center">
@@ -551,24 +553,55 @@ function ToolUI({
               >
                 <CheckIcon className="dark:text-foreground mr-1 size-3" />
 
+                <span className="dark:text-foreground @[320px]:hidden">
+                  Approve
+                </span>
                 {/* The min-width is needed to prevent the button from shifting when the text changes */}
-                <span className="dark:text-foreground min-w-[110px]">
+                <span className="dark:text-foreground hidden min-w-[110px] @[320px]:inline">
                   {approvalMode === 'one-time'
                     ? 'Approve this time'
                     : 'Approve always'}
                 </span>
               </Button>
-              <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
-                <PopoverTrigger asChild>
+              <Popover open={isDropdownOpen}>
+                <PopoverAnchor asChild>
                   <Button
+                    ref={dropdownTriggerRef}
                     variant="default"
                     size="sm"
                     className="cursor-pointer rounded-l-none border-l border-emerald-700 bg-emerald-600 px-2 hover:bg-emerald-700"
+                    onClick={() => setIsDropdownOpen((prev) => !prev)}
                   >
-                    <ChevronDownIcon className="dark:text-foreground size-3" />
+                    {isDropdownOpen ? (
+                      <ChevronUpIcon className="dark:text-foreground size-3" />
+                    ) : (
+                      <ChevronDownIcon className="dark:text-foreground size-3" />
+                    )}
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-64 p-1" sideOffset={4}>
+                </PopoverAnchor>
+                <PopoverContent
+                  align="end"
+                  className="w-fit p-1"
+                  sideOffset={4}
+                  onInteractOutside={(e) => {
+                    // Prevent Radix auto-dismiss to avoid race condition
+                    // between DismissableLayer's pointerdown and button's click
+                    e.preventDefault()
+                    // Use composedPath to detect trigger clicks across Shadow DOM
+                    const originalEvent = (
+                      e.detail as { originalEvent?: PointerEvent }
+                    )?.originalEvent
+                    const path = originalEvent?.composedPath?.() ?? []
+                    if (
+                      !path.includes(dropdownTriggerRef.current as EventTarget)
+                    ) {
+                      // Clicked outside both popover and trigger - close it
+                      setIsDropdownOpen(false)
+                    }
+                    // If clicked on trigger, do nothing - onClick will toggle
+                  }}
+                  onEscapeKeyDown={() => setIsDropdownOpen(false)}
+                >
                   <button
                     onClick={() => {
                       setApprovalMode('one-time')
