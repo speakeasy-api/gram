@@ -333,6 +333,9 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 	if v.Variation != nil {
 		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
 	}
+	if v.Annotations != nil {
+		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
+	}
 
 	return res
 }
@@ -400,6 +403,44 @@ func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResp
 	return res
 }
 
+// unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations builds a value of
+// type *types.ToolAnnotations from a value of type
+// *ToolAnnotationsResponseBody.
+func unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v *ToolAnnotationsResponseBody) *types.ToolAnnotations {
+	if v == nil {
+		return nil
+	}
+	res := &types.ToolAnnotations{
+		Title: v.Title,
+	}
+	if v.ReadOnlyHint != nil {
+		res.ReadOnlyHint = *v.ReadOnlyHint
+	}
+	if v.DestructiveHint != nil {
+		res.DestructiveHint = *v.DestructiveHint
+	}
+	if v.IdempotentHint != nil {
+		res.IdempotentHint = *v.IdempotentHint
+	}
+	if v.OpenWorldHint != nil {
+		res.OpenWorldHint = *v.OpenWorldHint
+	}
+	if v.ReadOnlyHint == nil {
+		res.ReadOnlyHint = false
+	}
+	if v.DestructiveHint == nil {
+		res.DestructiveHint = true
+	}
+	if v.IdempotentHint == nil {
+		res.IdempotentHint = false
+	}
+	if v.OpenWorldHint == nil {
+		res.OpenWorldHint = true
+	}
+
+	return res
+}
+
 // unmarshalFunctionToolDefinitionResponseBodyToTypesFunctionToolDefinition
 // builds a value of type *types.FunctionToolDefinition from a value of type
 // *FunctionToolDefinitionResponseBody.
@@ -440,6 +481,9 @@ func unmarshalFunctionToolDefinitionResponseBodyToTypesFunctionToolDefinition(v 
 	}
 	if v.Variation != nil {
 		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
+	}
+	if v.Annotations != nil {
+		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
 	}
 
 	return res
@@ -486,6 +530,9 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 	}
 	if v.Variation != nil {
 		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
+	}
+	if v.Annotations != nil {
+		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
 	}
 
 	return res
@@ -538,6 +585,9 @@ func unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinit
 	}
 	if v.Variation != nil {
 		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
+	}
+	if v.Annotations != nil {
+		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
 	}
 
 	return res
