@@ -332,6 +332,7 @@ async function deployAssets(init: {
 }
 
 type Toolset = { created: boolean; slug: string; mcpURL: string };
+
 async function upsertToolset(init: {
   gram: GramCore;
   serverURL: string;
@@ -342,11 +343,11 @@ async function upsertToolset(init: {
 }): Promise<Toolset> {
   const { gram, serverURL, sessionId, projectSlug, assetSlug, mcpPublic } =
     init;
+
+  // Fetch tools filtered by URN prefix
   const toolRes = await toolsList(
     gram,
-    {
-      limit: 100,
-    },
+    { urnPrefix: `tools:http:${assetSlug}` },
     {
       projectSlugHeaderGramProject: projectSlug,
       sessionHeaderGramSession: sessionId,
@@ -355,7 +356,6 @@ async function upsertToolset(init: {
   if (!toolRes.ok) {
     abort(`Failed to list tools for project \`${projectSlug}\``, toolRes.error);
   }
-
   const toolUrns = toolRes.value.tools.map((t) => {
     switch (true) {
       case !!t.httpToolDefinition:
@@ -374,16 +374,12 @@ async function upsertToolset(init: {
   let toolset: Toolset;
   const name = assetSlug + "-seed";
 
-  const urnsForSource = toolUrns.filter((urn) =>
-    urn.startsWith(`tools:http:${assetSlug}:`),
-  );
-
   const createRes = await toolsetsCreate(
     gram,
     {
       createToolsetRequestBody: {
         name,
-        toolUrns: urnsForSource,
+        toolUrns: toolUrns,
       },
     },
     {
@@ -402,7 +398,7 @@ async function upsertToolset(init: {
         {
           slug: name,
           updateToolsetRequestBody: {
-            toolUrns,
+            toolUrns: toolUrns,
           },
         },
         {

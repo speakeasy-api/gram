@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -907,6 +908,158 @@ func TestToolsService_ListTools_WithDeploymentIDAndFunctionTools(t *testing.T) {
 		}
 	}
 	require.GreaterOrEqual(t, functionToolCount, 1, "should have at least one function tool")
+}
+
+func TestToolsService_ListTools_WithUrnPrefixFilter(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	// Upload two different OpenAPI assets
+	bs1 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	ares1, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs1.Len()),
+	}, io.NopCloser(bs1))
+	require.NoError(t, err, "upload first openapi v3 asset")
+
+	bs2 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares2, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs2.Len()),
+	}, io.NopCloser(bs2))
+	require.NoError(t, err, "upload second openapi v3 asset")
+
+	// Create deployment with both assets using different slugs
+	_, err = ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey: "test-list-tools-urn-prefix",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares1.Asset.ID,
+				Name:    "petstore-api",
+				Slug:    "petstore-api",
+			},
+			{
+				AssetID: ares2.Asset.ID,
+				Name:    "todo-api",
+				Slug:    "todo-api",
+			},
+		},
+		Functions:        []*dgen.AddFunctionsForm{},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+
+	// List all tools without filter
+	allResult, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		UrnPrefix:        nil,
+		Limit:            nil,
+	})
+	require.NoError(t, err, "list all tools")
+	require.NotNil(t, allResult.Tools, "tools should not be nil")
+
+	// Count tools by source
+	petstoreCount := 0
+	todoCount := 0
+	for _, tool := range allResult.Tools {
+		if tool.HTTPToolDefinition != nil {
+			urn := tool.HTTPToolDefinition.ToolUrn
+			if strings.Contains(urn, "petstore-api") {
+				petstoreCount++
+			} else if strings.Contains(urn, "todo-api") {
+				todoCount++
+			}
+		}
+	}
+	require.GreaterOrEqual(t, petstoreCount, 1, "should have at least one petstore tool")
+	require.GreaterOrEqual(t, todoCount, 1, "should have at least one todo tool")
+	totalHTTPTools := petstoreCount + todoCount
+
+	// List tools filtered by petstore-api URN prefix
+	petstorePrefix := "tools:http:petstore-api"
+	petstoreResult, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		UrnPrefix:        &petstorePrefix,
+		Limit:            nil,
+	})
+	require.NoError(t, err, "list petstore tools")
+	require.NotNil(t, petstoreResult.Tools, "tools should not be nil")
+
+	// All HTTP tools should be from petstore-api
+	petstoreFilteredCount := 0
+	for _, tool := range petstoreResult.Tools {
+		if tool.HTTPToolDefinition != nil {
+			petstoreFilteredCount++
+			require.Contains(t, tool.HTTPToolDefinition.ToolUrn, "petstore-api", "tool URN should contain petstore-api")
+		}
+	}
+	require.Equal(t, petstoreCount, petstoreFilteredCount, "filtered count should match original petstore count")
+
+	// List tools filtered by todo-api URN prefix
+	todoPrefix := "tools:http:todo-api"
+	todoResult, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		UrnPrefix:        &todoPrefix,
+		Limit:            nil,
+	})
+	require.NoError(t, err, "list todo tools")
+	require.NotNil(t, todoResult.Tools, "tools should not be nil")
+
+	// All HTTP tools should be from todo-api
+	todoFilteredCount := 0
+	for _, tool := range todoResult.Tools {
+		if tool.HTTPToolDefinition != nil {
+			todoFilteredCount++
+			require.Contains(t, tool.HTTPToolDefinition.ToolUrn, "todo-api", "tool URN should contain todo-api")
+		}
+	}
+	require.Equal(t, todoCount, todoFilteredCount, "filtered count should match original todo count")
+
+	// Verify the sum equals total
+	require.Equal(t, totalHTTPTools, petstoreFilteredCount+todoFilteredCount, "sum of filtered tools should equal total HTTP tools")
+
+	// Test with non-existent URN prefix returns no tools
+	nonExistentPrefix := "tools:http:non-existent-source"
+	emptyResult, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		UrnPrefix:        &nonExistentPrefix,
+		Limit:            nil,
+	})
+	require.NoError(t, err, "list tools with non-existent source")
+	require.NotNil(t, emptyResult.Tools, "tools should not be nil")
+
+	// Should have no HTTP tools with non-existent source
+	for _, tool := range emptyResult.Tools {
+		require.Nil(t, tool.HTTPToolDefinition, "should not have any HTTP tools with non-existent source")
+	}
 }
 
 func TestToolsService_ListTools_FunctionToolsWithMetaTags(t *testing.T) {
