@@ -412,6 +412,7 @@ func DescribeToolset(
 			Summarizer:    nil,
 			Canonical:     nil,
 			Variation:     nil,
+			Annotations:   nil,
 		})
 	}
 
@@ -652,6 +653,7 @@ func readToolsetTools(
 				ResponseFilter:      responseFilter,
 				Variation:           nil, // Applied later
 				Canonical:           nil,
+				Annotations:         nil,
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -698,6 +700,7 @@ func readToolsetTools(
 					Summarizer:    nil,
 					Canonical:     nil,
 					Variation:     nil,
+					Annotations:   nil,
 				},
 			})
 		}
@@ -740,6 +743,7 @@ func readToolsetTools(
 				Canonical:     nil,
 				Variation:     nil,
 				Meta:          meta,
+				Annotations:   nil,
 			}
 			if functionTool.Schema == "" {
 				functionTool.Schema = constants.DefaultEmptyToolSchema
@@ -809,6 +813,7 @@ func readToolsetTools(
 					Summarizer:                 nil,
 					Canonical:                  nil,
 					Variation:                  nil,
+					Annotations:                nil,
 				},
 			})
 

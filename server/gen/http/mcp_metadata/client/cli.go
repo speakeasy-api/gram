@@ -67,7 +67,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"55c91b21-cb7d-4997-87b0-3386e83f6f06\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Recusandae ducimus.\",\n            \"provided_by\": \"Est tenetur neque vitae.\",\n            \"variable_name\": \"Officiis dolore et tenetur.\"\n         },\n         {\n            \"header_display_name\": \"Recusandae ducimus.\",\n            \"provided_by\": \"Est tenetur neque vitae.\",\n            \"variable_name\": \"Officiis dolore et tenetur.\"\n         }\n      ],\n      \"external_documentation_url\": \"At quaerat autem.\",\n      \"installation_override_url\": \"http://blick.biz/griffin_champlin\",\n      \"instructions\": \"Non asperiores quidem minima enim placeat voluptatum.\",\n      \"logo_asset_id\": \"Commodi qui.\",\n      \"toolset_slug\": \"maf\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"983966b2-fd26-43d6-831c-89a4d88da551\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Dolorum perferendis eaque.\",\n            \"provided_by\": \"Quo pariatur voluptatem eos aut.\",\n            \"variable_name\": \"Est eos reiciendis.\"\n         },\n         {\n            \"header_display_name\": \"Dolorum perferendis eaque.\",\n            \"provided_by\": \"Quo pariatur voluptatem eos aut.\",\n            \"variable_name\": \"Est eos reiciendis.\"\n         },\n         {\n            \"header_display_name\": \"Dolorum perferendis eaque.\",\n            \"provided_by\": \"Quo pariatur voluptatem eos aut.\",\n            \"variable_name\": \"Est eos reiciendis.\"\n         },\n         {\n            \"header_display_name\": \"Dolorum perferendis eaque.\",\n            \"provided_by\": \"Quo pariatur voluptatem eos aut.\",\n            \"variable_name\": \"Est eos reiciendis.\"\n         }\n      ],\n      \"external_documentation_url\": \"Molestias adipisci in.\",\n      \"installation_override_url\": \"http://nienow.org/max.lind\",\n      \"instructions\": \"Temporibus sint molestiae quo dicta atque.\",\n      \"logo_asset_id\": \"Hic minus debitis aut quibusdam.\",\n      \"toolset_slug\": \"9mn\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
@@ -134,7 +134,7 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 	{
 		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"l2b\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"slq\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.McpSlug) > 40 {

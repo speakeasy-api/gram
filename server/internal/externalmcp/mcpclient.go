@@ -190,10 +190,10 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		if tool.Annotations != nil {
 			annotations = &ToolAnnotations{
 				Title:           tool.Annotations.Title,
-				ReadOnlyHint:    tool.Annotations.ReadOnlyHint,
-				DestructiveHint: tool.Annotations.DestructiveHint,
-				IdempotentHint:  tool.Annotations.IdempotentHint,
-				OpenWorldHint:   tool.Annotations.OpenWorldHint,
+				ReadOnlyHint:    ptrBool(tool.Annotations.ReadOnlyHint),
+				DestructiveHint: tool.Annotations.DestructiveHint, // already *bool
+				IdempotentHint:  ptrBool(tool.Annotations.IdempotentHint),
+				OpenWorldHint:   tool.Annotations.OpenWorldHint, // already *bool
 			}
 		}
 
@@ -315,4 +315,12 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 
 	return resp, nil
+}
+
+// ptrBool converts a bool to *bool, returning nil for zero values.
+func ptrBool(b bool) *bool {
+	if !b {
+		return nil
+	}
+	return &b
 }

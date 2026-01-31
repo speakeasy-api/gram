@@ -137,6 +137,7 @@ func buildDescribeToolsTool(tools []*types.Tool) (*toolListEntry, error) {
 		Description: description,
 		InputSchema: json.RawMessage(schemaJSON),
 		Meta:        nil,
+		Annotations: nil,
 	}, nil
 }
 
@@ -227,6 +228,7 @@ func handleSearchToolsCall(
 			Description: toolEntry.Description,
 			Meta:        meta,
 			InputSchema: nil, // Intentional don't return to keep token usage down
+			Annotations: nil,
 		})
 	}
 

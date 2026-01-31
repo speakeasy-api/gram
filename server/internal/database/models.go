@@ -299,6 +299,7 @@ type FunctionToolDefinition struct {
 	Variables    []byte
 	AuthInput    []byte
 	Meta         []byte
+	Annotations  []byte
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz
@@ -370,6 +371,7 @@ type HttpToolDefinition struct {
 	PathSettings        []byte
 	RequestContentType  pgtype.Text
 	ResponseFilter      *models.ResponseFilter
+	Annotations         []byte
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
