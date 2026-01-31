@@ -46,6 +46,7 @@ SELECT
   htd.created_at,
   htd.updated_at,
   htd.tags,
+  htd.annotations,
   (CASE
     WHEN htd.project_id = @project_id THEN ''
     WHEN packages.id IS NOT NULL THEN packages.name
@@ -167,6 +168,7 @@ SELECT
   ftd.runtime,
   ftd.function_id,
   ftd.meta,
+  ftd.annotations,
   df.asset_id,
   ftd.created_at,
   ftd.updated_at
