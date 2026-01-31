@@ -463,7 +463,12 @@ function ToolCard({ tool }: { tool: Tool }) {
           justify="space-between"
           className="w-full"
         >
-          <Stack direction="horizontal" gap={2} align="center" className="flex-wrap">
+          <Stack
+            direction="horizontal"
+            gap={2}
+            align="center"
+            className="flex-wrap"
+          >
             <Type className="font-mono text-sm font-medium">
               {tool.annotations?.title || tool.name}
             </Type>
