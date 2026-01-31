@@ -1,5 +1,18 @@
 # @gram-ai/elements
 
+## 1.24.1
+
+### Patch Changes
+
+- ca387c6: Fix dark mode text colors for approval and deny buttons in tool approval UI
+- 6793e29: Fix thread list and tool approval UI for small containers and dark mode:
+  - Fix scroll-to-bottom arrow invisible in dark mode
+  - Make tool approval Deny/Approve buttons responsive with container queries
+  - Fix popover toggle race condition using composedPath() for Shadow DOM support
+  - Fix popover and tooltip z-index ordering
+  - Fix thread list item title text wrapping
+  - Resize welcome suggestions layout for small containers
+
 ## 1.24.0
 
 ### Minor Changes
