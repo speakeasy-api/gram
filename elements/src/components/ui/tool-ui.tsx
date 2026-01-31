@@ -540,7 +540,7 @@ function ToolUI({
               onClick={onDeny}
               className="text-destructive hover:bg-destructive/10 dark:text-rose-400"
             >
-              <XIcon className="@[320px]:mr-1 size-3" />
+              <XIcon className="size-3 @[320px]:mr-1" />
               <span className="hidden @[320px]:inline">Deny</span>
             </Button>
             {/* Split button: main approve + dropdown for options */}
@@ -592,7 +592,9 @@ function ToolUI({
                       e.detail as { originalEvent?: PointerEvent }
                     )?.originalEvent
                     const path = originalEvent?.composedPath?.() ?? []
-                    if (!path.includes(dropdownTriggerRef.current as EventTarget)) {
+                    if (
+                      !path.includes(dropdownTriggerRef.current as EventTarget)
+                    ) {
                       // Clicked outside both popover and trigger - close it
                       setIsDropdownOpen(false)
                     }

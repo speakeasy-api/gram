@@ -205,7 +205,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
+        className="aui-thread-scroll-to-bottom dark:bg-background dark:text-foreground dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
@@ -318,7 +318,7 @@ const ThreadSuggestions: FC = () => {
                 'aui-thread-welcome-suggestion dark:hover:bg-accent/60 h-auto w-full border text-left whitespace-break-spaces',
                 d('text-base'),
                 isStandalone
-                  ? `flex-col @sm:flex-row items-start @sm:items-center ${d('gap-sm')} ${d('px-lg')} ${d('py-sm')} ${r('full')}`
+                  ? `flex-col items-start @sm:flex-row @sm:items-center ${d('gap-sm')} ${d('px-lg')} ${d('py-sm')} ${r('full')}`
                   : `w-full flex-1 flex-col flex-wrap items-start justify-start ${d('gap-sm')} ${d('px-lg')} ${d('py-md')} ${r('xl')}`
               )}
               aria-label={suggestion.prompt}
