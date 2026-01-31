@@ -1,5 +1,11 @@
 # server
 
+## 0.22.0
+
+### Minor Changes
+
+- ca387c6: Add urn_prefix filter to tools.list API for server-side filtering of tools by URN prefix
+
 ## 0.21.0
 
 ### Minor Changes
