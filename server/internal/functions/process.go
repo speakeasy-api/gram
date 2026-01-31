@@ -343,6 +343,7 @@ func processManifestToolV0(
 		Variables:    varBs,
 		AuthInput:    authInput,
 		Meta:         metaBs,
+		Annotations:  nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("save tool: %w", err)

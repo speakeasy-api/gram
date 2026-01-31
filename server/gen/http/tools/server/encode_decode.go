@@ -325,6 +325,9 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 	if v.Variation != nil {
 		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
 	}
+	if v.Annotations != nil {
+		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
+	}
 
 	return res
 }
@@ -400,6 +403,48 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 	return res
 }
 
+// marshalTypesToolAnnotationsToToolAnnotationsResponseBody builds a value of
+// type *ToolAnnotationsResponseBody from a value of type
+// *types.ToolAnnotations.
+func marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v *types.ToolAnnotations) *ToolAnnotationsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ToolAnnotationsResponseBody{
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
+	}
+	{
+		var zero bool
+		if res.ReadOnlyHint == zero {
+			res.ReadOnlyHint = false
+		}
+	}
+	{
+		var zero bool
+		if res.DestructiveHint == zero {
+			res.DestructiveHint = true
+		}
+	}
+	{
+		var zero bool
+		if res.IdempotentHint == zero {
+			res.IdempotentHint = false
+		}
+	}
+	{
+		var zero bool
+		if res.OpenWorldHint == zero {
+			res.OpenWorldHint = true
+		}
+	}
+
+	return res
+}
+
 // marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody
 // builds a value of type *FunctionToolDefinitionResponseBody from a value of
 // type *types.FunctionToolDefinition.
@@ -440,6 +485,9 @@ func marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody(v *t
 	}
 	if v.Variation != nil {
 		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
+	}
+	if v.Annotations != nil {
+		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
 	}
 
 	return res
@@ -490,6 +538,9 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 	}
 	if v.Variation != nil {
 		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
+	}
+	if v.Annotations != nil {
+		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
 	}
 
 	return res
@@ -542,6 +593,9 @@ func marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBod
 	}
 	if v.Variation != nil {
 		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
+	}
+	if v.Annotations != nil {
+		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
 	}
 
 	return res

@@ -754,6 +754,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		PathSettings:        pathSettings,
 		RequestContentType:  conv.PtrToPGText(requestContentType),
 		ResponseFilter:      responseFilter,
+		Annotations:         nil,
 	}, deploymentEvents, nil
 }
 

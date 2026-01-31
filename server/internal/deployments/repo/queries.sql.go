@@ -273,8 +273,9 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , input_schema
+  , annotations
 )
-SELECT 
+SELECT
   $1
   , current.function_id
   , current.tool_urn
@@ -285,6 +286,7 @@ SELECT
   , current.variables
   , current.auth_input
   , current.input_schema
+  , current.annotations
 FROM function_tool_definitions as current
 WHERE current.deployment_id = $2
   AND current.name <> ALL ($3::text[])
@@ -503,6 +505,7 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , meta
+  , annotations
 ) VALUES (
     $1
   , $2
@@ -515,8 +518,9 @@ INSERT INTO function_tool_definitions (
   , $9
   , $10
   , $11
+  , $12
 )
-RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, annotations, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateFunctionsToolParams struct {
@@ -531,6 +535,7 @@ type CreateFunctionsToolParams struct {
 	Variables    []byte
 	AuthInput    []byte
 	Meta         []byte
+	Annotations  []byte
 }
 
 func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsToolParams) (FunctionToolDefinition, error) {
@@ -546,6 +551,7 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		arg.Variables,
 		arg.AuthInput,
 		arg.Meta,
+		arg.Annotations,
 	)
 	var i FunctionToolDefinition
 	err := row.Scan(
@@ -561,6 +567,7 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		&i.Variables,
 		&i.AuthInput,
 		&i.Meta,
+		&i.Annotations,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -683,6 +690,7 @@ INSERT INTO http_tool_definitions (
   , default_server_url
   , request_content_type
   , response_filter
+  , annotations
 ) VALUES (
     $1
   , $2
@@ -712,8 +720,9 @@ INSERT INTO http_tool_definitions (
   , $26
   , $27
   , $28
+  , $29
 )
-RETURNING id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, annotations, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenAPIv3ToolDefinitionParams struct {
@@ -745,6 +754,7 @@ type CreateOpenAPIv3ToolDefinitionParams struct {
 	DefaultServerUrl    pgtype.Text
 	RequestContentType  pgtype.Text
 	ResponseFilter      *models.ResponseFilter
+	Annotations         []byte
 }
 
 func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateOpenAPIv3ToolDefinitionParams) (HttpToolDefinition, error) {
@@ -777,6 +787,7 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		arg.DefaultServerUrl,
 		arg.RequestContentType,
 		arg.ResponseFilter,
+		arg.Annotations,
 	)
 	var i HttpToolDefinition
 	err := row.Scan(
@@ -810,6 +821,7 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		&i.PathSettings,
 		&i.RequestContentType,
 		&i.ResponseFilter,
+		&i.Annotations,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
