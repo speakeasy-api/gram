@@ -19,6 +19,7 @@ import { projectsRead } from "@gram/client/funcs/projectsRead.js";
 import { toolsList } from "@gram/client/funcs/toolsList.js";
 import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
+import { mcpMetadataSet } from "@gram/client/funcs/mcpMetadataSet.js";
 import { ServiceError } from "@gram/client/models/errors";
 import { $ } from "zx";
 
@@ -27,6 +28,8 @@ type Asset = {
   slug: string;
   filename: string;
   storybookDefault?: boolean;
+  docsUrl?: string;
+  docsBtnText?: string;
 };
 
 const SEED_PROJECTS: {
@@ -47,6 +50,8 @@ const SEED_PROJECTS: {
         slug: "kitchen-sink",
         filename: path.join("local", "openapi", "kitchen-sink.json"),
         storybookDefault: true,
+        docsUrl: "https://docs.getgram.ai",
+        docsBtnText: "Gram Docs",
       },
       {
         type: "openapi",
@@ -149,6 +154,8 @@ async function seed() {
         projectSlug,
         assetSlug: asset.slug,
         mcpPublic,
+        docsUrl: asset.docsUrl,
+        docsBtnText: asset.docsBtnText,
       });
       verb = toolset.created ? "Created" : "Updated";
       log.info(
@@ -340,8 +347,10 @@ async function upsertToolset(init: {
   projectSlug: string;
   assetSlug: string;
   mcpPublic: boolean;
+  docsUrl?: string;
+  docsBtnText?: string;
 }): Promise<Toolset> {
-  const { gram, serverURL, sessionId, projectSlug, assetSlug, mcpPublic } =
+  const { gram, serverURL, sessionId, projectSlug, assetSlug, mcpPublic, docsUrl, docsBtnText } =
     init;
 
   // Fetch tools filtered by URN prefix
@@ -464,6 +473,29 @@ async function upsertToolset(init: {
   toolset.mcpURL = `${serverURL}/mcp/${updateRes.value.mcpSlug}`;
 
   log.info(`${toolset.mcpURL} visibility was changed to public`);
+
+  // Set MCP metadata if docs URL is provided
+  if (docsUrl) {
+    const metadataRes = await mcpMetadataSet(
+      gram,
+      {
+        setMcpMetadataRequestBody: {
+          toolsetSlug: toolset.slug,
+          externalDocumentationUrl: docsUrl,
+          externalDocumentationText: docsBtnText,
+        },
+      },
+      {
+        sessionHeaderGramSession: sessionId,
+        projectSlugHeaderGramProject: projectSlug,
+      },
+    );
+    if (!metadataRes.ok) {
+      log.warn(`Failed to set MCP metadata for toolset '${toolset.slug}': ${metadataRes.error}`);
+    } else {
+      log.info(`Set MCP metadata for toolset '${toolset.slug}' (docs: ${docsUrl})`);
+    }
+  }
 
   return toolset;
 }
