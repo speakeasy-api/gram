@@ -69,9 +69,23 @@ ORDER BY updated_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID) (McpMetadatum, error) {
+type GetMetadataForToolsetRow struct {
+	ID                       uuid.UUID
+	ToolsetID                uuid.UUID
+	ProjectID                uuid.UUID
+	ExternalDocumentationUrl pgtype.Text
+	LogoID                   uuid.NullUUID
+	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	DefaultEnvironmentID     uuid.NullUUID
+	InstallationOverrideUrl  pgtype.Text
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+}
+
+func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID) (GetMetadataForToolsetRow, error) {
 	row := q.db.QueryRow(ctx, getMetadataForToolset, toolsetID)
-	var i McpMetadatum
+	var i GetMetadataForToolsetRow
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
@@ -224,7 +238,21 @@ type UpsertMetadataParams struct {
 	InstallationOverrideUrl  pgtype.Text
 }
 
-func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpMetadatum, error) {
+type UpsertMetadataRow struct {
+	ID                       uuid.UUID
+	ToolsetID                uuid.UUID
+	ProjectID                uuid.UUID
+	ExternalDocumentationUrl pgtype.Text
+	LogoID                   uuid.NullUUID
+	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	DefaultEnvironmentID     uuid.NullUUID
+	InstallationOverrideUrl  pgtype.Text
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (UpsertMetadataRow, error) {
 	row := q.db.QueryRow(ctx, upsertMetadata,
 		arg.ToolsetID,
 		arg.ProjectID,
@@ -234,7 +262,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		arg.DefaultEnvironmentID,
 		arg.InstallationOverrideUrl,
 	)
-	var i McpMetadatum
+	var i UpsertMetadataRow
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
