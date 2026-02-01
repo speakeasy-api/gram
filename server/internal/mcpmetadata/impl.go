@@ -214,7 +214,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 
 	var externalDocText pgtype.Text
 	if payload.ExternalDocumentationText != nil {
-		externalDocText = conv.ToPGText(*payload.ExternalDocumentationURL)
+		externalDocText = conv.ToPGText(*payload.ExternalDocumentationText)
 	}
 
 	var instructions pgtype.Text
