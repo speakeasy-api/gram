@@ -212,6 +212,11 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		externalDocURL = conv.ToPGText(*payload.ExternalDocumentationURL)
 	}
 
+	var externalDocText pgtype.Text
+	if payload.ExternalDocumentationText != nil {
+		externalDocText = conv.ToPGText(*payload.ExternalDocumentationURL)
+	}
+
 	var instructions pgtype.Text
 	if payload.Instructions != nil {
 		instructions = conv.ToPGText(*payload.Instructions)
@@ -232,13 +237,14 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
-		ToolsetID:                toolset.ID,
-		ProjectID:                *authCtx.ProjectID,
-		ExternalDocumentationUrl: externalDocURL,
-		LogoID:                   logoID,
-		Instructions:             instructions,
-		DefaultEnvironmentID:     defaultEnvironmentID,
-		InstallationOverrideUrl:  installationOverrideURL,
+		ToolsetID:                 toolset.ID,
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  externalDocURL,
+		ExternalDocumentationText: externalDocText,
+		LogoID:                    logoID,
+		Instructions:              instructions,
+		DefaultEnvironmentID:      defaultEnvironmentID,
+		InstallationOverrideUrl:   installationOverrideURL,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
