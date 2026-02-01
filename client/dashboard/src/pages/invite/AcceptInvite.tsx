@@ -20,11 +20,13 @@ export default function AcceptInvite() {
 
   // Prevent invite token from leaking via HTTP Referer headers
   useEffect(() => {
-    const meta = document.createElement('meta');
-    meta.name = 'referrer';
-    meta.content = 'no-referrer';
+    const meta = document.createElement("meta");
+    meta.name = "referrer";
+    meta.content = "no-referrer";
     document.head.appendChild(meta);
-    return () => { document.head.removeChild(meta); };
+    return () => {
+      document.head.removeChild(meta);
+    };
   }, []);
 
   // Redirect to register if not authenticated
@@ -88,7 +90,10 @@ function InviteDetails({ token }: { token: string }) {
         <p className="text-sm text-muted-foreground">
           This invite link is invalid or has already been used.
         </p>
-        <Button variant="secondary" onClick={() => navigate("/", { replace: true })}>
+        <Button
+          variant="secondary"
+          onClick={() => navigate("/", { replace: true })}
+        >
           <Button.Text>Go to dashboard</Button.Text>
         </Button>
       </InvitePage>
@@ -105,7 +110,10 @@ function InviteDetails({ token }: { token: string }) {
     return (
       <InvitePage>
         <p className="text-sm text-muted-foreground">{message}</p>
-        <Button variant="secondary" onClick={() => navigate("/", { replace: true })}>
+        <Button
+          variant="secondary"
+          onClick={() => navigate("/", { replace: true })}
+        >
           <Button.Text>Go to dashboard</Button.Text>
         </Button>
       </InvitePage>
@@ -123,10 +131,10 @@ function InviteDetails({ token }: { token: string }) {
   return (
     <InvitePage>
       <p className="text-body-lg text-center text-foreground">
-        Join <span className="font-semibold">{inviteInfo.inviterName}</span>&apos;s
-        project{" "}
-        <span className="font-semibold">{inviteInfo.organizationName}</span>{" "}
-        to get started with Gram
+        Join <span className="font-semibold">{inviteInfo.inviterName}</span>
+        &apos;s project{" "}
+        <span className="font-semibold">{inviteInfo.organizationName}</span> to
+        get started with Gram
       </p>
 
       {mutation.isError && (
@@ -135,7 +143,11 @@ function InviteDetails({ token }: { token: string }) {
         </p>
       )}
 
-      <Button variant="brand" onClick={handleAccept} disabled={mutation.isPending}>
+      <Button
+        variant="brand"
+        onClick={handleAccept}
+        disabled={mutation.isPending}
+      >
         {mutation.isPending && (
           <Button.LeftIcon>
             <Loader2 className="h-4 w-4 animate-spin" />

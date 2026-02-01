@@ -26,7 +26,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
     build: [routes.elements, routes.mcp],
     observe: [routes.logs, routes.metrics],
-    settings: [routes.settings, routes.team, routes.billing, routes.docs] as AppRoute[],
+    settings: [
+      routes.settings,
+      routes.team,
+      routes.billing,
+      routes.docs,
+    ] as AppRoute[],
   };
 
   return (

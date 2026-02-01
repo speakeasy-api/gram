@@ -13,10 +13,7 @@ export function FullPageError({ error }: FullPageErrorProps) {
 
         <Stack gap={3} align="center">
           <Stack direction="horizontal" gap={2} align="center">
-            <Icon
-              name="circle-alert"
-              className="h-5 w-5 text-destructive"
-            />
+            <Icon name="circle-alert" className="h-5 w-5 text-destructive" />
             <h2 className="text-lg font-medium">Something went wrong</h2>
           </Stack>
 

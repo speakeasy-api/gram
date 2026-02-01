@@ -183,7 +183,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite"];
 
 function isSafeRedirect(path: string): boolean {
-  return path.startsWith('/') && !path.startsWith('//') && !path.includes(':');
+  return path.startsWith("/") && !path.startsWith("//") && !path.includes(":");
 }
 
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
