@@ -212,6 +212,11 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		externalDocURL = conv.ToPGText(*payload.ExternalDocumentationURL)
 	}
 
+	var externalDocText pgtype.Text
+	if payload.ExternalDocumentationText != nil {
+		externalDocText = conv.ToPGText(*payload.ExternalDocumentationURL)
+	}
+
 	var instructions pgtype.Text
 	if payload.Instructions != nil {
 		instructions = conv.ToPGText(*payload.Instructions)
@@ -235,7 +240,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		ToolsetID:                 toolset.ID,
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  externalDocURL,
-		ExternalDocumentationText: conv.ToPGText(""), // FIXME after db migration
+		ExternalDocumentationText: externalDocText,
 		LogoID:                    logoID,
 		Instructions:              instructions,
 		DefaultEnvironmentID:      defaultEnvironmentID,
