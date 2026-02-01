@@ -244,21 +244,7 @@ type UpsertMetadataParams struct {
 	InstallationOverrideUrl   pgtype.Text
 }
 
-type UpsertMetadataRow struct {
-	ID                       uuid.UUID
-	ToolsetID                uuid.UUID
-	ProjectID                uuid.UUID
-	ExternalDocumentationUrl pgtype.Text
-	LogoID                   uuid.NullUUID
-	Instructions             pgtype.Text
-	HeaderDisplayNames       []byte
-	DefaultEnvironmentID     uuid.NullUUID
-	InstallationOverrideUrl  pgtype.Text
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
-}
-
-func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (UpsertMetadataRow, error) {
+func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpMetadatum, error) {
 	row := q.db.QueryRow(ctx, upsertMetadata,
 		arg.ToolsetID,
 		arg.ProjectID,
@@ -269,7 +255,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		arg.DefaultEnvironmentID,
 		arg.InstallationOverrideUrl,
 	)
-	var i UpsertMetadataRow
+	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
