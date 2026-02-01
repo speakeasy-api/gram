@@ -13893,6 +13893,9 @@ components:
                     items:
                         $ref: '#/components/schemas/McpEnvironmentConfig'
                     description: The list of environment variables configured for this MCP
+                external_documentation_text:
+                    type: string
+                    description: A blob of text for the button on the MCP server page
                 external_documentation_url:
                     type: string
                     description: A link to external documentation for the MCP install page
