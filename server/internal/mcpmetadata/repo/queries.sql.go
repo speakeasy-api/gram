@@ -70,23 +70,9 @@ ORDER BY updated_at DESC
 LIMIT 1
 `
 
-type GetMetadataForToolsetRow struct {
-	ID                       uuid.UUID
-	ToolsetID                uuid.UUID
-	ProjectID                uuid.UUID
-	ExternalDocumentationUrl pgtype.Text
-	LogoID                   uuid.NullUUID
-	Instructions             pgtype.Text
-	HeaderDisplayNames       []byte
-	DefaultEnvironmentID     uuid.NullUUID
-	InstallationOverrideUrl  pgtype.Text
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
-}
-
-func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID) (GetMetadataForToolsetRow, error) {
+func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID) (McpMetadatum, error) {
 	row := q.db.QueryRow(ctx, getMetadataForToolset, toolsetID)
-	var i GetMetadataForToolsetRow
+	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
