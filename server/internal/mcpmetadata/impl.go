@@ -515,16 +515,17 @@ func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 	}
 
 	metadata := &types.McpMetadata{
-		ID:                       record.ID.String(),
-		ToolsetID:                record.ToolsetID.String(),
-		CreatedAt:                record.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                record.UpdatedAt.Time.Format(time.RFC3339),
-		ExternalDocumentationURL: conv.FromPGText[string](record.ExternalDocumentationUrl),
-		LogoAssetID:              conv.FromNullableUUID(record.LogoID),
-		Instructions:             conv.FromPGText[string](record.Instructions),
-		DefaultEnvironmentID:     conv.FromNullableUUID(record.DefaultEnvironmentID),
-		InstallationOverrideURL:  conv.FromPGText[string](record.InstallationOverrideUrl),
-		EnvironmentConfigs:       environmentConfigs,
+		ID:                        record.ID.String(),
+		ToolsetID:                 record.ToolsetID.String(),
+		CreatedAt:                 record.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                 record.UpdatedAt.Time.Format(time.RFC3339),
+		ExternalDocumentationURL:  conv.FromPGText[string](record.ExternalDocumentationUrl),
+		ExternalDocumentationText: conv.FromPGText[string](record.ExternalDocumentationText),
+		LogoAssetID:               conv.FromNullableUUID(record.LogoID),
+		Instructions:              conv.FromPGText[string](record.Instructions),
+		DefaultEnvironmentID:      conv.FromNullableUUID(record.DefaultEnvironmentID),
+		InstallationOverrideURL:   conv.FromPGText[string](record.InstallationOverrideUrl),
+		EnvironmentConfigs:        environmentConfigs,
 	}
 	return metadata, nil
 }
