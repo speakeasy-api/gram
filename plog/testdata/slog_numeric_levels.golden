@@ -1,0 +1,4 @@
+12:00:02.000 INFO  info level
+12:00:03.000 WARN  warn level
+12:00:04.000 ERROR error level
+12:00:05.000 FATAL fatal level

@@ -259,6 +259,7 @@ run();
 
 * [acceptInvite](docs/sdks/teams/README.md#acceptinvite) - acceptInvite teams
 * [cancelInvite](docs/sdks/teams/README.md#cancelinvite) - cancelInvite teams
+* [getInviteInfo](docs/sdks/teams/README.md#getinviteinfo) - getInviteInfo teams
 * [inviteMember](docs/sdks/teams/README.md#invitemember) - inviteMember teams
 * [listInvites](docs/sdks/teams/README.md#listinvites) - listInvites teams
 * [listMembers](docs/sdks/teams/README.md#listmembers) - listMembers teams
@@ -410,6 +411,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`teamsAcceptInvite`](docs/sdks/teams/README.md#acceptinvite) - acceptInvite teams
 - [`teamsCancelInvite`](docs/sdks/teams/README.md#cancelinvite) - cancelInvite teams
+- [`teamsGetInviteInfo`](docs/sdks/teams/README.md#getinviteinfo) - getInviteInfo teams
 - [`teamsInviteMember`](docs/sdks/teams/README.md#invitemember) - inviteMember teams
 - [`teamsListInvites`](docs/sdks/teams/README.md#listinvites) - listInvites teams
 - [`teamsListMembers`](docs/sdks/teams/README.md#listmembers) - listMembers teams
@@ -515,6 +517,7 @@ To learn about this feature and how to get started, check
 - [`useGetProjectMetricsSummaryMutation`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
+- [`useGetTeamInviteInfo`](docs/sdks/teams/README.md#getinviteinfo) - getInviteInfo teams
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations

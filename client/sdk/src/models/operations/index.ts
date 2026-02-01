@@ -51,6 +51,7 @@ export * from "./getproject.js";
 export * from "./getprojectmetricssummary.js";
 export * from "./getslackconnection.js";
 export * from "./getsourceenvironment.js";
+export * from "./getteaminviteinfo.js";
 export * from "./gettemplate.js";
 export * from "./gettoolset.js";
 export * from "./gettoolsetenvironment.js";

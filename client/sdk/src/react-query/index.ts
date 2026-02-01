@@ -50,6 +50,7 @@ export * from "./getPeriodUsage.js";
 export * from "./getProjectMetricsSummary.js";
 export * from "./getSlackConnection.js";
 export * from "./getSourceEnvironment.js";
+export * from "./getTeamInviteInfo.js";
 export * from "./getToolsetEnvironment.js";
 export * from "./getUsageTiers.js";
 export * from "./globalVariations.js";

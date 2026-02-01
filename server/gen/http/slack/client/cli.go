@@ -89,7 +89,7 @@ func BuildUpdateSlackConnectionPayload(slackUpdateSlackConnectionBody string, sl
 	{
 		err = json.Unmarshal([]byte(slackUpdateSlackConnectionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_toolset_slug\": \"Est et natus.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_toolset_slug\": \"Dolorem omnis quia consequatur delectus aut ea.\"\n   }'")
 		}
 	}
 	var sessionToken *string

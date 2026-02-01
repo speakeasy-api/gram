@@ -8050,6 +8050,96 @@ paths:
       x-speakeasy-name-override: cancelInvite
       x-speakeasy-react-hook:
         name: CancelTeamInvite
+  /rpc/teams.getInviteInfo:
+    get:
+      description: Get information about a team invite by its token. Used to display invite details before accepting.
+      operationId: getTeamInviteInfo
+      parameters:
+        - allowEmptyValue: true
+          description: The invite token from the email link
+          in: query
+          name: token
+          required: true
+          schema:
+            description: The invite token from the email link
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteInfoResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getInviteInfo teams
+      tags:
+        - teams
+      x-speakeasy-name-override: getInviteInfo
+      x-speakeasy-react-hook:
+        name: GetTeamInviteInfo
   /rpc/teams.invite:
     post:
       description: Invite a new member to the organization.
@@ -14084,6 +14174,31 @@ components:
       required:
         - version
         - created_at
+    InviteInfoResult:
+      type: object
+      properties:
+        email:
+          type: string
+          description: The email address the invite was sent to
+        inviter_name:
+          type: string
+          description: Display name of the user who sent the invite
+        organization_name:
+          type: string
+          description: Name of the organization
+        status:
+          type: string
+          description: Current status of the invite
+          enum:
+            - pending
+            - accepted
+            - expired
+            - cancelled
+      required:
+        - inviter_name
+        - organization_name
+        - email
+        - status
     InviteMemberForm:
       type: object
       properties:

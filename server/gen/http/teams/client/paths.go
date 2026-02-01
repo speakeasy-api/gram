@@ -32,6 +32,11 @@ func ResendInviteTeamsPath() string {
 	return "/rpc/teams.resendInvite"
 }
 
+// GetInviteInfoTeamsPath returns the URL path to the teams service getInviteInfo HTTP endpoint.
+func GetInviteInfoTeamsPath() string {
+	return "/rpc/teams.getInviteInfo"
+}
+
 // AcceptInviteTeamsPath returns the URL path to the teams service acceptInvite HTTP endpoint.
 func AcceptInviteTeamsPath() string {
 	return "/rpc/teams.acceptInvite"

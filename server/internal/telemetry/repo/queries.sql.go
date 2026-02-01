@@ -24,33 +24,27 @@ INSERT INTO telemetry_logs (
     gram_urn,
     service_name,
     service_version,
-    http_request_method,
-    http_response_status_code,
-    http_route,
-    http_server_url
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    gram_chat_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertTelemetryLogParams struct {
-	ID                     string
-	TimeUnixNano           int64
-	ObservedTimeUnixNano   int64
-	SeverityText           *string
-	Body                   string
-	TraceID                *string
-	SpanID                 *string
-	Attributes             string
-	ResourceAttributes     string
-	GramProjectID          string
-	GramDeploymentID       *string
-	GramFunctionID         *string
-	GramURN                string
-	ServiceName            string
-	ServiceVersion         *string
-	HTTPRequestMethod      *string
-	HTTPResponseStatusCode *int32
-	HTTPRoute              *string
-	HTTPServerURL          *string
+	ID                   string
+	TimeUnixNano         int64
+	ObservedTimeUnixNano int64
+	SeverityText         *string
+	Body                 string
+	TraceID              *string
+	SpanID               *string
+	Attributes           string
+	ResourceAttributes   string
+	GramProjectID        string
+	GramDeploymentID     *string
+	GramFunctionID       *string
+	GramURN        string
+	ServiceName    string
+	ServiceVersion *string
+	GramChatID     *string
 }
 
 //nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -74,10 +68,7 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 		arg.GramURN,
 		arg.ServiceName,
 		arg.ServiceVersion,
-		arg.HTTPRequestMethod,
-		arg.HTTPResponseStatusCode,
-		arg.HTTPRoute,
-		arg.HTTPServerURL,
+		arg.GramChatID,
 	)
 }
 
@@ -98,10 +89,7 @@ SELECT
     gram_urn,
     service_name,
     service_version,
-    http_request_method,
-    http_response_status_code,
-    http_route,
-    http_server_url
+    gram_chat_id
 FROM telemetry_logs
 WHERE gram_project_id = ?
     AND time_unix_nano >= ?
@@ -111,9 +99,9 @@ WHERE gram_project_id = ?
     AND (? = '' OR gram_deployment_id = toUUIDOrNull(?))
     AND (? = '' OR gram_function_id = toUUIDOrNull(?))
     AND (? = '' OR severity_text = ?)
-    AND (? = 0 OR http_response_status_code = ?)
-    AND (? = '' OR http_route = ?)
-    AND (? = '' OR http_request_method = ?)
+    AND (? = 0 OR toInt32OrZero(toString(attributes.` + "`http.response.status_code`" + `)) = ?)
+    AND (? = '' OR toString(attributes.` + "`http.route`" + `) = ?)
+    AND (? = '' OR toString(attributes.` + "`http.request.method`" + `) = ?)
     AND (? = '' OR service_name = ?)
     -- Cursor pagination: empty string = first page, otherwise compare based on sort direction
     AND if(
@@ -203,7 +191,7 @@ SELECT
     trace_id,
     min(time_unix_nano) as start_time_unix_nano,
     count(*) as log_count,
-    any(http_response_status_code) as http_status_code,
+    anyIf(toInt32OrNull(toString(attributes.` + "`http.response.status_code`" + `)), toString(attributes.` + "`http.response.status_code`" + `) != '') as http_status_code,
 	any(gram_urn) as gram_urn
 FROM telemetry_logs
 WHERE gram_project_id = ?
@@ -308,9 +296,9 @@ SELECT
     -- Tool call metrics
     countIf(startsWith(toString(attributes.` + "`gram.tool.urn`" + `), 'tools:')) AS total_tool_calls,
     countIf(startsWith(toString(attributes.` + "`gram.tool.urn`" + `), 'tools:')
-            AND http_response_status_code >= 200 AND http_response_status_code < 300) AS tool_call_success,
+            AND toInt32OrZero(toString(attributes.` + "`http.response.status_code`" + `)) >= 200 AND toInt32OrZero(toString(attributes.` + "`http.response.status_code`" + `)) < 300) AS tool_call_success,
     countIf(startsWith(toString(attributes.` + "`gram.tool.urn`" + `), 'tools:')
-            AND http_response_status_code >= 400) AS tool_call_failure,
+            AND toInt32OrZero(toString(attributes.` + "`http.response.status_code`" + `)) >= 400) AS tool_call_failure,
     avgIf(toFloat64OrZero(toString(attributes.` + "`http.server.request.duration`" + `)) * 1000,
           startsWith(toString(attributes.` + "`gram.tool.urn`" + `), 'tools:')) AS avg_tool_duration_ms,
 
@@ -328,11 +316,11 @@ SELECT
     ) AS tool_counts,
     sumMapIf(
         map(gram_urn, toUInt64(1)),
-        startsWith(gram_urn, 'tools:') AND http_response_status_code >= 200 AND http_response_status_code < 300
+        startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.` + "`http.response.status_code`" + `)) >= 200 AND toInt32OrZero(toString(attributes.` + "`http.response.status_code`" + `)) < 300
     ) AS tool_success_counts,
     sumMapIf(
         map(gram_urn, toUInt64(1)),
-        startsWith(gram_urn, 'tools:') AND http_response_status_code >= 400
+        startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.` + "`http.response.status_code`" + `)) >= 400
     ) AS tool_failure_counts
 
 FROM telemetry_logs

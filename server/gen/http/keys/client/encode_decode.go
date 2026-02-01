@@ -945,6 +945,7 @@ func unmarshalKeyResponseBodyToKeysKey(v *KeyResponseBody) *keys.Key {
 		Key:             v.Key,
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
+		LastAccessedAt:  v.LastAccessedAt,
 	}
 	res.Scopes = make([]string, len(v.Scopes))
 	for i, val := range v.Scopes {

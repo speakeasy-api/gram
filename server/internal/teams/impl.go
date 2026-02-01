@@ -36,6 +36,20 @@ import (
 type Config struct {
 	// SiteURL is the base URL of the frontend (e.g. "https://app.gram.sh").
 	SiteURL string
+	// DevMode skips the invite email match check for local development.
+	DevMode bool
+	// InviteExpiryDuration controls how long team invites remain valid.
+	// Defaults to 7 days if zero.
+	InviteExpiryDuration time.Duration
+}
+
+// inviteExpiry returns the configured invite expiry duration, falling back to
+// 7 days when the value is zero (unconfigured).
+func (c Config) inviteExpiry() time.Duration {
+	if c.InviteExpiryDuration <= 0 {
+		return 7 * 24 * time.Hour
+	}
+	return c.InviteExpiryDuration
 }
 
 type Service struct {
@@ -213,7 +227,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to check existing members").Log(ctx, s.logger)
 	}
 	for _, m := range members {
-		if m.Email == payload.Email {
+		if strings.EqualFold(m.Email, payload.Email) {
 			return nil, oops.E(oops.CodeConflict, nil, "user is already a member of this organization")
 		}
 	}
@@ -223,8 +237,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate invite token").Log(ctx, s.logger)
 	}
 
-	// Invite expires in 7 days
-	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+	expiresAt := time.Now().Add(s.cfg.inviteExpiry())
 
 	invite, err := s.repo.CreateTeamInvite(ctx, repo.CreateTeamInviteParams{
 		OrganizationID:  payload.OrganizationID,
@@ -309,6 +322,10 @@ func (s *Service) CancelInvite(ctx context.Context, payload *gen.CancelInvitePay
 		return err
 	}
 
+	if invite.Status != "pending" {
+		return oops.E(oops.CodeInvalid, nil, "can only cancel pending invites")
+	}
+
 	if err := s.repo.CancelTeamInvite(ctx, inviteID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to cancel invite").Log(ctx, s.logger)
 	}
@@ -339,8 +356,7 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 		return nil, oops.E(oops.CodeInvalid, nil, "can only resend pending invites")
 	}
 
-	// Extend expiry by 7 days from now
-	newExpiry := time.Now().Add(7 * 24 * time.Hour)
+	newExpiry := time.Now().Add(s.cfg.inviteExpiry())
 	updatedInvite, err := s.repo.UpdateTeamInviteExpiry(ctx, repo.UpdateTeamInviteExpiryParams{
 		ID:        inviteID,
 		ExpiresAt: pgtype.Timestamptz{Time: newExpiry, Valid: true, InfinityModifier: 0},
@@ -402,7 +418,13 @@ func (s *Service) AcceptInvite(ctx context.Context, payload *gen.AcceptInvitePay
 	}
 
 	if !strings.EqualFold(invite.Email, userInfo.Email) {
-		return nil, oops.E(oops.CodeForbidden, nil, "invite was sent to a different email address")
+		if !s.cfg.DevMode {
+			return nil, oops.E(oops.CodeForbidden, nil, "invite was sent to a different email address")
+		}
+		s.logger.WarnContext(ctx, "dev mode: skipping invite email match check",
+			attr.SlogTeamInviteEmail(invite.Email),
+			attr.SlogUserEmail(userInfo.Email),
+		)
 	}
 
 	if err := s.repo.AddOrganizationMember(ctx, repo.AddOrganizationMemberParams{
@@ -439,6 +461,28 @@ func (s *Service) AcceptInvite(ctx context.Context, payload *gen.AcceptInvitePay
 	}, nil
 }
 
+func (s *Service) GetInviteInfo(ctx context.Context, payload *gen.GetInviteInfoPayload) (*gen.InviteInfoResult, error) {
+	info, err := s.repo.GetInviteInfoByToken(ctx, payload.Token)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, nil, "invite not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to look up invite").Log(ctx, s.logger)
+	}
+
+	status := info.Status
+	if status == "pending" && info.ExpiresAt.Valid && time.Now().After(info.ExpiresAt.Time) {
+		status = "expired"
+	}
+
+	return &gen.InviteInfoResult{
+		InviterName:      info.InviterName,
+		OrganizationName: info.OrganizationName,
+		Email:            info.Email,
+		Status:           status,
+	}, nil
+}
+
 func (s *Service) RemoveMember(ctx context.Context, payload *gen.RemoveMemberPayload) error {
 	userInfo, err := s.hasOrgAccess(ctx, payload.OrganizationID)
 	if err != nil {
@@ -456,14 +500,9 @@ func (s *Service) RemoveMember(ctx context.Context, payload *gen.RemoveMemberPay
 		return oops.E(oops.CodeUnexpected, err, "failed to check members").Log(ctx, s.logger)
 	}
 
-	found := false
-	for _, m := range members {
-		if m.ID == payload.UserID {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.ContainsFunc(members, func(m repo.ListOrganizationMembersRow) bool {
+		return m.ID == payload.UserID
+	}) {
 		return oops.C(oops.CodeNotFound)
 	}
 

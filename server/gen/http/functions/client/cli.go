@@ -22,7 +22,7 @@ func BuildGetSignedAssetURLPayload(functionsGetSignedAssetURLBody string, functi
 	{
 		err = json.Unmarshal([]byte(functionsGetSignedAssetURLBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Earum numquam perferendis modi voluptas.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Tempora in.\"\n   }'")
 		}
 	}
 	var functionToken *string

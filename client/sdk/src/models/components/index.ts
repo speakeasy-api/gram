@@ -85,6 +85,7 @@ export * from "./instancemcpserver.js";
 export * from "./integration.js";
 export * from "./integrationentry.js";
 export * from "./integrationversion.js";
+export * from "./inviteinforesult.js";
 export * from "./invitememberform.js";
 export * from "./invitememberresult.js";
 export * from "./key.js";

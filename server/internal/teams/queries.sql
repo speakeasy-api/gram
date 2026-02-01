@@ -39,7 +39,7 @@ WHERE id = @id AND deleted IS FALSE;
 -- name: GetPendingInviteByEmail :one
 SELECT * FROM team_invites
 WHERE organization_id = @organization_id
-  AND email = @email
+  AND lower(email) = lower(@email)
   AND status = 'pending'
   AND deleted IS FALSE;
 
@@ -72,3 +72,16 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
 
 -- name: GetOrganizationSlug :one
 SELECT slug FROM organization_metadata WHERE id = @id;
+
+-- name: GetInviteInfoByToken :one
+SELECT
+  ti.id,
+  ti.email,
+  ti.status,
+  ti.expires_at,
+  u.display_name as inviter_name,
+  om.name as organization_name
+FROM team_invites ti
+JOIN users u ON u.id = ti.invited_by_user_id
+JOIN organization_metadata om ON om.id = ti.organization_id
+WHERE ti.token = @token AND ti.deleted IS FALSE;

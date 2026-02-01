@@ -63,12 +63,7 @@ type TelemetryLog struct {
 	GramURN          string  `ch:"gram_urn"`           // String
 	ServiceName      string  `ch:"service_name"`       // LowCardinality(String)
 	ServiceVersion   *string `ch:"service_version"`    // Nullable(String)
-
-	// Denormalized HTTP Fields (Wide Event Pattern - for HTTP logs only, NULL for function logs)
-	HTTPRequestMethod      *string `ch:"http_request_method"`       // LowCardinality(Nullable(String))
-	HTTPResponseStatusCode *int32  `ch:"http_response_status_code"` // Nullable(Int32)
-	HTTPRoute              *string `ch:"http_route"`                // Nullable(String)
-	HTTPServerURL          *string `ch:"http_server_url"`           // Nullable(String)
+	GramChatID       *string `ch:"gram_chat_id"`       // Nullable(String)
 }
 
 // TraceSummary represents an aggregated view of a trace (one row per trace).

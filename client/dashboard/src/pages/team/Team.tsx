@@ -5,6 +5,7 @@ import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
+import { formatDistanceToNow } from "date-fns";
 import {
   invalidateAllListTeamInvites,
   invalidateAllListTeamMembers,
@@ -223,6 +224,25 @@ export default function Team() {
       header: "Sent",
       width: "150px",
       render: (invite) => <HumanizeDateTime date={invite.createdAt} />,
+    },
+    {
+      key: "expiresAt",
+      header: "Expires",
+      width: "150px",
+      render: (invite) => {
+        const now = new Date();
+        const isExpired = invite.expiresAt < now;
+        return (
+          <Type
+            variant="body"
+            className={isExpired ? "text-destructive" : "text-muted-foreground"}
+          >
+            {isExpired
+              ? "Expired"
+              : formatDistanceToNow(invite.expiresAt, { addSuffix: true })}
+          </Type>
+        );
+      },
     },
     {
       key: "actions",

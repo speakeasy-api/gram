@@ -7,34 +7,45 @@ import { ToolUIGroup } from '@/components/ui/tool-ui'
 
 export const ToolGroup: FC<
   PropsWithChildren<{ startIndex: number; endIndex: number }>
-> = ({ children }) => {
-  const parts = useAssistantState(({ message }) => message).parts
-  const toolCallParts = parts.filter((part) => part.type === 'tool-call')
-  const anyMessagePartsAreRunning = toolCallParts.some(
-    (part) => part.status?.type === 'running'
-  )
+> = ({ children, startIndex, endIndex }) => {
+  // startIndex/endIndex are inclusive indices into message.parts.
+  // assistant-ui only groups consecutive tool-call parts, so every part
+  // in the range is a tool-call — the count is simply the range size.
+  const toolCount = endIndex - startIndex + 1
+
+  const firstToolName = useAssistantState(({ message }) => {
+    const part = message.parts[startIndex]
+    return part?.type === 'tool-call' ? part.toolName : undefined
+  })
+  const anyMessagePartsAreRunning = useAssistantState(({ message }) => {
+    for (let i = startIndex; i <= endIndex; i++) {
+      if (message.parts[i]?.status?.type === 'running') return true
+    }
+    return false
+  })
 
   const { config } = useElements()
   const defaultExpanded = config.tools?.expandToolGroupsByDefault ?? false
 
   const groupTitle = useMemo(() => {
-    const toolParts = parts.filter((part) => part.type === 'tool-call')
-
-    if (toolParts.length === 0) return 'No tools called'
-    if (toolParts.length === 1)
-      return `Calling ${humanizeToolName(toolParts[0].toolName)}...`
+    if (toolCount === 0) return 'No tools called'
+    if (toolCount === 1) {
+      return firstToolName
+        ? `Calling ${humanizeToolName(firstToolName)}...`
+        : 'Calling tool...'
+    }
     return anyMessagePartsAreRunning
-      ? `Calling ${toolParts.length} tools...`
-      : `Executed ${toolParts.length} tools`
-  }, [parts, anyMessagePartsAreRunning])
+      ? `Calling ${toolCount} tools...`
+      : `Executed ${toolCount} tools`
+  }, [toolCount, firstToolName, anyMessagePartsAreRunning])
 
   // If there's a custom component for the single tool, render children directly
-  if (config.tools?.components?.[toolCallParts[0]?.toolName]) {
+  if (firstToolName && config.tools?.components?.[firstToolName]) {
     return children
   }
 
   // For single tool calls, render without the group wrapper
-  if (toolCallParts.length === 1) {
+  if (toolCount === 1) {
     return (
       <div className={cn('my-4 w-full max-w-xl')}>
         <div className="border-border bg-card overflow-hidden rounded-lg border">

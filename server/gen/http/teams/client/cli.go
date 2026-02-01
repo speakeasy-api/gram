@@ -44,7 +44,7 @@ func BuildInviteMemberPayload(teamsInviteMemberBody string, teamsInviteMemberSes
 	{
 		err = json.Unmarshal([]byte(teamsInviteMemberBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"ljr\",\n      \"organization_id\": \"Est illum natus temporibus.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"8zy\",\n      \"organization_id\": \"Aspernatur molestias.\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.email", body.Email, goa.FormatEmail))
 		if utf8.RuneCountInString(body.Email) > 255 {
@@ -122,7 +122,7 @@ func BuildResendInvitePayload(teamsResendInviteBody string, teamsResendInviteSes
 	{
 		err = json.Unmarshal([]byte(teamsResendInviteBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"invite_id\": \"5ca1c5ee-ad22-4f0a-a9f4-44df8ff39225\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"invite_id\": \"5448263a-03f9-4ea1-bc0e-dd17067c7908\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.invite_id", body.InviteID, goa.FormatUUID))
 		if err != nil {
@@ -143,6 +143,26 @@ func BuildResendInvitePayload(teamsResendInviteBody string, teamsResendInviteSes
 	return v, nil
 }
 
+// BuildGetInviteInfoPayload builds the payload for the teams getInviteInfo
+// endpoint from CLI flags.
+func BuildGetInviteInfoPayload(teamsGetInviteInfoToken string, teamsGetInviteInfoSessionToken string) (*teams.GetInviteInfoPayload, error) {
+	var token string
+	{
+		token = teamsGetInviteInfoToken
+	}
+	var sessionToken *string
+	{
+		if teamsGetInviteInfoSessionToken != "" {
+			sessionToken = &teamsGetInviteInfoSessionToken
+		}
+	}
+	v := &teams.GetInviteInfoPayload{}
+	v.Token = token
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildAcceptInvitePayload builds the payload for the teams acceptInvite
 // endpoint from CLI flags.
 func BuildAcceptInvitePayload(teamsAcceptInviteBody string, teamsAcceptInviteSessionToken string) (*teams.AcceptInvitePayload, error) {
@@ -151,7 +171,7 @@ func BuildAcceptInvitePayload(teamsAcceptInviteBody string, teamsAcceptInviteSes
 	{
 		err = json.Unmarshal([]byte(teamsAcceptInviteBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"token\": \"Hic nihil natus corporis explicabo in.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"token\": \"Autem voluptas.\"\n   }'")
 		}
 	}
 	var sessionToken *string

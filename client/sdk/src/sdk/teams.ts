@@ -4,6 +4,7 @@
 
 import { teamsAcceptInvite } from "../funcs/teamsAcceptInvite.js";
 import { teamsCancelInvite } from "../funcs/teamsCancelInvite.js";
+import { teamsGetInviteInfo } from "../funcs/teamsGetInviteInfo.js";
 import { teamsInviteMember } from "../funcs/teamsInviteMember.js";
 import { teamsListInvites } from "../funcs/teamsListInvites.js";
 import { teamsListMembers } from "../funcs/teamsListMembers.js";
@@ -46,6 +47,25 @@ export class Teams extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(teamsCancelInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getInviteInfo teams
+   *
+   * @remarks
+   * Get information about a team invite by its token. Used to display invite details before accepting.
+   */
+  async getInviteInfo(
+    request: operations.GetTeamInviteInfoRequest,
+    security?: operations.GetTeamInviteInfoSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.InviteInfoResult> {
+    return unwrapAsync(teamsGetInviteInfo(
       this,
       request,
       security,

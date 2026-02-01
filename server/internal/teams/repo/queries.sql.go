@@ -91,6 +91,43 @@ func (q *Queries) CreateTeamInvite(ctx context.Context, arg CreateTeamInvitePara
 	return i, err
 }
 
+const getInviteInfoByToken = `-- name: GetInviteInfoByToken :one
+SELECT
+  ti.id,
+  ti.email,
+  ti.status,
+  ti.expires_at,
+  u.display_name as inviter_name,
+  om.name as organization_name
+FROM team_invites ti
+JOIN users u ON u.id = ti.invited_by_user_id
+JOIN organization_metadata om ON om.id = ti.organization_id
+WHERE ti.token = $1 AND ti.deleted IS FALSE
+`
+
+type GetInviteInfoByTokenRow struct {
+	ID               uuid.UUID
+	Email            string
+	Status           string
+	ExpiresAt        pgtype.Timestamptz
+	InviterName      string
+	OrganizationName string
+}
+
+func (q *Queries) GetInviteInfoByToken(ctx context.Context, token string) (GetInviteInfoByTokenRow, error) {
+	row := q.db.QueryRow(ctx, getInviteInfoByToken, token)
+	var i GetInviteInfoByTokenRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.InviterName,
+		&i.OrganizationName,
+	)
+	return i, err
+}
+
 const getOrganizationSlug = `-- name: GetOrganizationSlug :one
 SELECT slug FROM organization_metadata WHERE id = $1
 `
@@ -105,7 +142,7 @@ func (q *Queries) GetOrganizationSlug(ctx context.Context, id string) (string, e
 const getPendingInviteByEmail = `-- name: GetPendingInviteByEmail :one
 SELECT id, organization_id, email, invited_by_user_id, status, token, expires_at, created_at, updated_at, deleted_at, deleted FROM team_invites
 WHERE organization_id = $1
-  AND email = $2
+  AND lower(email) = lower($2)
   AND status = 'pending'
   AND deleted IS FALSE
 `

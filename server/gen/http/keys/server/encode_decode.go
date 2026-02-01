@@ -826,6 +826,7 @@ func marshalKeysKeyToKeyResponseBody(v *keys.Key) *KeyResponseBody {
 		Key:             v.Key,
 		CreatedAt:       v.CreatedAt,
 		UpdatedAt:       v.UpdatedAt,
+		LastAccessedAt:  v.LastAccessedAt,
 	}
 	if v.Scopes != nil {
 		res.Scopes = make([]string, len(v.Scopes))

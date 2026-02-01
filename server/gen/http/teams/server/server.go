@@ -19,14 +19,15 @@ import (
 
 // Server lists the teams service endpoint HTTP handlers.
 type Server struct {
-	Mounts       []*MountPoint
-	ListMembers  http.Handler
-	InviteMember http.Handler
-	ListInvites  http.Handler
-	CancelInvite http.Handler
-	ResendInvite http.Handler
-	AcceptInvite http.Handler
-	RemoveMember http.Handler
+	Mounts        []*MountPoint
+	ListMembers   http.Handler
+	InviteMember  http.Handler
+	ListInvites   http.Handler
+	CancelInvite  http.Handler
+	ResendInvite  http.Handler
+	GetInviteInfo http.Handler
+	AcceptInvite  http.Handler
+	RemoveMember  http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -61,16 +62,18 @@ func New(
 			{"ListInvites", "GET", "/rpc/teams.listInvites"},
 			{"CancelInvite", "DELETE", "/rpc/teams.cancelInvite"},
 			{"ResendInvite", "POST", "/rpc/teams.resendInvite"},
+			{"GetInviteInfo", "GET", "/rpc/teams.getInviteInfo"},
 			{"AcceptInvite", "POST", "/rpc/teams.acceptInvite"},
 			{"RemoveMember", "DELETE", "/rpc/teams.removeMember"},
 		},
-		ListMembers:  NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
-		InviteMember: NewInviteMemberHandler(e.InviteMember, mux, decoder, encoder, errhandler, formatter),
-		ListInvites:  NewListInvitesHandler(e.ListInvites, mux, decoder, encoder, errhandler, formatter),
-		CancelInvite: NewCancelInviteHandler(e.CancelInvite, mux, decoder, encoder, errhandler, formatter),
-		ResendInvite: NewResendInviteHandler(e.ResendInvite, mux, decoder, encoder, errhandler, formatter),
-		AcceptInvite: NewAcceptInviteHandler(e.AcceptInvite, mux, decoder, encoder, errhandler, formatter),
-		RemoveMember: NewRemoveMemberHandler(e.RemoveMember, mux, decoder, encoder, errhandler, formatter),
+		ListMembers:   NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
+		InviteMember:  NewInviteMemberHandler(e.InviteMember, mux, decoder, encoder, errhandler, formatter),
+		ListInvites:   NewListInvitesHandler(e.ListInvites, mux, decoder, encoder, errhandler, formatter),
+		CancelInvite:  NewCancelInviteHandler(e.CancelInvite, mux, decoder, encoder, errhandler, formatter),
+		ResendInvite:  NewResendInviteHandler(e.ResendInvite, mux, decoder, encoder, errhandler, formatter),
+		GetInviteInfo: NewGetInviteInfoHandler(e.GetInviteInfo, mux, decoder, encoder, errhandler, formatter),
+		AcceptInvite:  NewAcceptInviteHandler(e.AcceptInvite, mux, decoder, encoder, errhandler, formatter),
+		RemoveMember:  NewRemoveMemberHandler(e.RemoveMember, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -84,6 +87,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListInvites = m(s.ListInvites)
 	s.CancelInvite = m(s.CancelInvite)
 	s.ResendInvite = m(s.ResendInvite)
+	s.GetInviteInfo = m(s.GetInviteInfo)
 	s.AcceptInvite = m(s.AcceptInvite)
 	s.RemoveMember = m(s.RemoveMember)
 }
@@ -98,6 +102,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListInvitesHandler(mux, h.ListInvites)
 	MountCancelInviteHandler(mux, h.CancelInvite)
 	MountResendInviteHandler(mux, h.ResendInvite)
+	MountGetInviteInfoHandler(mux, h.GetInviteInfo)
 	MountAcceptInviteHandler(mux, h.AcceptInvite)
 	MountRemoveMemberHandler(mux, h.RemoveMember)
 }
@@ -349,6 +354,59 @@ func NewResendInviteHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "resendInvite")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "teams")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetInviteInfoHandler configures the mux to serve the "teams" service
+// "getInviteInfo" endpoint.
+func MountGetInviteInfoHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/teams.getInviteInfo", otelhttp.WithRouteTag("/rpc/teams.getInviteInfo", f).ServeHTTP)
+}
+
+// NewGetInviteInfoHandler creates a HTTP handler which loads the HTTP request
+// and calls the "teams" service "getInviteInfo" endpoint.
+func NewGetInviteInfoHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetInviteInfoRequest(mux, decoder)
+		encodeResponse = EncodeGetInviteInfoResponse(encoder)
+		encodeError    = EncodeGetInviteInfoError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getInviteInfo")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "teams")
 		payload, err := decodeRequest(r)
 		if err != nil {

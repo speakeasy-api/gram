@@ -65,6 +65,19 @@ type ResendInviteResponseBody struct {
 	Invite *TeamInviteResponseBody `form:"invite" json:"invite" xml:"invite"`
 }
 
+// GetInviteInfoResponseBody is the type of the "teams" service "getInviteInfo"
+// endpoint HTTP response body.
+type GetInviteInfoResponseBody struct {
+	// Display name of the user who sent the invite
+	InviterName string `form:"inviter_name" json:"inviter_name" xml:"inviter_name"`
+	// Name of the organization
+	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
+	// The email address the invite was sent to
+	Email string `form:"email" json:"email" xml:"email"`
+	// Current status of the invite
+	Status string `form:"status" json:"status" xml:"status"`
+}
+
 // AcceptInviteResponseBody is the type of the "teams" service "acceptInvite"
 // endpoint HTTP response body.
 type AcceptInviteResponseBody struct {
@@ -977,6 +990,188 @@ type ResendInviteGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetInviteInfoUnauthorizedResponseBody is the type of the "teams" service
+// "getInviteInfo" endpoint HTTP response body for the "unauthorized" error.
+type GetInviteInfoUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInviteInfoForbiddenResponseBody is the type of the "teams" service
+// "getInviteInfo" endpoint HTTP response body for the "forbidden" error.
+type GetInviteInfoForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInviteInfoBadRequestResponseBody is the type of the "teams" service
+// "getInviteInfo" endpoint HTTP response body for the "bad_request" error.
+type GetInviteInfoBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInviteInfoNotFoundResponseBody is the type of the "teams" service
+// "getInviteInfo" endpoint HTTP response body for the "not_found" error.
+type GetInviteInfoNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInviteInfoConflictResponseBody is the type of the "teams" service
+// "getInviteInfo" endpoint HTTP response body for the "conflict" error.
+type GetInviteInfoConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInviteInfoUnsupportedMediaResponseBody is the type of the "teams" service
+// "getInviteInfo" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetInviteInfoUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInviteInfoInvalidResponseBody is the type of the "teams" service
+// "getInviteInfo" endpoint HTTP response body for the "invalid" error.
+type GetInviteInfoInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInviteInfoInvariantViolationResponseBody is the type of the "teams"
+// service "getInviteInfo" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetInviteInfoInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInviteInfoUnexpectedResponseBody is the type of the "teams" service
+// "getInviteInfo" endpoint HTTP response body for the "unexpected" error.
+type GetInviteInfoUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInviteInfoGatewayErrorResponseBody is the type of the "teams" service
+// "getInviteInfo" endpoint HTTP response body for the "gateway_error" error.
+type GetInviteInfoGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AcceptInviteUnauthorizedResponseBody is the type of the "teams" service
 // "acceptInvite" endpoint HTTP response body for the "unauthorized" error.
 type AcceptInviteUnauthorizedResponseBody struct {
@@ -1422,6 +1617,18 @@ func NewResendInviteResponseBody(res *teams.ResendInviteResult) *ResendInviteRes
 	body := &ResendInviteResponseBody{}
 	if res.Invite != nil {
 		body.Invite = marshalTeamsTeamInviteToTeamInviteResponseBody(res.Invite)
+	}
+	return body
+}
+
+// NewGetInviteInfoResponseBody builds the HTTP response body from the result
+// of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoResponseBody(res *teams.InviteInfoResult) *GetInviteInfoResponseBody {
+	body := &GetInviteInfoResponseBody{
+		InviterName:      res.InviterName,
+		OrganizationName: res.OrganizationName,
+		Email:            res.Email,
+		Status:           res.Status,
 	}
 	return body
 }
@@ -2135,6 +2342,146 @@ func NewResendInviteGatewayErrorResponseBody(res *goa.ServiceError) *ResendInvit
 	return body
 }
 
+// NewGetInviteInfoUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoUnauthorizedResponseBody(res *goa.ServiceError) *GetInviteInfoUnauthorizedResponseBody {
+	body := &GetInviteInfoUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInviteInfoForbiddenResponseBody builds the HTTP response body from the
+// result of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoForbiddenResponseBody(res *goa.ServiceError) *GetInviteInfoForbiddenResponseBody {
+	body := &GetInviteInfoForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInviteInfoBadRequestResponseBody builds the HTTP response body from
+// the result of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoBadRequestResponseBody(res *goa.ServiceError) *GetInviteInfoBadRequestResponseBody {
+	body := &GetInviteInfoBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInviteInfoNotFoundResponseBody builds the HTTP response body from the
+// result of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoNotFoundResponseBody(res *goa.ServiceError) *GetInviteInfoNotFoundResponseBody {
+	body := &GetInviteInfoNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInviteInfoConflictResponseBody builds the HTTP response body from the
+// result of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoConflictResponseBody(res *goa.ServiceError) *GetInviteInfoConflictResponseBody {
+	body := &GetInviteInfoConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInviteInfoUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoUnsupportedMediaResponseBody(res *goa.ServiceError) *GetInviteInfoUnsupportedMediaResponseBody {
+	body := &GetInviteInfoUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInviteInfoInvalidResponseBody builds the HTTP response body from the
+// result of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoInvalidResponseBody(res *goa.ServiceError) *GetInviteInfoInvalidResponseBody {
+	body := &GetInviteInfoInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInviteInfoInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoInvariantViolationResponseBody(res *goa.ServiceError) *GetInviteInfoInvariantViolationResponseBody {
+	body := &GetInviteInfoInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInviteInfoUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoUnexpectedResponseBody(res *goa.ServiceError) *GetInviteInfoUnexpectedResponseBody {
+	body := &GetInviteInfoUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInviteInfoGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getInviteInfo" endpoint of the "teams" service.
+func NewGetInviteInfoGatewayErrorResponseBody(res *goa.ServiceError) *GetInviteInfoGatewayErrorResponseBody {
+	body := &GetInviteInfoGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewAcceptInviteUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "acceptInvite" endpoint of the "teams" service.
 func NewAcceptInviteUnauthorizedResponseBody(res *goa.ServiceError) *AcceptInviteUnauthorizedResponseBody {
@@ -2458,6 +2805,16 @@ func NewResendInvitePayload(body *ResendInviteRequestBody, sessionToken *string)
 	v := &teams.ResendInvitePayload{
 		InviteID: *body.InviteID,
 	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetInviteInfoPayload builds a teams service getInviteInfo endpoint
+// payload.
+func NewGetInviteInfoPayload(token string, sessionToken *string) *teams.GetInviteInfoPayload {
+	v := &teams.GetInviteInfoPayload{}
+	v.Token = token
 	v.SessionToken = sessionToken
 
 	return v

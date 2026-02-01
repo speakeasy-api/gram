@@ -1172,6 +1172,239 @@ func DecodeResendInviteResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildGetInviteInfoRequest instantiates a HTTP request object with method and
+// path set to call the "teams" service "getInviteInfo" endpoint
+func (c *Client) BuildGetInviteInfoRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetInviteInfoTeamsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("teams", "getInviteInfo", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetInviteInfoRequest returns an encoder for requests sent to the teams
+// getInviteInfo server.
+func EncodeGetInviteInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*teams.GetInviteInfoPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("teams", "getInviteInfo", "*teams.GetInviteInfoPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("token", p.Token)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetInviteInfoResponse returns a decoder for responses returned by the
+// teams getInviteInfo endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetInviteInfoResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetInviteInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetInviteInfoResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+			}
+			err = ValidateGetInviteInfoResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+			}
+			res := NewGetInviteInfoInviteInfoResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetInviteInfoUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+			}
+			err = ValidateGetInviteInfoUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+			}
+			return nil, NewGetInviteInfoUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetInviteInfoForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+			}
+			err = ValidateGetInviteInfoForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+			}
+			return nil, NewGetInviteInfoForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetInviteInfoBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+			}
+			err = ValidateGetInviteInfoBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+			}
+			return nil, NewGetInviteInfoBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetInviteInfoNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+			}
+			err = ValidateGetInviteInfoNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+			}
+			return nil, NewGetInviteInfoNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetInviteInfoConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+			}
+			err = ValidateGetInviteInfoConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+			}
+			return nil, NewGetInviteInfoConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetInviteInfoUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+			}
+			err = ValidateGetInviteInfoUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+			}
+			return nil, NewGetInviteInfoUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetInviteInfoInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+			}
+			err = ValidateGetInviteInfoInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+			}
+			return nil, NewGetInviteInfoInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetInviteInfoInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+				}
+				err = ValidateGetInviteInfoInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+				}
+				return nil, NewGetInviteInfoInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetInviteInfoUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+				}
+				err = ValidateGetInviteInfoUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+				}
+				return nil, NewGetInviteInfoUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("teams", "getInviteInfo", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetInviteInfoGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("teams", "getInviteInfo", err)
+			}
+			err = ValidateGetInviteInfoGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("teams", "getInviteInfo", err)
+			}
+			return nil, NewGetInviteInfoGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("teams", "getInviteInfo", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildAcceptInviteRequest instantiates a HTTP request object with method and
 // path set to call the "teams" service "acceptInvite" endpoint
 func (c *Client) BuildAcceptInviteRequest(ctx context.Context, v any) (*http.Request, error) {

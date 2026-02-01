@@ -60,7 +60,7 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	{
 		err = json.Unmarshal([]byte(projectsCreateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"6zk\",\n      \"organization_id\": \"Esse hic itaque adipisci blanditiis voluptas.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"g6o\",\n      \"organization_id\": \"Omnis quaerat quas.\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
@@ -126,7 +126,7 @@ func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken 
 	{
 		err = json.Unmarshal([]byte(projectsSetLogoBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Nam soluta ullam officia assumenda.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Eum quam.\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -194,7 +194,7 @@ func BuildUpsertAllowedOriginPayload(projectsUpsertAllowedOriginBody string, pro
 	{
 		err = json.Unmarshal([]byte(projectsUpsertAllowedOriginBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"origin\": \"fz\",\n      \"status\": \"approved\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"origin\": \"q6v\",\n      \"status\": \"rejected\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Origin) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.origin", body.Origin, utf8.RuneCountInString(body.Origin), 1, true))

@@ -79,6 +79,8 @@ type Key struct {
 	CreatedAt string
 	// When the key was last updated.
 	UpdatedAt string
+	// When the key was last accessed.
+	LastAccessedAt *string
 }
 
 // ListKeysPayload is the payload type of the keys service listKeys method.

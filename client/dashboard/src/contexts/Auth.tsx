@@ -11,7 +11,12 @@ import { useSessionInfo } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Navigate, useNavigate, useSearchParams } from "react-router";
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -175,9 +180,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite"];
+
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { session, error, status } = useSessionData();
 
   const isLoading = status === "pending";
@@ -201,6 +209,15 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!session.activeOrganizationId) {
+    return (
+      <SessionContext.Provider value={session}>
+        {children}
+      </SessionContext.Provider>
+    );
+  }
+
+  // Don't redirect away from unauthenticated root-level routes
+  if (UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))) {
     return (
       <SessionContext.Provider value={session}>
         {children}

@@ -223,6 +223,8 @@ CREATE TABLE IF NOT EXISTS api_keys (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
+  last_accessed_at timestamptz,
+
   CONSTRAINT api_keys_pkey PRIMARY KEY (id),
   CONSTRAINT api_keys_key_hash UNIQUE (key_hash),
   CONSTRAINT api_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
@@ -947,6 +949,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   instructions TEXT,
   header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
   default_environment_id UUID, -- Informs mcp_environment_configs which environment to load from by default
+  installation_override_url TEXT, -- URL to redirect to instead of the default installation page
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

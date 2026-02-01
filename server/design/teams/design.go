@@ -115,6 +115,27 @@ var _ = Service("teams", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResendTeamInvite"}`)
 	})
 
+	Method("getInviteInfo", func() {
+		Description("Get information about a team invite by its token. Used to display invite details before accepting.")
+
+		Payload(func() {
+			Required("token")
+			Attribute("token", String, "The invite token from the email link")
+			security.SessionPayload()
+		})
+		Result(InviteInfoResult)
+
+		HTTP(func() {
+			GET("/rpc/teams.getInviteInfo")
+			security.SessionHeader()
+			Param("token")
+		})
+
+		Meta("openapi:operationId", "getTeamInviteInfo")
+		Meta("openapi:extension:x-speakeasy-name-override", "getInviteInfo")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetTeamInviteInfo"}`)
+	})
+
 	Method("acceptInvite", func() {
 		Description("Accept a team invite using a token from an invite email.")
 
@@ -220,6 +241,16 @@ var ListInvitesResult = Type("ListInvitesResult", func() {
 var ResendInviteResult = Type("ResendInviteResult", func() {
 	Required("invite")
 	Attribute("invite", TeamInvite, "The updated invite")
+})
+
+var InviteInfoResult = Type("InviteInfoResult", func() {
+	Required("inviter_name", "organization_name", "email", "status")
+	Attribute("inviter_name", String, "Display name of the user who sent the invite")
+	Attribute("organization_name", String, "Name of the organization")
+	Attribute("email", String, "The email address the invite was sent to")
+	Attribute("status", String, "Current status of the invite", func() {
+		Enum("pending", "accepted", "expired", "cancelled")
+	})
 })
 
 var AcceptInviteResult = Type("AcceptInviteResult", func() {

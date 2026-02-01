@@ -45,6 +45,14 @@
 
 /* Scope ALL variables to .gram-elements instead of :root */
 .gram-elements {
+  /*
+   * tw-shimmer uses @property declarations for --shimmer-track-height and
+   * --shimmer-angle, but @property is document-scoped and ignored inside
+   * shadow roots. Set the initial values here so shimmer works in shadow DOM.
+   */
+  --shimmer-track-height: 200px;
+  --shimmer-angle: 15deg;
+
   /* Scoped preflight/base styles */
   font-family:
     ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
