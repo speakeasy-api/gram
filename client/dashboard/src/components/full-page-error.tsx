@@ -30,7 +30,7 @@ export function FullPageError({ error }: FullPageErrorProps) {
         </Stack>
 
         <Stack direction="horizontal" gap={2}>
-          <Button variant="brand" onPress={() => window.location.reload()}>
+          <Button variant="brand" onClick={() => window.location.reload()}>
             <Button.LeftIcon>
               <Icon name="rotate-ccw" className="h-4 w-4" />
             </Button.LeftIcon>
@@ -38,7 +38,7 @@ export function FullPageError({ error }: FullPageErrorProps) {
           </Button>
           <Button
             variant="secondary"
-            onPress={() => (window.location.href = "/")}
+            onClick={() => (window.location.href = "/")}
           >
             <Button.Text>Go to home</Button.Text>
           </Button>
