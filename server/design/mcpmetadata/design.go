@@ -100,6 +100,7 @@ var McpMetadata = Type("McpMetadata", func() {
 	Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page", func() {
 		Format(FormatURI)
 	})
+	Attribute("external_documentation_text", String, "A blob of text for the button on the MCP server page")
 	Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
 	Attribute("default_environment_id", String, "The default environment to load variables from", func() {
 		Format(FormatUUID)
