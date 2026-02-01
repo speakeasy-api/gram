@@ -115,6 +115,26 @@ var _ = Service("teams", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResendTeamInvite"}`)
 	})
 
+	Method("acceptInvite", func() {
+		Description("Accept a team invite using a token from an invite email.")
+
+		Payload(func() {
+			Required("token")
+			Attribute("token", String, "The invite token from the email link")
+			security.SessionPayload()
+		})
+		Result(AcceptInviteResult)
+
+		HTTP(func() {
+			POST("/rpc/teams.acceptInvite")
+			security.SessionHeader()
+		})
+
+		Meta("openapi:operationId", "acceptTeamInvite")
+		Meta("openapi:extension:x-speakeasy-name-override", "acceptInvite")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AcceptTeamInvite"}`)
+	})
+
 	Method("removeMember", func() {
 		Description("Remove a member from the organization.")
 
@@ -200,4 +220,9 @@ var ListInvitesResult = Type("ListInvitesResult", func() {
 var ResendInviteResult = Type("ResendInviteResult", func() {
 	Required("invite")
 	Attribute("invite", TeamInvite, "The updated invite")
+})
+
+var AcceptInviteResult = Type("AcceptInviteResult", func() {
+	Required("organization_slug")
+	Attribute("organization_slug", String, "The slug of the organization the user was added to")
 })

@@ -32,6 +32,11 @@ func ResendInviteTeamsPath() string {
 	return "/rpc/teams.resendInvite"
 }
 
+// AcceptInviteTeamsPath returns the URL path to the teams service acceptInvite HTTP endpoint.
+func AcceptInviteTeamsPath() string {
+	return "/rpc/teams.acceptInvite"
+}
+
 // RemoveMemberTeamsPath returns the URL path to the teams service removeMember HTTP endpoint.
 func RemoveMemberTeamsPath() string {
 	return "/rpc/teams.removeMember"

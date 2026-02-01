@@ -69,7 +69,7 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
 		"resources list-resources",
 		"slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-connection)",
-		"teams (list-members|invite-member|list-invites|cancel-invite|resend-invite|remove-member)",
+		"teams (list-members|invite-member|list-invites|cancel-invite|resend-invite|accept-invite|remove-member)",
 		"telemetry (search-logs|search-tool-calls|capture-event|get-project-metrics-summary)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -585,6 +585,10 @@ func ParseEndpoint(
 		teamsResendInviteBodyFlag         = teamsResendInviteFlags.String("body", "REQUIRED", "")
 		teamsResendInviteSessionTokenFlag = teamsResendInviteFlags.String("session-token", "", "")
 
+		teamsAcceptInviteFlags            = flag.NewFlagSet("accept-invite", flag.ExitOnError)
+		teamsAcceptInviteBodyFlag         = teamsAcceptInviteFlags.String("body", "REQUIRED", "")
+		teamsAcceptInviteSessionTokenFlag = teamsAcceptInviteFlags.String("session-token", "", "")
+
 		teamsRemoveMemberFlags              = flag.NewFlagSet("remove-member", flag.ExitOnError)
 		teamsRemoveMemberOrganizationIDFlag = teamsRemoveMemberFlags.String("organization-id", "REQUIRED", "")
 		teamsRemoveMemberUserIDFlag         = teamsRemoveMemberFlags.String("user-id", "REQUIRED", "")
@@ -897,6 +901,7 @@ func ParseEndpoint(
 	teamsListInvitesFlags.Usage = teamsListInvitesUsage
 	teamsCancelInviteFlags.Usage = teamsCancelInviteUsage
 	teamsResendInviteFlags.Usage = teamsResendInviteUsage
+	teamsAcceptInviteFlags.Usage = teamsAcceptInviteUsage
 	teamsRemoveMemberFlags.Usage = teamsRemoveMemberUsage
 
 	telemetryFlags.Usage = telemetryUsage
@@ -1360,6 +1365,9 @@ func ParseEndpoint(
 
 			case "resend-invite":
 				epf = teamsResendInviteFlags
+
+			case "accept-invite":
+				epf = teamsAcceptInviteFlags
 
 			case "remove-member":
 				epf = teamsRemoveMemberFlags
@@ -1846,6 +1854,9 @@ func ParseEndpoint(
 			case "resend-invite":
 				endpoint = c.ResendInvite()
 				data, err = teamsc.BuildResendInvitePayload(*teamsResendInviteBodyFlag, *teamsResendInviteSessionTokenFlag)
+			case "accept-invite":
+				endpoint = c.AcceptInvite()
+				data, err = teamsc.BuildAcceptInvitePayload(*teamsAcceptInviteBodyFlag, *teamsAcceptInviteSessionTokenFlag)
 			case "remove-member":
 				endpoint = c.RemoveMember()
 				data, err = teamsc.BuildRemoveMemberPayload(*teamsRemoveMemberOrganizationIDFlag, *teamsRemoveMemberUserIDFlag, *teamsRemoveMemberSessionTokenFlag)
@@ -4056,6 +4067,7 @@ func teamsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-invites: List pending invites for an organization.`)
 	fmt.Fprintln(os.Stderr, `    cancel-invite: Cancel a pending invite.`)
 	fmt.Fprintln(os.Stderr, `    resend-invite: Resend an invite email.`)
+	fmt.Fprintln(os.Stderr, `    accept-invite: Accept a team invite using a token from an invite email.`)
 	fmt.Fprintln(os.Stderr, `    remove-member: Remove a member from the organization.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -4161,6 +4173,26 @@ func teamsResendInviteUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams resend-invite --body '{\n      \"invite_id\": \"5ca1c5ee-ad22-4f0a-a9f4-44df8ff39225\"\n   }' --session-token \"Quo eum libero.\"")
 }
 
+func teamsAcceptInviteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] teams accept-invite", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Accept a team invite using a token from an invite email.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams accept-invite --body '{\n      \"token\": \"Hic nihil natus corporis explicabo in.\"\n   }' --session-token \"Qui qui sunt eum aut adipisci.\"")
+}
+
 func teamsRemoveMemberUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] teams remove-member", os.Args[0])
@@ -4180,7 +4212,7 @@ func teamsRemoveMemberUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams remove-member --organization-id \"Hic nihil natus corporis explicabo in.\" --user-id \"Qui qui sunt eum aut adipisci.\" --session-token \"Suscipit porro sit.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "teams remove-member --organization-id \"Sint atque necessitatibus.\" --user-id \"In ut ea.\" --session-token \"Sed ullam.\"")
 }
 
 // telemetryUsage displays the usage of the telemetry command and its
@@ -4218,7 +4250,7 @@ func telemetrySearchLogsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-logs --body '{\n      \"cursor\": \"Vitae dignissimos.\",\n      \"filter\": {\n         \"deployment_id\": \"44878a02-ac8c-41c3-9676-51ac74f6ee87\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"941f28f2-9b6f-4f10-ab54-e83c750cf33c\",\n         \"gram_urn\": \"Dolorem quia.\",\n         \"gram_urns\": [\n            \"Quaerat ut architecto aperiam quia.\",\n            \"Veniam iusto aliquam excepturi delectus.\"\n         ],\n         \"http_method\": \"DELETE\",\n         \"http_route\": \"Quis blanditiis fugiat architecto aspernatur.\",\n         \"http_status_code\": 2007424368,\n         \"service_name\": \"Est labore quod sunt amet repudiandae voluptatem.\",\n         \"severity_text\": \"FATAL\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"ef113f46bcd5276139c8272522705612\"\n      },\n      \"limit\": 973,\n      \"sort\": \"desc\"\n   }' --apikey-token \"Nisi dolore velit eos.\" --session-token \"Asperiores aliquam repellat rerum esse dolore sed.\" --project-slug-input \"Beatae dolor quisquam et porro voluptatem distinctio.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-logs --body '{\n      \"cursor\": \"Illum quae fugit delectus rerum neque fugiat.\",\n      \"filter\": {\n         \"deployment_id\": \"44033ca6-b2c9-4a20-adae-77d6e556f26b\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"55c25098-4193-433c-a883-49ddc9f46acc\",\n         \"gram_urn\": \"Porro iusto et enim sint odit qui.\",\n         \"gram_urns\": [\n            \"Nihil labore nostrum qui corporis.\",\n            \"Aperiam laborum vel.\",\n            \"Reprehenderit similique minima rerum qui.\"\n         ],\n         \"http_method\": \"GET\",\n         \"http_route\": \"Sed dolores est eius.\",\n         \"http_status_code\": 61684992,\n         \"service_name\": \"Dolorem nam qui corrupti corporis optio.\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"7c3ef78942cb7d1fd62f9ef72f35765b\"\n      },\n      \"limit\": 173,\n      \"sort\": \"asc\"\n   }' --apikey-token \"Sequi aut.\" --session-token \"Aut suscipit ea.\" --project-slug-input \"Tempore quo accusantium quia.\"")
 }
 
 func telemetrySearchToolCallsUsage() {
@@ -4242,7 +4274,7 @@ func telemetrySearchToolCallsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-tool-calls --body '{\n      \"cursor\": \"In voluptas quia sit.\",\n      \"filter\": {\n         \"deployment_id\": \"128bf357-ec9a-4ec1-84b0-8656077e082e\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"64c046b3-cba4-466c-a163-ee103bb166af\",\n         \"gram_urn\": \"Ullam reiciendis architecto cupiditate vitae.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 457,\n      \"sort\": \"desc\"\n   }' --apikey-token \"Ipsam quae omnis blanditiis omnis quo.\" --session-token \"Dolorum recusandae sed at ea enim provident.\" --project-slug-input \"Optio soluta aperiam.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-tool-calls --body '{\n      \"cursor\": \"Pariatur esse.\",\n      \"filter\": {\n         \"deployment_id\": \"0dd6b787-ba45-42da-9025-98e3e477f984\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"52a06da0-0303-4c31-a378-a2b84c415f0c\",\n         \"gram_urn\": \"Molestiae consectetur fugit.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 660,\n      \"sort\": \"asc\"\n   }' --apikey-token \"Aut dolore ex inventore.\" --session-token \"Qui et minima laborum ut enim illum.\" --project-slug-input \"Dolorem veritatis aliquam labore.\"")
 }
 
 func telemetryCaptureEventUsage() {
@@ -4268,7 +4300,7 @@ func telemetryCaptureEventUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry capture-event --body '{\n      \"distinct_id\": \"Veritatis ut.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }' --apikey-token \"Cupiditate delectus a qui.\" --session-token \"Eum omnis.\" --project-slug-input \"Dolor porro placeat et molestiae.\" --chat-sessions-token \"Aut rerum ratione similique.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry capture-event --body '{\n      \"distinct_id\": \"Porro eveniet reprehenderit neque facere.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }' --apikey-token \"Beatae nemo laborum.\" --session-token \"Ut nihil omnis rerum.\" --project-slug-input \"Eum enim quis temporibus porro.\" --chat-sessions-token \"Omnis et numquam consequatur quasi optio qui.\"")
 }
 
 func telemetryGetProjectMetricsSummaryUsage() {
@@ -4292,7 +4324,7 @@ func telemetryGetProjectMetricsSummaryUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-project-metrics-summary --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"Eos quisquam neque facilis blanditiis.\" --session-token \"Et distinctio.\" --project-slug-input \"Alias est earum numquam aliquid voluptatum.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-project-metrics-summary --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"Excepturi quae.\" --session-token \"Dolorem laudantium itaque sed.\" --project-slug-input \"Repellat quaerat.\"")
 }
 
 // templatesUsage displays the usage of the templates command and its
@@ -4333,7 +4365,7 @@ func templatesCreateTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates create-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Officia exercitationem veniam.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"name\": \"a5c\",\n      \"prompt\": \"Ut a aut atque.\",\n      \"tool_urns_hint\": [\n         \"Corporis consequatur velit perspiciatis maxime facere reiciendis.\",\n         \"Cumque amet provident vitae consequuntur iste aut.\",\n         \"Excepturi fugiat ut aliquid in qui sint.\"\n      ],\n      \"tools_hint\": [\n         \"Quam ex nesciunt.\",\n         \"Fuga nemo quasi voluptas ab sequi quas.\",\n         \"Atque est placeat consequatur nobis.\"\n      ]\n   }' --apikey-token \"Qui est sed.\" --session-token \"Aliquid enim et quaerat asperiores distinctio illum.\" --project-slug-input \"Modi dolorem consequuntur minima laboriosam.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates create-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Nesciunt et quod distinctio.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"c66\",\n      \"prompt\": \"At voluptas a dolorum numquam.\",\n      \"tool_urns_hint\": [\n         \"Ut aliquid.\",\n         \"Qui sint eos qui est sed voluptatem.\",\n         \"Enim et quaerat asperiores distinctio.\"\n      ],\n      \"tools_hint\": [\n         \"Maxime facere.\",\n         \"Sequi cumque.\",\n         \"Provident vitae consequuntur iste aut quam.\"\n      ]\n   }' --apikey-token \"Praesentium modi dolorem consequuntur minima laboriosam ratione.\" --session-token \"Molestias consectetur aut aut quo aperiam voluptatem.\" --project-slug-input \"Quia error.\"")
 }
 
 func templatesUpdateTemplateUsage() {
@@ -4357,7 +4389,7 @@ func templatesUpdateTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates update-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Aperiam molestiae ducimus sit animi cum eius.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Repudiandae et nihil aut.\",\n      \"kind\": \"prompt\",\n      \"name\": \"Fugit praesentium sit.\",\n      \"prompt\": \"Voluptas odio id hic.\",\n      \"tool_urns_hint\": [\n         \"Maiores assumenda quibusdam expedita.\",\n         \"Perspiciatis incidunt qui quia.\",\n         \"Molestiae consectetur eveniet qui quis.\"\n      ],\n      \"tools_hint\": [\n         \"Quia laborum perspiciatis.\",\n         \"Quo neque sint quidem animi totam consequatur.\",\n         \"Maiores voluptatem quibusdam earum temporibus voluptatibus.\"\n      ]\n   }' --apikey-token \"Eveniet eaque dolorem.\" --session-token \"Ut nostrum dignissimos dolores.\" --project-slug-input \"Et sed aut.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates update-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Dolor perspiciatis ut aspernatur.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Hic odit aperiam molestiae ducimus.\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"Animi cum eius et aut magni.\",\n      \"prompt\": \"Illum placeat ut possimus.\",\n      \"tool_urns_hint\": [\n         \"Sunt eveniet eaque dolorem repudiandae ut nostrum.\",\n         \"Dolores odio et sed aut et laudantium.\",\n         \"Sit enim.\"\n      ],\n      \"tools_hint\": [\n         \"Quibusdam earum temporibus voluptatibus quo tempore.\",\n         \"Assumenda quibusdam expedita at perspiciatis incidunt qui.\",\n         \"Voluptas molestiae consectetur eveniet.\"\n      ]\n   }' --apikey-token \"Laudantium nihil iure.\" --session-token \"Quae quo suscipit vel.\" --project-slug-input \"Et sed quod necessitatibus perferendis.\"")
 }
 
 func templatesGetTemplateUsage() {
@@ -4383,7 +4415,7 @@ func templatesGetTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates get-template --id \"Ut vitae.\" --name \"Aspernatur dolorum ut.\" --apikey-token \"Iste adipisci cum repellendus tempore voluptatem corporis.\" --session-token \"Omnis sed repellendus cum ut.\" --project-slug-input \"Consequatur sed illum.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates get-template --id \"Sit consequatur sed illum.\" --name \"Sapiente aut omnis iusto.\" --apikey-token \"Excepturi suscipit laudantium.\" --session-token \"Ad sunt.\" --project-slug-input \"Corrupti atque nesciunt.\"")
 }
 
 func templatesListTemplatesUsage() {
@@ -4405,7 +4437,7 @@ func templatesListTemplatesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates list-templates --apikey-token \"Officiis qui architecto quos ad.\" --session-token \"Omnis aliquam.\" --project-slug-input \"Tempore autem quis blanditiis.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates list-templates --apikey-token \"Occaecati facere nostrum itaque mollitia.\" --session-token \"Quis quidem beatae necessitatibus.\" --project-slug-input \"Itaque voluptatem.\"")
 }
 
 func templatesDeleteTemplateUsage() {
@@ -4431,7 +4463,7 @@ func templatesDeleteTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates delete-template --id \"Nihil in assumenda quas.\" --name \"Qui dolores.\" --apikey-token \"Dolore officiis temporibus.\" --session-token \"Ea amet rerum eum adipisci ut qui.\" --project-slug-input \"Enim aut iusto enim sint.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates delete-template --id \"Adipisci ut qui eaque.\" --name \"Aut iusto enim sint.\" --apikey-token \"Ut facere sed beatae quae ab voluptates.\" --session-token \"Laudantium quod aperiam labore ex ipsum.\" --project-slug-input \"Corrupti blanditiis.\"")
 }
 
 func templatesRenderTemplateByIDUsage() {
@@ -4457,7 +4489,7 @@ func templatesRenderTemplateByIDUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates render-template-by-id --body '{\n      \"arguments\": {\n         \"Labore sapiente deleniti tenetur non optio.\": \"Perspiciatis repellat vero nam consequatur quia culpa.\"\n      }\n   }' --id \"Aut excepturi.\" --apikey-token \"Nostrum quisquam reprehenderit qui molestiae quos.\" --session-token \"Dicta dolor.\" --project-slug-input \"Ut tenetur.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates render-template-by-id --body '{\n      \"arguments\": {\n         \"Nostrum quisquam reprehenderit qui molestiae quos.\": \"Dicta dolor.\"\n      }\n   }' --id \"Ut tenetur.\" --apikey-token \"Eos possimus.\" --session-token \"Rem ipsam voluptatibus expedita.\" --project-slug-input \"Similique soluta neque.\"")
 }
 
 func templatesRenderTemplateUsage() {
@@ -4481,7 +4513,7 @@ func templatesRenderTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates render-template --body '{\n      \"arguments\": {\n         \"Consequatur aut aliquid voluptatem odio sapiente.\": \"Quo repellat voluptas molestiae.\",\n         \"Nostrum nostrum nihil vitae iusto.\": \"Ut aut in voluptatem.\",\n         \"Quia est esse ullam.\": \"Sit dolor.\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"prompt\": \"Omnis rem ipsum.\"\n   }' --apikey-token \"Ut quo ratione.\" --session-token \"Quaerat doloremque neque.\" --project-slug-input \"Recusandae molestias unde tempora accusamus facere dicta.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates render-template --body '{\n      \"arguments\": {\n         \"Aut in voluptatem unde consequatur aut.\": \"Voluptatem odio.\",\n         \"Sapiente quo repellat voluptas molestiae doloremque aut.\": \"Ut quo ratione.\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"prompt\": \"Nostrum nostrum nihil vitae iusto.\"\n   }' --apikey-token \"Neque labore recusandae.\" --session-token \"Unde tempora.\" --project-slug-input \"Facere dicta.\"")
 }
 
 // toolsUsage displays the usage of the tools command and its subcommands.

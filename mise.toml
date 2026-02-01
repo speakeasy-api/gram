@@ -157,3 +157,5 @@ PULSE_REGISTRY_KEY = "unset"
 ## Elements ##
 ## Used for local development only
 VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:6006"
+
+LOOPS_API_KEY = "unset"

@@ -62,6 +62,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -270,6 +271,12 @@ func newStartCommand() *cli.Command {
 			Name:     "posthog-personal-api-key",
 			Usage:    "The posthog personal API key for local feature flag evaluation",
 			EnvVars:  []string{"POSTHOG_PERSONAL_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "loops-api-key",
+			Usage:    "The Loops API key for transactional emails",
+			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -596,7 +603,10 @@ func newStartCommand() *cli.Command {
 				Environment:            c.String("environment"),
 			}))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
-			teams.Attach(mux, teams.NewService(logger, db, sessionManager))
+			loopsClient := loops.NewClient(logger, c.String("loops-api-key"))
+			teams.Attach(mux, teams.NewService(logger, db, sessionManager, loopsClient, teams.Config{
+				SiteURL: c.String("site-url"),
+			}))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient))
 			toolsets.Attach(mux, toolsetsSvc)

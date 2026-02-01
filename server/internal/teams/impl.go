@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,7 +30,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/teams/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 )
+
+type Config struct {
+	// SiteURL is the base URL of the frontend (e.g. "https://app.gram.sh").
+	SiteURL string
+}
 
 type Service struct {
 	tracer   trace.Tracer
@@ -38,6 +45,8 @@ type Service struct {
 	repo     *repo.Queries
 	sessions *sessions.Manager
 	auth     *auth.Auth
+	loops    *loops.Client
+	cfg      Config
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -47,7 +56,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, loopsClient *loops.Client, cfg Config) *Service {
 	logger = logger.With(attr.SlogComponent("teams"))
 
 	return &Service{
@@ -57,6 +66,8 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		repo:     repo.New(db),
 		sessions: sessions,
 		auth:     auth.New(logger, db, sessions),
+		loops:    loopsClient,
+		cfg:      cfg,
 	}
 }
 
@@ -68,6 +79,53 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+}
+
+// sendInviteEmail sends a team invite email via Loops. Failures are logged but
+// not propagated — the invite is still created in the database regardless.
+func (s *Service) sendInviteEmail(ctx context.Context, email, token, teammateFirstName, teammateEmail, workspaceName string) {
+	transactionalID := loops.TransactionalID(loops.TemplateTeamInvite)
+	if transactionalID == "" {
+		s.logger.DebugContext(ctx, "skipping invite email: no transactional ID registered")
+		return
+	}
+
+	inviteURL := fmt.Sprintf("%s/invite?token=%s", strings.TrimRight(s.cfg.SiteURL, "/"), token)
+
+	if err := s.loops.SendTransactionalEmail(ctx, loops.SendTransactionalEmailInput{
+		TransactionalID: transactionalID,
+		Email:           email,
+		DataVariables: map[string]string{
+			"invite_link":    inviteURL,
+			"teammate_fn":    teammateFirstName,
+			"teammate_email": teammateEmail,
+			"workspace_name": workspaceName,
+		},
+		AddToAudience: true,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to send invite email via Loops",
+			attr.SlogError(err),
+			attr.SlogTeamInviteEmail(email),
+		)
+	}
+}
+
+// firstName extracts the first name from a display name.
+func firstName(displayName string) string {
+	if name, _, ok := strings.Cut(displayName, " "); ok {
+		return name
+	}
+	return displayName
+}
+
+// orgName looks up the organization name from the user's cached org list.
+func orgName(userInfo *sessions.CachedUserInfo, organizationID string) string {
+	for _, org := range userInfo.Organizations {
+		if org.ID == organizationID {
+			return org.Name
+		}
+	}
+	return ""
 }
 
 // generateToken creates a secure random token for invites
@@ -179,17 +237,18 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create invite").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
 	}
 
-	// TODO: Send invite email via Loops when configured
+	invitedByName := ""
+	if userInfo.DisplayName != nil {
+		invitedByName = *userInfo.DisplayName
+	}
+
+	s.sendInviteEmail(ctx, payload.Email, token, firstName(invitedByName), userInfo.Email, orgName(userInfo, payload.OrganizationID))
+
 	s.logger.InfoContext(ctx, "team invite created",
 		attr.SlogOrganizationID(payload.OrganizationID),
 		attr.SlogTeamInviteEmail(payload.Email),
 		attr.SlogTeamInviteID(invite.ID.String()),
 	)
-
-	invitedByName := ""
-	if userInfo.DisplayName != nil {
-		invitedByName = *userInfo.DisplayName
-	}
 
 	return &gen.InviteMemberResult{
 		Invite: &gen.TeamInvite{
@@ -290,17 +349,18 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to update invite expiry").Log(ctx, s.logger)
 	}
 
-	// TODO: Resend invite email via Loops when configured
+	invitedByName := ""
+	if userInfo.DisplayName != nil {
+		invitedByName = *userInfo.DisplayName
+	}
+
+	s.sendInviteEmail(ctx, invite.Email, invite.Token, firstName(invitedByName), userInfo.Email, orgName(userInfo, invite.OrganizationID))
+
 	s.logger.InfoContext(ctx, "team invite resent",
 		attr.SlogOrganizationID(invite.OrganizationID),
 		attr.SlogTeamInviteEmail(invite.Email),
 		attr.SlogTeamInviteID(invite.ID.String()),
 	)
-
-	invitedByName := ""
-	if userInfo.DisplayName != nil {
-		invitedByName = *userInfo.DisplayName
-	}
 
 	return &gen.ResendInviteResult{
 		Invite: &gen.TeamInvite{
@@ -311,6 +371,71 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 			CreatedAt: updatedInvite.CreatedAt.Time.Format(time.RFC3339),
 			ExpiresAt: updatedInvite.ExpiresAt.Time.Format(time.RFC3339),
 		},
+	}, nil
+}
+
+func (s *Service) AcceptInvite(ctx context.Context, payload *gen.AcceptInvitePayload) (*gen.AcceptInviteResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get user info").Log(ctx, s.logger)
+	}
+
+	invite, err := s.repo.GetTeamInviteByToken(ctx, payload.Token)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, nil, "invite not found or already used")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to look up invite").Log(ctx, s.logger)
+	}
+
+	if invite.Status != "pending" {
+		return nil, oops.E(oops.CodeInvalid, nil, "invite is no longer pending")
+	}
+
+	if invite.ExpiresAt.Valid && time.Now().After(invite.ExpiresAt.Time) {
+		return nil, oops.E(oops.CodeInvalid, nil, "invite has expired")
+	}
+
+	if !strings.EqualFold(invite.Email, userInfo.Email) {
+		return nil, oops.E(oops.CodeForbidden, nil, "invite was sent to a different email address")
+	}
+
+	if err := s.repo.AddOrganizationMember(ctx, repo.AddOrganizationMemberParams{
+		OrganizationID: invite.OrganizationID,
+		UserID:         authCtx.UserID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to add member to organization").Log(ctx, s.logger)
+	}
+
+	if err := s.repo.AcceptTeamInvite(ctx, invite.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to accept invite").Log(ctx, s.logger)
+	}
+
+	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
+		s.logger.ErrorContext(ctx, "failed to invalidate user info cache",
+			attr.SlogError(err),
+			attr.SlogUserID(authCtx.UserID),
+		)
+	}
+
+	orgSlug, err := s.repo.GetOrganizationSlug(ctx, invite.OrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization slug").Log(ctx, s.logger)
+	}
+
+	s.logger.InfoContext(ctx, "team invite accepted",
+		attr.SlogOrganizationID(invite.OrganizationID),
+		attr.SlogUserID(authCtx.UserID),
+		attr.SlogTeamInviteID(invite.ID.String()),
+	)
+
+	return &gen.AcceptInviteResult{
+		OrganizationSlug: orgSlug,
 	}, nil
 }
 

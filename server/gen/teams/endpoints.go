@@ -21,6 +21,7 @@ type Endpoints struct {
 	ListInvites  goa.Endpoint
 	CancelInvite goa.Endpoint
 	ResendInvite goa.Endpoint
+	AcceptInvite goa.Endpoint
 	RemoveMember goa.Endpoint
 }
 
@@ -34,6 +35,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListInvites:  NewListInvitesEndpoint(s, a.APIKeyAuth),
 		CancelInvite: NewCancelInviteEndpoint(s, a.APIKeyAuth),
 		ResendInvite: NewResendInviteEndpoint(s, a.APIKeyAuth),
+		AcceptInvite: NewAcceptInviteEndpoint(s, a.APIKeyAuth),
 		RemoveMember: NewRemoveMemberEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -45,6 +47,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListInvites = m(e.ListInvites)
 	e.CancelInvite = m(e.CancelInvite)
 	e.ResendInvite = m(e.ResendInvite)
+	e.AcceptInvite = m(e.AcceptInvite)
 	e.RemoveMember = m(e.RemoveMember)
 }
 
@@ -160,6 +163,29 @@ func NewResendInviteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.ResendInvite(ctx, p)
+	}
+}
+
+// NewAcceptInviteEndpoint returns an endpoint function that calls the method
+// "acceptInvite" of service "teams".
+func NewAcceptInviteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AcceptInvitePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.AcceptInvite(ctx, p)
 	}
 }
 

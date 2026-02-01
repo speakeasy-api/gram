@@ -23,6 +23,24 @@ func (q *Queries) AcceptTeamInvite(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const addOrganizationMember = `-- name: AddOrganizationMember :exec
+INSERT INTO organization_user_relationships (organization_id, user_id)
+VALUES ($1, $2)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+`
+
+type AddOrganizationMemberParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) AddOrganizationMember(ctx context.Context, arg AddOrganizationMemberParams) error {
+	_, err := q.db.Exec(ctx, addOrganizationMember, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const cancelTeamInvite = `-- name: CancelTeamInvite :exec
 UPDATE team_invites
 SET status = 'cancelled', deleted_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -71,6 +89,17 @@ func (q *Queries) CreateTeamInvite(ctx context.Context, arg CreateTeamInvitePara
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getOrganizationSlug = `-- name: GetOrganizationSlug :one
+SELECT slug FROM organization_metadata WHERE id = $1
+`
+
+func (q *Queries) GetOrganizationSlug(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationSlug, id)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
 }
 
 const getPendingInviteByEmail = `-- name: GetPendingInviteByEmail :one

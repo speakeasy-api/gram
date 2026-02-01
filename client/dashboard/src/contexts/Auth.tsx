@@ -1,3 +1,4 @@
+import { FullPageError } from "@/components/full-page-error";
 import { getServerURL } from "@/lib/utils";
 import { LINKED_FROM_PARAM } from "@/pages/home/Home";
 import {
@@ -166,19 +167,9 @@ export const useOrganization = (): OrganizationEntry & {
   });
 };
 
-// Error fallback component
-const ErrorFallback = ({ error }: { error: Error }) => {
-  return (
-    <div role="alert">
-      <p>Something went wrong:</p>
-      <pre>{error.message}</pre>
-    </div>
-  );
-};
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
+    <ErrorBoundary FallbackComponent={FullPageError}>
       <AuthHandler>{children}</AuthHandler>
     </ErrorBoundary>
   );

@@ -5,6 +5,7 @@
 export { GramProvider, useGramContext } from "./_context.js";
 export * from "./_types.js";
 
+export * from "./acceptTeamInvite.js";
 export * from "./activeDeployment.js";
 export * from "./addExternalOAuthServer.js";
 export * from "./addOAuthProxyServer.js";

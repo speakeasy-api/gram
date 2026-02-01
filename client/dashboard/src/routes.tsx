@@ -33,6 +33,7 @@ import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Settings from "./pages/settings/Settings";
 import Team from "./pages/team/Team";
+import AcceptInvite from "./pages/invite/AcceptInvite";
 import SourceDetails from "./pages/sources/SourceDetails";
 import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
@@ -109,6 +110,12 @@ const ROUTE_STRUCTURE = {
     title: "Register",
     url: "/register",
     component: Register,
+    unauthenticated: true,
+  },
+  invite: {
+    title: "Accept Invite",
+    url: "/invite",
+    component: AcceptInvite,
     unauthenticated: true,
   },
   onboarding: {

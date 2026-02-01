@@ -143,6 +143,31 @@ func BuildResendInvitePayload(teamsResendInviteBody string, teamsResendInviteSes
 	return v, nil
 }
 
+// BuildAcceptInvitePayload builds the payload for the teams acceptInvite
+// endpoint from CLI flags.
+func BuildAcceptInvitePayload(teamsAcceptInviteBody string, teamsAcceptInviteSessionToken string) (*teams.AcceptInvitePayload, error) {
+	var err error
+	var body AcceptInviteRequestBody
+	{
+		err = json.Unmarshal([]byte(teamsAcceptInviteBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"token\": \"Hic nihil natus corporis explicabo in.\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if teamsAcceptInviteSessionToken != "" {
+			sessionToken = &teamsAcceptInviteSessionToken
+		}
+	}
+	v := &teams.AcceptInvitePayload{
+		Token: body.Token,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildRemoveMemberPayload builds the payload for the teams removeMember
 // endpoint from CLI flags.
 func BuildRemoveMemberPayload(teamsRemoveMemberOrganizationID string, teamsRemoveMemberUserID string, teamsRemoveMemberSessionToken string) (*teams.RemoveMemberPayload, error) {

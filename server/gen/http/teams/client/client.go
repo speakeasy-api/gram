@@ -37,6 +37,10 @@ type Client struct {
 	// resendInvite endpoint.
 	ResendInviteDoer goahttp.Doer
 
+	// AcceptInvite Doer is the HTTP client used to make requests to the
+	// acceptInvite endpoint.
+	AcceptInviteDoer goahttp.Doer
+
 	// RemoveMember Doer is the HTTP client used to make requests to the
 	// removeMember endpoint.
 	RemoveMemberDoer goahttp.Doer
@@ -66,6 +70,7 @@ func NewClient(
 		ListInvitesDoer:     doer,
 		CancelInviteDoer:    doer,
 		ResendInviteDoer:    doer,
+		AcceptInviteDoer:    doer,
 		RemoveMemberDoer:    doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -190,6 +195,30 @@ func (c *Client) ResendInvite() goa.Endpoint {
 		resp, err := c.ResendInviteDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("teams", "resendInvite", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AcceptInvite returns an endpoint that makes HTTP requests to the teams
+// service acceptInvite server.
+func (c *Client) AcceptInvite() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAcceptInviteRequest(c.encoder)
+		decodeResponse = DecodeAcceptInviteResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAcceptInviteRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AcceptInviteDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("teams", "acceptInvite", err)
 		}
 		return decodeResponse(resp)
 	}
