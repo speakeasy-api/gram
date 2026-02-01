@@ -12,15 +12,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const acceptTeamInvite = `-- name: AcceptTeamInvite :exec
+const acceptTeamInvite = `-- name: AcceptTeamInvite :one
 UPDATE team_invites
 SET status = 'accepted', updated_at = clock_timestamp()
-WHERE id = $1 AND deleted IS FALSE
+WHERE id = $1 AND status = 'pending' AND deleted IS FALSE
+RETURNING id, organization_id, email, invited_by_user_id, status, token, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
-func (q *Queries) AcceptTeamInvite(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, acceptTeamInvite, id)
-	return err
+func (q *Queries) AcceptTeamInvite(ctx context.Context, id uuid.UUID) (TeamInvite, error) {
+	row := q.db.QueryRow(ctx, acceptTeamInvite, id)
+	var i TeamInvite
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.InvitedByUserID,
+		&i.Status,
+		&i.Token,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const addOrganizationMember = `-- name: AddOrganizationMember :exec
@@ -50,6 +65,20 @@ WHERE id = $1 AND deleted IS FALSE
 func (q *Queries) CancelTeamInvite(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, cancelTeamInvite, id)
 	return err
+}
+
+const countRecentInvitesByOrg = `-- name: CountRecentInvitesByOrg :one
+SELECT count(*) FROM team_invites
+WHERE organization_id = $1
+  AND created_at > now() - interval '24 hours'
+  AND deleted IS FALSE
+`
+
+func (q *Queries) CountRecentInvitesByOrg(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countRecentInvitesByOrg, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const createTeamInvite = `-- name: CreateTeamInvite :one
@@ -343,20 +372,21 @@ func (q *Queries) RemoveOrganizationMember(ctx context.Context, arg RemoveOrgani
 	return err
 }
 
-const updateTeamInviteExpiry = `-- name: UpdateTeamInviteExpiry :one
+const updateTeamInviteExpiryAndToken = `-- name: UpdateTeamInviteExpiryAndToken :one
 UPDATE team_invites
-SET expires_at = $1, updated_at = clock_timestamp()
-WHERE id = $2 AND deleted IS FALSE
+SET expires_at = $1, token = $2, updated_at = clock_timestamp()
+WHERE id = $3 AND deleted IS FALSE
 RETURNING id, organization_id, email, invited_by_user_id, status, token, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
-type UpdateTeamInviteExpiryParams struct {
+type UpdateTeamInviteExpiryAndTokenParams struct {
 	ExpiresAt pgtype.Timestamptz
+	Token     string
 	ID        uuid.UUID
 }
 
-func (q *Queries) UpdateTeamInviteExpiry(ctx context.Context, arg UpdateTeamInviteExpiryParams) (TeamInvite, error) {
-	row := q.db.QueryRow(ctx, updateTeamInviteExpiry, arg.ExpiresAt, arg.ID)
+func (q *Queries) UpdateTeamInviteExpiryAndToken(ctx context.Context, arg UpdateTeamInviteExpiryAndTokenParams) (TeamInvite, error) {
+	row := q.db.QueryRow(ctx, updateTeamInviteExpiryAndToken, arg.ExpiresAt, arg.Token, arg.ID)
 	var i TeamInvite
 	err := row.Scan(
 		&i.ID,

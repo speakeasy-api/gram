@@ -18,6 +18,15 @@ export default function AcceptInvite() {
   const isLoading = status === "pending";
   const isAuthenticated = !!session?.session;
 
+  // Prevent invite token from leaking via HTTP Referer headers
+  useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = 'referrer';
+    meta.content = 'no-referrer';
+    document.head.appendChild(meta);
+    return () => { document.head.removeChild(meta); };
+  }, []);
+
   // Redirect to register if not authenticated
   useEffect(() => {
     if (isLoading || isAuthenticated) return;

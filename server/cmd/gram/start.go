@@ -604,9 +604,13 @@ func newStartCommand() *cli.Command {
 			}))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
 			loopsClient := loops.NewClient(logger, c.String("loops-api-key"))
+			teamsDevMode := localEnvPath != ""
+			if teamsDevMode {
+				logger.WarnContext(ctx, "SECURITY: DevMode is enabled, invite email verification is disabled")
+			}
 			teams.Attach(mux, teams.NewService(logger, db, sessionManager, loopsClient, teams.Config{
 				SiteURL:              c.String("site-url"),
-				DevMode:              localEnvPath != "",
+				DevMode:              teamsDevMode,
 				InviteExpiryDuration: 7 * 24 * time.Hour,
 			}))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))

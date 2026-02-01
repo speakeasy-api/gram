@@ -182,6 +182,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite"];
 
+function isSafeRedirect(path: string): boolean {
+  return path.startsWith('/') && !path.startsWith('//') && !path.includes(':');
+}
+
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
@@ -227,7 +231,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
-  if (redirectParam) {
+  if (redirectParam && isSafeRedirect(redirectParam)) {
     if (!import.meta.env.DEV) {
       console.log("(0.2) redirecting to redirectParam", redirectParam);
       return <Navigate to={redirectParam} replace />;

@@ -25,16 +25,17 @@ UPDATE team_invites
 SET status = 'cancelled', deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = @id AND deleted IS FALSE;
 
--- name: UpdateTeamInviteExpiry :one
+-- name: UpdateTeamInviteExpiryAndToken :one
 UPDATE team_invites
-SET expires_at = @expires_at, updated_at = clock_timestamp()
+SET expires_at = @expires_at, token = @token, updated_at = clock_timestamp()
 WHERE id = @id AND deleted IS FALSE
 RETURNING *;
 
--- name: AcceptTeamInvite :exec
+-- name: AcceptTeamInvite :one
 UPDATE team_invites
 SET status = 'accepted', updated_at = clock_timestamp()
-WHERE id = @id AND deleted IS FALSE;
+WHERE id = @id AND status = 'pending' AND deleted IS FALSE
+RETURNING *;
 
 -- name: GetPendingInviteByEmail :one
 SELECT * FROM team_invites
@@ -85,3 +86,9 @@ FROM team_invites ti
 JOIN users u ON u.id = ti.invited_by_user_id
 JOIN organization_metadata om ON om.id = ti.organization_id
 WHERE ti.token = @token AND ti.deleted IS FALSE;
+
+-- name: CountRecentInvitesByOrg :one
+SELECT count(*) FROM team_invites
+WHERE organization_id = @organization_id
+  AND created_at > now() - interval '24 hours'
+  AND deleted IS FALSE;

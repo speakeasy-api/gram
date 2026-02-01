@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/teams/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
@@ -142,6 +143,22 @@ func orgName(userInfo *sessions.CachedUserInfo, organizationID string) string {
 	return ""
 }
 
+// maskEmail masks an email address for privacy, showing only the first character
+// of the local part and domain. For example, "john@example.com" becomes "j***@e***.com".
+func maskEmail(email string) string {
+	localPart, rest, ok := strings.Cut(email, "@")
+	if !ok || len(localPart) == 0 {
+		return "***"
+	}
+
+	domain, tld, hasTLD := strings.Cut(rest, ".")
+	if !hasTLD || len(domain) == 0 {
+		return string(localPart[0]) + "***@***"
+	}
+
+	return string(localPart[0]) + "***@" + string(domain[0]) + "***." + tld
+}
+
 // generateToken creates a secure random token for invites
 func generateToken() (string, error) {
 	bytes := make([]byte, 32)
@@ -207,6 +224,15 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 	userInfo, err := s.hasOrgAccess(ctx, payload.OrganizationID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Rate limit: max 50 invites per organization per 24 hours.
+	recentCount, err := s.repo.CountRecentInvitesByOrg(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check invite rate limit").Log(ctx, s.logger)
+	}
+	if recentCount >= 50 {
+		return nil, oops.E(oops.CodeInvalid, nil, "too many invites sent in the last 24 hours, please try again later")
 	}
 
 	// Check if there's already a pending invite for this email
@@ -356,13 +382,25 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 		return nil, oops.E(oops.CodeInvalid, nil, "can only resend pending invites")
 	}
 
+	// Prevent rapid resending: require at least 5 minutes between resends.
+	if invite.UpdatedAt.Valid && time.Since(invite.UpdatedAt.Time) < 5*time.Minute {
+		return nil, oops.E(oops.CodeInvalid, nil, "please wait at least 5 minutes before resending an invite")
+	}
+
+	// Rotate the token on resend so the old link is invalidated.
+	newToken, err := generateToken()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate new invite token").Log(ctx, s.logger)
+	}
+
 	newExpiry := time.Now().Add(s.cfg.inviteExpiry())
-	updatedInvite, err := s.repo.UpdateTeamInviteExpiry(ctx, repo.UpdateTeamInviteExpiryParams{
+	updatedInvite, err := s.repo.UpdateTeamInviteExpiryAndToken(ctx, repo.UpdateTeamInviteExpiryAndTokenParams{
 		ID:        inviteID,
 		ExpiresAt: pgtype.Timestamptz{Time: newExpiry, Valid: true, InfinityModifier: 0},
+		Token:     newToken,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to update invite expiry").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update invite").Log(ctx, s.logger)
 	}
 
 	invitedByName := ""
@@ -370,7 +408,7 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 		invitedByName = *userInfo.DisplayName
 	}
 
-	s.sendInviteEmail(ctx, invite.Email, invite.Token, firstName(invitedByName), userInfo.Email, orgName(userInfo, invite.OrganizationID))
+	s.sendInviteEmail(ctx, invite.Email, newToken, firstName(invitedByName), userInfo.Email, orgName(userInfo, invite.OrganizationID))
 
 	s.logger.InfoContext(ctx, "team invite resent",
 		attr.SlogOrganizationID(invite.OrganizationID),
@@ -427,15 +465,36 @@ func (s *Service) AcceptInvite(ctx context.Context, payload *gen.AcceptInvitePay
 		)
 	}
 
-	if err := s.repo.AddOrganizationMember(ctx, repo.AddOrganizationMemberParams{
+	// Use a transaction to atomically add the member and accept the invite,
+	// preventing race conditions where concurrent requests could both succeed.
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return dbtx.Rollback(ctx)
+	})
+
+	tx := s.repo.WithTx(dbtx)
+
+	if err := tx.AddOrganizationMember(ctx, repo.AddOrganizationMemberParams{
 		OrganizationID: invite.OrganizationID,
 		UserID:         authCtx.UserID,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to add member to organization").Log(ctx, s.logger)
 	}
 
-	if err := s.repo.AcceptTeamInvite(ctx, invite.ID); err != nil {
+	// AcceptTeamInvite now includes AND status = 'pending' in the WHERE clause.
+	// If a concurrent request already accepted the invite, this returns no rows.
+	if _, err := tx.AcceptTeamInvite(ctx, invite.ID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, nil, "invite is no longer pending")
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to accept invite").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit transaction").Log(ctx, s.logger)
 	}
 
 	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
@@ -475,10 +534,21 @@ func (s *Service) GetInviteInfo(ctx context.Context, payload *gen.GetInviteInfoP
 		status = "expired"
 	}
 
+	// Mask the invite email unless the caller's email matches, to avoid
+	// leaking the full address to unintended recipients.
+	email := maskEmail(info.Email)
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.SessionID != nil {
+		if userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID); err == nil {
+			if strings.EqualFold(userInfo.Email, info.Email) {
+				email = info.Email
+			}
+		}
+	}
+
 	return &gen.InviteInfoResult{
 		InviterName:      info.InviterName,
 		OrganizationName: info.OrganizationName,
-		Email:            info.Email,
+		Email:            email,
 		Status:           status,
 	}, nil
 }
