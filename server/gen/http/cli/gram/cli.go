@@ -3444,7 +3444,7 @@ func mcpMetadataSetMcpMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata set-mcp-metadata --body '{\n      \"default_environment_id\": \"55c91b21-cb7d-4997-87b0-3386e83f6f06\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Recusandae ducimus.\",\n            \"provided_by\": \"Est tenetur neque vitae.\",\n            \"variable_name\": \"Officiis dolore et tenetur.\"\n         },\n         {\n            \"header_display_name\": \"Recusandae ducimus.\",\n            \"provided_by\": \"Est tenetur neque vitae.\",\n            \"variable_name\": \"Officiis dolore et tenetur.\"\n         }\n      ],\n      \"external_documentation_url\": \"At quaerat autem.\",\n      \"installation_override_url\": \"http://blick.biz/griffin_champlin\",\n      \"instructions\": \"Non asperiores quidem minima enim placeat voluptatum.\",\n      \"logo_asset_id\": \"Commodi qui.\",\n      \"toolset_slug\": \"maf\"\n   }' --apikey-token \"Nisi modi est nemo dolorem.\" --session-token \"Velit qui.\" --project-slug-input \"Est vel.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata set-mcp-metadata --body '{\n      \"default_environment_id\": \"554caa30-8dec-4822-8238-bdb15a5fad01\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Neque vitae ipsam nisi modi.\",\n            \"provided_by\": \"Nemo dolorem nulla velit qui et.\",\n            \"variable_name\": \"Vero recusandae ducimus eum est.\"\n         },\n         {\n            \"header_display_name\": \"Neque vitae ipsam nisi modi.\",\n            \"provided_by\": \"Nemo dolorem nulla velit qui et.\",\n            \"variable_name\": \"Vero recusandae ducimus eum est.\"\n         },\n         {\n            \"header_display_name\": \"Neque vitae ipsam nisi modi.\",\n            \"provided_by\": \"Nemo dolorem nulla velit qui et.\",\n            \"variable_name\": \"Vero recusandae ducimus eum est.\"\n         }\n      ],\n      \"external_documentation_text\": \"Non asperiores quidem minima enim placeat voluptatum.\",\n      \"external_documentation_url\": \"At quaerat autem.\",\n      \"installation_override_url\": \"http://labadiehomenick.com/zack_donnelly\",\n      \"instructions\": \"Recusandae dolor.\",\n      \"logo_asset_id\": \"Commodi qui.\",\n      \"toolset_slug\": \"maf\"\n   }' --apikey-token \"Vel maiores dolor dolorum maxime.\" --session-token \"Eius accusamus earum saepe.\" --project-slug-input \"Quas soluta neque officia.\"")
 }
 
 func mcpMetadataExportMcpMetadataUsage() {
@@ -3468,7 +3468,7 @@ func mcpMetadataExportMcpMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"ru1\"\n   }' --apikey-token \"Qui quasi assumenda.\" --session-token \"Qui animi ducimus dolorem sint.\" --project-slug-input \"Labore atque sint libero.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"bso\"\n   }' --apikey-token \"Reiciendis est doloremque natus earum.\" --session-token \"Vel quis atque.\" --project-slug-input \"Unde molestiae accusamus earum beatae.\"")
 }
 
 // packagesUsage displays the usage of the packages command and its subcommands.
@@ -3506,7 +3506,7 @@ func packagesCreatePackageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages create-package --body '{\n      \"description\": \"8q1\",\n      \"image_asset_id\": \"hm2\",\n      \"keywords\": [\n         \"Vitae deleniti voluptate saepe et est.\",\n         \"Aliquid dolorum non vel minus.\",\n         \"Recusandae quos ut sint explicabo.\"\n      ],\n      \"name\": \"7xr\",\n      \"summary\": \"nha\",\n      \"title\": \"bur\",\n      \"url\": \"gpy\"\n   }' --apikey-token \"Laboriosam aspernatur.\" --session-token \"Exercitationem blanditiis harum cupiditate fugit ex ullam.\" --project-slug-input \"Aperiam officiis molestias.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages create-package --body '{\n      \"description\": \"mn8\",\n      \"image_asset_id\": \"0wm\",\n      \"keywords\": [\n         \"Explicabo ipsum deserunt repellat enim.\",\n         \"Laboriosam aspernatur.\",\n         \"Exercitationem blanditiis harum cupiditate fugit ex ullam.\"\n      ],\n      \"name\": \"py9\",\n      \"summary\": \"hf2\",\n      \"title\": \"itg\",\n      \"url\": \"5l8\"\n   }' --apikey-token \"Minima autem a corporis dolorem dolor iure.\" --session-token \"Cumque debitis asperiores et quo autem.\" --project-slug-input \"Odit explicabo vel in voluptas.\"")
 }
 
 func packagesUpdatePackageUsage() {
@@ -3530,7 +3530,7 @@ func packagesUpdatePackageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages update-package --body '{\n      \"description\": \"ko9\",\n      \"id\": \"f4e\",\n      \"image_asset_id\": \"dl2\",\n      \"keywords\": [\n         \"Autem aut soluta assumenda.\",\n         \"Esse maiores voluptatem alias iste.\",\n         \"Facilis similique in commodi optio blanditiis.\"\n      ],\n      \"summary\": \"ko2\",\n      \"title\": \"dj9\",\n      \"url\": \"bsk\"\n   }' --apikey-token \"Laborum dolorem non inventore.\" --session-token \"Eos veniam nesciunt maxime et corrupti.\" --project-slug-input \"Soluta facere pariatur.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages update-package --body '{\n      \"description\": \"kcr\",\n      \"id\": \"k2q\",\n      \"image_asset_id\": \"gu8\",\n      \"keywords\": [\n         \"In labore voluptas voluptatem laborum.\",\n         \"Non inventore cupiditate eos.\",\n         \"Nesciunt maxime et corrupti recusandae soluta.\"\n      ],\n      \"summary\": \"ls3\",\n      \"title\": \"wql\",\n      \"url\": \"c2a\"\n   }' --apikey-token \"Magnam nisi magni minus.\" --session-token \"Nesciunt nam rerum quis natus.\" --project-slug-input \"Illum debitis.\"")
 }
 
 func packagesListPackagesUsage() {
@@ -3552,7 +3552,7 @@ func packagesListPackagesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages list-packages --apikey-token \"Aliquid omnis labore necessitatibus.\" --session-token \"Incidunt est quibusdam illo quidem molestias.\" --project-slug-input \"Amet quaerat quis.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages list-packages --apikey-token \"Alias ipsa optio.\" --session-token \"Rem iusto eligendi unde repellat sit rerum.\" --project-slug-input \"Molestiae adipisci nemo et voluptas velit at.\"")
 }
 
 func packagesListVersionsUsage() {
@@ -3576,7 +3576,7 @@ func packagesListVersionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages list-versions --name \"Atque dolore.\" --apikey-token \"Officia doloremque ut unde ab praesentium totam.\" --session-token \"Et ratione dolores.\" --project-slug-input \"Autem occaecati nam accusamus soluta doloribus.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages list-versions --name \"Quaerat odit.\" --apikey-token \"Aspernatur nemo expedita voluptates vel.\" --session-token \"Qui nulla numquam deleniti.\" --project-slug-input \"Neque blanditiis recusandae animi.\"")
 }
 
 func packagesPublishUsage() {
@@ -3600,7 +3600,7 @@ func packagesPublishUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"Est perspiciatis provident asperiores modi magnam.\",\n      \"name\": \"Dolorem perspiciatis non.\",\n      \"version\": \"Et quaerat consequatur nam et et sunt.\",\n      \"visibility\": \"public\"\n   }' --apikey-token \"Tempora ea sunt et.\" --session-token \"Consequatur iusto neque quia qui perferendis dolores.\" --project-slug-input \"Consectetur consequatur cum.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"Iusto neque.\",\n      \"name\": \"Asperiores modi magnam autem omnis.\",\n      \"version\": \"Ea sunt et quae.\",\n      \"visibility\": \"public\"\n   }' --apikey-token \"Perferendis dolores enim.\" --session-token \"Consequatur cum qui labore.\" --project-slug-input \"Natus nisi voluptatem quo impedit magnam.\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.
@@ -3632,7 +3632,7 @@ func featuresSetProductFeatureUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"t92\"\n   }' --session-token \"Soluta quia id quia optio quasi.\" --project-slug-input \"Consequatur cumque et in.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": true,\n      \"feature_name\": \"71c\"\n   }' --session-token \"Et in.\" --project-slug-input \"Totam eum dolorum necessitatibus fugit dolore sed.\"")
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.
@@ -3670,7 +3670,7 @@ func projectsGetProjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects get-project --slug \"o2j\" --apikey-token \"Voluptas velit nisi omnis blanditiis ipsa sint.\" --session-token \"Nostrum aut vero veritatis.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects get-project --slug \"nfr\" --apikey-token \"Nostrum aut vero veritatis.\" --session-token \"Ut voluptatum a.\"")
 }
 
 func projectsCreateProjectUsage() {
@@ -3692,7 +3692,7 @@ func projectsCreateProjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects create-project --body '{\n      \"name\": \"cpy\",\n      \"organization_id\": \"Aut est possimus quam ipsa.\"\n   }' --apikey-token \"Et praesentium.\" --session-token \"Possimus aliquid.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects create-project --body '{\n      \"name\": \"d05\",\n      \"organization_id\": \"Praesentium nostrum possimus aliquid neque numquam.\"\n   }' --apikey-token \"Consequatur molestiae est ut molestiae quaerat similique.\" --session-token \"Dolorum natus quam.\"")
 }
 
 func projectsListProjectsUsage() {
@@ -3714,7 +3714,7 @@ func projectsListProjectsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects list-projects --organization-id \"Eaque sunt non at.\" --apikey-token \"Inventore assumenda quia aut a voluptatibus ut.\" --session-token \"Omnis cum ratione hic voluptatem iure corrupti.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects list-projects --organization-id \"Iure corrupti nulla.\" --apikey-token \"Quasi quia omnis qui quisquam.\" --session-token \"Non voluptate fugit omnis quasi tenetur.\"")
 }
 
 func projectsSetLogoUsage() {
@@ -3738,7 +3738,7 @@ func projectsSetLogoUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects set-logo --body '{\n      \"asset_id\": \"Excepturi neque quasi aliquid.\"\n   }' --apikey-token \"Omnis ut beatae accusantium.\" --session-token \"In sequi in vel necessitatibus accusantium molestiae.\" --project-slug-input \"Atque enim consequatur eum quaerat dolore.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects set-logo --body '{\n      \"asset_id\": \"Necessitatibus accusantium molestiae sed atque enim.\"\n   }' --apikey-token \"Eum quaerat dolore velit natus aperiam.\" --session-token \"Est animi.\" --project-slug-input \"Quae dolores.\"")
 }
 
 func projectsListAllowedOriginsUsage() {
@@ -3760,7 +3760,7 @@ func projectsListAllowedOriginsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects list-allowed-origins --apikey-token \"Et veniam.\" --session-token \"Aut reiciendis et quam qui blanditiis.\" --project-slug-input \"Quo qui magnam itaque possimus magni.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects list-allowed-origins --apikey-token \"Corrupti quo qui magnam itaque possimus magni.\" --session-token \"Sit eos fugit.\" --project-slug-input \"Et occaecati et illo sit.\"")
 }
 
 func projectsUpsertAllowedOriginUsage() {
@@ -3784,7 +3784,7 @@ func projectsUpsertAllowedOriginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects upsert-allowed-origin --body '{\n      \"origin\": \"1\",\n      \"status\": \"approved\"\n   }' --apikey-token \"Veritatis nesciunt amet.\" --session-token \"Sed nemo sit in magnam.\" --project-slug-input \"Perspiciatis sed earum ut eos quibusdam qui.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects upsert-allowed-origin --body '{\n      \"origin\": \"nqy\",\n      \"status\": \"pending\"\n   }' --apikey-token \"Eos quibusdam qui.\" --session-token \"Veniam sint.\" --project-slug-input \"Dolorum rem.\"")
 }
 
 func projectsDeleteProjectUsage() {
@@ -3806,7 +3806,7 @@ func projectsDeleteProjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects delete-project --id \"76fc3e59-5b48-4461-b956-73ae21f9861c\" --apikey-token \"Est impedit asperiores quod eum distinctio ducimus.\" --session-token \"Libero error consequatur sed repellendus numquam nihil.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects delete-project --id \"54ef38fd-55a7-49ad-9a49-72dd4d75b4db\" --apikey-token \"Ducimus voluptas libero error consequatur sed repellendus.\" --session-token \"Nihil sint porro quo.\"")
 }
 
 // resourcesUsage displays the usage of the resources command and its
@@ -3843,7 +3843,7 @@ func resourcesListResourcesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "resources list-resources --cursor \"Fugit commodi aspernatur.\" --limit 357963945 --deployment-id \"Sint animi.\" --session-token \"Quia aspernatur ut fuga.\" --project-slug-input \"Et earum sed neque.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "resources list-resources --cursor \"Quia sint.\" --limit 2008499715 --deployment-id \"Quisquam quia aspernatur ut fuga est et.\" --session-token \"Sed neque.\" --project-slug-input \"Dolor nam eum.\"")
 }
 
 // slackUsage displays the usage of the slack command and its subcommands.
@@ -3877,7 +3877,7 @@ func slackCallbackUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack callback --state \"Nihil recusandae animi.\" --code \"Totam dolor voluptas.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack callback --state \"Et itaque.\" --code \"Et alias accusamus asperiores molestiae ut.\"")
 }
 
 func slackLoginUsage() {
@@ -3899,7 +3899,7 @@ func slackLoginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack login --project-slug \"Qui quis repudiandae dolorem.\" --return-url \"Iusto et praesentium.\" --session-token \"Esse in.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack login --project-slug \"Distinctio alias doloribus consequatur.\" --return-url \"Eligendi odit maxime qui quis repudiandae.\" --session-token \"Unde iusto et praesentium ipsam esse in.\"")
 }
 
 func slackGetSlackConnectionUsage() {
