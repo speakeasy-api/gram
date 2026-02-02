@@ -32,6 +32,7 @@ export default defineConfig({
         elements: resolve(__dirname, 'src/index.ts'),
         server: resolve(__dirname, 'src/server.ts'),
         plugins: resolve(__dirname, 'src/plugins/index.ts'),
+        'compat-plugin': resolve(__dirname, 'src/compat-plugin.ts'),
       },
       formats: ['es', 'cjs'],
     },

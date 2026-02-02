@@ -263,6 +263,30 @@ To create your own plugins, see the comprehensive [Plugin Development Guide](./s
 - Real-world examples
 - Troubleshooting tips
 
+## React Compatibility
+
+`@gram-ai/elements` supports React 16.8+, React 17, React 18, and React 19.
+
+React 18 and 19 work out of the box. For React 16 or 17, you need to configure your bundler to shim newer React APIs (`useSyncExternalStore`, `useId`, `useInsertionEffect`) that are used by transitive dependencies like zustand and @assistant-ui/react.
+
+> **Note:** React 16 and React 17 are not regularly tested. If you run into any issues using Elements with these versions, please reach out to us for support.
+
+### Vite Setup (React 16/17)
+
+Add the compatibility plugin to your Vite config:
+
+```typescript
+import react from '@vitejs/plugin-react'
+import { reactCompat } from '@gram-ai/elements/compat'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: [react(), reactCompat()],
+})
+```
+
+This automatically shims React 18 APIs (`useSyncExternalStore`, `useId`, `useInsertionEffect`) so that Elements and its dependencies work correctly on older React versions.
+
 ## Contributing
 
 We welcome pull requests to Elements. Please read the contributing guide.

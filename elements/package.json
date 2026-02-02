@@ -20,6 +20,11 @@
       "import": "./dist/plugins.js",
       "require": "./dist/plugins.cjs"
     },
+    "./compat": {
+      "types": "./dist/compat-plugin.d.ts",
+      "import": "./dist/compat-plugin.js",
+      "require": "./dist/compat-plugin.cjs"
+    },
     "./elements.css": "./dist/elements.css"
   },
   "bin": {
