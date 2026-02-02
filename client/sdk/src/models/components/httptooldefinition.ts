@@ -15,12 +15,20 @@ import {
   ResponseFilter,
   ResponseFilter$inboundSchema,
 } from "./responsefilter.js";
+import {
+  ToolAnnotations,
+  ToolAnnotations$inboundSchema,
+} from "./toolannotations.js";
 import { ToolVariation, ToolVariation$inboundSchema } from "./toolvariation.js";
 
 /**
  * An HTTP tool
  */
 export type HTTPToolDefinition = {
+  /**
+   * MCP tool annotations providing hints about tool behavior
+   */
+  annotations?: ToolAnnotations | undefined;
   /**
    * The ID of the asset
    */
@@ -134,6 +142,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  annotations: ToolAnnotations$inboundSchema.optional(),
   asset_id: z.string(),
   canonical: CanonicalToolAttributes$inboundSchema.optional(),
   canonical_name: z.string(),

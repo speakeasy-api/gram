@@ -485,7 +485,7 @@ function ToolCard({ tool }: { tool: Tool }) {
               )}
             {tool.annotations?.idempotentHint &&
               !tool.annotations?.readOnlyHint && (
-                <Badge variant="info" className="text-xs">
+                <Badge variant="information" className="text-xs">
                   Idempotent
                 </Badge>
               )}

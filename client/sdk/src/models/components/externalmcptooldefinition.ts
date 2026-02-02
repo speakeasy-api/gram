@@ -12,6 +12,10 @@ import {
   CanonicalToolAttributes,
   CanonicalToolAttributes$inboundSchema,
 } from "./canonicaltoolattributes.js";
+import {
+  ToolAnnotations,
+  ToolAnnotations$inboundSchema,
+} from "./toolannotations.js";
 import { ToolVariation, ToolVariation$inboundSchema } from "./toolvariation.js";
 
 /**
@@ -30,6 +34,10 @@ export type TransportType = ClosedEnum<typeof TransportType>;
  * A proxy tool that references an external MCP server
  */
 export type ExternalMCPToolDefinition = {
+  /**
+   * MCP tool annotations providing hints about tool behavior
+   */
+  annotations?: ToolAnnotations | undefined;
   /**
    * The original details of a tool
    */
@@ -160,6 +168,7 @@ export const ExternalMCPToolDefinition$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  annotations: ToolAnnotations$inboundSchema.optional(),
   canonical: CanonicalToolAttributes$inboundSchema.optional(),
   canonical_name: z.string(),
   confirm: z.string().optional(),
