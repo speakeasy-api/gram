@@ -214,7 +214,22 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if hasValidInvite {
 		if orgSlug, err := s.processInviteToken(ctx, state.InviteToken, userInfo.UserID, userInfo.Email, &session); err != nil {
 			s.logger.ErrorContext(ctx, "failed to process invite token", attr.SlogError(err))
-			// Fall through — the user is still signed in, just not added to the org.
+
+			// If the invite was the only reason the user bypassed the waitlist,
+			// revoke their session and redirect to the waitlist instead of
+			// silently granting access.
+			if !userInfo.Admin && !userInfo.UserWhitelisted {
+				if clearErr := s.sessions.ClearSession(ctx, session); clearErr != nil {
+					s.logger.ErrorContext(ctx, "failed to clear session after invite failure", attr.SlogError(clearErr))
+				}
+				return &gen.CallbackResult{
+					Location:      gramWaitlistTypeForm,
+					SessionToken:  "",
+					SessionCookie: "",
+				}, nil
+			}
+			// For whitelisted/admin users, fall through — they have legitimate
+			// access regardless of the invite.
 		} else {
 			return &gen.CallbackResult{
 				Location:      "/" + orgSlug,
