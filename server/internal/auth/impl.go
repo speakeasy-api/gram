@@ -130,9 +130,27 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, err)
 	}
 
-	// Users with a valid invite token bypass the whitelist check.
-	hasInviteToken := state != nil && state.InviteToken != ""
-	if !userInfo.Admin && !userInfo.UserWhitelisted && !hasInviteToken {
+	// Pre-validate the invite token against the database so that a garbage,
+	// expired, or cancelled token cannot be used to bypass the whitelist
+	// check below. Only a pending, non-expired invite grants whitelist bypass.
+	hasValidInvite := false
+	if state != nil && state.InviteToken != "" {
+		if invite, lookupErr := s.teamsRepo.GetTeamInviteByToken(ctx, state.InviteToken); lookupErr == nil {
+			if invite.Status == "pending" && (!invite.ExpiresAt.Valid || time.Now().Before(invite.ExpiresAt.Time)) {
+				hasValidInvite = true
+			} else {
+				s.logger.WarnContext(ctx, "invite token is not eligible for whitelist bypass",
+					slog.String("status", invite.Status),
+				)
+			}
+		} else {
+			s.logger.WarnContext(ctx, "invite token in state did not resolve to a valid invite",
+				slog.String("error", lookupErr.Error()),
+			)
+		}
+	}
+
+	if !userInfo.Admin && !userInfo.UserWhitelisted && !hasValidInvite {
 		return &gen.CallbackResult{
 			Location:      gramWaitlistTypeForm,
 			SessionToken:  "",
@@ -150,71 +168,53 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		if err := s.sessions.StoreSession(ctx, session); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
+	} else {
+		activeOrg := userInfo.Organizations[0]
 
-		// Process invite token for users with no existing orgs.
-		if hasInviteToken {
-			if orgSlug, err := s.processInviteToken(ctx, state.InviteToken, userInfo.UserID, userInfo.Email, &session); err != nil {
-				s.logger.ErrorContext(ctx, "failed to process invite token", attr.SlogError(err))
-				// Fall through — the user is still signed in, just not added to the org.
-			} else {
-				return &gen.CallbackResult{
-					Location:      "/" + orgSlug,
-					SessionToken:  session.SessionID,
-					SessionCookie: session.SessionID,
-				}, nil
+		// For speakeasy users and admins we default speakeasy-team being the active organization if present
+		// For admins we allow you to override the active organization returned by header if present
+		if strings.HasSuffix(userInfo.Email, "@speakeasy.com") || strings.HasSuffix(userInfo.Email, "@speakeasyapi.dev") || userInfo.Admin {
+			override := "speakeasy-team"
+			if userInfo.Admin {
+				if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
+					override = adminOverride
+				}
+			}
+			for _, org := range userInfo.Organizations {
+				if org.Slug == override {
+					activeOrg = org
+					break
+				}
 			}
 		}
 
-		return &gen.CallbackResult{
-			Location:      s.callbackRedirectURL(ctx, payload),
-			SessionToken:  session.SessionID,
-			SessionCookie: session.SessionID,
-		}, nil
-	}
-
-	activeOrg := userInfo.Organizations[0]
-
-	// For speakeasy users and admins we default speakeasy-team being the active organization if present
-	// For admins we allow you to override the active organization returned by header if present
-	if strings.HasSuffix(userInfo.Email, "@speakeasy.com") || strings.HasSuffix(userInfo.Email, "@speakeasyapi.dev") || userInfo.Admin {
-		override := "speakeasy-team"
-		if userInfo.Admin {
-			if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
-				override = adminOverride
-			}
+		orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+			ID:              activeOrg.ID,
+			Name:            activeOrg.Name,
+			Slug:            activeOrg.Slug,
+			SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
+		})
+		if err != nil {
+			return redirectWithError(authErrInit, err)
 		}
-		for _, org := range userInfo.Organizations {
-			if org.Slug == override {
-				activeOrg = org
-				break
-			}
+
+		if orgMetadata.DisabledAt.Valid {
+			return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
+		}
+
+		session.ActiveOrganizationID = activeOrg.ID
+		if err := s.sessions.StoreSession(ctx, session); err != nil {
+			return redirectWithError(authErrInit, err)
 		}
 	}
 
-	orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              activeOrg.ID,
-		Name:            activeOrg.Name,
-		Slug:            activeOrg.Slug,
-		SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
-	})
-	if err != nil {
-		return redirectWithError(authErrInit, err)
-	}
-
-	if orgMetadata.DisabledAt.Valid {
-		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
-	}
-
-	session.ActiveOrganizationID = activeOrg.ID
-	if err := s.sessions.StoreSession(ctx, session); err != nil {
-		return redirectWithError(authErrInit, err)
-	}
-
-	// Process invite token for users that already have orgs.
-	if hasInviteToken {
+	// Process invite token after the session is stored. processInviteToken
+	// re-validates the token, adds the user to the org, and updates the
+	// session's active org.
+	if hasValidInvite {
 		if orgSlug, err := s.processInviteToken(ctx, state.InviteToken, userInfo.UserID, userInfo.Email, &session); err != nil {
 			s.logger.ErrorContext(ctx, "failed to process invite token", attr.SlogError(err))
-			// Fall through — redirect to the normal destination.
+			// Fall through — the user is still signed in, just not added to the org.
 		} else {
 			return &gen.CallbackResult{
 				Location:      "/" + orgSlug,
