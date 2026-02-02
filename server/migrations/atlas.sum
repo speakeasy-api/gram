@@ -1,4 +1,4 @@
-h1:CdUhTvAH6r9Pjg3dq+TPEtOmseJpbntA5nVZ1edz/7E=
+h1:X31VyLehiFYeklnTFz/+eWF535IcWaUQRrPKuVnskc0=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -96,3 +96,4 @@ h1:CdUhTvAH6r9Pjg3dq+TPEtOmseJpbntA5nVZ1edz/7E=
 20260129194537_api-key-last-accessed.sql h1:2ggrS/lKJnBS6HSll9akkQg9SZSYy03W839YxU46+mU=
 20260202185119_chat_resolution_table.sql h1:dn+2e8A8HMxpf9wrKXQmf8LHUJF/bTg9sMOY6hjjb5A=
 20260202191147_store-user-access-tokens.sql h1:vJ/EElnorclr462ZUxF+qkjYxdfcbPDZQ7PPDGuYxFM=
+20260202212612_chat_message_seq.sql h1:zkT31NSsc0VdturT59w1Tbt4X18v6Nj5CMiNK7Fh1co=

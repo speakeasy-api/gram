@@ -71,6 +71,7 @@ type Chat struct {
 
 type ChatMessage struct {
 	ID               uuid.UUID
+	Seq              int64
 	ChatID           uuid.UUID
 	ProjectID        uuid.NullUUID
 	Role             string
