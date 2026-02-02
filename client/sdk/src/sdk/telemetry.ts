@@ -4,6 +4,7 @@
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
+import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -43,6 +44,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.GetMetricsSummaryResult> {
     return unwrapAsync(telemetryGetProjectMetricsSummary(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * searchChats telemetry
+   *
+   * @remarks
+   * Search and list chat session summaries that match a search filter
+   */
+  async searchChats(
+    request: operations.SearchChatsRequest,
+    security?: operations.SearchChatsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SearchChatsResult> {
+    return unwrapAsync(telemetrySearchChats(
       this,
       request,
       security,

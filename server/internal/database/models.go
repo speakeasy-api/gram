@@ -57,18 +57,16 @@ type Asset struct {
 }
 
 type Chat struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	UserID          pgtype.Text
-	ExternalUserID  pgtype.Text
-	Title           pgtype.Text
-	Resolution      pgtype.Text
-	ResolutionNotes pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type ChatMessage struct {
@@ -98,6 +96,22 @@ type ChatMessage struct {
 	ToolOutcome      pgtype.Text
 	ToolOutcomeNotes pgtype.Text
 	CreatedAt        pgtype.Timestamptz
+}
+
+type ChatResolution struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	ChatID          uuid.UUID
+	UserGoal        string
+	Resolution      string
+	ResolutionNotes string
+	Score           int32
+	CreatedAt       pgtype.Timestamptz
+}
+
+type ChatResolutionMessage struct {
+	ChatResolutionID uuid.UUID
+	MessageID        uuid.UUID
 }
 
 type CustomDomain struct {
@@ -238,6 +252,7 @@ type ExternalMcpToolDefinition struct {
 type ExternalOauthClientRegistration struct {
 	ID                    uuid.UUID
 	OrganizationID        string
+	ProjectID             uuid.UUID
 	OauthServerIssuer     string
 	ClientID              string
 	ClientSecretEncrypted pgtype.Text
@@ -733,12 +748,15 @@ type UserOauthToken struct {
 	ID                    uuid.UUID
 	UserID                string
 	OrganizationID        string
+	ProjectID             uuid.UUID
+	ClientRegistrationID  uuid.UUID
+	ToolsetID             uuid.UUID
 	OauthServerIssuer     string
 	AccessTokenEncrypted  string
 	RefreshTokenEncrypted pgtype.Text
-	TokenType             string
+	TokenType             pgtype.Text
 	ExpiresAt             pgtype.Timestamptz
-	Scope                 pgtype.Text
+	Scopes                []string
 	ProviderName          pgtype.Text
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz

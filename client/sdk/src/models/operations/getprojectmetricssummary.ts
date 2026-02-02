@@ -12,11 +12,6 @@ export type GetProjectMetricsSummarySecurityOption1 = {
 };
 
 export type GetProjectMetricsSummarySecurityOption2 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
-export type GetProjectMetricsSummarySecurityOption3 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
@@ -24,7 +19,6 @@ export type GetProjectMetricsSummarySecurityOption3 = {
 export type GetProjectMetricsSummarySecurity = {
   option1?: GetProjectMetricsSummarySecurityOption1 | undefined;
   option2?: GetProjectMetricsSummarySecurityOption2 | undefined;
-  option3?: GetProjectMetricsSummarySecurityOption3 | undefined;
 };
 
 export type GetProjectMetricsSummaryRequest = {
@@ -77,8 +71,8 @@ export function getProjectMetricsSummarySecurityOption1ToJSON(
 
 /** @internal */
 export type GetProjectMetricsSummarySecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -87,12 +81,12 @@ export const GetProjectMetricsSummarySecurityOption2$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   GetProjectMetricsSummarySecurityOption2
 > = z.object({
-  apikeyHeaderGramKey: z.string(),
   projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
     projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
 
@@ -108,42 +102,9 @@ export function getProjectMetricsSummarySecurityOption2ToJSON(
 }
 
 /** @internal */
-export type GetProjectMetricsSummarySecurityOption3$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const GetProjectMetricsSummarySecurityOption3$outboundSchema: z.ZodType<
-  GetProjectMetricsSummarySecurityOption3$Outbound,
-  z.ZodTypeDef,
-  GetProjectMetricsSummarySecurityOption3
-> = z.object({
-  projectSlugHeaderGramProject: z.string(),
-  sessionHeaderGramSession: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
-  });
-});
-
-export function getProjectMetricsSummarySecurityOption3ToJSON(
-  getProjectMetricsSummarySecurityOption3:
-    GetProjectMetricsSummarySecurityOption3,
-): string {
-  return JSON.stringify(
-    GetProjectMetricsSummarySecurityOption3$outboundSchema.parse(
-      getProjectMetricsSummarySecurityOption3,
-    ),
-  );
-}
-
-/** @internal */
 export type GetProjectMetricsSummarySecurity$Outbound = {
   Option1?: GetProjectMetricsSummarySecurityOption1$Outbound | undefined;
   Option2?: GetProjectMetricsSummarySecurityOption2$Outbound | undefined;
-  Option3?: GetProjectMetricsSummarySecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -156,13 +117,10 @@ export const GetProjectMetricsSummarySecurity$outboundSchema: z.ZodType<
     .optional(),
   option2: z.lazy(() => GetProjectMetricsSummarySecurityOption2$outboundSchema)
     .optional(),
-  option3: z.lazy(() => GetProjectMetricsSummarySecurityOption3$outboundSchema)
-    .optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
-    option3: "Option3",
   });
 });
 

@@ -363,12 +363,22 @@ const ComposerToolMentions: FC<{
     isActive,
   } = useToolMentions({ tools })
 
-  // Find and attach to the textarea within the composer
+  // Find and attach to the textarea within the composer.
+  // Uses getRootNode() so it works inside Shadow DOM (where document.querySelector can't reach).
   useEffect(() => {
     if (!isActive) return
 
+    const rootNode = containerRef.current?.getRootNode() as
+      | Document
+      | ShadowRoot
+      | undefined
+    if (!rootNode) return
+
+    const observeTarget =
+      rootNode instanceof ShadowRoot ? rootNode : document.body
+
     const findTextarea = () => {
-      const textarea = document.querySelector(
+      const textarea = rootNode.querySelector(
         '.aui-composer-input'
       ) as HTMLTextAreaElement | null
       if (textarea && textareaRef.current !== textarea) {
@@ -393,7 +403,7 @@ const ComposerToolMentions: FC<{
       findTextarea()
     })
 
-    observer.observe(document.body, {
+    observer.observe(observeTarget, {
       childList: true,
       subtree: true,
     })

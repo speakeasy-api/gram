@@ -6,8 +6,11 @@ import {
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useRoutes } from "@/routes";
+import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
+import type { Toolset } from "@/lib/toolTypes";
 import {
   Chat,
   ChatHistory,
@@ -16,18 +19,17 @@ import {
 } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useToolset } from "@gram/client/react-query/toolset.js";
+import {
+  useGetMcpMetadata,
+  useListEnvironments,
+  useListToolsets,
+} from "@gram/client/react-query/index.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { HistoryIcon } from "lucide-react";
+import { AlertCircle, HistoryIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { useEnvironment } from "../environments/Environment";
-import { getAuthStatus } from "./PlaygroundAuth";
-import {
-  GramComposer,
-  GramThreadWelcome,
-  PlaygroundAuthWarningContext,
-} from "./PlaygroundElementsOverrides";
+import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -66,19 +68,27 @@ export function PlaygroundElements({
   // Get MCP URL from toolset (always uses Gram domain, not custom domains)
   const mcpUrl = useInternalMcpUrl(toolset);
 
-  // Get environment data for auth status check
-  const environmentData = useEnvironment(environmentSlug ?? undefined);
+  // Get environments and MCP metadata for auth status check
+  const { data: environmentsData } = useListEnvironments();
+  const environments = environmentsData?.environments ?? [];
+  const { data: mcpMetadataData } = useGetMcpMetadata(
+    { toolsetSlug: toolsetSlug ?? "" },
+    undefined,
+    { throwOnError: false, retry: false, enabled: !!toolsetSlug },
+  );
+  const mcpMetadata = mcpMetadataData?.metadata;
+  const defaultEnvironmentSlug =
+    environments.find((env) => env.id === mcpMetadata?.defaultEnvironmentId)
+      ?.slug ?? "default";
 
-  // Calculate auth status
-  const authStatus =
-    toolset && environmentData
-      ? getAuthStatus(toolset, {
-          entries: environmentData.entries?.map((e) => ({
-            name: e.name,
-            value: e.value,
-          })),
-        })
-      : null;
+  // ToolsetEntry from useListToolsets is structurally compatible with Toolset
+  // for the fields useMissingRequiredEnvVars accesses (same pattern as Playground.tsx)
+  const missingAuthCount = useMissingRequiredEnvVars(
+    toolset as Toolset | undefined,
+    environments,
+    environmentSlug ?? defaultEnvironmentSlug,
+    mcpMetadata,
+  );
 
   // Create getSession function using SDK mutation with session auth
   const getSession = useCallback(async () => {
@@ -156,6 +166,7 @@ export function PlaygroundElements({
         },
         composer: {
           placeholder: "Send a message...",
+          toolMentions: true,
         },
         theme: {
           colorScheme: resolvedTheme === "dark" ? "dark" : "light",
@@ -164,40 +175,64 @@ export function PlaygroundElements({
         },
         components: {
           ThreadWelcome: GramThreadWelcome,
-          Composer: GramComposer,
         },
       }}
     >
-      <PlaygroundAuthWarningContext.Provider
-        value={
-          authStatus?.hasMissingAuth && toolsetSlug
-            ? { missingCount: authStatus.missingCount, toolsetSlug }
-            : null
-        }
-      >
-        <div className="h-full flex flex-col min-h-0">
-          <div className="flex items-center justify-between gap-2 py-3 shrink-0 border-b-border border-b px-4">
-            <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-              <PopoverTrigger asChild>
-                <Button size="sm" variant="ghost">
-                  <HistoryIcon className="size-4 mr-2" />
-                  Chat History
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="start"
-                className="w-72 p-0 max-h-96 overflow-hidden"
-              >
-                <ChatHistory className="h-full max-h-96 overflow-y-auto" />
-              </PopoverContent>
-            </Popover>
-            <div className="flex items-center gap-2">{additionalActions}</div>
-          </div>
-          <div className="h-full overflow-hidden">
-            <Chat />
-          </div>
+      <div className="h-full flex flex-col min-h-0">
+        <div className="flex items-center justify-between gap-2 py-3 shrink-0 border-b-border border-b px-4">
+          <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="ghost">
+                <HistoryIcon className="size-4 mr-2" />
+                Chat History
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-72 p-0 max-h-96 overflow-hidden"
+            >
+              <ChatHistory className="h-full max-h-96 overflow-y-auto" />
+            </PopoverContent>
+          </Popover>
+          <div className="flex items-center gap-2">{additionalActions}</div>
         </div>
-      </PlaygroundAuthWarningContext.Provider>
+        {missingAuthCount > 0 && toolsetSlug && (
+          <AuthWarningBanner
+            missingCount={missingAuthCount}
+            toolsetSlug={toolsetSlug}
+          />
+        )}
+        <div className="h-full overflow-hidden">
+          <Chat />
+        </div>
+      </div>
     </GramElementsProvider>
+  );
+}
+
+function AuthWarningBanner({
+  missingCount,
+  toolsetSlug,
+}: {
+  missingCount: number;
+  toolsetSlug: string;
+}) {
+  const routes = useRoutes();
+
+  return (
+    <div className="flex items-center gap-2 px-4 py-2.5 bg-warning/15 border-b border-warning/30 text-sm font-medium text-warning-foreground">
+      <AlertCircle className="size-4 shrink-0" />
+      <span>
+        {missingCount} authentication{" "}
+        {missingCount === 1 ? "variable" : "variables"} not configured.{" "}
+        <routes.mcp.details.Link
+          params={[toolsetSlug]}
+          hash="auth"
+          className="underline hover:text-foreground font-medium"
+        >
+          Configure now
+        </routes.mcp.details.Link>
+      </span>
+    </div>
   );
 }

@@ -24,6 +24,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
@@ -95,9 +96,10 @@ type OpenRouter struct {
 	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
 	tracking        billing.Tracker
+	posthog         *posthog.Posthog
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker) *OpenRouter {
+func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker, posthog *posthog.Posthog) *OpenRouter {
 	return &OpenRouter{
 		provisioningKey: provisioningKey,
 		env:             env,
@@ -108,6 +110,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey stri
 		refresher:       refresher,
 		featureClient:   featureClient,
 		tracking:        tracking,
+		posthog:         posthog,
 	}
 }
 
@@ -436,10 +439,22 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 }
 
 // TriggerModelUsageTracking fetches generation details from OpenRouter and tracks model usage.
-func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID string, orgID string, projectID string, source billing.ModelUsageSource, chatID string) error {
+func (o *OpenRouter) TriggerModelUsageTracking(
+	ctx context.Context,
+	generationID string,
+	orgID string,
+	projectID string,
+	source billing.ModelUsageSource,
+	chatID string,
+) error {
 	var genResp *generationResponse
 	var statusCode int
 	var err error
+
+	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
+	}
 
 	// The generation is typically not available synchronously with the chat completion but becomes available quickly.
 	// Temporal could handle reliability here, but given we don't want to move this action to temporal right now,
@@ -501,6 +516,25 @@ func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID
 	}
 
 	o.tracking.TrackModelUsage(ctx, event)
+
+	if err := o.posthog.CaptureEvent(ctx, "model_usage", orgID, map[string]interface{}{
+		"model":                   event.Model,
+		"cost":                    event.Cost,
+		"source":                  string(event.Source),
+		"organization_slug":       org.Slug,
+		"organization_id":         event.OrganizationID,
+		"project_id":              event.ProjectID,
+		"chat_id":                 event.ChatID,
+		"input_tokens":            event.InputTokens,
+		"output_tokens":           event.OutputTokens,
+		"total_tokens":            event.TotalTokens,
+		"native_tokens_cached":    event.NativeTokensCached,
+		"native_tokens_reasoning": event.NativeTokensReasoning,
+		"cache_discount":          event.CacheDiscount,
+		"upstream_inference_cost": event.UpstreamInferenceCost,
+	}); err != nil {
+		o.logger.ErrorContext(ctx, "failed to capture model usage event for posthog", attr.SlogError(err))
+	}
 
 	return nil
 }
