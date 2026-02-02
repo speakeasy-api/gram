@@ -20,10 +20,6 @@ var _ = Service("telemetry", func() {
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
 		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("consumer")
-		})
-		Security(security.ByKey, security.ProjectSlug)
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
@@ -53,10 +49,6 @@ var _ = Service("telemetry", func() {
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
 		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("consumer")
-		})
-		Security(security.ByKey, security.ProjectSlug)
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
@@ -86,10 +78,6 @@ var _ = Service("telemetry", func() {
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
 		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("consumer")
-		})
-		Security(security.ByKey, security.ProjectSlug)
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
@@ -111,7 +99,7 @@ var _ = Service("telemetry", func() {
 
 		Meta("openapi:operationId", "searchChats")
 		Meta("openapi:extension:x-speakeasy-name-override", "searchChats")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SearchChats"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SearchChats", "type": "query"}`)
 	})
 
 	Method("captureEvent", func() {
@@ -119,10 +107,6 @@ var _ = Service("telemetry", func() {
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
 		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("consumer")
-		})
-		Security(security.ByKey, security.ProjectSlug)
 		Security(security.Session, security.ProjectSlug)
 		Security(security.ChatSessionsToken)
 
@@ -153,9 +137,6 @@ var _ = Service("telemetry", func() {
 		Description("Get aggregated metrics summary for an entire project")
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
-		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("consumer")
 		})
 		Security(security.Session, security.ProjectSlug)
 
