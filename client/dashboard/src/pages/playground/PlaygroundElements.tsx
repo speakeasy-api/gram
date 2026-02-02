@@ -10,6 +10,7 @@ import { useRoutes } from "@/routes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
+import type { Toolset } from "@/lib/toolTypes";
 import {
   Chat,
   ChatHistory,
@@ -76,8 +77,10 @@ export function PlaygroundElements({
     environments.find((env) => env.id === mcpMetadata?.defaultEnvironmentId)
       ?.slug ?? "default";
 
+  // ToolsetEntry from useListToolsets is structurally compatible with Toolset
+  // for the fields useMissingRequiredEnvVars accesses (same pattern as Playground.tsx)
   const missingAuthCount = useMissingRequiredEnvVars(
-    toolset,
+    toolset as Toolset | undefined,
     environments,
     environmentSlug ?? defaultEnvironmentSlug,
     mcpMetadata,
@@ -170,33 +173,33 @@ export function PlaygroundElements({
       }}
     >
       <div className="h-full flex flex-col min-h-0">
-          <div className="flex items-center justify-between gap-2 py-3 shrink-0 border-b-border border-b px-4">
-            <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-              <PopoverTrigger asChild>
-                <Button size="sm" variant="ghost">
-                  <HistoryIcon className="size-4 mr-2" />
-                  Chat History
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="start"
-                className="w-72 p-0 max-h-96 overflow-hidden"
-              >
-                <ChatHistory className="h-full max-h-96 overflow-y-auto" />
-              </PopoverContent>
-            </Popover>
-            <div className="flex items-center gap-2">{additionalActions}</div>
-          </div>
-          {missingAuthCount > 0 && toolsetSlug && (
-            <AuthWarningBanner
-              missingCount={missingAuthCount}
-              toolsetSlug={toolsetSlug}
-            />
-          )}
-          <div className="h-full overflow-hidden">
-            <Chat />
-          </div>
+        <div className="flex items-center justify-between gap-2 py-3 shrink-0 border-b-border border-b px-4">
+          <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="ghost">
+                <HistoryIcon className="size-4 mr-2" />
+                Chat History
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-72 p-0 max-h-96 overflow-hidden"
+            >
+              <ChatHistory className="h-full max-h-96 overflow-y-auto" />
+            </PopoverContent>
+          </Popover>
+          <div className="flex items-center gap-2">{additionalActions}</div>
         </div>
+        {missingAuthCount > 0 && toolsetSlug && (
+          <AuthWarningBanner
+            missingCount={missingAuthCount}
+            toolsetSlug={toolsetSlug}
+          />
+        )}
+        <div className="h-full overflow-hidden">
+          <Chat />
+        </div>
+      </div>
     </GramElementsProvider>
   );
 }
