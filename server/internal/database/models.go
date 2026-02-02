@@ -102,12 +102,16 @@ type ChatResolution struct {
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
 	ChatID          uuid.UUID
-	MessageIds      []string
 	UserGoal        string
 	Resolution      string
 	ResolutionNotes string
 	Score           int32
 	CreatedAt       pgtype.Timestamptz
+}
+
+type ChatResolutionMessage struct {
+	ChatResolutionID uuid.UUID
+	MessageID        uuid.UUID
 }
 
 type CustomDomain struct {
