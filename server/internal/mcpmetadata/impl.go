@@ -232,13 +232,14 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
-		ToolsetID:                toolset.ID,
-		ProjectID:                *authCtx.ProjectID,
-		ExternalDocumentationUrl: externalDocURL,
-		LogoID:                   logoID,
-		Instructions:             instructions,
-		DefaultEnvironmentID:     defaultEnvironmentID,
-		InstallationOverrideUrl:  installationOverrideURL,
+		ToolsetID:                 toolset.ID,
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  externalDocURL,
+		ExternalDocumentationText: conv.ToPGText(""), // FIXME post migration
+		LogoID:                    logoID,
+		Instructions:              instructions,
+		DefaultEnvironmentID:      defaultEnvironmentID,
+		InstallationOverrideUrl:   installationOverrideURL,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
