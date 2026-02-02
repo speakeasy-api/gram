@@ -36,6 +36,12 @@ mise run lint:migrations --file "$migpath"
 
 If something looks wrong at this point, you can always revert the migration with git and start again.
 
+Now, run SQLc code generation to update or generat Go code for database access:
+
+```bash
+mise run gen:sqlc-server
+```
+
 Next apply the pending migration(s) to your local database:
 
 ```bash

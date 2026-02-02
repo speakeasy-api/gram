@@ -1215,9 +1215,9 @@ WHERE deleted IS FALSE;
 -- Team invites for organization member management
 CREATE TABLE IF NOT EXISTS team_invites (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
+  organization_id TEXT,
   email TEXT NOT NULL CHECK (email <> '' AND CHAR_LENGTH(email) <= 255),
-  invited_by_user_id TEXT NOT NULL,
+  invited_by_user_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'cancelled')),
   token TEXT NOT NULL CHECK (token <> '' AND CHAR_LENGTH(token) <= 64),
   expires_at timestamptz NOT NULL,
@@ -1235,7 +1235,7 @@ CREATE TABLE IF NOT EXISTS team_invites (
 -- Unique constraint on organization + email for non-deleted pending invites
 CREATE UNIQUE INDEX IF NOT EXISTS team_invites_organization_id_email_pending_key
 ON team_invites (organization_id, email)
-WHERE deleted IS FALSE AND status = 'pending';
+WHERE deleted IS FALSE AND status = 'pending' AND organization_id IS NOT NULL;
 
 -- Index for looking up invites by token
 CREATE UNIQUE INDEX IF NOT EXISTS team_invites_token_key
