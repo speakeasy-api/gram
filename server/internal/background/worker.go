@@ -208,6 +208,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
+	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	// Agent runner related workflows
 	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
 	temporalWorker.RegisterWorkflow(SubAgentWorkflow)

@@ -53,6 +53,8 @@ type Activities struct {
 	executeModelCall              *activities.ExecuteModelCall
 	loadAgentTools                *activities.LoadAgentTools
 	recordAgentExecution          *activities.RecordAgentExecution
+	analyzeToolCallOutcomes       *activities.AnalyzeToolCallOutcomes
+	analyzeChatResolutions        *activities.AnalyzeChatResolutions
 }
 
 func NewActivities(
@@ -105,6 +107,8 @@ func NewActivities(
 		executeModelCall:              activities.NewExecuteModelCall(logger, agentsService),
 		loadAgentTools:                activities.NewLoadAgentTools(logger, agentsService),
 		recordAgentExecution:          activities.NewRecordAgentExecution(logger, db),
+		analyzeToolCallOutcomes:       activities.NewAnalyzeToolCallOutcomes(logger, db, openrouterChatClient),
+		analyzeChatResolutions:        activities.NewAnalyzeChatResolutions(logger, db, openrouterChatClient),
 	}
 }
 
@@ -206,4 +210,12 @@ func (a *Activities) RecordAgentExecution(ctx context.Context, input activities.
 
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
 	return a.generateChatTitle.Do(ctx, input)
+}
+
+func (a *Activities) AnalyzeToolCallOutcomes(ctx context.Context, input activities.AnalyzeToolCallOutcomesArgs) error {
+	return a.analyzeToolCallOutcomes.Do(ctx, input)
+}
+
+func (a *Activities) AnalyzeChatResolutions(ctx context.Context, input activities.AnalyzeChatResolutionsArgs) error {
+	return a.analyzeChatResolutions.Do(ctx, input)
 }

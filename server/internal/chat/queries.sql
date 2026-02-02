@@ -147,3 +147,49 @@ WHERE chat_id = @chat_id
   AND content != ''
 ORDER BY created_at ASC
 LIMIT 1;
+
+-- name: GetToolCallMessages :many
+SELECT * FROM chat_messages
+WHERE chat_id = @chat_id
+  AND role = 'tool'
+ORDER BY created_at ASC;
+
+-- name: UpdateToolCallOutcome :exec
+UPDATE chat_messages
+SET tool_outcome = @tool_outcome,
+    tool_outcome_notes = @tool_outcome_notes
+WHERE id = @id;
+
+-- name: InsertChatResolution :one
+INSERT INTO chat_resolutions (
+    project_id,
+    chat_id,
+    user_goal,
+    resolution,
+    resolution_notes,
+    score
+) VALUES (
+    @project_id,
+    @chat_id,
+    @user_goal,
+    @resolution,
+    @resolution_notes,
+    @score
+) RETURNING id;
+
+-- name: InsertChatResolutionMessage :exec
+INSERT INTO chat_resolution_messages (
+    chat_resolution_id,
+    message_id
+) VALUES (
+    @chat_resolution_id,
+    @message_id
+);
+
+-- name: DeleteChatResolutions :exec
+DELETE FROM chat_resolutions WHERE chat_id = @chat_id;
+
+-- name: ListChatResolutions :many
+SELECT * FROM chat_resolutions
+WHERE chat_id = @chat_id
+ORDER BY created_at DESC;

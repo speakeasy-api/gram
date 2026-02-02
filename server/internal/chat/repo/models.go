@@ -51,3 +51,14 @@ type ChatMessage struct {
 	ToolOutcomeNotes pgtype.Text
 	CreatedAt        pgtype.Timestamptz
 }
+
+type ChatResolution struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	ChatID          uuid.UUID
+	UserGoal        string
+	Resolution      string
+	ResolutionNotes string
+	Score           int32
+	CreatedAt       pgtype.Timestamptz
+}
