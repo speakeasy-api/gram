@@ -337,7 +337,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -435,7 +435,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.cli == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -502,7 +502,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.plog == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -568,7 +568,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -616,7 +616,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ env.SHOULD_BUILD_DOCKER == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -711,7 +711,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -772,7 +772,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -829,7 +829,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -841,7 +841,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -944,7 +944,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1095,7 +1095,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.tsframework == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1148,7 +1148,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.elements == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1206,7 +1206,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.elements == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
