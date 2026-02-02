@@ -638,6 +638,20 @@ type SourceEnvironment struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type TeamInvite struct {
+	ExpiresAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	OrganizationID  string
+	Email           string
+	InvitedByUserID pgtype.Text
+	Status          string
+	Token           string
+	ID              uuid.UUID
+	Deleted         bool
+}
+
 type ToolVariation struct {
 	ID            uuid.UUID
 	GroupID       uuid.UUID
