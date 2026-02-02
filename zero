@@ -109,7 +109,7 @@ mise run zero:migrations
 mise db:migrate
 mise clickhouse:migrate
 
-mise zero:summary
+interactive_only mise zero:summary
 
 echo -e "\n✅ All set up!"
 
