@@ -247,7 +247,7 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 	}
 
 	if !params.enabled {
-		return &telem_gen.SearchChatsResult{Chats: []*telem_gen.ChatSummary{}, Enabled: false, NextCursor: nil}, nil
+		return nil, oops.E(oops.CodeForbidden, nil, logsDisabledMsg)
 	}
 
 	var deploymentID, gramURN string
