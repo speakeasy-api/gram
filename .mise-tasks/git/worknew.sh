@@ -20,7 +20,7 @@ dest="${usage_dir:?}/_gram_${usage_name:?}"
 git fetch
 git worktree add "${dest}" "${usage_branch:?}"
 
-cp ./mise.local.toml "${dest}"
+[ -f ./mise.local.toml ] && cp ./mise.local.toml "${dest}"
 cd "${dest}"
 mise trust
 git checkout -b "${new_branch}"
