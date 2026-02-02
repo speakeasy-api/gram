@@ -749,9 +749,6 @@ CREATE TABLE IF NOT EXISTS chats (
   user_id TEXT,
   external_user_id TEXT,
   title TEXT,
-  
-  resolution TEXT,
-  resolution_notes TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -807,6 +804,32 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
+
+CREATE TABLE IF NOT EXISTS chat_resolutions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+
+  user_goal TEXT NOT NULL,
+  resolution TEXT NOT NULL,
+  resolution_notes TEXT NOT NULL,
+  score INT NOT NULL DEFAULT 0, -- score between 0 and 100
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_resolutions_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_resolutions_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+  CONSTRAINT chat_resolutions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS chat_resolution_messages (
+  chat_resolution_id uuid NOT NULL,
+  message_id uuid NOT NULL,
+
+  CONSTRAINT chat_resolution_messages_pkey PRIMARY KEY (chat_resolution_id, message_id),
+  CONSTRAINT chat_resolution_messages_chat_resolution_id_fkey FOREIGN KEY (chat_resolution_id) REFERENCES chat_resolutions(id) ON DELETE CASCADE,
+  CONSTRAINT chat_resolution_messages_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS slack_app_connections (
   slack_team_id TEXT NOT NULL,
@@ -1212,52 +1235,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS project_allowed_origins_project_id_origin_key
 ON project_allowed_origins (project_id, origin)
 WHERE deleted IS FALSE;
 
--- User OAuth tokens for external MCP servers
--- Stores tokens obtained from external OAuth 2.1 providers (e.g., Google, Atlassian)
--- when users authenticate to use external MCP servers in the Playground.
--- Scoped per user + organization + OAuth issuer, allowing one token to work
--- for multiple MCP servers that share the same OAuth provider.
-CREATE TABLE IF NOT EXISTS user_oauth_tokens (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-
-  -- Scoping: per user, per org, per OAuth server (RFC recommendation)
-  user_id TEXT NOT NULL,
-  organization_id TEXT NOT NULL,
-
-  -- OAuth 2.1 server issuer URL (from AS metadata, e.g., "https://accounts.google.com")
-  -- This allows token reuse across MCP servers sharing the same OAuth provider
-  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
-
-  -- Token data (encrypted at rest via application layer)
-  access_token_encrypted TEXT NOT NULL,
-  refresh_token_encrypted TEXT,  -- Optional, for refresh flow
-  token_type TEXT NOT NULL DEFAULT 'Bearer',
-  expires_at timestamptz,  -- When access token expires (NULL if non-expiring)
-  scope TEXT,  -- Space-separated granted scopes
-
-  -- Metadata for debugging/display
-  provider_name TEXT,  -- Human-readable name (e.g., "Google", "Atlassian")
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT user_oauth_tokens_pkey PRIMARY KEY (id),
-  CONSTRAINT user_oauth_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-  CONSTRAINT user_oauth_tokens_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
-);
-
--- Unique constraint: one token per user per org per OAuth issuer
-CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
-ON user_oauth_tokens (user_id, organization_id, oauth_server_issuer)
-WHERE deleted IS FALSE;
-
--- Index for looking up tokens by user within an org
-CREATE INDEX IF NOT EXISTS user_oauth_tokens_user_org_idx
-ON user_oauth_tokens (user_id, organization_id)
-WHERE deleted IS FALSE;
-
 -- Organization-level OAuth client registrations from Dynamic Client Registration (DCR)
 -- When Gram acts as an OAuth client to external MCP servers using MCP OAuth 2.1,
 -- it needs to register itself via DCR and store the resulting client credentials.
@@ -1265,6 +1242,7 @@ WHERE deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS external_oauth_client_registrations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
 
   -- OAuth server issuer URL (from AS metadata or derived from auth endpoint origin)
   oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> ''),
@@ -1281,10 +1259,58 @@ CREATE TABLE IF NOT EXISTS external_oauth_client_registrations (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT external_oauth_client_registrations_pkey PRIMARY KEY (id),
-  CONSTRAINT external_oauth_client_registrations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
+  CONSTRAINT external_oauth_client_registrations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT external_oauth_client_registrations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 -- Unique constraint: one client registration per org per OAuth issuer
 CREATE UNIQUE INDEX IF NOT EXISTS external_oauth_client_registrations_org_issuer_key
 ON external_oauth_client_registrations (organization_id, oauth_server_issuer)
+WHERE deleted IS FALSE;
+
+-- User OAuth tokens for external MCP servers
+-- Stores tokens obtained from external OAuth 2.1 providers (e.g., Google, Atlassian)
+-- when users authenticate to use external MCP servers in the Playground.
+-- Scoped per user + organization + OAuth issuer, allowing one token to work
+-- for multiple MCP servers that share the same OAuth provider.
+CREATE TABLE IF NOT EXISTS user_oauth_tokens (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  -- Scoping: per user, per org, per OAuth server (RFC recommendation)
+  user_id TEXT NOT NULL,
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  client_registration_id uuid NOT NULL,  -- FK to external_oauth_client_registrations
+  toolset_id uuid NOT NULL,  -- FK to toolsets
+
+  -- OAuth 2.1 server issuer URL (from AS metadata, e.g., "https://accounts.google.com")
+  -- This allows token reuse across MCP servers sharing the same OAuth provider
+  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
+
+  -- Token data (encrypted at rest via application layer)
+  access_token_encrypted TEXT NOT NULL,
+  refresh_token_encrypted TEXT,  -- Optional, for refresh flow
+  token_type TEXT,
+  expires_at timestamptz,  -- When access token expires (NULL if non-expiring)
+  scopes TEXT[] NOT NULL,
+
+  -- Metadata for debugging/display
+  provider_name TEXT,  -- Human-readable name (e.g., "Google", "Atlassian")
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_oauth_tokens_pkey PRIMARY KEY (id),
+  CONSTRAINT user_oauth_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT user_oauth_tokens_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT user_oauth_tokens_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_oauth_tokens_client_registration_id_fkey FOREIGN KEY (client_registration_id) REFERENCES external_oauth_client_registrations (id) ON DELETE CASCADE,
+  CONSTRAINT user_oauth_tokens_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE
+);
+
+-- Unique constraint: one token per user per org per OAuth issuer
+CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
+ON user_oauth_tokens (user_id, organization_id, oauth_server_issuer)
 WHERE deleted IS FALSE;
