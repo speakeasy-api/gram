@@ -203,16 +203,12 @@ export function TopHeader() {
                     Get Support
                   </a>
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    if (window.Pylon) {
-                      window.Pylon("show");
-                    }
-                  }}
-                >
-                  <MessageCircleIcon className="mr-2 h-4 w-4" />
-                  Chat with Team
-                </DropdownMenuItem>
+                {window.Pylon && (
+                  <DropdownMenuItem onClick={() => window.Pylon("show")}>
+                    <MessageCircleIcon className="mr-2 h-4 w-4" />
+                    Chat with Team
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem asChild>
                   <a
                     href="https://github.com/speakeasy-api/gram/issues/new"
