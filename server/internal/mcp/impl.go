@@ -28,6 +28,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -88,6 +89,7 @@ type Service struct {
 	chatSessionsManager *chatsessions.Manager
 	externalmcpRepo     *externalmcp_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
+	enc                 *encryption.Client
 }
 
 type oauthTokenInputs struct {
@@ -176,6 +178,7 @@ func NewService(
 		temporal:            temporal,
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
+		enc:                 enc,
 	}
 }
 
@@ -448,19 +451,41 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 	case toolset.McpIsPublic && hasExternalMCPOAuth:
-		// External MCP OAuth flow - only accept Authorization header
-		if authToken == "" {
-			w.Header().Set(
-				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
-			)
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		wwwAuth := fmt.Sprintf(`Bearer resource_metadata=%s`,
+			baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug)
+
+		resolvedToken, err := s.resolveExternalMcpOAuthToken(ctx, fullToolset)
+		print(resolvedToken, err)
+
+		if authToken != "" {
+			// Token provided - pass it through as OAuth token for external MCP
+			tokenInputs = append(tokenInputs, oauthTokenInputs{
+				securityKeys: []string{},
+				Token:        authToken,
+			})
+		} else {
+			resolvedToken, err := s.resolveExternalMcpOAuthToken(ctx, fullToolset)
+			if err != nil {
+				w.Header().Set("WWW-Authenticate", wwwAuth)
+				return oops.E(oops.CodeUnauthorized, err, "unauthorized")
+			}
+
+			tokenInputs = append(tokenInputs, oauthTokenInputs{
+				securityKeys: []string{},
+				Token:        resolvedToken,
+			})
 		}
-		// Token provided - pass it through as OAuth token for external MCP
-		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{},
-			Token:        authToken,
-		})
+
+		token := authToken
+		if token == "" {
+			token = sessionToken
+		}
+		if token != "" {
+			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
+			if err != nil {
+				return err
+			}
+		}
 	case !toolset.McpIsPublic:
 		// Private MCP - always allow sessionToken fallback since private servers require user authentication
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
@@ -937,4 +962,49 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 
 	// All strategies failed
 	return ctx, oops.E(oops.CodeUnauthorized, nil, "failed to authorize").Log(ctx, s.logger)
+}
+
+func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *types.Toolset) (string, error) {
+	sessionCtx, err := s.sessions.Authenticate(ctx, "", false)
+	if err != nil {
+		return "", oops.E(oops.CodeUnauthorized, err, "failed to authenticate session for OAuth token lookup")
+	}
+
+	authCtx, ok := contextvalues.GetAuthContext(sessionCtx)
+	if !ok || authCtx == nil {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+
+	oauthConfig := externalmcp.ResolveOAuthConfig(toolset)
+	if oauthConfig == nil {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+
+	issuer := oauthConfig.TokenEndpoint
+	if parsed, err := url.Parse(issuer); err == nil {
+		issuer = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
+	} else {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to parse token endpoint URL")
+	}
+
+	token, err := s.oauthRepo.GetUserOAuthToken(ctx, oauth_repo.GetUserOAuthTokenParams{
+		UserID:            authCtx.UserID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		OauthServerIssuer: issuer,
+	})
+
+	if err != nil {
+		return "", oops.E(oops.CodeUnauthorized, err, "failed to get user OAuth token")
+	}
+
+	if token.ExpiresAt.Valid && token.ExpiresAt.Time.Before(time.Now()) {
+		return "", oops.E(oops.CodeUnauthorized, err, "OAuth token has expired")
+	}
+
+	accessToken, err := s.enc.Decrypt(token.AccessTokenEncrypted)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "unable to access oauth token")
+	}
+
+	return accessToken, nil
 }

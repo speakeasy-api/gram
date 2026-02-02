@@ -102,6 +102,7 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 		GramURN:              params.ToolInfo.URN,
 		ServiceName:    serviceName,
 		ServiceVersion: getStringPtr(allAttrs, attr.ServiceVersionKey),
+		GramChatID:     getStringPtr(allAttrs, attr.GenAIConversationIDKey),
 	}, nil
 }
 
@@ -117,7 +118,6 @@ func parseAttributes(attrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON s
 		if k == attr.GenAIRequestModelKey {
 			if model, ok := v.(string); ok {
 				spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
-				continue
 			}
 		}
 

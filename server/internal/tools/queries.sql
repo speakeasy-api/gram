@@ -58,6 +58,7 @@ WHERE
   htd.deployment_id IN (SELECT id FROM all_deployment_ids)
   AND htd.deleted IS FALSE
   AND (sqlc.narg(cursor)::uuid IS NULL OR htd.id < sqlc.narg(cursor))
+  AND (sqlc.narg(urn_prefix)::text IS NULL OR htd.tool_urn LIKE sqlc.narg(urn_prefix) || '%' ESCAPE '\')
 ORDER BY htd.id DESC
 LIMIT $1;
 
@@ -175,6 +176,7 @@ WHERE
   ftd.deployment_id = (SELECT id FROM deployment)
   AND ftd.deleted IS FALSE
   AND (sqlc.narg(cursor)::uuid IS NULL OR ftd.id < sqlc.narg(cursor))
+  AND (sqlc.narg(urn_prefix)::text IS NULL OR ftd.tool_urn LIKE sqlc.narg(urn_prefix) || '%' ESCAPE '\')
 ORDER BY ftd.id DESC
 LIMIT $1;
 
