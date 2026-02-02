@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.24.2
+
+### Patch Changes
+
+- 46004f8: Fix tool mentions not working inside Shadow DOM. The composer's tool mention autocomplete used `document.querySelector` to find the textarea, which can't reach elements inside a shadow root. Changed to use `getRootNode()` so it correctly queries within the Shadow DOM when present.
+
 ## 1.24.1
 
 ### Patch Changes
