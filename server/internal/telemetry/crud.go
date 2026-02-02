@@ -87,25 +87,22 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	}
 
 	return &repo.InsertTelemetryLogParams{
-		ID:                     id.String(),
-		TimeUnixNano:           params.Timestamp.UnixNano(),
-		ObservedTimeUnixNano:   observedTimeUnixNano,
-		SeverityText:           getSeverityText(allAttrs),
-		Body:                   getString(allAttrs, attr.LogBodyKey),
-		TraceID:                getStringPtr(allAttrs, attr.TraceIDKey),
-		SpanID:                 getStringPtr(allAttrs, attr.SpanIDKey),
-		Attributes:             spanAttrs,
-		ResourceAttributes:     resourceAttrs,
-		GramProjectID:          params.ToolInfo.ProjectID,
-		GramDeploymentID:       deploymentID,
-		GramFunctionID:         params.ToolInfo.FunctionID,
-		GramURN:                params.ToolInfo.URN,
-		ServiceName:            serviceName,
-		ServiceVersion:         getStringPtr(allAttrs, attr.ServiceVersionKey),
-		HTTPRequestMethod:      getStringPtr(allAttrs, attr.HTTPRequestMethodKey),
-		HTTPResponseStatusCode: getInt32Ptr(allAttrs, attr.HTTPResponseStatusCodeKey),
-		HTTPRoute:              getStringPtr(allAttrs, attr.HTTPRouteKey),
-		HTTPServerURL:          getStringPtr(allAttrs, attr.URLFullKey),
+		ID:                   id.String(),
+		TimeUnixNano:         params.Timestamp.UnixNano(),
+		ObservedTimeUnixNano: observedTimeUnixNano,
+		SeverityText:         getSeverityText(allAttrs),
+		Body:                 getString(allAttrs, attr.LogBodyKey),
+		TraceID:              getStringPtr(allAttrs, attr.TraceIDKey),
+		SpanID:               getStringPtr(allAttrs, attr.SpanIDKey),
+		Attributes:           spanAttrs,
+		ResourceAttributes:   resourceAttrs,
+		GramProjectID:        params.ToolInfo.ProjectID,
+		GramDeploymentID:     deploymentID,
+		GramFunctionID:       params.ToolInfo.FunctionID,
+		GramURN:              params.ToolInfo.URN,
+		ServiceName:    serviceName,
+		ServiceVersion: getStringPtr(allAttrs, attr.ServiceVersionKey),
+		GramChatID:     getStringPtr(allAttrs, attr.GenAIConversationIDKey),
 	}, nil
 }
 
@@ -121,7 +118,6 @@ func parseAttributes(attrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON s
 		if k == attr.GenAIRequestModelKey {
 			if model, ok := v.(string); ok {
 				spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
-				continue
 			}
 		}
 
@@ -226,24 +222,4 @@ func getStringPtr(attrs map[attr.Key]any, key attribute.Key) *string {
 		return nil
 	}
 	return &s
-}
-
-// getInt32Ptr gets an int32 pointer from attrs without removing it.
-func getInt32Ptr(attrs map[attr.Key]any, key attribute.Key) *int32 {
-	if v, ok := attrs[key]; ok {
-		switch n := v.(type) {
-		case int:
-			i := int32(n) //nolint:gosec // Column values are bounded
-			return &i
-		case int32:
-			return &n
-		case int64:
-			i := int32(n) //nolint:gosec // Column values are bounded
-			return &i
-		case float64:
-			i := int32(n)
-			return &i
-		}
-	}
-	return nil
 }

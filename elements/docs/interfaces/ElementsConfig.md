@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.23.0**](../README.md)
+[**@gram-ai/elements v1.24.1**](../README.md)
 
 ***
 
@@ -405,6 +405,7 @@ Configuration for the chat thread display and behavior.
 ```ts
 const config: ElementsConfig = {
   thread: {
+    experimental_showFeedback: true,
     followUpSuggestions: true,
   },
 }

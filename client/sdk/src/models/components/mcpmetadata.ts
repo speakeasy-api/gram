@@ -37,6 +37,10 @@ export type McpMetadata = {
    */
   id: string;
   /**
+   * URL to redirect to instead of showing the default installation page
+   */
+  installationOverrideUrl?: string | undefined;
+  /**
    * Server instructions returned in the MCP initialize response
    */
   instructions?: string | undefined;
@@ -65,6 +69,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
   environment_configs: z.array(McpEnvironmentConfig$inboundSchema).optional(),
   external_documentation_url: z.string().optional(),
   id: z.string(),
+  installation_override_url: z.string().optional(),
   instructions: z.string().optional(),
   logo_asset_id: z.string().optional(),
   toolset_id: z.string(),
@@ -75,6 +80,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
     "default_environment_id": "defaultEnvironmentId",
     "environment_configs": "environmentConfigs",
     "external_documentation_url": "externalDocumentationUrl",
+    "installation_override_url": "installationOverrideUrl",
     "logo_asset_id": "logoAssetId",
     "toolset_id": "toolsetId",
     "updated_at": "updatedAt",

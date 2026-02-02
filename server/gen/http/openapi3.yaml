@@ -8995,6 +8995,13 @@ paths:
                     description: The deployment ID. If unset, latest deployment will be used.
                     type: string
                 - allowEmptyValue: true
+                  description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
+                  in: query
+                  name: urn_prefix
+                  schema:
+                    description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -13347,6 +13354,10 @@ components:
                 key_prefix:
                     type: string
                     description: The store prefix of the api key for recognition
+                last_accessed_at:
+                    type: string
+                    description: When the key was last accessed.
+                    format: date-time
                 name:
                     type: string
                     description: The name of the key
@@ -13731,6 +13742,10 @@ components:
                 id:
                     type: string
                     description: The ID of the metadata record
+                installation_override_url:
+                    type: string
+                    description: URL to redirect to instead of showing the default installation page
+                    format: uri
                 instructions:
                     type: string
                     description: Server instructions returned in the MCP initialize response
@@ -14879,6 +14894,10 @@ components:
                 external_documentation_url:
                     type: string
                     description: A link to external documentation for the MCP install page
+                installation_override_url:
+                    type: string
+                    description: URL to redirect to instead of showing the default installation page
+                    format: uri
                 instructions:
                     type: string
                     description: Server instructions returned in the MCP initialize response

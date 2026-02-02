@@ -30,6 +30,10 @@ export type Key = {
    */
   keyPrefix: string;
   /**
+   * When the key was last accessed.
+   */
+  lastAccessedAt?: Date | undefined;
+  /**
    * The name of the key
    */
   name: string;
@@ -61,6 +65,9 @@ export const Key$inboundSchema: z.ZodType<Key, z.ZodTypeDef, unknown> = z
     id: z.string(),
     key: z.string().optional(),
     key_prefix: z.string(),
+    last_accessed_at: z.string().datetime({ offset: true }).transform(v =>
+      new Date(v)
+    ).optional(),
     name: z.string(),
     organization_id: z.string(),
     project_id: z.string().optional(),
@@ -73,6 +80,7 @@ export const Key$inboundSchema: z.ZodType<Key, z.ZodTypeDef, unknown> = z
       "created_at": "createdAt",
       "created_by_user_id": "createdByUserId",
       "key_prefix": "keyPrefix",
+      "last_accessed_at": "lastAccessedAt",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",
