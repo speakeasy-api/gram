@@ -307,7 +307,9 @@ func TestSearchChats_PaginationCursorScopedByProject(t *testing.T) {
 
 	// Verify all 3 chats from our project are returned and no duplicates
 	seen := make(map[string]bool)
-	allChats := append(page1.Chats, page2.Chats...)
+	allChats := make([]*gen.ChatSummary, 0, len(page1.Chats)+len(page2.Chats))
+	allChats = append(allChats, page1.Chats...)
+	allChats = append(allChats, page2.Chats...)
 	for _, chat := range allChats {
 		require.False(t, seen[chat.GramChatID], "duplicate chat ID across pages: %s", chat.GramChatID)
 		seen[chat.GramChatID] = true
