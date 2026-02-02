@@ -55,6 +55,10 @@ export type SearchLogsFilter = {
    */
   functionId?: string | undefined;
   /**
+   * Chat ID filter
+   */
+  gramChatId?: string | undefined;
+  /**
    * Gram URN filter (single URN, use gram_urns for multiple)
    */
   gramUrn?: string | undefined;
@@ -105,6 +109,7 @@ export type SearchLogsFilter$Outbound = {
   deployment_id?: string | undefined;
   from?: string | undefined;
   function_id?: string | undefined;
+  gram_chat_id?: string | undefined;
   gram_urn?: string | undefined;
   gram_urns?: Array<string> | undefined;
   http_method?: string | undefined;
@@ -125,6 +130,7 @@ export const SearchLogsFilter$outboundSchema: z.ZodType<
   deploymentId: z.string().optional(),
   from: z.date().transform(v => v.toISOString()).optional(),
   functionId: z.string().optional(),
+  gramChatId: z.string().optional(),
   gramUrn: z.string().optional(),
   gramUrns: z.array(z.string()).optional(),
   httpMethod: HttpMethod$outboundSchema.optional(),
@@ -138,6 +144,7 @@ export const SearchLogsFilter$outboundSchema: z.ZodType<
   return remap$(v, {
     deploymentId: "deployment_id",
     functionId: "function_id",
+    gramChatId: "gram_chat_id",
     gramUrn: "gram_urn",
     gramUrns: "gram_urns",
     httpMethod: "http_method",

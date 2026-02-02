@@ -7884,10 +7884,6 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
                 - chat_sessions_token_header_Gram-Chat-Session: []
@@ -7991,8 +7987,6 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: getProjectMetricsSummary telemetry
@@ -8001,6 +7995,111 @@ paths:
             x-speakeasy-name-override: getProjectMetricsSummary
             x-speakeasy-react-hook:
                 name: GetProjectMetricsSummary
+    /rpc/telemetry.searchChats:
+        post:
+            description: Search and list chat session summaries that match a search filter
+            operationId: searchChats
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SearchChatsPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SearchChatsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: searchChats telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: searchChats
+            x-speakeasy-react-hook:
+                name: SearchChats
+                type: query
     /rpc/telemetry.searchLogs:
         post:
             description: Search and list telemetry logs that match a search filter
@@ -8095,10 +8194,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
@@ -8203,10 +8298,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
@@ -11461,6 +11552,73 @@ components:
                 - num_messages
                 - created_at
                 - updated_at
+        ChatSummary:
+            type: object
+            properties:
+                duration_seconds:
+                    type: number
+                    description: Chat session duration in seconds
+                    format: double
+                end_time_unix_nano:
+                    type: integer
+                    description: Latest log timestamp in Unix nanoseconds
+                    format: int64
+                gram_chat_id:
+                    type: string
+                    description: Chat session ID
+                log_count:
+                    type: integer
+                    description: Total number of logs in this chat session
+                    format: int64
+                message_count:
+                    type: integer
+                    description: Number of LLM completion messages in this chat session
+                    format: int64
+                model:
+                    type: string
+                    description: LLM model used in this chat session
+                start_time_unix_nano:
+                    type: integer
+                    description: Earliest log timestamp in Unix nanoseconds
+                    format: int64
+                status:
+                    type: string
+                    description: Chat session status
+                    enum:
+                        - success
+                        - error
+                tool_call_count:
+                    type: integer
+                    description: Number of tool calls in this chat session
+                    format: int64
+                total_input_tokens:
+                    type: integer
+                    description: Total input tokens used
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Total output tokens used
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Total tokens used (input + output)
+                    format: int64
+                user_id:
+                    type: string
+                    description: User ID associated with this chat session
+            description: Summary information for a chat session
+            required:
+                - gram_chat_id
+                - start_time_unix_nano
+                - end_time_unix_nano
+                - log_count
+                - tool_call_count
+                - message_count
+                - duration_seconds
+                - status
+                - total_input_tokens
+                - total_output_tokens
+                - total_tokens
         CreateDeploymentForm:
             type: object
             properties:
@@ -14498,6 +14656,68 @@ components:
                 - type
                 - status_codes
                 - content_types
+        SearchChatsFilter:
+            type: object
+            properties:
+                deployment_id:
+                    type: string
+                    description: Deployment ID filter
+                    format: uuid
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                gram_urn:
+                    type: string
+                    description: Gram URN filter (single URN, use gram_urns for multiple)
+                to:
+                    type: string
+                    description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+            description: Filter criteria for searching chat sessions
+        SearchChatsPayload:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination
+                filter:
+                    $ref: '#/components/schemas/SearchChatsFilter'
+                limit:
+                    type: integer
+                    description: Number of items to return (1-1000)
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 1000
+                sort:
+                    type: string
+                    description: Sort order
+                    default: desc
+                    enum:
+                        - asc
+                        - desc
+            description: Payload for searching chat session summaries
+        SearchChatsResult:
+            type: object
+            properties:
+                chats:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatSummary'
+                    description: List of chat session summaries
+                enabled:
+                    type: boolean
+                    description: Whether tool metrics are enabled for the organization
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+            description: Result of searching chat session summaries
+            required:
+                - chats
+                - enabled
         SearchLogsFilter:
             type: object
             properties:
@@ -14514,6 +14734,9 @@ components:
                     type: string
                     description: Function ID filter
                     format: uuid
+                gram_chat_id:
+                    type: string
+                    description: Chat ID filter
                 gram_urn:
                     type: string
                     description: Gram URN filter (single URN, use gram_urns for multiple)

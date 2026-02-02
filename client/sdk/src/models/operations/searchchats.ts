@@ -6,22 +6,22 @@ import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
-export type SearchLogsSecurityOption1 = {
+export type SearchChatsSecurityOption1 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
 
-export type SearchLogsSecurityOption2 = {
+export type SearchChatsSecurityOption2 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
-export type SearchLogsSecurity = {
-  option1?: SearchLogsSecurityOption1 | undefined;
-  option2?: SearchLogsSecurityOption2 | undefined;
+export type SearchChatsSecurity = {
+  option1?: SearchChatsSecurityOption1 | undefined;
+  option2?: SearchChatsSecurityOption2 | undefined;
 };
 
-export type SearchLogsRequest = {
+export type SearchChatsRequest = {
   /**
    * API Key header
    */
@@ -34,20 +34,20 @@ export type SearchLogsRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  searchLogsPayload: components.SearchLogsPayload;
+  searchChatsPayload: components.SearchChatsPayload;
 };
 
 /** @internal */
-export type SearchLogsSecurityOption1$Outbound = {
+export type SearchChatsSecurityOption1$Outbound = {
   "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
 };
 
 /** @internal */
-export const SearchLogsSecurityOption1$outboundSchema: z.ZodType<
-  SearchLogsSecurityOption1$Outbound,
+export const SearchChatsSecurityOption1$outboundSchema: z.ZodType<
+  SearchChatsSecurityOption1$Outbound,
   z.ZodTypeDef,
-  SearchLogsSecurityOption1
+  SearchChatsSecurityOption1
 > = z.object({
   apikeyHeaderGramKey: z.string(),
   projectSlugHeaderGramProject: z.string(),
@@ -58,25 +58,25 @@ export const SearchLogsSecurityOption1$outboundSchema: z.ZodType<
   });
 });
 
-export function searchLogsSecurityOption1ToJSON(
-  searchLogsSecurityOption1: SearchLogsSecurityOption1,
+export function searchChatsSecurityOption1ToJSON(
+  searchChatsSecurityOption1: SearchChatsSecurityOption1,
 ): string {
   return JSON.stringify(
-    SearchLogsSecurityOption1$outboundSchema.parse(searchLogsSecurityOption1),
+    SearchChatsSecurityOption1$outboundSchema.parse(searchChatsSecurityOption1),
   );
 }
 
 /** @internal */
-export type SearchLogsSecurityOption2$Outbound = {
+export type SearchChatsSecurityOption2$Outbound = {
   "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
 /** @internal */
-export const SearchLogsSecurityOption2$outboundSchema: z.ZodType<
-  SearchLogsSecurityOption2$Outbound,
+export const SearchChatsSecurityOption2$outboundSchema: z.ZodType<
+  SearchChatsSecurityOption2$Outbound,
   z.ZodTypeDef,
-  SearchLogsSecurityOption2
+  SearchChatsSecurityOption2
 > = z.object({
   projectSlugHeaderGramProject: z.string(),
   sessionHeaderGramSession: z.string(),
@@ -87,28 +87,28 @@ export const SearchLogsSecurityOption2$outboundSchema: z.ZodType<
   });
 });
 
-export function searchLogsSecurityOption2ToJSON(
-  searchLogsSecurityOption2: SearchLogsSecurityOption2,
+export function searchChatsSecurityOption2ToJSON(
+  searchChatsSecurityOption2: SearchChatsSecurityOption2,
 ): string {
   return JSON.stringify(
-    SearchLogsSecurityOption2$outboundSchema.parse(searchLogsSecurityOption2),
+    SearchChatsSecurityOption2$outboundSchema.parse(searchChatsSecurityOption2),
   );
 }
 
 /** @internal */
-export type SearchLogsSecurity$Outbound = {
-  Option1?: SearchLogsSecurityOption1$Outbound | undefined;
-  Option2?: SearchLogsSecurityOption2$Outbound | undefined;
+export type SearchChatsSecurity$Outbound = {
+  Option1?: SearchChatsSecurityOption1$Outbound | undefined;
+  Option2?: SearchChatsSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
-export const SearchLogsSecurity$outboundSchema: z.ZodType<
-  SearchLogsSecurity$Outbound,
+export const SearchChatsSecurity$outboundSchema: z.ZodType<
+  SearchChatsSecurity$Outbound,
   z.ZodTypeDef,
-  SearchLogsSecurity
+  SearchChatsSecurity
 > = z.object({
-  option1: z.lazy(() => SearchLogsSecurityOption1$outboundSchema).optional(),
-  option2: z.lazy(() => SearchLogsSecurityOption2$outboundSchema).optional(),
+  option1: z.lazy(() => SearchChatsSecurityOption1$outboundSchema).optional(),
+  option2: z.lazy(() => SearchChatsSecurityOption2$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
@@ -116,45 +116,45 @@ export const SearchLogsSecurity$outboundSchema: z.ZodType<
   });
 });
 
-export function searchLogsSecurityToJSON(
-  searchLogsSecurity: SearchLogsSecurity,
+export function searchChatsSecurityToJSON(
+  searchChatsSecurity: SearchChatsSecurity,
 ): string {
   return JSON.stringify(
-    SearchLogsSecurity$outboundSchema.parse(searchLogsSecurity),
+    SearchChatsSecurity$outboundSchema.parse(searchChatsSecurity),
   );
 }
 
 /** @internal */
-export type SearchLogsRequest$Outbound = {
+export type SearchChatsRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SearchLogsPayload: components.SearchLogsPayload$Outbound;
+  SearchChatsPayload: components.SearchChatsPayload$Outbound;
 };
 
 /** @internal */
-export const SearchLogsRequest$outboundSchema: z.ZodType<
-  SearchLogsRequest$Outbound,
+export const SearchChatsRequest$outboundSchema: z.ZodType<
+  SearchChatsRequest$Outbound,
   z.ZodTypeDef,
-  SearchLogsRequest
+  SearchChatsRequest
 > = z.object({
   gramKey: z.string().optional(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
-  searchLogsPayload: components.SearchLogsPayload$outboundSchema,
+  searchChatsPayload: components.SearchChatsPayload$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
     gramKey: "Gram-Key",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
-    searchLogsPayload: "SearchLogsPayload",
+    searchChatsPayload: "SearchChatsPayload",
   });
 });
 
-export function searchLogsRequestToJSON(
-  searchLogsRequest: SearchLogsRequest,
+export function searchChatsRequestToJSON(
+  searchChatsRequest: SearchChatsRequest,
 ): string {
   return JSON.stringify(
-    SearchLogsRequest$outboundSchema.parse(searchLogsRequest),
+    SearchChatsRequest$outboundSchema.parse(searchChatsRequest),
   );
 }

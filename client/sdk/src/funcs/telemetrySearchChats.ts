@@ -27,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getProjectMetricsSummary telemetry
+ * searchChats telemetry
  *
  * @remarks
- * Get aggregated metrics summary for an entire project
+ * Search and list chat session summaries that match a search filter
  */
-export function telemetryGetProjectMetricsSummary(
+export function telemetrySearchChats(
   client: GramCore,
-  request: operations.GetProjectMetricsSummaryRequest,
-  security?: operations.GetProjectMetricsSummarySecurity | undefined,
+  request: operations.SearchChatsRequest,
+  security?: operations.SearchChatsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.GetMetricsSummaryResult,
+    components.SearchChatsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +61,13 @@ export function telemetryGetProjectMetricsSummary(
 
 async function $do(
   client: GramCore,
-  request: operations.GetProjectMetricsSummaryRequest,
-  security?: operations.GetProjectMetricsSummarySecurity | undefined,
+  request: operations.SearchChatsRequest,
+  security?: operations.SearchChatsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.GetMetricsSummaryResult,
+      components.SearchChatsResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -83,19 +83,18 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.GetProjectMetricsSummaryRequest$outboundSchema.parse(value),
+    (value) => operations.SearchChatsRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.GetProjectMetricsSummaryPayload, {
+  const body = encodeJSON("body", payload.SearchChatsPayload, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/telemetry.getProjectMetricsSummary")();
+  const path = pathToFunc("/rpc/telemetry.searchChats")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -144,7 +143,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getProjectMetricsSummary",
+    operationID: "searchChats",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -199,7 +198,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.GetMetricsSummaryResult,
+    components.SearchChatsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -210,7 +209,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.GetMetricsSummaryResult$inboundSchema),
+    M.json(200, components.SearchChatsResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
