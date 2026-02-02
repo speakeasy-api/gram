@@ -11764,6 +11764,8 @@ components:
     BaseToolAttributes:
       type: object
       properties:
+        annotations:
+          $ref: '#/components/schemas/ToolAnnotations'
         canonical:
           $ref: '#/components/schemas/CanonicalToolAttributes'
         canonical_name:
@@ -13038,6 +13040,8 @@ components:
     ExternalMCPToolDefinition:
       type: object
       properties:
+        annotations:
+          $ref: '#/components/schemas/ToolAnnotations'
         canonical:
           $ref: '#/components/schemas/CanonicalToolAttributes'
         canonical_name:
@@ -13300,6 +13304,8 @@ components:
     FunctionToolDefinition:
       type: object
       properties:
+        annotations:
+          $ref: '#/components/schemas/ToolAnnotations'
         asset_id:
           type: string
           description: The ID of the asset
@@ -13740,6 +13746,8 @@ components:
     HTTPToolDefinition:
       type: object
       properties:
+        annotations:
+          $ref: '#/components/schemas/ToolAnnotations'
         asset_id:
           type: string
           description: The ID of the asset
@@ -14907,6 +14915,8 @@ components:
     PromptTemplate:
       type: object
       properties:
+        annotations:
+          $ref: '#/components/schemas/ToolAnnotations'
         canonical:
           $ref: '#/components/schemas/CanonicalToolAttributes'
         canonical_name:
@@ -15965,6 +15975,29 @@ components:
         prompt_template:
           $ref: '#/components/schemas/PromptTemplate'
       description: A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy
+    ToolAnnotations:
+      type: object
+      properties:
+        destructive_hint:
+          type: boolean
+          description: If true, the tool may perform destructive updates (only meaningful when read_only_hint is false)
+          default: true
+        idempotent_hint:
+          type: boolean
+          description: If true, repeated calls with same arguments have no additional effect (only meaningful when read_only_hint is false)
+          default: false
+        open_world_hint:
+          type: boolean
+          description: If true, the tool interacts with external entities beyond its local environment
+          default: true
+        read_only_hint:
+          type: boolean
+          description: If true, the tool does not modify its environment
+          default: false
+        title:
+          type: string
+          description: Human-readable display name for the tool
+      description: MCP tool annotations providing hints about tool behavior
     ToolCallSummary:
       type: object
       properties:

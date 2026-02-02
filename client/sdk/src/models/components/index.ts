@@ -164,6 +164,7 @@ export * from "./submitfeedbackrequestbody.js";
 export * from "./telemetrylogrecord.js";
 export * from "./tierlimits.js";
 export * from "./tool.js";
+export * from "./toolannotations.js";
 export * from "./toolcallsummary.js";
 export * from "./toolentry.js";
 export * from "./toolset.js";
