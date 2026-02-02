@@ -29,3 +29,15 @@ if (typeof ReactMutable.useId !== 'function') {
 if (typeof ReactMutable.useInsertionEffect !== 'function') {
   ReactMutable.useInsertionEffect = shims.useInsertionEffect
 }
+
+if (typeof ReactMutable.startTransition !== 'function') {
+  ReactMutable.startTransition = shims.startTransition
+}
+
+if (typeof ReactMutable.useTransition !== 'function') {
+  ReactMutable.useTransition = shims.useTransition
+}
+
+if (typeof ReactMutable.useDeferredValue !== 'function') {
+  ReactMutable.useDeferredValue = shims.useDeferredValue
+}

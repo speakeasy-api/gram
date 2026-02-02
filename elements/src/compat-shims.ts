@@ -18,6 +18,22 @@ interface ReactLike {
   useSyncExternalStore?: typeof import('react').useSyncExternalStore
   useId?: typeof import('react').useId
   useInsertionEffect?: typeof import('react').useInsertionEffect
+  startTransition?: typeof import('react').startTransition
+  useTransition?: typeof import('react').useTransition
+  useDeferredValue?: typeof import('react').useDeferredValue
+}
+
+/**
+ * Check if a snapshot has changed, catching errors from getSnapshot().
+ * Matches the official use-sync-external-store/shim behavior where errors
+ * are treated as "changed" to trigger a re-render.
+ */
+function snapshotChanged<T>(inst: { value: T; getSnapshot: () => T }): boolean {
+  try {
+    return !Object.is(inst.value, inst.getSnapshot())
+  } catch {
+    return true
+  }
 }
 
 /**
@@ -43,18 +59,18 @@ export function createUseSyncExternalStoreShim(React: ReactLike) {
       inst.value = value
       inst.getSnapshot = getSnapshot
 
-      if (!Object.is(inst.value, inst.getSnapshot())) {
+      if (snapshotChanged(inst)) {
         forceUpdate({ inst })
       }
     }, [subscribe, value, getSnapshot])
 
     React.useEffect(() => {
-      if (!Object.is(inst.value, inst.getSnapshot())) {
+      if (snapshotChanged(inst)) {
         forceUpdate({ inst })
       }
 
       return subscribe(() => {
-        if (!Object.is(inst.value, inst.getSnapshot())) {
+        if (snapshotChanged(inst)) {
           forceUpdate({ inst })
         }
       })
@@ -91,5 +107,10 @@ export function createShims(React: ReactLike) {
       React.useSyncExternalStore ?? createUseSyncExternalStoreShim(React),
     useId: React.useId ?? createUseIdShim(React),
     useInsertionEffect: React.useInsertionEffect ?? React.useLayoutEffect,
+    startTransition: React.startTransition ?? ((cb: () => void) => cb()),
+    useTransition:
+      React.useTransition ??
+      ((): [boolean, (cb: () => void) => void] => [false, (cb) => cb()]),
+    useDeferredValue: React.useDeferredValue ?? (<T>(value: T): T => value),
   }
 }
