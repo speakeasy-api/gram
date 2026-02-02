@@ -45,8 +45,8 @@ jobs:
             exit 0
           fi
 
-          if [[ "${{ github.event.pull_request.title }}" =~ ^chore(\([a-zA-Z0-9_-]+\))?: ]]; then
-            echo "Skipping changesets-lint job for chore PR."
+          if [[ "${{ github.event.pull_request.title }}" =~ ^(chore|mig)(\([a-zA-Z0-9_-]+\))?: ]]; then
+            echo "Skipping changesets-lint job for chore/mig PR."
             exit 0
           fi
 
