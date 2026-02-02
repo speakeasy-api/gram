@@ -48,7 +48,7 @@ type CreateChatMessageParams struct {
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, project_id, organization_id, user_id, external_user_id, title, resolution, resolution_notes, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
+SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
@@ -61,8 +61,6 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.UserID,
 		&i.ExternalUserID,
 		&i.Title,
-		&i.Resolution,
-		&i.ResolutionNotes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -90,7 +88,7 @@ func (q *Queries) GetFirstUserChatMessage(ctx context.Context, chatID uuid.UUID)
 
 const listAllChats = `-- name: ListAllChats :many
 SELECT 
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.resolution, c.resolution_notes, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -108,20 +106,18 @@ WHERE c.project_id = $1
 `
 
 type ListAllChatsRow struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	UserID          pgtype.Text
-	ExternalUserID  pgtype.Text
-	Title           pgtype.Text
-	Resolution      pgtype.Text
-	ResolutionNotes pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-	NumMessages     int32
-	TotalTokens     int32
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+	NumMessages    int32
+	TotalTokens    int32
 }
 
 func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]ListAllChatsRow, error) {
@@ -140,8 +136,6 @@ func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]List
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Title,
-			&i.Resolution,
-			&i.ResolutionNotes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -217,7 +211,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 
 const listChatsForExternalUser = `-- name: ListChatsForExternalUser :many
 SELECT 
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.resolution, c.resolution_notes, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -240,20 +234,18 @@ type ListChatsForExternalUserParams struct {
 }
 
 type ListChatsForExternalUserRow struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	UserID          pgtype.Text
-	ExternalUserID  pgtype.Text
-	Title           pgtype.Text
-	Resolution      pgtype.Text
-	ResolutionNotes pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-	NumMessages     int32
-	TotalTokens     int32
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+	NumMessages    int32
+	TotalTokens    int32
 }
 
 func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsForExternalUserParams) ([]ListChatsForExternalUserRow, error) {
@@ -272,8 +264,6 @@ func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsFor
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Title,
-			&i.Resolution,
-			&i.ResolutionNotes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -293,7 +283,7 @@ func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsFor
 
 const listChatsForUser = `-- name: ListChatsForUser :many
 SELECT 
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.resolution, c.resolution_notes, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -316,20 +306,18 @@ type ListChatsForUserParams struct {
 }
 
 type ListChatsForUserRow struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	UserID          pgtype.Text
-	ExternalUserID  pgtype.Text
-	Title           pgtype.Text
-	Resolution      pgtype.Text
-	ResolutionNotes pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-	NumMessages     int32
-	TotalTokens     int32
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+	NumMessages    int32
+	TotalTokens    int32
 }
 
 func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserParams) ([]ListChatsForUserRow, error) {
@@ -348,8 +336,6 @@ func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserPara
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Title,
-			&i.Resolution,
-			&i.ResolutionNotes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
