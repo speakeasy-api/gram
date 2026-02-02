@@ -57,6 +57,12 @@ func (s *SegmentChat) Do(ctx context.Context, args SegmentChatArgs) (*SegmentCha
 		return nil, fmt.Errorf("failed to list chat messages: %w", err)
 	}
 
+	if len(messages) == 0 {
+		return &SegmentChatOutput{
+			Segments: []ChatSegment{},
+		}, nil
+	}
+
 	// If no messages or very few messages, return single segment
 	if len(messages) <= 3 {
 		return &SegmentChatOutput{
