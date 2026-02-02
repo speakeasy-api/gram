@@ -1,4 +1,6 @@
 server:
+  - 'go.mod'
+  - 'go.sum'
   - 'server/**'
 
 client:
@@ -10,9 +12,13 @@ client:
   - 'sdks/typescript/**'
 
 functions:
+  - 'go.mod'
+  - 'go.sum'
   - 'functions/**'
 
 cli:
+  - 'go.mod'
+  - 'go.sum'
   - 'cli/**'
   - 'server/design/**'
   - 'server/gen/**'
@@ -24,8 +30,12 @@ elements:
   - 'elements/**'
 
 migrations:
+  - 'go.mod'
+  - 'go.sum'
   - 'server/migrations/**'
   - 'server/clickhouse/migrations/**'
 
 plog:
+  - 'go.mod'
+  - 'go.sum'
   - 'plog/**'
