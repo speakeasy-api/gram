@@ -200,10 +200,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup git base branch for Atlas
-        run: |
-          git fetch origin main:main || git branch main origin/main
-
       - name: Setup Atlas
         uses: ariga/setup-atlas@1ffa6444093025c9791791f0de623560359acd02 # v0
         with:
@@ -216,7 +212,7 @@ jobs:
           dir-name: gram
           dev-url: postgres://postgres:pass@localhost:5432/dev?search_path=public&sslmode=disable
           config: file://server/atlas.hcl
-          git-base: main
+          git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -226,7 +222,7 @@ jobs:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
           dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
-          git-base: main
+          git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
