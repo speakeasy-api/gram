@@ -1248,7 +1248,10 @@ CREATE TABLE IF NOT EXISTS user_oauth_tokens (
 
   CONSTRAINT user_oauth_tokens_pkey PRIMARY KEY (id),
   CONSTRAINT user_oauth_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-  CONSTRAINT user_oauth_tokens_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT user_oauth_tokens_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT user_oauth_tokens_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_oauth_tokens_client_registration_id_fkey FOREIGN KEY (client_registration_id) REFERENCES external_oauth_client_registrations (id) ON DELETE CASCADE,
+  CONSTRAINT user_oauth_tokens_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE
 );
 
 -- Unique constraint: one token per user per org per OAuth issuer
@@ -1280,7 +1283,8 @@ CREATE TABLE IF NOT EXISTS external_oauth_client_registrations (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT external_oauth_client_registrations_pkey PRIMARY KEY (id),
-  CONSTRAINT external_oauth_client_registrations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
+  CONSTRAINT external_oauth_client_registrations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT external_oauth_client_registrations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 -- Unique constraint: one client registration per org per OAuth issuer
