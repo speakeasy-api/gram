@@ -200,6 +200,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup git base branch for Atlas
+        run: |
+          git fetch origin main:main || git branch main origin/main
+
       - name: Setup Atlas
         uses: ariga/setup-atlas@1ffa6444093025c9791791f0de623560359acd02 # v0
         with:
@@ -215,10 +219,6 @@ jobs:
           git-base: main
         env:
           GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Setup git base branch for Atlas
-        run: |
-          git fetch origin main:main || git branch main origin/main
 
       - name: Lint ClickHouse migrations
         uses: ariga/atlas-action/migrate/lint@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
