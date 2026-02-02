@@ -398,7 +398,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	authToken := r.Header.Get("Authorization")
 	authToken = strings.TrimPrefix(authToken, "Bearer ")
 	authToken = strings.TrimPrefix(authToken, "bearer ")
-	sessionToken := r.Header.Get(constants.ChatSessionsTokenHeader)
+	chatSessionJwt := r.Header.Get(constants.ChatSessionsTokenHeader)
 
 	var tokenInputs []oauthTokenInputs
 
@@ -422,6 +422,14 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		oAuthProxyProvider = &providers[0]
 	}
 
+	// Switch handling auth based on both MCP configuration and request context.
+	//
+	// Possible MCP configurations, for reference:
+	// - "External OAuth" - User-provided OAuth server separate from Gram
+	// - "External MCP OAuth" - OAuth provided by a 3rd party MCP server
+	//   (usually via catalog)
+	// - "OAuth Proxy" - Gram acts as the OAuth2.1 DCR server between MCP client
+	//   & non-DCR OAuth Server
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 		// External OAuth server flow - only accept Authorization header
@@ -454,16 +462,20 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		wwwAuth := fmt.Sprintf(`Bearer resource_metadata=%s`,
 			baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug)
 
-		resolvedToken, err := s.resolveExternalMcpOAuthToken(ctx, fullToolset)
-		print(resolvedToken, err)
-
+		// Prioritize literal tokens sent by the client. Pass through directly
+		// to underlying server.
 		if authToken != "" {
-			// Token provided - pass it through as OAuth token for external MCP
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
 				securityKeys: []string{},
 				Token:        authToken,
 			})
-		} else {
+
+			break
+		}
+
+		// Attempt to look for a stored OAuth credential if the requests comes
+		// from a Gram app (eg: Dashboard/Playground)
+		if gramSession, _ := r.Cookie(constants.SessionCookie); gramSession != nil {
 			resolvedToken, err := s.resolveExternalMcpOAuthToken(ctx, fullToolset)
 			if err != nil {
 				w.Header().Set("WWW-Authenticate", wwwAuth)
@@ -474,24 +486,18 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 				securityKeys: []string{},
 				Token:        resolvedToken,
 			})
+
+			break
 		}
 
-		token := authToken
-		if token == "" {
-			token = sessionToken
-		}
-		if token != "" {
-			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
-			if err != nil {
-				return err
-			}
-		}
+		w.Header().Set("WWW-Authenticate", wwwAuth)
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	case !toolset.McpIsPublic:
 		// Private MCP - always allow sessionToken fallback since private servers require user authentication
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
 		token := authToken
 		if token == "" {
-			token = sessionToken
+			token = chatSessionJwt
 		}
 
 		ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
@@ -511,7 +517,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		// Public MCP without OAuth - allow sessionToken fallback
 		token := authToken
 		if token == "" {
-			token = sessionToken
+			token = chatSessionJwt
 		}
 		if token != "" {
 			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
