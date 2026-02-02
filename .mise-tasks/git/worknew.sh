@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+#MISE dir="{{ config_root }}"
 #MISE description="Create a git worktree"
 #MISE alias="gwn"
 #USAGE flag "--dir <dir>" default=".." help="The directory to create the worktree in"
@@ -19,6 +20,7 @@ dest="${usage_dir:?}/_gram_${usage_name:?}"
 git fetch
 git worktree add "${dest}" "${usage_branch:?}"
 
+cp ./mise.local.toml "${dest}"
 cd "${dest}"
 mise trust
 git checkout -b "${new_branch}"
