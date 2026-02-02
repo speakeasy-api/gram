@@ -212,7 +212,7 @@ jobs:
           dir-name: gram
           dev-url: postgres://postgres:pass@localhost:5432/dev?search_path=public&sslmode=disable
           config: file://server/atlas.hcl
-          base: main
+          git-base: main
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -222,7 +222,7 @@ jobs:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
           dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
-          base: main
+          git-base: main
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
