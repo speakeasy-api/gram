@@ -26,14 +26,16 @@ if (typeof ReactMutable.useSyncExternalStore !== 'function') {
   ReactMutable.useSyncExternalStore = function useSyncExternalStore<T>(
     subscribe: (onStoreChange: () => void) => () => void,
     getSnapshot: () => T,
-    getServerSnapshot?: () => T,
+    getServerSnapshot?: () => T
   ): T {
     // Server snapshot is only relevant for SSR with React 18's streaming renderer.
     // For older React, we always use getSnapshot.
     void getServerSnapshot
 
     const value = getSnapshot()
-    const [{ inst }, forceUpdate] = React.useState({ inst: { value, getSnapshot } })
+    const [{ inst }, forceUpdate] = React.useState({
+      inst: { value, getSnapshot },
+    })
 
     React.useLayoutEffect(() => {
       inst.value = value
@@ -42,7 +44,7 @@ if (typeof ReactMutable.useSyncExternalStore !== 'function') {
       if (!Object.is(inst.value, inst.getSnapshot())) {
         forceUpdate({ inst })
       }
-    }, [subscribe, value, getSnapshot]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [subscribe, value, getSnapshot])
 
     React.useEffect(() => {
       if (!Object.is(inst.value, inst.getSnapshot())) {
@@ -54,7 +56,7 @@ if (typeof ReactMutable.useSyncExternalStore !== 'function') {
           forceUpdate({ inst })
         }
       })
-    }, [subscribe]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [subscribe])
 
     return value
   }

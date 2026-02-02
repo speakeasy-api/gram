@@ -12,7 +12,7 @@
   "dependencies": {
     "react": "^16.14.0",
     "react-dom": "^16.14.0",
-    "@gram-ai/elements": "workspace:*"
+    "@gram-ai/elements": "link:../.."
   },
   "devDependencies": {
     "@types/react": "^16.14.0",
