@@ -22,6 +22,9 @@ export default defineConfig({
       peerDeps: true,
       optionalDeps: false,
       devDeps: false,
+      // react-original is a virtual alias set up by the reactCompat() plugin
+      // at consumer build time — it must stay external in our library build.
+      include: ['react-original'],
     }),
   ],
   build: {
@@ -33,6 +36,7 @@ export default defineConfig({
         server: resolve(__dirname, 'src/server.ts'),
         plugins: resolve(__dirname, 'src/plugins/index.ts'),
         'compat-plugin': resolve(__dirname, 'src/compat-plugin.ts'),
+        'react-shim': resolve(__dirname, 'src/react-shim.ts'),
       },
       formats: ['es', 'cjs'],
     },
