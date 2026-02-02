@@ -1211,3 +1211,33 @@ CREATE TABLE IF NOT EXISTS project_allowed_origins (
 CREATE UNIQUE INDEX IF NOT EXISTS project_allowed_origins_project_id_origin_key
 ON project_allowed_origins (project_id, origin)
 WHERE deleted IS FALSE;
+
+-- Team invites for organization member management
+CREATE TABLE IF NOT EXISTS team_invites (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  email TEXT NOT NULL CHECK (email <> '' AND CHAR_LENGTH(email) <= 255),
+  invited_by_user_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'cancelled')),
+  token TEXT NOT NULL CHECK (token <> '' AND CHAR_LENGTH(token) <= 64),
+  expires_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT team_invites_pkey PRIMARY KEY (id),
+  CONSTRAINT team_invites_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT team_invites_invited_by_user_id_fkey FOREIGN KEY (invited_by_user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+-- Unique constraint on organization + email for non-deleted pending invites
+CREATE UNIQUE INDEX IF NOT EXISTS team_invites_organization_id_email_pending_key
+ON team_invites (organization_id, email)
+WHERE deleted IS FALSE AND status = 'pending' AND organization_id IS NOT NULL;
+
+-- Index for looking up invites by token
+CREATE UNIQUE INDEX IF NOT EXISTS team_invites_token_key
+ON team_invites (token)
+WHERE deleted IS FALSE;
