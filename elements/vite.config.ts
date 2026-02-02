@@ -17,13 +17,11 @@ export default defineConfig({
     // Automatically keep peerDependencies as they are defined in the package.json in sync
     // with the rollupOptions.external list
     externalizeDeps({
-      // We mark deps as false because the plugins default behaviour is externalise all deps.
       deps: false,
       peerDeps: true,
       optionalDeps: false,
       devDeps: false,
-      // react-original is a virtual alias set up by the reactCompat() plugin
-      // at consumer build time — it must stay external in our library build.
+      // react-original is a virtual alias resolved by reactCompat() at consumer build time
       include: ['react-original'],
     }),
   ],

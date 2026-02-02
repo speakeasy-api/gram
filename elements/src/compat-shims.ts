@@ -1,15 +1,9 @@
 /**
- * Shared polyfill implementations for React 18 APIs.
- *
- * Used by both:
- * - compat.ts (runtime patching of the React module object)
- * - react-shim.ts (bundler-level module replacement via the Vite plugin)
- *
- * Each factory takes a React-like object so the caller can pass either
- * `import * as React from 'react'` or `import ReactOriginal from 'react-original'`.
+ * Polyfill factories for React 18 APIs. Shared by compat.ts (runtime patching)
+ * and react-shim.ts (bundler-level replacement). This module must NOT import
+ * from 'react' to avoid circular dependencies when the Vite plugin is active.
  */
 
-// Minimal interface for the React hooks we depend on
 interface ReactLike {
   useState: typeof import('react').useState
   useEffect: typeof import('react').useEffect
@@ -23,11 +17,6 @@ interface ReactLike {
   useDeferredValue?: typeof import('react').useDeferredValue
 }
 
-/**
- * Check if a snapshot has changed, catching errors from getSnapshot().
- * Matches the official use-sync-external-store/shim behavior where errors
- * are treated as "changed" to trigger a re-render.
- */
 function snapshotChanged<T>(inst: { value: T; getSnapshot: () => T }): boolean {
   try {
     return !Object.is(inst.value, inst.getSnapshot())
@@ -36,43 +25,24 @@ function snapshotChanged<T>(inst: { value: T; getSnapshot: () => T }): boolean {
   }
 }
 
-/**
- * Polyfill useSyncExternalStore (React 18+)
- *
- * Used by zustand and @tanstack/react-query. Simplified shim based on the
- * official `use-sync-external-store/shim` package from the React team.
- */
-export function createUseSyncExternalStoreShim(React: ReactLike) {
+function createUseSyncExternalStoreShim(R: ReactLike) {
   return function useSyncExternalStore<T>(
-    subscribe: (onStoreChange: () => void) => () => void,
-    getSnapshot: () => T,
-    getServerSnapshot?: () => T
+    subscribe: (cb: () => void) => () => void,
+    getSnapshot: () => T
   ): T {
-    void getServerSnapshot
-
     const value = getSnapshot()
-    const [{ inst }, forceUpdate] = React.useState({
-      inst: { value, getSnapshot },
-    })
+    const [{ inst }, forceUpdate] = R.useState({ inst: { value, getSnapshot } })
 
-    React.useLayoutEffect(() => {
+    R.useLayoutEffect(() => {
       inst.value = value
       inst.getSnapshot = getSnapshot
-
-      if (snapshotChanged(inst)) {
-        forceUpdate({ inst })
-      }
+      if (snapshotChanged(inst)) forceUpdate({ inst })
     }, [subscribe, value, getSnapshot])
 
-    React.useEffect(() => {
-      if (snapshotChanged(inst)) {
-        forceUpdate({ inst })
-      }
-
+    R.useEffect(() => {
+      if (snapshotChanged(inst)) forceUpdate({ inst })
       return subscribe(() => {
-        if (snapshotChanged(inst)) {
-          forceUpdate({ inst })
-        }
+        if (snapshotChanged(inst)) forceUpdate({ inst })
       })
     }, [subscribe])
 
@@ -80,37 +50,26 @@ export function createUseSyncExternalStoreShim(React: ReactLike) {
   }
 }
 
-/**
- * Polyfill useId (React 18+)
- *
- * Used by @assistant-ui/react and Radix UI primitives. Generates a stable
- * ID per component instance using useRef.
- */
-export function createUseIdShim(React: ReactLike) {
+function createUseIdShim(R: ReactLike) {
   let counter = 0
   return function useId(): string {
-    const ref = React.useRef<string | null>(null)
-    if (ref.current === null) {
-      ref.current = `:r${counter++}:`
-    }
+    const ref = R.useRef<string | null>(null)
+    if (ref.current === null) ref.current = `:r${counter++}:`
     return ref.current
   }
 }
 
-/**
- * Build the complete set of shims for a given React instance.
- * Existing native implementations take precedence.
- */
-export function createShims(React: ReactLike) {
+/** Build polyfills for a React instance. Native APIs take precedence via ??. */
+export function createShims(R: ReactLike) {
   return {
     useSyncExternalStore:
-      React.useSyncExternalStore ?? createUseSyncExternalStoreShim(React),
-    useId: React.useId ?? createUseIdShim(React),
-    useInsertionEffect: React.useInsertionEffect ?? React.useLayoutEffect,
-    startTransition: React.startTransition ?? ((cb: () => void) => cb()),
+      R.useSyncExternalStore ?? createUseSyncExternalStoreShim(R),
+    useId: R.useId ?? createUseIdShim(R),
+    useInsertionEffect: R.useInsertionEffect ?? R.useLayoutEffect,
+    startTransition: R.startTransition ?? ((cb: () => void) => cb()),
     useTransition:
-      React.useTransition ??
+      R.useTransition ??
       ((): [boolean, (cb: () => void) => void] => [false, (cb) => cb()]),
-    useDeferredValue: React.useDeferredValue ?? (<T>(value: T): T => value),
+    useDeferredValue: R.useDeferredValue ?? (<T>(value: T): T => value),
   }
 }
