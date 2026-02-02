@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sourcegraph/conc/pool"
 	"go.opentelemetry.io/otel/codes"
@@ -123,6 +124,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		DeploymentID: uuid.NullUUID{UUID: deploymentID, Valid: true},
 		ProjectID:    projectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		UrnPrefix:    pgtype.Text{String: "", Valid: false},
 		Limit:        1,
 	})
 	if err != nil {
@@ -137,6 +139,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		DeploymentID: uuid.NullUUID{UUID: deploymentID, Valid: true},
 		ProjectID:    projectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		UrnPrefix:    pgtype.Text{String: "", Valid: false},
 		Limit:        1,
 	})
 	if err != nil {
@@ -410,7 +413,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 		pool.Go(func() error {
 			processor := externalmcp.NewToolExtractor(p.logger, p.db, p.registryClient)
 
-return processor.Do(ctx, externalmcp.ToolExtractorTask{
+			return processor.Do(ctx, externalmcp.ToolExtractorTask{
 				OrgSlug:      orgSlug,
 				ProjectSlug:  projectSlug,
 				ProjectID:    projectID,

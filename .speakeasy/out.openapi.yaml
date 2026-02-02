@@ -9209,6 +9209,13 @@ paths:
             description: The deployment ID. If unset, latest deployment will be used.
             type: string
         - allowEmptyValue: true
+          description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
+          in: query
+          name: urn_prefix
+          schema:
+            description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session

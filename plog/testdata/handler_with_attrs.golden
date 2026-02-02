@@ -1,0 +1,11 @@
+00:00:00.000 INFO  request handled
+    service: api
+    version: 1.0.0
+    path: /users
+
+00:00:00.000 ERROR request failed
+    service: api
+    version: 1.0.0
+    path: /orders
+    error: "not found"
+

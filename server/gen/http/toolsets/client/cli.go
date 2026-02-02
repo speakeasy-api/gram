@@ -25,7 +25,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"a8u\",\n      \"description\": \"Autem tempore autem quis blanditiis.\",\n      \"name\": \"Architecto quos ad ut omnis.\",\n      \"resource_urns\": [\n         \"Eum pariatur.\",\n         \"Aliquid et qui est consequatur provident ut.\",\n         \"Laborum quae ad nihil.\"\n      ],\n      \"tool_urns\": [\n         \"Eaque occaecati facere nostrum itaque mollitia.\",\n         \"Quis quidem beatae necessitatibus.\",\n         \"Itaque voluptatem.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"0t2\",\n      \"description\": \"Ut possimus laborum dolor perspiciatis.\",\n      \"name\": \"Et aut magni nobis illum.\",\n      \"resource_urns\": [\n         \"Nostrum ut voluptates.\",\n         \"Esse fuga vitae possimus et alias.\"\n      ],\n      \"tool_urns\": [\n         \"Ea dolores.\",\n         \"Consectetur omnis.\",\n         \"Autem cumque sint provident laborum autem praesentium.\",\n         \"Minus suscipit repellendus eligendi eligendi.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))

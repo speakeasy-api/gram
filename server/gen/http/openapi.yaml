@@ -7510,6 +7510,11 @@ paths:
                   name: deployment_id
                   required: false
                   type: string
+                - description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
+                  in: query
+                  name: urn_prefix
+                  required: false
+                  type: string
                 - description: Session header
                   in: header
                   name: Gram-Session
@@ -63309,12 +63314,12 @@ definitions:
                   required: true
                   secret: false
             external_oauth_server:
-                created_at: "1977-07-25T05:25:06Z"
-                id: Eaque enim aut iusto enim sint.
-                metadata: Ex ipsum minima corrupti.
-                project_id: Ut facere sed beatae quae ab voluptates.
-                slug: xm7
-                updated_at: "1976-06-21T13:59:03Z"
+                created_at: "1980-06-27T17:10:18Z"
+                id: Neque sint quidem animi totam.
+                metadata: Tempore maiores assumenda.
+                project_id: Velit maiores voluptatem.
+                slug: u3k
+                updated_at: "2006-08-17T04:09:48Z"
             function_environment_variables:
                 - auth_input_type: Distinctio impedit natus optio.
                   description: Natus non.
@@ -63331,10 +63336,10 @@ definitions:
             mcp_slug: l5j
             name: Reprehenderit nostrum.
             oauth_enablement_metadata:
-                oauth2_security_count: 3665509153442594047
+                oauth2_security_count: 6887819381364345153
             oauth_proxy_server:
-                created_at: "2015-04-15T23:26:48Z"
-                id: Ratione eveniet.
+                created_at: "1993-10-12T08:08:00Z"
+                id: Aliquam autem tempore autem quis blanditiis dolor.
                 oauth_proxy_providers:
                     - authorization_endpoint: Nihil repellendus et ipsa.
                       created_at: "2012-04-18T09:33:30Z"
@@ -63395,15 +63400,14 @@ definitions:
                       slug: muv
                       token_endpoint: Quasi ut neque.
                       token_endpoint_auth_methods_supported:
-                        - Ipsa consectetur et et mollitia non.
-                        - Alias tempore maxime quae aperiam blanditiis et.
-                        - Enim non iure dolores et impedit beatae.
-                      updated_at: "1995-05-23T22:49:15Z"
-                project_id: Doloremque neque labore.
-                slug: tgo
-                updated_at: "2005-07-14T14:24:06Z"
-            organization_id: Beatae error rerum atque.
-            project_id: Dolores est.
+                        - Blanditiis repellat earum.
+                        - Velit aut autem.
+                      updated_at: "1985-05-09T17:30:04Z"
+                project_id: Eaque occaecati facere nostrum itaque mollitia.
+                slug: 3g8
+                updated_at: "1977-04-16T02:54:01Z"
+            organization_id: Adipisci deleniti quibusdam.
+            project_id: Minus voluptatibus velit velit.
             prompt_templates:
                 - canonical:
                     confirm: Veritatis repellat cumque voluptatem.
