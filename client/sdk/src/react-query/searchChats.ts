@@ -3,15 +3,13 @@
  */
 
 import {
-  MutationKey,
-  useMutation,
-  UseMutationResult,
+  InvalidateQueryFilters,
+  QueryClient,
+  useQuery,
+  UseQueryResult,
+  useSuspenseQuery,
+  UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,19 +22,26 @@ import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
-import { MutationHookOptions } from "./_types.js";
-
-export type SearchChatsMutationVariables = {
-  request: operations.SearchChatsRequest;
-  security?: operations.SearchChatsSecurity | undefined;
-  options?: RequestOptions;
+import {
+  QueryHookOptions,
+  SuspenseQueryHookOptions,
+  TupleToPrefixes,
+} from "./_types.js";
+import {
+  buildSearchChatsQuery,
+  prefetchSearchChats,
+  queryKeySearchChats,
+  SearchChatsQueryData,
+} from "./searchChats.core.js";
+export {
+  buildSearchChatsQuery,
+  prefetchSearchChats,
+  queryKeySearchChats,
+  type SearchChatsQueryData,
 };
 
-export type SearchChatsMutationData = components.SearchChatsResult;
-
-export type SearchChatsMutationError =
+export type SearchChatsQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,62 +58,88 @@ export type SearchChatsMutationError =
  * @remarks
  * Search and list chat session summaries that match a search filter
  */
-export function useSearchChatsMutation(
-  options?: MutationHookOptions<
-    SearchChatsMutationData,
-    SearchChatsMutationError,
-    SearchChatsMutationVariables
-  >,
-): UseMutationResult<
-  SearchChatsMutationData,
-  SearchChatsMutationError,
-  SearchChatsMutationVariables
-> {
+export function useSearchChats(
+  request: operations.SearchChatsRequest,
+  security?: operations.SearchChatsSecurity | undefined,
+  options?: QueryHookOptions<SearchChatsQueryData, SearchChatsQueryError>,
+): UseQueryResult<SearchChatsQueryData, SearchChatsQueryError> {
   const client = useGramContext();
-  return useMutation({
-    ...buildSearchChatsMutation(client, options),
+  return useQuery({
+    ...buildSearchChatsQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
     ...options,
   });
 }
 
-export function mutationKeySearchChats(): MutationKey {
-  return ["@gram/client", "telemetry", "searchChats"];
-}
-
-export function buildSearchChatsMutation(
-  client$: GramCore,
-  hookOptions?: RequestOptions,
-): {
-  mutationKey: MutationKey;
-  mutationFn: (
-    variables: SearchChatsMutationVariables,
-  ) => Promise<SearchChatsMutationData>;
-} {
-  return {
-    mutationKey: mutationKeySearchChats(),
-    mutationFn: function searchChatsMutationFn({
+/**
+ * searchChats telemetry
+ *
+ * @remarks
+ * Search and list chat session summaries that match a search filter
+ */
+export function useSearchChatsSuspense(
+  request: operations.SearchChatsRequest,
+  security?: operations.SearchChatsSecurity | undefined,
+  options?: SuspenseQueryHookOptions<
+    SearchChatsQueryData,
+    SearchChatsQueryError
+  >,
+): UseSuspenseQueryResult<SearchChatsQueryData, SearchChatsQueryError> {
+  const client = useGramContext();
+  return useSuspenseQuery({
+    ...buildSearchChatsQuery(
+      client,
       request,
       security,
       options,
-    }): Promise<SearchChatsMutationData> {
-      const mergedOptions = {
-        ...hookOptions,
-        ...options,
-        fetchOptions: {
-          ...hookOptions?.fetchOptions,
-          ...options?.fetchOptions,
-          signal: combineSignals(
-            hookOptions?.fetchOptions?.signal,
-            options?.fetchOptions?.signal,
-          ),
-        },
-      };
-      return unwrapAsync(telemetrySearchChats(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
+    ),
+    ...options,
+  });
+}
+
+export function setSearchChatsData(
+  client: QueryClient,
+  queryKeyBase: [
+    parameters: {
+      gramKey?: string | undefined;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
     },
-  };
+  ],
+  data: SearchChatsQueryData,
+): SearchChatsQueryData | undefined {
+  const key = queryKeySearchChats(...queryKeyBase);
+
+  return client.setQueryData<SearchChatsQueryData>(key, data);
+}
+
+export function invalidateSearchChats(
+  client: QueryClient,
+  queryKeyBase: TupleToPrefixes<
+    [parameters: {
+      gramKey?: string | undefined;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    }]
+  >,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void> {
+  return client.invalidateQueries({
+    ...filters,
+    queryKey: ["@gram/client", "telemetry", "searchChats", ...queryKeyBase],
+  });
+}
+
+export function invalidateAllSearchChats(
+  client: QueryClient,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void> {
+  return client.invalidateQueries({
+    ...filters,
+    queryKey: ["@gram/client", "telemetry", "searchChats"],
+  });
 }

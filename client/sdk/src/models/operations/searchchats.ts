@@ -12,16 +12,6 @@ export type SearchChatsSecurityOption1 = {
 };
 
 export type SearchChatsSecurityOption2 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
-export type SearchChatsSecurityOption3 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
-export type SearchChatsSecurityOption4 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
@@ -29,8 +19,6 @@ export type SearchChatsSecurityOption4 = {
 export type SearchChatsSecurity = {
   option1?: SearchChatsSecurityOption1 | undefined;
   option2?: SearchChatsSecurityOption2 | undefined;
-  option3?: SearchChatsSecurityOption3 | undefined;
-  option4?: SearchChatsSecurityOption4 | undefined;
 };
 
 export type SearchChatsRequest = {
@@ -80,8 +68,8 @@ export function searchChatsSecurityOption1ToJSON(
 
 /** @internal */
 export type SearchChatsSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -90,12 +78,12 @@ export const SearchChatsSecurityOption2$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SearchChatsSecurityOption2
 > = z.object({
-  apikeyHeaderGramKey: z.string(),
   projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
     projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
 
@@ -108,69 +96,9 @@ export function searchChatsSecurityOption2ToJSON(
 }
 
 /** @internal */
-export type SearchChatsSecurityOption3$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
-};
-
-/** @internal */
-export const SearchChatsSecurityOption3$outboundSchema: z.ZodType<
-  SearchChatsSecurityOption3$Outbound,
-  z.ZodTypeDef,
-  SearchChatsSecurityOption3
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-  });
-});
-
-export function searchChatsSecurityOption3ToJSON(
-  searchChatsSecurityOption3: SearchChatsSecurityOption3,
-): string {
-  return JSON.stringify(
-    SearchChatsSecurityOption3$outboundSchema.parse(searchChatsSecurityOption3),
-  );
-}
-
-/** @internal */
-export type SearchChatsSecurityOption4$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const SearchChatsSecurityOption4$outboundSchema: z.ZodType<
-  SearchChatsSecurityOption4$Outbound,
-  z.ZodTypeDef,
-  SearchChatsSecurityOption4
-> = z.object({
-  projectSlugHeaderGramProject: z.string(),
-  sessionHeaderGramSession: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
-  });
-});
-
-export function searchChatsSecurityOption4ToJSON(
-  searchChatsSecurityOption4: SearchChatsSecurityOption4,
-): string {
-  return JSON.stringify(
-    SearchChatsSecurityOption4$outboundSchema.parse(searchChatsSecurityOption4),
-  );
-}
-
-/** @internal */
 export type SearchChatsSecurity$Outbound = {
   Option1?: SearchChatsSecurityOption1$Outbound | undefined;
   Option2?: SearchChatsSecurityOption2$Outbound | undefined;
-  Option3?: SearchChatsSecurityOption3$Outbound | undefined;
-  Option4?: SearchChatsSecurityOption4$Outbound | undefined;
 };
 
 /** @internal */
@@ -181,14 +109,10 @@ export const SearchChatsSecurity$outboundSchema: z.ZodType<
 > = z.object({
   option1: z.lazy(() => SearchChatsSecurityOption1$outboundSchema).optional(),
   option2: z.lazy(() => SearchChatsSecurityOption2$outboundSchema).optional(),
-  option3: z.lazy(() => SearchChatsSecurityOption3$outboundSchema).optional(),
-  option4: z.lazy(() => SearchChatsSecurityOption4$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
-    option3: "Option3",
-    option4: "Option4",
   });
 });
 
