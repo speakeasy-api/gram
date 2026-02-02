@@ -11,7 +11,7 @@ tool (
 require (
 	cloud.google.com/go/storage v1.59.1
 	github.com/BurntSushi/toml v1.6.0
-	github.com/ClickHouse/clickhouse-go/v2 v2.42.0
+	github.com/ClickHouse/clickhouse-go/v2 v2.43.0
 	github.com/KimMachineGun/automemlimit v0.7.5
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/OpenRouterTeam/go-sdk v0.0.0-20260126192013-c2c3c701312e
@@ -93,7 +93,7 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
-	github.com/ClickHouse/ch-go v0.69.0 // indirect
+	github.com/ClickHouse/ch-go v0.71.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.30.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.54.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.54.0 // indirect
@@ -193,7 +193,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
@@ -222,7 +222,7 @@ require (
 	github.com/paulmach/orb v0.12.0 // indirect
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
 	github.com/pganalyze/pg_query_go/v6 v6.1.0 // indirect
-	github.com/pierrec/lz4/v4 v4.1.22 // indirect
+	github.com/pierrec/lz4/v4 v4.1.25 // indirect
 	github.com/pingcap/errors v0.11.5-0.20240311024730-e056997136bb // indirect
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86 // indirect
 	github.com/pingcap/log v1.1.0 // indirect
