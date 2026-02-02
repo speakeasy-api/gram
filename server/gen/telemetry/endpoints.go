@@ -75,54 +75,6 @@ func NewSearchLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		}
 		if err != nil {
 			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
-				RequiredScopes: []string{"consumer"},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{"consumer"},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
 				Name:           "session",
 				Scopes:         []string{},
 				RequiredScopes: []string{},
@@ -179,54 +131,6 @@ func NewSearchToolCallsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
-				RequiredScopes: []string{"consumer"},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{"consumer"},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			sc := security.APIKeyScheme{
@@ -289,54 +193,6 @@ func NewSearchChatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		}
 		if err != nil {
 			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
-				RequiredScopes: []string{"consumer"},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{"consumer"},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
 				Name:           "session",
 				Scopes:         []string{},
 				RequiredScopes: []string{},
@@ -393,54 +249,6 @@ func NewCaptureEventEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, au
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
-				RequiredScopes: []string{"consumer"},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{"consumer"},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			sc := security.APIKeyScheme{
@@ -512,30 +320,6 @@ func NewGetProjectMetricsSummaryEndpoint(s Service, authAPIKeyFn security.AuthAP
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat"},
-				RequiredScopes: []string{"consumer"},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{"consumer"},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			sc := security.APIKeyScheme{

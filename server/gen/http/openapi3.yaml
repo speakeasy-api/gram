@@ -7884,10 +7884,6 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
                 - chat_sessions_token_header_Gram-Chat-Session: []
@@ -7989,8 +7985,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
@@ -8097,10 +8091,6 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: searchChats telemetry
@@ -8109,6 +8099,7 @@ paths:
             x-speakeasy-name-override: searchChats
             x-speakeasy-react-hook:
                 name: SearchChats
+                type: query
     /rpc/telemetry.searchLogs:
         post:
             description: Search and list telemetry logs that match a search filter
@@ -8203,10 +8194,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
@@ -8311,10 +8298,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []

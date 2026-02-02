@@ -6336,12 +6336,6 @@ paths:
 
                 **Required security scopes for project_slug**:
                   * `producer`
-
-                **Required security scopes for apikey**:
-                  * `consumer`
-
-                **Required security scopes for project_slug**:
-                  * `consumer`
             operationId: telemetry#captureEvent
             parameters:
                 - description: API Key header
@@ -6419,10 +6413,6 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
                 - chat_sessions_token_header_Gram-Chat-Session: []
@@ -6440,12 +6430,6 @@ paths:
 
                 **Required security scopes for project_slug**:
                   * `producer`
-
-                **Required security scopes for apikey**:
-                  * `consumer`
-
-                **Required security scopes for project_slug**:
-                  * `consumer`
             operationId: telemetry#getProjectMetricsSummary
             parameters:
                 - description: API Key header
@@ -6520,8 +6504,6 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: getProjectMetricsSummary telemetry
@@ -6540,12 +6522,6 @@ paths:
 
                 **Required security scopes for project_slug**:
                   * `producer`
-
-                **Required security scopes for apikey**:
-                  * `consumer`
-
-                **Required security scopes for project_slug**:
-                  * `consumer`
             operationId: telemetry#searchChats
             parameters:
                 - description: API Key header
@@ -6617,10 +6593,6 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: searchChats telemetry
@@ -6629,6 +6601,7 @@ paths:
             x-speakeasy-name-override: searchChats
             x-speakeasy-react-hook:
                 name: SearchChats
+                type: query
     /rpc/telemetry.searchLogs:
         post:
             description: |-
@@ -6639,12 +6612,6 @@ paths:
 
                 **Required security scopes for project_slug**:
                   * `producer`
-
-                **Required security scopes for apikey**:
-                  * `consumer`
-
-                **Required security scopes for project_slug**:
-                  * `consumer`
             operationId: telemetry#searchLogs
             parameters:
                 - description: API Key header
@@ -6716,10 +6683,6 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
             summary: searchLogs telemetry
@@ -6738,12 +6701,6 @@ paths:
 
                 **Required security scopes for project_slug**:
                   * `producer`
-
-                **Required security scopes for apikey**:
-                  * `consumer`
-
-                **Required security scopes for project_slug**:
-                  * `consumer`
             operationId: telemetry#searchToolCalls
             parameters:
                 - description: API Key header
@@ -6813,10 +6770,6 @@ paths:
             schemes:
                 - http
             security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
