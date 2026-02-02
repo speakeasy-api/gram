@@ -22,7 +22,6 @@ type Endpoints struct {
 	CancelInvite  goa.Endpoint
 	ResendInvite  goa.Endpoint
 	GetInviteInfo goa.Endpoint
-	AcceptInvite  goa.Endpoint
 	RemoveMember  goa.Endpoint
 }
 
@@ -36,8 +35,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListInvites:   NewListInvitesEndpoint(s, a.APIKeyAuth),
 		CancelInvite:  NewCancelInviteEndpoint(s, a.APIKeyAuth),
 		ResendInvite:  NewResendInviteEndpoint(s, a.APIKeyAuth),
-		GetInviteInfo: NewGetInviteInfoEndpoint(s, a.APIKeyAuth),
-		AcceptInvite:  NewAcceptInviteEndpoint(s, a.APIKeyAuth),
+		GetInviteInfo: NewGetInviteInfoEndpoint(s),
 		RemoveMember:  NewRemoveMemberEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -50,7 +48,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CancelInvite = m(e.CancelInvite)
 	e.ResendInvite = m(e.ResendInvite)
 	e.GetInviteInfo = m(e.GetInviteInfo)
-	e.AcceptInvite = m(e.AcceptInvite)
 	e.RemoveMember = m(e.RemoveMember)
 }
 
@@ -171,47 +168,10 @@ func NewResendInviteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 
 // NewGetInviteInfoEndpoint returns an endpoint function that calls the method
 // "getInviteInfo" of service "teams".
-func NewGetInviteInfoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewGetInviteInfoEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*GetInviteInfoPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
 		return s.GetInviteInfo(ctx, p)
-	}
-}
-
-// NewAcceptInviteEndpoint returns an endpoint function that calls the method
-// "acceptInvite" of service "teams".
-func NewAcceptInviteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*AcceptInvitePayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.AcceptInvite(ctx, p)
 	}
 }
 

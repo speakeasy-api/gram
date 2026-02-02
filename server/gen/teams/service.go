@@ -29,8 +29,6 @@ type Service interface {
 	// Get information about a team invite by its token. Used to display invite
 	// details before accepting.
 	GetInviteInfo(context.Context, *GetInviteInfoPayload) (res *InviteInfoResult, err error)
-	// Accept a team invite using a token from an invite email.
-	AcceptInvite(context.Context, *AcceptInvitePayload) (res *AcceptInviteResult, err error)
 	// Remove a member from the organization.
 	RemoveMember(context.Context, *RemoveMemberPayload) (err error)
 }
@@ -55,22 +53,7 @@ const ServiceName = "teams"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listMembers", "inviteMember", "listInvites", "cancelInvite", "resendInvite", "getInviteInfo", "acceptInvite", "removeMember"}
-
-// AcceptInvitePayload is the payload type of the teams service acceptInvite
-// method.
-type AcceptInvitePayload struct {
-	// The invite token from the email link
-	Token        string
-	SessionToken *string
-}
-
-// AcceptInviteResult is the result type of the teams service acceptInvite
-// method.
-type AcceptInviteResult struct {
-	// The slug of the organization the user was added to
-	OrganizationSlug string
-}
+var MethodNames = [7]string{"listMembers", "inviteMember", "listInvites", "cancelInvite", "resendInvite", "getInviteInfo", "removeMember"}
 
 // CancelInvitePayload is the payload type of the teams service cancelInvite
 // method.
@@ -84,8 +67,7 @@ type CancelInvitePayload struct {
 // method.
 type GetInviteInfoPayload struct {
 	// The invite token from the email link
-	Token        string
-	SessionToken *string
+	Token string
 }
 
 // InviteInfoResult is the result type of the teams service getInviteInfo

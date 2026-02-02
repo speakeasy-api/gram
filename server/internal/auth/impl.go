@@ -10,8 +10,10 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
@@ -28,9 +30,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	teamsRepo "github.com/speakeasy-api/gram/server/internal/teams/repo"
 )
 
 type authErr string
@@ -48,6 +52,7 @@ type AuthConfigurations struct {
 	GramServerURL          string
 	SignInRedirectURL      string
 	Environment            string
+	DevMode                bool
 }
 
 // Service for gram dashboard authentication endpoints
@@ -60,6 +65,7 @@ type Service struct {
 	projectsRepo *projectsRepo.Queries
 	envRepo      *envRepo.Queries
 	orgRepo      *orgRepo.Queries
+	teamsRepo    *teamsRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -76,6 +82,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		projectsRepo: projectsRepo.New(db),
 		envRepo:      envRepo.New(db),
 		orgRepo:      orgRepo.New(db),
+		teamsRepo:    teamsRepo.New(db),
 	}
 }
 
@@ -111,6 +118,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
 	}
 
+	state := decodeStateParam(payload)
+
 	idToken, err := s.sessions.ExchangeTokenFromSpeakeasy(ctx, payload.Code)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
@@ -121,7 +130,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, err)
 	}
 
-	if !userInfo.Admin && !userInfo.UserWhitelisted {
+	// Users with a valid invite token bypass the whitelist check.
+	hasInviteToken := state != nil && state.InviteToken != ""
+	if !userInfo.Admin && !userInfo.UserWhitelisted && !hasInviteToken {
 		return &gen.CallbackResult{
 			Location:      gramWaitlistTypeForm,
 			SessionToken:  "",
@@ -138,6 +149,20 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if len(userInfo.Organizations) == 0 {
 		if err := s.sessions.StoreSession(ctx, session); err != nil {
 			return redirectWithError(authErrInit, err)
+		}
+
+		// Process invite token for users with no existing orgs.
+		if hasInviteToken {
+			if orgSlug, err := s.processInviteToken(ctx, state.InviteToken, userInfo.UserID, userInfo.Email, &session); err != nil {
+				s.logger.ErrorContext(ctx, "failed to process invite token", attr.SlogError(err))
+				// Fall through — the user is still signed in, just not added to the org.
+			} else {
+				return &gen.CallbackResult{
+					Location:      "/" + orgSlug,
+					SessionToken:  session.SessionID,
+					SessionCookie: session.SessionID,
+				}, nil
+			}
 		}
 
 		return &gen.CallbackResult{
@@ -183,6 +208,20 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	session.ActiveOrganizationID = activeOrg.ID
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)
+	}
+
+	// Process invite token for users that already have orgs.
+	if hasInviteToken {
+		if orgSlug, err := s.processInviteToken(ctx, state.InviteToken, userInfo.UserID, userInfo.Email, &session); err != nil {
+			s.logger.ErrorContext(ctx, "failed to process invite token", attr.SlogError(err))
+			// Fall through — redirect to the normal destination.
+		} else {
+			return &gen.CallbackResult{
+				Location:      "/" + orgSlug,
+				SessionToken:  session.SessionID,
+				SessionCookie: session.SessionID,
+			}, nil
+		}
 	}
 
 	return &gen.CallbackResult{
@@ -489,11 +528,13 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 
 type loginState struct {
 	FinalDestinationURL string `json:"final_destination_url"`
+	InviteToken         string `json:"invite_token,omitempty"`
 }
 
 func encodeStateParam(payload *gen.LoginPayload) string {
 	state := loginState{
 		FinalDestinationURL: conv.PtrValOr(payload.Redirect, ""),
+		InviteToken:         conv.PtrValOr(payload.InviteToken, ""),
 	}
 
 	jsonBytes, err := json.Marshal(state)
@@ -549,6 +590,93 @@ func (s *Service) callbackRedirectURL(
 	}
 
 	return s.cfg.SignInRedirectURL
+}
+
+// processInviteToken validates the invite token, adds the user to the
+// organisation, marks the invite as accepted, and returns the org slug for
+// redirect. The session's active org is updated to the invited org.
+func (s *Service) processInviteToken(ctx context.Context, token, userID, userEmail string, session *sessions.Session) (string, error) {
+	invite, err := s.teamsRepo.GetTeamInviteByToken(ctx, token)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", fmt.Errorf("invite not found or already used")
+		}
+		return "", fmt.Errorf("looking up invite: %w", err)
+	}
+
+	if invite.Status != "pending" {
+		return "", fmt.Errorf("invite is no longer pending")
+	}
+
+	if invite.ExpiresAt.Valid && time.Now().After(invite.ExpiresAt.Time) {
+		return "", fmt.Errorf("invite has expired")
+	}
+
+	if !strings.EqualFold(invite.Email, userEmail) {
+		if !s.cfg.DevMode {
+			return "", fmt.Errorf("invite was sent to a different email address")
+		}
+		s.logger.WarnContext(ctx, "dev mode: skipping invite email match check",
+			slog.String("invite_email", invite.Email),
+			slog.String("user_email", userEmail),
+		)
+	}
+
+	// Use a transaction to atomically add the member and accept the invite.
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return dbtx.Rollback(ctx)
+	})
+
+	tx := s.teamsRepo.WithTx(dbtx)
+
+	if err := tx.AddOrganizationMember(ctx, teamsRepo.AddOrganizationMemberParams{
+		OrganizationID: invite.OrganizationID,
+		UserID:         userID,
+	}); err != nil {
+		return "", fmt.Errorf("adding member to organization: %w", err)
+	}
+
+	if _, err := tx.AcceptTeamInvite(ctx, invite.ID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", fmt.Errorf("invite is no longer pending (concurrent accept)")
+		}
+		return "", fmt.Errorf("accepting invite: %w", err)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("committing transaction: %w", err)
+	}
+
+	if err := s.sessions.InvalidateUserInfoCache(ctx, userID); err != nil {
+		s.logger.ErrorContext(ctx, "failed to invalidate user info cache after invite accept",
+			attr.SlogError(err),
+		)
+	}
+
+	orgSlug, err := s.teamsRepo.GetOrganizationSlug(ctx, invite.OrganizationID)
+	if err != nil {
+		return "", fmt.Errorf("getting organization slug: %w", err)
+	}
+
+	// Update session to point at the invited org.
+	session.ActiveOrganizationID = invite.OrganizationID
+	if err := s.sessions.UpdateSession(ctx, *session); err != nil {
+		s.logger.ErrorContext(ctx, "failed to update session after invite accept",
+			attr.SlogError(err),
+		)
+	}
+
+	s.logger.InfoContext(ctx, "team invite accepted via oauth callback",
+		slog.String("organization_id", invite.OrganizationID),
+		slog.String("user_id", userID),
+		slog.String("invite_id", invite.ID.String()),
+	)
+
+	return orgSlug, nil
 }
 
 // relativeURL converts any URL to a safe relative URL by extracting only the

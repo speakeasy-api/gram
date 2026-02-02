@@ -28,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/teams/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
@@ -425,98 +424,6 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 			CreatedAt: updatedInvite.CreatedAt.Time.Format(time.RFC3339),
 			ExpiresAt: updatedInvite.ExpiresAt.Time.Format(time.RFC3339),
 		},
-	}, nil
-}
-
-func (s *Service) AcceptInvite(ctx context.Context, payload *gen.AcceptInvitePayload) (*gen.AcceptInviteResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get user info").Log(ctx, s.logger)
-	}
-
-	invite, err := s.repo.GetTeamInviteByToken(ctx, payload.Token)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, nil, "invite not found or already used")
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to look up invite").Log(ctx, s.logger)
-	}
-
-	if invite.Status != "pending" {
-		return nil, oops.E(oops.CodeInvalid, nil, "invite is no longer pending")
-	}
-
-	if invite.ExpiresAt.Valid && time.Now().After(invite.ExpiresAt.Time) {
-		return nil, oops.E(oops.CodeInvalid, nil, "invite has expired")
-	}
-
-	if !strings.EqualFold(invite.Email, userInfo.Email) {
-		if !s.cfg.DevMode {
-			return nil, oops.E(oops.CodeForbidden, nil, "invite was sent to a different email address")
-		}
-		s.logger.WarnContext(ctx, "dev mode: skipping invite email match check",
-			attr.SlogTeamInviteEmail(invite.Email),
-			attr.SlogUserEmail(userInfo.Email),
-		)
-	}
-
-	// Use a transaction to atomically add the member and accept the invite,
-	// preventing race conditions where concurrent requests could both succeed.
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error {
-		return dbtx.Rollback(ctx)
-	})
-
-	tx := s.repo.WithTx(dbtx)
-
-	if err := tx.AddOrganizationMember(ctx, repo.AddOrganizationMemberParams{
-		OrganizationID: invite.OrganizationID,
-		UserID:         authCtx.UserID,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to add member to organization").Log(ctx, s.logger)
-	}
-
-	// AcceptTeamInvite now includes AND status = 'pending' in the WHERE clause.
-	// If a concurrent request already accepted the invite, this returns no rows.
-	if _, err := tx.AcceptTeamInvite(ctx, invite.ID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeConflict, nil, "invite is no longer pending")
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to accept invite").Log(ctx, s.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit transaction").Log(ctx, s.logger)
-	}
-
-	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
-		s.logger.ErrorContext(ctx, "failed to invalidate user info cache",
-			attr.SlogError(err),
-			attr.SlogUserID(authCtx.UserID),
-		)
-	}
-
-	orgSlug, err := s.repo.GetOrganizationSlug(ctx, invite.OrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization slug").Log(ctx, s.logger)
-	}
-
-	s.logger.InfoContext(ctx, "team invite accepted",
-		attr.SlogOrganizationID(invite.OrganizationID),
-		attr.SlogUserID(authCtx.UserID),
-		attr.SlogTeamInviteID(invite.ID.String()),
-	)
-
-	return &gen.AcceptInviteResult{
-		OrganizationSlug: orgSlug,
 	}, nil
 }
 

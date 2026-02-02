@@ -21,12 +21,11 @@ type Client struct {
 	CancelInviteEndpoint  goa.Endpoint
 	ResendInviteEndpoint  goa.Endpoint
 	GetInviteInfoEndpoint goa.Endpoint
-	AcceptInviteEndpoint  goa.Endpoint
 	RemoveMemberEndpoint  goa.Endpoint
 }
 
 // NewClient initializes a "teams" service client given the endpoints.
-func NewClient(listMembers, inviteMember, listInvites, cancelInvite, resendInvite, getInviteInfo, acceptInvite, removeMember goa.Endpoint) *Client {
+func NewClient(listMembers, inviteMember, listInvites, cancelInvite, resendInvite, getInviteInfo, removeMember goa.Endpoint) *Client {
 	return &Client{
 		ListMembersEndpoint:   listMembers,
 		InviteMemberEndpoint:  inviteMember,
@@ -34,7 +33,6 @@ func NewClient(listMembers, inviteMember, listInvites, cancelInvite, resendInvit
 		CancelInviteEndpoint:  cancelInvite,
 		ResendInviteEndpoint:  resendInvite,
 		GetInviteInfoEndpoint: getInviteInfo,
-		AcceptInviteEndpoint:  acceptInvite,
 		RemoveMemberEndpoint:  removeMember,
 	}
 }
@@ -165,28 +163,6 @@ func (c *Client) GetInviteInfo(ctx context.Context, p *GetInviteInfoPayload) (re
 		return
 	}
 	return ires.(*InviteInfoResult), nil
-}
-
-// AcceptInvite calls the "acceptInvite" endpoint of the "teams" service.
-// AcceptInvite may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) AcceptInvite(ctx context.Context, p *AcceptInvitePayload) (res *AcceptInviteResult, err error) {
-	var ires any
-	ires, err = c.AcceptInviteEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*AcceptInviteResult), nil
 }
 
 // RemoveMember calls the "removeMember" endpoint of the "teams" service.

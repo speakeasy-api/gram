@@ -1580,15 +1580,6 @@ func NewResendInviteRequestBody(p *teams.ResendInvitePayload) *ResendInviteReque
 	return body
 }
 
-// NewAcceptInviteRequestBody builds the HTTP request body from the payload of
-// the "acceptInvite" endpoint of the "teams" service.
-func NewAcceptInviteRequestBody(p *teams.AcceptInvitePayload) *AcceptInviteRequestBody {
-	body := &AcceptInviteRequestBody{
-		Token: p.Token,
-	}
-	return body
-}
-
 // NewListMembersResultOK builds a "teams" service "listMembers" endpoint
 // result from a HTTP "OK" response.
 func NewListMembersResultOK(body *ListMembersResponseBody) *teams.ListMembersResult {
@@ -2554,14 +2545,6 @@ func NewGetInviteInfoGatewayError(body *GetInviteInfoGatewayErrorResponseBody) *
 
 // NewAcceptInviteResultOK builds a "teams" service "acceptInvite" endpoint
 // result from a HTTP "OK" response.
-func NewAcceptInviteResultOK(body *AcceptInviteResponseBody) *teams.AcceptInviteResult {
-	v := &teams.AcceptInviteResult{
-		OrganizationSlug: *body.OrganizationSlug,
-	}
-
-	return v
-}
-
 // NewAcceptInviteUnauthorized builds a teams service acceptInvite endpoint
 // unauthorized error.
 func NewAcceptInviteUnauthorized(body *AcceptInviteUnauthorizedResponseBody) *goa.ServiceError {

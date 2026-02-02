@@ -1,9 +1,5 @@
-import { useSessionData } from "@/contexts/Auth";
 import { GramLogo } from "@/components/gram-logo/index";
-import {
-  useAcceptTeamInviteMutation,
-  useGetTeamInviteInfo,
-} from "@gram/client/react-query";
+import { useGetTeamInviteInfo } from "@gram/client/react-query";
 import { useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
@@ -11,12 +7,7 @@ import { Button } from "@speakeasy-api/moonshine";
 
 export default function AcceptInvite() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const token = searchParams.get("token");
-
-  const { session, status } = useSessionData();
-  const isLoading = status === "pending";
-  const isAuthenticated = !!session?.session;
 
   // Prevent invite token from leaking via HTTP Referer headers
   useEffect(() => {
@@ -29,29 +20,12 @@ export default function AcceptInvite() {
     };
   }, []);
 
-  // Redirect to register if not authenticated
-  useEffect(() => {
-    if (isLoading || isAuthenticated) return;
-    const currentUrl = `/invite?token=${encodeURIComponent(token ?? "")}`;
-    navigate(`/register?redirect=${encodeURIComponent(currentUrl)}`, {
-      replace: true,
-    });
-  }, [isLoading, isAuthenticated, token, navigate]);
-
   if (!token) {
     return (
       <InvitePage>
         <p className="text-sm text-muted-foreground">
           Invalid invite link. No token provided.
         </p>
-      </InvitePage>
-    );
-  }
-
-  if (isLoading || !isAuthenticated) {
-    return (
-      <InvitePage>
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </InvitePage>
     );
   }
@@ -66,15 +40,6 @@ function InviteDetails({ token }: { token: string }) {
     error: infoError,
     isLoading: infoLoading,
   } = useGetTeamInviteInfo({ token });
-
-  const mutation = useAcceptTeamInviteMutation();
-
-  // Redirect on success
-  useEffect(() => {
-    if (mutation.isSuccess && mutation.data?.organizationSlug) {
-      navigate(`/${mutation.data.organizationSlug}`, { replace: true });
-    }
-  }, [mutation.isSuccess, mutation.data, navigate]);
 
   if (infoLoading) {
     return (
@@ -121,11 +86,10 @@ function InviteDetails({ token }: { token: string }) {
   }
 
   const handleAccept = () => {
-    mutation.mutate({
-      request: {
-        serveChatAttachmentSignedForm: { token },
-      },
-    });
+    // Redirect to the OAuth login endpoint with the invite token.
+    // The server encodes the token into the OAuth state parameter and processes
+    // the invite acceptance during the callback after authentication.
+    window.location.href = `/rpc/auth.login?invite_token=${encodeURIComponent(token)}`;
   };
 
   return (
@@ -137,25 +101,8 @@ function InviteDetails({ token }: { token: string }) {
         get started with Gram
       </p>
 
-      {mutation.isError && (
-        <p className="text-sm text-destructive">
-          {getErrorMessage(mutation.error)}
-        </p>
-      )}
-
-      <Button
-        variant="brand"
-        onClick={handleAccept}
-        disabled={mutation.isPending}
-      >
-        {mutation.isPending && (
-          <Button.LeftIcon>
-            <Loader2 className="h-4 w-4 animate-spin" />
-          </Button.LeftIcon>
-        )}
-        <Button.Text>
-          {mutation.isPending ? "Accepting..." : "Accept invite"}
-        </Button.Text>
+      <Button variant="brand" onClick={handleAccept}>
+        <Button.Text>Accept invite</Button.Text>
       </Button>
     </InvitePage>
   );
@@ -238,20 +185,4 @@ function SpeakeasyLogo() {
       />
     </svg>
   );
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error && typeof error === "object" && "message" in error) {
-    const msg = (error as { message: string }).message;
-    if (msg.includes("expired"))
-      return "This invite has expired. Please ask the team admin to send a new invitation.";
-    if (msg.includes("no longer pending"))
-      return "This invite has already been used.";
-    if (msg.includes("different email"))
-      return "This invite was sent to a different email address. Please log in with the correct account.";
-    if (msg.includes("not found"))
-      return "This invite was not found or has already been used.";
-    return msg;
-  }
-  return "An unexpected error occurred while accepting the invite.";
 }

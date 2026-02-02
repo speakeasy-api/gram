@@ -1633,15 +1633,6 @@ func NewGetInviteInfoResponseBody(res *teams.InviteInfoResult) *GetInviteInfoRes
 	return body
 }
 
-// NewAcceptInviteResponseBody builds the HTTP response body from the result of
-// the "acceptInvite" endpoint of the "teams" service.
-func NewAcceptInviteResponseBody(res *teams.AcceptInviteResult) *AcceptInviteResponseBody {
-	body := &AcceptInviteResponseBody{
-		OrganizationSlug: res.OrganizationSlug,
-	}
-	return body
-}
-
 // NewListMembersUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "listMembers" endpoint of the "teams" service.
 func NewListMembersUnauthorizedResponseBody(res *goa.ServiceError) *ListMembersUnauthorizedResponseBody {
@@ -2812,20 +2803,9 @@ func NewResendInvitePayload(body *ResendInviteRequestBody, sessionToken *string)
 
 // NewGetInviteInfoPayload builds a teams service getInviteInfo endpoint
 // payload.
-func NewGetInviteInfoPayload(token string, sessionToken *string) *teams.GetInviteInfoPayload {
+func NewGetInviteInfoPayload(token string) *teams.GetInviteInfoPayload {
 	v := &teams.GetInviteInfoPayload{}
 	v.Token = token
-	v.SessionToken = sessionToken
-
-	return v
-}
-
-// NewAcceptInvitePayload builds a teams service acceptInvite endpoint payload.
-func NewAcceptInvitePayload(body *AcceptInviteRequestBody, sessionToken *string) *teams.AcceptInvitePayload {
-	v := &teams.AcceptInvitePayload{
-		Token: *body.Token,
-	}
-	v.SessionToken = sessionToken
 
 	return v
 }
@@ -2872,11 +2852,3 @@ func ValidateResendInviteRequestBody(body *ResendInviteRequestBody) (err error) 
 	return
 }
 
-// ValidateAcceptInviteRequestBody runs the validations defined on
-// AcceptInviteRequestBody
-func ValidateAcceptInviteRequestBody(body *AcceptInviteRequestBody) (err error) {
-	if body.Token == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("token", "body"))
-	}
-	return
-}

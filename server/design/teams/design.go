@@ -118,42 +118,22 @@ var _ = Service("teams", func() {
 	Method("getInviteInfo", func() {
 		Description("Get information about a team invite by its token. Used to display invite details before accepting.")
 
+		NoSecurity()
+
 		Payload(func() {
 			Required("token")
 			Attribute("token", String, "The invite token from the email link")
-			security.SessionPayload()
 		})
 		Result(InviteInfoResult)
 
 		HTTP(func() {
 			GET("/rpc/teams.getInviteInfo")
-			security.SessionHeader()
 			Param("token")
 		})
 
 		Meta("openapi:operationId", "getTeamInviteInfo")
 		Meta("openapi:extension:x-speakeasy-name-override", "getInviteInfo")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetTeamInviteInfo"}`)
-	})
-
-	Method("acceptInvite", func() {
-		Description("Accept a team invite using a token from an invite email.")
-
-		Payload(func() {
-			Required("token")
-			Attribute("token", String, "The invite token from the email link")
-			security.SessionPayload()
-		})
-		Result(AcceptInviteResult)
-
-		HTTP(func() {
-			POST("/rpc/teams.acceptInvite")
-			security.SessionHeader()
-		})
-
-		Meta("openapi:operationId", "acceptTeamInvite")
-		Meta("openapi:extension:x-speakeasy-name-override", "acceptInvite")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AcceptTeamInvite"}`)
 	})
 
 	Method("removeMember", func() {
@@ -253,7 +233,3 @@ var InviteInfoResult = Type("InviteInfoResult", func() {
 	})
 })
 
-var AcceptInviteResult = Type("AcceptInviteResult", func() {
-	Required("organization_slug")
-	Attribute("organization_slug", String, "The slug of the organization the user was added to")
-})

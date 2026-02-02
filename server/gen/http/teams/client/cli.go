@@ -145,45 +145,13 @@ func BuildResendInvitePayload(teamsResendInviteBody string, teamsResendInviteSes
 
 // BuildGetInviteInfoPayload builds the payload for the teams getInviteInfo
 // endpoint from CLI flags.
-func BuildGetInviteInfoPayload(teamsGetInviteInfoToken string, teamsGetInviteInfoSessionToken string) (*teams.GetInviteInfoPayload, error) {
+func BuildGetInviteInfoPayload(teamsGetInviteInfoToken string) (*teams.GetInviteInfoPayload, error) {
 	var token string
 	{
 		token = teamsGetInviteInfoToken
 	}
-	var sessionToken *string
-	{
-		if teamsGetInviteInfoSessionToken != "" {
-			sessionToken = &teamsGetInviteInfoSessionToken
-		}
-	}
 	v := &teams.GetInviteInfoPayload{}
 	v.Token = token
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildAcceptInvitePayload builds the payload for the teams acceptInvite
-// endpoint from CLI flags.
-func BuildAcceptInvitePayload(teamsAcceptInviteBody string, teamsAcceptInviteSessionToken string) (*teams.AcceptInvitePayload, error) {
-	var err error
-	var body AcceptInviteRequestBody
-	{
-		err = json.Unmarshal([]byte(teamsAcceptInviteBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"token\": \"Autem voluptas.\"\n   }'")
-		}
-	}
-	var sessionToken *string
-	{
-		if teamsAcceptInviteSessionToken != "" {
-			sessionToken = &teamsAcceptInviteSessionToken
-		}
-	}
-	v := &teams.AcceptInvitePayload{
-		Token: body.Token,
-	}
-	v.SessionToken = sessionToken
 
 	return v, nil
 }
