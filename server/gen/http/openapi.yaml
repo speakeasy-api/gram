@@ -7411,6 +7411,11 @@ paths:
                   name: deployment_id
                   required: false
                   type: string
+                - description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
+                  in: query
+                  name: urn_prefix
+                  required: false
+                  type: string
                 - description: Session header
                   in: header
                   name: Gram-Session
@@ -64120,12 +64125,12 @@ definitions:
                   required: false
                   secret: false
             external_oauth_server:
-                created_at: "1985-01-14T23:53:02Z"
-                id: Quo neque sint quidem animi totam consequatur.
-                metadata: Expedita at.
-                project_id: Maiores voluptatem quibusdam earum temporibus voluptatibus.
-                slug: 3ip
-                updated_at: "1980-09-21T16:35:26Z"
+                created_at: "1980-06-27T17:10:18Z"
+                id: Neque sint quidem animi totam.
+                metadata: Tempore maiores assumenda.
+                project_id: Velit maiores voluptatem.
+                slug: u3k
+                updated_at: "2006-08-17T04:09:48Z"
             function_environment_variables:
                 - auth_input_type: Quo dolores.
                   description: Eos laborum quo vero ut deserunt.
@@ -64142,10 +64147,10 @@ definitions:
             mcp_slug: lq0
             name: Unde dolorem vel unde reiciendis sapiente labore.
             oauth_enablement_metadata:
-                oauth2_security_count: 1213042066222327751
+                oauth2_security_count: 6887819381364345153
             oauth_proxy_server:
                 created_at: "1993-10-12T08:08:00Z"
-                id: Tempore autem quis blanditiis.
+                id: Aliquam autem tempore autem quis blanditiis dolor.
                 oauth_proxy_providers:
                     - authorization_endpoint: Et qui.
                       created_at: "1992-05-11T00:52:39Z"
@@ -64207,7 +64212,7 @@ definitions:
                         - Blanditiis repellat earum.
                         - Velit aut autem.
                       updated_at: "1985-05-09T17:30:04Z"
-                project_id: Porro eaque occaecati facere nostrum itaque mollitia.
+                project_id: Eaque occaecati facere nostrum itaque mollitia.
                 slug: 3g8
                 updated_at: "1977-04-16T02:54:01Z"
             organization_id: Adipisci deleniti quibusdam.

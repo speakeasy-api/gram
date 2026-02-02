@@ -1,10 +1,12 @@
 package telemetry
 
 import (
+	"context"
 	"maps"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // HTTPLogAttributes is a utility to set attributes in a map.
@@ -83,6 +85,18 @@ func (h HTTPLogAttributes) RecordRequestBody(body int64) {
 
 func (h HTTPLogAttributes) RecordResponseBody(body int64) {
 	h[attr.HTTPResponseBodyKey] = body
+}
+
+// RecordTraceContext extracts trace and span IDs from the OTel span context
+// and records them as attributes so they get written to the dedicated ClickHouse columns.
+func (h HTTPLogAttributes) RecordTraceContext(ctx context.Context) {
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.HasTraceID() {
+		h[attr.TraceIDKey] = spanCtx.TraceID().String()
+	}
+	if spanCtx.HasSpanID() {
+		h[attr.SpanIDKey] = spanCtx.SpanID().String()
+	}
 }
 
 func (h HTTPLogAttributes) RecordMessageBody(msg string) {

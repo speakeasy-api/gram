@@ -1,5 +1,26 @@
 # server
 
+## 0.22.0
+
+### Minor Changes
+
+- ca387c6: Add urn_prefix filter to tools.list API for server-side filtering of tools by URN prefix
+
+## 0.21.0
+
+### Minor Changes
+
+- 2d520cb: Add support for follow-on suggestions within the Elements library
+- b85bfd5: Last accessed date is now available for Gram API keys and can be viewed via the
+  API and dashboard settings page.
+
+### Patch Changes
+
+- 89bcd84: Support custom HTTP headers for external MCP servers, enabling authenticated access to registries requiring API keys
+- ed006b1: Support custom domains for MCP export api
+- afb9fbb: Adds new endpoint to retrieve summarized project metrics
+- 90ad1ba: Add support for install page redirect URLs
+
 ## 0.20.1
 
 ### Patch Changes

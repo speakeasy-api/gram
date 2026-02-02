@@ -17,6 +17,16 @@ export { ChatHistory } from '@/components/ChatHistory'
 export { ShareButton } from '@/components/ShareButton'
 export type { ShareButtonProps } from '@/components/ShareButton'
 
+// Replay
+export { Replay } from '@/components/Replay'
+export { useRecordCassette } from '@/hooks/useRecordCassette'
+export type {
+  Cassette,
+  CassetteMessage,
+  CassettePart,
+  ReplayOptions,
+} from '@/lib/cassette'
+
 // Frontend Tools
 export { defineFrontendTool } from './lib/tools'
 export type { FrontendTool } from './lib/tools'

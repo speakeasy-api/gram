@@ -263,6 +263,67 @@ To create your own plugins, see the comprehensive [Plugin Development Guide](./s
 - Real-world examples
 - Troubleshooting tips
 
+## Replay
+
+Replay lets you play back a pre-recorded conversation with streaming animations — no auth, MCP, or network calls required. This is useful for marketing demos, documentation, and testing.
+
+### Recording a cassette
+
+A cassette is a JSON file that captures a conversation. To record one from a live chat session, enable the built-in recorder by setting this environment variable:
+
+```
+VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING=true
+```
+
+This adds a record button to the composer. Click it to open the recorder popover, then start recording. Chat normally, and when you're done, click **Stop & Download** to save the cassette as a `.cassette.json` file.
+
+You can also record programmatically using the `useRecordCassette` hook:
+
+```tsx
+import {
+  GramElementsProvider,
+  Chat,
+  useRecordCassette,
+} from '@gram-ai/elements'
+
+function RecordableChat() {
+  const { isRecording, startRecording, download } = useRecordCassette()
+  return (
+    <>
+      <Chat />
+      <button onClick={startRecording}>Record</button>
+      <button onClick={() => download('demo')}>Save</button>
+    </>
+  )
+}
+```
+
+### Playing back a cassette
+
+Use the `<Replay>` component, which replaces `GramElementsProvider` entirely:
+
+```tsx
+import { Replay, Chat } from '@gram-ai/elements'
+import cassette from './demo.cassette.json'
+
+function MarketingDemo() {
+  return (
+    <Replay cassette={cassette} config={{ variant: 'standalone' }}>
+      <Chat />
+    </Replay>
+  )
+}
+```
+
+`<Replay>` accepts optional timing props to control the playback speed:
+
+| Prop                  | Default | Description                                     |
+| --------------------- | ------- | ----------------------------------------------- |
+| `typingSpeed`         | `15`    | Milliseconds per character for streaming        |
+| `userMessageDelay`    | `800`   | Milliseconds before each user message appears   |
+| `assistantStartDelay` | `400`   | Milliseconds before the assistant starts typing |
+| `onComplete`          | —       | Callback when replay finishes                   |
+
 ## React Compatibility
 
 `@gram-ai/elements` supports React 16.8+, React 17, React 18, and React 19.
