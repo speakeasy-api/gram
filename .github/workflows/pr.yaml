@@ -205,12 +205,6 @@ jobs:
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
-      - name: Generate tag
-        id: tag
-        run: |
-          SHORT_SHA=$(echo "${{ github.event.pull_request.base.sha }}" | cut -c1-7)
-          echo "tag=sha-${SHORT_SHA}" >> $GITHUB_OUTPUT
-
       - name: Lint PostgreSQL migrations
         uses: ariga/atlas-action/migrate/lint@v1.13.10 # ffcda7674f642bd28873a37bee3a47f5631e72d3
         with:
@@ -218,7 +212,7 @@ jobs:
           dir-name: gram
           dev-url: postgres://postgres:pass@localhost:5432/dev?search_path=public&sslmode=disable
           config: file://server/atlas.hcl
-          tag: ${{ steps.tag.outputs.tag }}
+          base: main
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -228,7 +222,7 @@ jobs:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
           dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
-          tag: ${{ steps.tag.outputs.tag }}
+          base: main
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
