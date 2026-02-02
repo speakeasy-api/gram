@@ -1,0 +1,30 @@
+name: Dispatch Release
+
+on:
+  workflow_run:
+    workflows: ["Pull Request"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  dispatch:
+    if: github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App Token
+        id: token
+        uses: actions/create-github-app-token@b96fde71c0080358ed6e2d162f11c612c92a97d1 # v2.1.4
+        with:
+          app-id: ${{ vars.GRAM_BOT_APP_ID }}
+          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          owner: speakeasy-api
+          repositories: gram-infra
+
+      - name: Dispatch prepare-release
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          gh workflow run "Prepare Release" \
+            -R speakeasy-api/gram-infra \
+            -f environment=dev \
+            -f commit_hash=${{ github.event.workflow_run.head_sha }}
