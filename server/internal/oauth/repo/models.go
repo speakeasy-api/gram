@@ -12,6 +12,7 @@ import (
 type ExternalOauthClientRegistration struct {
 	ID                    uuid.UUID
 	OrganizationID        string
+	ProjectID             uuid.UUID
 	OauthServerIssuer     string
 	ClientID              string
 	ClientSecretEncrypted pgtype.Text
@@ -70,12 +71,15 @@ type UserOauthToken struct {
 	ID                    uuid.UUID
 	UserID                string
 	OrganizationID        string
+	ProjectID             uuid.UUID
+	ClientRegistrationID  uuid.UUID
+	ToolsetID             uuid.UUID
 	OauthServerIssuer     string
 	AccessTokenEncrypted  string
 	RefreshTokenEncrypted pgtype.Text
 	TokenType             pgtype.Text
 	ExpiresAt             pgtype.Timestamptz
-	Scope                 pgtype.Text
+	Scopes                []string
 	ProviderName          pgtype.Text
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz

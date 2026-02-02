@@ -117,7 +117,7 @@ INSERT INTO user_oauth_tokens (
     refresh_token_encrypted,
     token_type,
     expires_at,
-    scope,
+    scopes,
     provider_name
 ) VALUES (
     @user_id,
@@ -127,14 +127,14 @@ INSERT INTO user_oauth_tokens (
     @refresh_token_encrypted,
     @token_type,
     @expires_at,
-    @scope,
+    @scopes,
     @provider_name
 ) ON CONFLICT (user_id, organization_id, oauth_server_issuer) WHERE deleted IS FALSE DO UPDATE SET
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
     token_type = EXCLUDED.token_type,
     expires_at = EXCLUDED.expires_at,
-    scope = EXCLUDED.scope,
+    scopes = EXCLUDED.scopes,
     provider_name = EXCLUDED.provider_name,
     updated_at = clock_timestamp()
 RETURNING *;

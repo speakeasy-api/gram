@@ -150,7 +150,7 @@ func (q *Queries) DeleteUserOAuthTokenByIssuer(ctx context.Context, arg DeleteUs
 }
 
 const getExternalOAuthClientRegistration = `-- name: GetExternalOAuthClientRegistration :one
-SELECT id, organization_id, oauth_server_issuer, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted FROM external_oauth_client_registrations
+SELECT id, organization_id, project_id, oauth_server_issuer, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted FROM external_oauth_client_registrations
 WHERE organization_id = $1
   AND oauth_server_issuer = $2
   AND deleted IS FALSE
@@ -167,6 +167,7 @@ func (q *Queries) GetExternalOAuthClientRegistration(ctx context.Context, arg Ge
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.ProjectID,
 		&i.OauthServerIssuer,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
@@ -233,7 +234,7 @@ func (q *Queries) GetOAuthProxyServer(ctx context.Context, arg GetOAuthProxyServ
 }
 
 const getUserOAuthToken = `-- name: GetUserOAuthToken :one
-SELECT id, user_id, organization_id, oauth_server_issuer, access_token_encrypted, refresh_token_encrypted, token_type, expires_at, scope, provider_name, created_at, updated_at, deleted_at, deleted FROM user_oauth_tokens
+SELECT id, user_id, organization_id, project_id, client_registration_id, toolset_id, oauth_server_issuer, access_token_encrypted, refresh_token_encrypted, token_type, expires_at, scopes, provider_name, created_at, updated_at, deleted_at, deleted FROM user_oauth_tokens
 WHERE user_id = $1
   AND organization_id = $2
   AND oauth_server_issuer = $3
@@ -253,12 +254,15 @@ func (q *Queries) GetUserOAuthToken(ctx context.Context, arg GetUserOAuthTokenPa
 		&i.ID,
 		&i.UserID,
 		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ClientRegistrationID,
+		&i.ToolsetID,
 		&i.OauthServerIssuer,
 		&i.AccessTokenEncrypted,
 		&i.RefreshTokenEncrypted,
 		&i.TokenType,
 		&i.ExpiresAt,
-		&i.Scope,
+		&i.Scopes,
 		&i.ProviderName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -269,7 +273,7 @@ func (q *Queries) GetUserOAuthToken(ctx context.Context, arg GetUserOAuthTokenPa
 }
 
 const getUserOAuthTokenByID = `-- name: GetUserOAuthTokenByID :one
-SELECT id, user_id, organization_id, oauth_server_issuer, access_token_encrypted, refresh_token_encrypted, token_type, expires_at, scope, provider_name, created_at, updated_at, deleted_at, deleted FROM user_oauth_tokens
+SELECT id, user_id, organization_id, project_id, client_registration_id, toolset_id, oauth_server_issuer, access_token_encrypted, refresh_token_encrypted, token_type, expires_at, scopes, provider_name, created_at, updated_at, deleted_at, deleted FROM user_oauth_tokens
 WHERE id = $1 AND deleted IS FALSE
 `
 
@@ -280,12 +284,15 @@ func (q *Queries) GetUserOAuthTokenByID(ctx context.Context, id uuid.UUID) (User
 		&i.ID,
 		&i.UserID,
 		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ClientRegistrationID,
+		&i.ToolsetID,
 		&i.OauthServerIssuer,
 		&i.AccessTokenEncrypted,
 		&i.RefreshTokenEncrypted,
 		&i.TokenType,
 		&i.ExpiresAt,
-		&i.Scope,
+		&i.Scopes,
 		&i.ProviderName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -347,7 +354,7 @@ func (q *Queries) ListOAuthProxyProvidersByServer(ctx context.Context, arg ListO
 }
 
 const listUserOAuthTokens = `-- name: ListUserOAuthTokens :many
-SELECT id, user_id, organization_id, oauth_server_issuer, access_token_encrypted, refresh_token_encrypted, token_type, expires_at, scope, provider_name, created_at, updated_at, deleted_at, deleted FROM user_oauth_tokens
+SELECT id, user_id, organization_id, project_id, client_registration_id, toolset_id, oauth_server_issuer, access_token_encrypted, refresh_token_encrypted, token_type, expires_at, scopes, provider_name, created_at, updated_at, deleted_at, deleted FROM user_oauth_tokens
 WHERE user_id = $1
   AND organization_id = $2
   AND deleted IS FALSE
@@ -372,12 +379,15 @@ func (q *Queries) ListUserOAuthTokens(ctx context.Context, arg ListUserOAuthToke
 			&i.ID,
 			&i.UserID,
 			&i.OrganizationID,
+			&i.ProjectID,
+			&i.ClientRegistrationID,
+			&i.ToolsetID,
 			&i.OauthServerIssuer,
 			&i.AccessTokenEncrypted,
 			&i.RefreshTokenEncrypted,
 			&i.TokenType,
 			&i.ExpiresAt,
-			&i.Scope,
+			&i.Scopes,
 			&i.ProviderName,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -416,7 +426,7 @@ INSERT INTO external_oauth_client_registrations (
     client_id_issued_at = EXCLUDED.client_id_issued_at,
     client_secret_expires_at = EXCLUDED.client_secret_expires_at,
     updated_at = clock_timestamp()
-RETURNING id, organization_id, oauth_server_issuer, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, oauth_server_issuer, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertExternalOAuthClientRegistrationParams struct {
@@ -444,6 +454,7 @@ func (q *Queries) UpsertExternalOAuthClientRegistration(ctx context.Context, arg
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.ProjectID,
 		&i.OauthServerIssuer,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
@@ -610,7 +621,7 @@ INSERT INTO user_oauth_tokens (
     refresh_token_encrypted,
     token_type,
     expires_at,
-    scope,
+    scopes,
     provider_name
 ) VALUES (
     $1,
@@ -627,10 +638,10 @@ INSERT INTO user_oauth_tokens (
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
     token_type = EXCLUDED.token_type,
     expires_at = EXCLUDED.expires_at,
-    scope = EXCLUDED.scope,
+    scopes = EXCLUDED.scopes,
     provider_name = EXCLUDED.provider_name,
     updated_at = clock_timestamp()
-RETURNING id, user_id, organization_id, oauth_server_issuer, access_token_encrypted, refresh_token_encrypted, token_type, expires_at, scope, provider_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, user_id, organization_id, project_id, client_registration_id, toolset_id, oauth_server_issuer, access_token_encrypted, refresh_token_encrypted, token_type, expires_at, scopes, provider_name, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertUserOAuthTokenParams struct {
@@ -641,7 +652,7 @@ type UpsertUserOAuthTokenParams struct {
 	RefreshTokenEncrypted pgtype.Text
 	TokenType             pgtype.Text
 	ExpiresAt             pgtype.Timestamptz
-	Scope                 pgtype.Text
+	Scopes                []string
 	ProviderName          pgtype.Text
 }
 
@@ -656,7 +667,7 @@ func (q *Queries) UpsertUserOAuthToken(ctx context.Context, arg UpsertUserOAuthT
 		arg.RefreshTokenEncrypted,
 		arg.TokenType,
 		arg.ExpiresAt,
-		arg.Scope,
+		arg.Scopes,
 		arg.ProviderName,
 	)
 	var i UserOauthToken
@@ -664,12 +675,15 @@ func (q *Queries) UpsertUserOAuthToken(ctx context.Context, arg UpsertUserOAuthT
 		&i.ID,
 		&i.UserID,
 		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ClientRegistrationID,
+		&i.ToolsetID,
 		&i.OauthServerIssuer,
 		&i.AccessTokenEncrypted,
 		&i.RefreshTokenEncrypted,
 		&i.TokenType,
 		&i.ExpiresAt,
-		&i.Scope,
+		&i.Scopes,
 		&i.ProviderName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
