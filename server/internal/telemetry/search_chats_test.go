@@ -247,6 +247,74 @@ func TestSearchChats_FilterByDeploymentID(t *testing.T) {
 	require.Len(t, result.Chats, 2)
 }
 
+func TestSearchChats_PaginationCursorScopedByProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	otherProjectID := uuid.New().String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+
+	// Create 3 chats in the user's project with distinct timestamps
+	chatIDs := make([]string, 3)
+	for i := range 3 {
+		chatIDs[i] = uuid.New().String()
+		ts := now.Add(-time.Duration(30-i*10) * time.Minute)
+		insertChatLogWithChatID(t, ctx, projectID, deploymentID, ts, chatIDs[i], 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
+	}
+
+	// Insert a chat in a different project using the same chat ID as the cursor
+	// candidate (chatIDs[0]) but with a very different timestamp. If the cursor
+	// subquery is not scoped by project, it would pick up this row's timestamp
+	// and corrupt pagination.
+	insertChatLogWithChatID(t, ctx, otherProjectID, deploymentID, now.Add(-5*time.Hour), chatIDs[0], 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Page 1: get first 2 chats
+	page1, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 2,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page1.Chats, 2)
+	require.NotNil(t, page1.NextCursor)
+
+	// Page 2: should return exactly the remaining 1 chat from this project
+	page2, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Cursor: page1.NextCursor,
+		Limit:  2,
+		Sort:   "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page2.Chats, 1, "should only see chats from the queried project")
+	require.Nil(t, page2.NextCursor)
+
+	// Verify all 3 chats from our project are returned and no duplicates
+	seen := make(map[string]bool)
+	allChats := append(page1.Chats, page2.Chats...)
+	for _, chat := range allChats {
+		require.False(t, seen[chat.GramChatID], "duplicate chat ID across pages: %s", chat.GramChatID)
+		seen[chat.GramChatID] = true
+	}
+	require.Len(t, seen, 3)
+}
+
 func TestSearchLogs_FilterByGramChatID(t *testing.T) {
 	t.Parallel()
 

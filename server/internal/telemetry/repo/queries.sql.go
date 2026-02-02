@@ -211,8 +211,8 @@ HAVING if(
         true,
         if(
             ? = 'asc',
-            min(time_unix_nano) > (SELECT min(time_unix_nano) FROM telemetry_logs WHERE trace_id = ? GROUP BY trace_id LIMIT 1),
-            min(time_unix_nano) < (SELECT min(time_unix_nano) FROM telemetry_logs WHERE trace_id = ? GROUP BY trace_id LIMIT 1)
+            min(time_unix_nano) > (SELECT min(time_unix_nano) FROM telemetry_logs WHERE gram_project_id = ? AND trace_id = ? GROUP BY trace_id LIMIT 1),
+            min(time_unix_nano) < (SELECT min(time_unix_nano) FROM telemetry_logs WHERE gram_project_id = ? AND trace_id = ? GROUP BY trace_id LIMIT 1)
         )
     )
 ORDER BY
@@ -242,13 +242,13 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		arg.GramDeploymentID, arg.GramDeploymentID, // 4,5: deployment_id filter
 		arg.GramFunctionID, arg.GramFunctionID, // 6,7: function_id filter
 		arg.GramURN, arg.GramURN, // 8,9: gram_urn filter (position-based substring search)
-		arg.Cursor,    // 10: cursor empty string check
-		arg.SortOrder, // 11: ASC or DESC for comparison
-		arg.Cursor,    // 12: ASC cursor subquery
-		arg.Cursor,    // 13: DESC cursor subquery
-		arg.SortOrder, // 14: ORDER BY start_time ASC
-		arg.SortOrder, // 15: ORDER BY start_time DESC
-		arg.Limit,     // 16: LIMIT
+		arg.Cursor,                        // 10: cursor empty string check
+		arg.SortOrder,                     // 11: ASC or DESC for comparison
+		arg.GramProjectID, arg.Cursor,     // 12,13: ASC cursor subquery (project + trace_id)
+		arg.GramProjectID, arg.Cursor,     // 14,15: DESC cursor subquery (project + trace_id)
+		arg.SortOrder, // 16: ORDER BY start_time ASC
+		arg.SortOrder, // 17: ORDER BY start_time DESC
+		arg.Limit,     // 18: LIMIT
 	)
 	if err != nil {
 		return nil, err
@@ -425,8 +425,8 @@ HAVING if(
         true,
         if(
             ? = 'asc',
-            min(time_unix_nano) > (SELECT min(time_unix_nano) FROM telemetry_logs WHERE gram_chat_id = ? GROUP BY gram_chat_id LIMIT 1),
-            min(time_unix_nano) < (SELECT min(time_unix_nano) FROM telemetry_logs WHERE gram_chat_id = ? GROUP BY gram_chat_id LIMIT 1)
+            min(time_unix_nano) > (SELECT min(time_unix_nano) FROM telemetry_logs WHERE gram_project_id = ? AND gram_chat_id = ? GROUP BY gram_chat_id LIMIT 1),
+            min(time_unix_nano) < (SELECT min(time_unix_nano) FROM telemetry_logs WHERE gram_project_id = ? AND gram_chat_id = ? GROUP BY gram_chat_id LIMIT 1)
         )
     )
 ORDER BY
@@ -455,13 +455,13 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		arg.TimeEnd,                                // 3: time_unix_nano <=
 		arg.GramDeploymentID, arg.GramDeploymentID, // 4,5: deployment_id filter
 		arg.GramURN, arg.GramURN, // 6,7: gram_urn filter
-		arg.Cursor,    // 8: cursor empty string check
-		arg.SortOrder, // 9: ASC or DESC for comparison
-		arg.Cursor,    // 10: ASC cursor subquery
-		arg.Cursor,    // 11: DESC cursor subquery
-		arg.SortOrder, // 12: ORDER BY start_time ASC
-		arg.SortOrder, // 13: ORDER BY start_time DESC
-		arg.Limit,     // 14: LIMIT
+		arg.Cursor,                        // 8: cursor empty string check
+		arg.SortOrder,                     // 9: ASC or DESC for comparison
+		arg.GramProjectID, arg.Cursor,     // 10,11: ASC cursor subquery (project + chat_id)
+		arg.GramProjectID, arg.Cursor,     // 12,13: DESC cursor subquery (project + chat_id)
+		arg.SortOrder, // 14: ORDER BY start_time ASC
+		arg.SortOrder, // 15: ORDER BY start_time DESC
+		arg.Limit,     // 16: LIMIT
 	)
 	if err != nil {
 		return nil, err
