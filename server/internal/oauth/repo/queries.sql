@@ -112,6 +112,9 @@ ORDER BY created_at ASC;
 INSERT INTO user_oauth_tokens (
     user_id,
     organization_id,
+    project_id,
+    client_registration_id,
+    toolset_id,
     oauth_server_issuer,
     access_token_encrypted,
     refresh_token_encrypted,
@@ -122,6 +125,9 @@ INSERT INTO user_oauth_tokens (
 ) VALUES (
     @user_id,
     @organization_id,
+    @project_id,
+    @client_registration_id,
+    @toolset_id,
     @oauth_server_issuer,
     @access_token_encrypted,
     @refresh_token_encrypted,
@@ -178,6 +184,7 @@ WHERE user_id = @user_id
 -- name: UpsertExternalOAuthClientRegistration :one
 INSERT INTO external_oauth_client_registrations (
     organization_id,
+    project_id,
     oauth_server_issuer,
     client_id,
     client_secret_encrypted,
@@ -185,6 +192,7 @@ INSERT INTO external_oauth_client_registrations (
     client_secret_expires_at
 ) VALUES (
     @organization_id,
+    @project_id,
     @oauth_server_issuer,
     @client_id,
     @client_secret_encrypted,

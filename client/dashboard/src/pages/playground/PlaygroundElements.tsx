@@ -22,7 +22,6 @@ import { useToolset } from "@gram/client/react-query/toolset.js";
 import {
   useGetMcpMetadata,
   useListEnvironments,
-  useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { AlertCircle, HistoryIcon } from "lucide-react";

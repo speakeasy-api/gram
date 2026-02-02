@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/smithy-go/ptr"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -56,8 +58,9 @@ type externalOAuthSuccessPageData struct {
 // ExternalOAuthState represents the state stored during external OAuth flow
 type ExternalOAuthState struct {
 	// User context
-	UserID         string `json:"user_id"`
-	OrganizationID string `json:"organization_id"`
+	UserID         string    `json:"user_id"`
+	OrganizationID string    `json:"organization_id"`
+	ProjectID      uuid.UUID `json:"project_id,omitempty"`
 
 	// OAuth flow context
 	ToolsetID       uuid.UUID `json:"toolset_id"`
@@ -104,6 +107,7 @@ type ExternalOAuthService struct {
 	toolsetsRepo    *toolsets_repo.Queries
 	deploymentsRepo *deployments_repo.Queries
 	externalmcpRepo *externalmcp_repo.Queries
+	projectsRepo    *projects_repo.Queries
 	stateStorage    cache.TypedCacheObject[ExternalOAuthState]
 	serverURL       *url.URL
 	sessionManager  SessionManager
@@ -111,12 +115,12 @@ type ExternalOAuthService struct {
 		Encrypt(plaintext []byte) (string, error)
 		Decrypt(ciphertext string) (string, error)
 	}
-	httpClient         *http.Client
-	successPageTmpl    *template.Template
-	successScriptHash  string
-	successScriptData  []byte
-	successStyleHash   string
-	successStyleData   []byte
+	httpClient        *http.Client
+	successPageTmpl   *template.Template
+	successScriptHash string
+	successScriptData []byte
+	successStyleHash  string
+	successStyleData  []byte
 }
 
 // SessionManager interface for authenticating session tokens
@@ -156,6 +160,7 @@ func NewExternalOAuthService(
 		toolsetsRepo:      toolsets_repo.New(db),
 		deploymentsRepo:   deployments_repo.New(db),
 		externalmcpRepo:   externalmcp_repo.New(db),
+		projectsRepo:      projects_repo.New(db),
 		stateStorage:      stateStorage,
 		serverURL:         serverURL,
 		sessionManager:    sessionManager,
@@ -193,11 +198,6 @@ func AttachExternalOAuth(mux goahttp.Muxer, service *ExternalOAuthService) {
 		oops.ErrHandle(service.logger, service.handleExternalDisconnect).ServeHTTP(w, r)
 	})
 
-	// Get access token for MCP requests (used by Elements)
-	o11y.AttachHandler(mux, "GET", "/oauth-external/token", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.handleGetToken).ServeHTTP(w, r)
-	})
-
 	// External OAuth success page static assets (with cache busting hash)
 	o11y.AttachHandler(mux, "GET", "/oauth-external/oauth_success-{hash}.js", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.serveExternalSuccessScript).ServeHTTP(w, r)
@@ -214,6 +214,7 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 	// Try to get session from context (set by middleware from cookie)
 	// If not available, try to authenticate from session query parameter
 	// This is needed because popup windows may not share cookies across origins
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		sessionToken := r.URL.Query().Get("session")
@@ -232,14 +233,30 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 
 	// Parse query parameters
 	toolsetIDStr := r.URL.Query().Get("toolset_id")
-	redirectURI := r.URL.Query().Get("redirect_uri")
-	externalMCPSlug := r.URL.Query().Get("external_mcp_slug")
-
 	if toolsetIDStr == "" {
 		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").Log(ctx, s.logger)
 	}
+
+	redirectURI := r.URL.Query().Get("redirect_uri")
 	if redirectURI == "" {
 		return oops.E(oops.CodeBadRequest, nil, "redirect_uri is required").Log(ctx, s.logger)
+	}
+
+	externalMCPSlug := r.URL.Query().Get("external_mcp_slug")
+
+	var projectID uuid.UUID
+	if authCtx.ProjectID != nil {
+		projectID = *authCtx.ProjectID
+	} else {
+		project, err := s.projectsRepo.GetProjectBySlug(ctx, projects_repo.GetProjectBySlugParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Slug:           "default",
+		})
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "failed to get default project").Log(ctx, s.logger)
+		}
+
+		projectID = project.ID
 	}
 
 	// Validate redirect_uri origin matches server origin to prevent open redirects.
@@ -286,12 +303,12 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 	}
 
 	// Get or register OAuth client via DCR (for MCP OAuth 2.1)
-	clientID, _, err := s.getOrRegisterClient(ctx, authCtx.ActiveOrganizationID, oauthConfig)
+	oauthClient, err := s.getOrRegisterClient(ctx, authCtx.ActiveOrganizationID, projectID, oauthConfig)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to register OAuth client").Log(ctx, s.logger)
 	}
 	// Update the config with the obtained client_id
-	oauthConfig.ClientID = clientID
+	oauthConfig.ClientID = oauthClient.ClientID
 
 	// Generate PKCE code_verifier (43-128 chars)
 	codeVerifier, err := generateCodeVerifier()
@@ -312,6 +329,7 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 	state := ExternalOAuthState{
 		UserID:            authCtx.UserID,
 		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         projectID,
 		ToolsetID:         toolsetID,
 		RedirectURI:       redirectURI,
 		CodeVerifier:      codeVerifier,
@@ -413,12 +431,12 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 	}
 
 	// Get the registered client credentials for token exchange
-	clientID, clientSecret, err := s.getOrRegisterClient(ctx, state.OrganizationID, oauthConfig)
+	oauthClient, err := s.getOrRegisterClient(ctx, state.OrganizationID, state.ProjectID, oauthConfig)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to get OAuth client credentials").Log(ctx, s.logger)
 	}
-	oauthConfig.ClientID = clientID
-	oauthConfig.ClientSecret = clientSecret
+	oauthConfig.ClientID = oauthClient.ClientID
+	oauthConfig.ClientSecret = oauthClient.ClientSecret
 
 	// Exchange code for tokens
 	callbackURL := fmt.Sprintf("%s/oauth-external/callback", s.serverURL.String())
@@ -457,12 +475,15 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 	_, err = s.oauthRepo.UpsertUserOAuthToken(ctx, repo.UpsertUserOAuthTokenParams{
 		UserID:                state.UserID,
 		OrganizationID:        state.OrganizationID,
+		ProjectID:             state.ProjectID,
+		ClientRegistrationID:  oauthClient.RegistrationID,
+		ToolsetID:             toolset.ID,
 		OauthServerIssuer:     state.OAuthServerIssuer,
 		AccessTokenEncrypted:  accessTokenEncrypted,
 		RefreshTokenEncrypted: refreshTokenEncrypted,
-		TokenType:             tokenResp.TokenType,
+		TokenType:             conv.ToPGText("bearer"),
 		ExpiresAt:             expiresAt,
-		Scope:                 conv.ToPGText(tokenResp.Scope),
+		Scopes:                strings.Fields(tokenResp.Scope),
 		ProviderName:          conv.ToPGText(state.ProviderName),
 	})
 	if err != nil {
@@ -521,6 +542,12 @@ func (s *ExternalOAuthService) serveExternalSuccessStyle(w http.ResponseWriter, 
 		return oops.E(oops.CodeUnexpected, err, "failed to write style response").Log(r.Context(), s.logger)
 	}
 	return nil
+}
+
+type handleExternalStatusResponse struct {
+	Status       string  `json:"status"`
+	ExpiresAt    *string `json:"expires_at,omitempty"`
+	ProviderName *string `json:"provider_name,omitempty"`
 }
 
 // handleExternalStatus checks if the user has a valid OAuth token for an OAuth issuer
@@ -602,14 +629,16 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 		status = "disconnected" // Token exists but expired
 	}
 
-	response := map[string]interface{}{
-		"status": status,
+	response := handleExternalStatusResponse{
+		Status:       status,
+		ExpiresAt:    nil,
+		ProviderName: nil,
 	}
 
 	if connected {
-		response["expires_at"] = token.ExpiresAt.Time.Format(time.RFC3339)
+		response.ExpiresAt = ptr.String(token.ExpiresAt.Time.Format(time.RFC3339))
 		if token.ProviderName.Valid {
-			response["provider_name"] = token.ProviderName.String
+			response.ProviderName = ptr.String(token.ProviderName.String)
 		}
 	}
 
@@ -669,81 +698,6 @@ func (s *ExternalOAuthService) handleExternalDisconnect(w http.ResponseWriter, r
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 	}); err != nil {
-		s.logger.ErrorContext(ctx, "failed to encode response", attr.SlogError(err))
-	}
-	return nil
-}
-
-// handleGetToken returns the decrypted access token for MCP requests
-// This endpoint is called by Elements to get tokens for authenticated MCP connections
-func (s *ExternalOAuthService) handleGetToken(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		// Try session header (for cross-origin requests from dashboard)
-		sessionToken := r.Header.Get("Gram-Session")
-		if sessionToken != "" {
-			var err error
-			ctx, err = s.sessionManager.Authenticate(ctx, sessionToken, false)
-			if err != nil {
-				return oops.E(oops.CodeUnauthorized, err, "invalid session").Log(ctx, s.logger)
-			}
-			authCtx, ok = contextvalues.GetAuthContext(ctx)
-		}
-		if !ok || authCtx == nil {
-			return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
-		}
-	}
-
-	issuer := r.URL.Query().Get("issuer")
-	if issuer == "" {
-		return oops.E(oops.CodeBadRequest, nil, "issuer is required").Log(ctx, s.logger)
-	}
-
-	// Get stored token
-	token, err := s.oauthRepo.GetUserOAuthToken(ctx, repo.GetUserOAuthTokenParams{
-		UserID:            authCtx.UserID,
-		OrganizationID:    authCtx.ActiveOrganizationID,
-		OauthServerIssuer: issuer,
-	})
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "no OAuth token found for this issuer").Log(ctx, s.logger)
-	}
-
-	// Check if token is expired
-	if token.ExpiresAt.Valid && time.Now().After(token.ExpiresAt.Time) {
-		// Token is expired, try to refresh if we have a refresh token
-		if token.RefreshTokenEncrypted.Valid && token.RefreshTokenEncrypted.String != "" {
-			// TODO: Implement token refresh using the refresh token
-			// For now, return an error indicating refresh is needed
-			return oops.E(oops.CodeUnauthorized, nil, "token expired, re-authentication required").Log(ctx, s.logger)
-		}
-		return oops.E(oops.CodeUnauthorized, nil, "token expired, re-authentication required").Log(ctx, s.logger)
-	}
-
-	// Decrypt access token
-	accessToken, err := s.enc.Decrypt(token.AccessTokenEncrypted)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to decrypt access token").Log(ctx, s.logger)
-	}
-
-	// Return the token response
-	response := map[string]interface{}{
-		"access_token": accessToken,
-		"token_type":   token.TokenType,
-	}
-
-	if token.ExpiresAt.Valid {
-		response["expires_at"] = token.ExpiresAt.Time.Unix()
-	}
-
-	if token.Scope.Valid {
-		response["scope"] = token.Scope.String
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
 		s.logger.ErrorContext(ctx, "failed to encode response", attr.SlogError(err))
 	}
 	return nil
@@ -866,13 +820,20 @@ type DCRResponse struct {
 	ClientName              string   `json:"client_name,omitempty"`
 }
 
+type getOrRegisterClientResult struct {
+	RegistrationID uuid.UUID
+	ClientID       string
+	ClientSecret   string
+}
+
 // getOrRegisterClient retrieves existing client credentials or performs DCR to get new ones.
 // This is used for MCP OAuth 2.1 which requires Dynamic Client Registration.
 func (s *ExternalOAuthService) getOrRegisterClient(
 	ctx context.Context,
 	organizationID string,
+	projectID uuid.UUID,
 	oauthConfig *ExternalOAuthConfig,
-) (clientID string, clientSecret string, err error) {
+) (_ *getOrRegisterClientResult, err error) {
 	// First, check if we already have a registered client for this org/issuer
 	existing, err := s.oauthRepo.GetExternalOAuthClientRegistration(ctx, repo.GetExternalOAuthClientRegistrationParams{
 		OrganizationID:    organizationID,
@@ -885,7 +846,7 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 				attr.SlogOAuthIssuer(oauthConfig.Issuer))
 		} else {
 			// Valid existing registration
-			clientSecret = ""
+			clientSecret := ""
 			if existing.ClientSecretEncrypted.Valid && existing.ClientSecretEncrypted.String != "" {
 				decrypted, decryptErr := s.enc.Decrypt(existing.ClientSecretEncrypted.String)
 				if decryptErr != nil {
@@ -899,14 +860,21 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 				s.logger.DebugContext(ctx, "using existing client registration",
 					attr.SlogOAuthClientID(existing.ClientID),
 					attr.SlogOAuthIssuer(oauthConfig.Issuer))
-				return existing.ClientID, clientSecret, nil
+
+				result := &getOrRegisterClientResult{
+					RegistrationID: existing.ID,
+					ClientID:       existing.ClientID,
+					ClientSecret:   clientSecret,
+				}
+
+				return result, nil
 			}
 		}
 	}
 
 	// No valid registration exists, perform DCR
 	if oauthConfig.RegistrationEndpoint == "" {
-		return "", "", fmt.Errorf("no registration endpoint configured for OAuth server %s", oauthConfig.Issuer)
+		return nil, fmt.Errorf("no registration endpoint configured for OAuth server %s", oauthConfig.Issuer)
 	}
 
 	// Build DCR request
@@ -923,7 +891,7 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 
 	reqBody, err := json.Marshal(dcrReq)
 	if err != nil {
-		return "", "", fmt.Errorf("marshal DCR request: %w", err)
+		return nil, fmt.Errorf("marshal DCR request: %w", err)
 	}
 
 	s.logger.InfoContext(ctx, "performing dynamic client registration",
@@ -932,14 +900,14 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, oauthConfig.RegistrationEndpoint, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", "", fmt.Errorf("create DCR request: %w", err)
+		return nil, fmt.Errorf("create DCR request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf("DCR request failed: %w", err)
+		return nil, fmt.Errorf("DCR request failed: %w", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -949,23 +917,23 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", "", fmt.Errorf("read DCR response: %w", err)
+		return nil, fmt.Errorf("read DCR response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		s.logger.ErrorContext(ctx, "DCR failed",
 			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
 			attr.SlogHTTPRequestBody(string(body)))
-		return "", "", fmt.Errorf("DCR failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("DCR failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var dcrResp DCRResponse
 	if err := json.Unmarshal(body, &dcrResp); err != nil {
-		return "", "", fmt.Errorf("unmarshal DCR response: %w", err)
+		return nil, fmt.Errorf("unmarshal DCR response: %w", err)
 	}
 
 	if dcrResp.ClientID == "" {
-		return "", "", fmt.Errorf("DCR response missing client_id")
+		return nil, fmt.Errorf("DCR response missing client_id")
 	}
 
 	// Encrypt client secret if present
@@ -973,7 +941,7 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 	if dcrResp.ClientSecret != "" {
 		encrypted, encErr := s.enc.Encrypt([]byte(dcrResp.ClientSecret))
 		if encErr != nil {
-			return "", "", fmt.Errorf("encrypt client secret: %w", encErr)
+			return nil, fmt.Errorf("encrypt client secret: %w", encErr)
 		}
 		encryptedSecret = &encrypted
 	}
@@ -990,8 +958,9 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 	}
 
 	// Store the registration
-	_, err = s.oauthRepo.UpsertExternalOAuthClientRegistration(ctx, repo.UpsertExternalOAuthClientRegistrationParams{
+	storedRegistration, err := s.oauthRepo.UpsertExternalOAuthClientRegistration(ctx, repo.UpsertExternalOAuthClientRegistrationParams{
 		OrganizationID:        organizationID,
+		ProjectID:             projectID,
 		OauthServerIssuer:     oauthConfig.Issuer,
 		ClientID:              dcrResp.ClientID,
 		ClientSecretEncrypted: pgtype.Text{String: stringPtrOrEmpty(encryptedSecret), Valid: encryptedSecret != nil},
@@ -999,14 +968,20 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 		ClientSecretExpiresAt: pgtype.Timestamptz{Time: timeOrZero(expiresAt), Valid: expiresAt != nil, InfinityModifier: pgtype.Finite},
 	})
 	if err != nil {
-		return "", "", fmt.Errorf("store client registration: %w", err)
+		return nil, fmt.Errorf("store client registration: %w", err)
 	}
 
 	s.logger.InfoContext(ctx, "dynamic client registration successful",
 		attr.SlogOAuthClientID(dcrResp.ClientID),
 		attr.SlogOAuthIssuer(oauthConfig.Issuer))
 
-	return dcrResp.ClientID, dcrResp.ClientSecret, nil
+	result := &getOrRegisterClientResult{
+		RegistrationID: storedRegistration.ID,
+		ClientID:       dcrResp.ClientID,
+		ClientSecret:   dcrResp.ClientSecret,
+	}
+
+	return result, nil
 }
 
 // stringPtrOrEmpty returns the value of the string pointer or empty string if nil
