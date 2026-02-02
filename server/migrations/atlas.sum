@@ -1,4 +1,4 @@
-h1:X31VyLehiFYeklnTFz/+eWF535IcWaUQRrPKuVnskc0=
+h1:7vSo6zKZWiyvC8PDF20UfipfiU8L8hyQ1jTFRaXqkKo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -97,3 +97,4 @@ h1:X31VyLehiFYeklnTFz/+eWF535IcWaUQRrPKuVnskc0=
 20260202185119_chat_resolution_table.sql h1:dn+2e8A8HMxpf9wrKXQmf8LHUJF/bTg9sMOY6hjjb5A=
 20260202191147_store-user-access-tokens.sql h1:vJ/EElnorclr462ZUxF+qkjYxdfcbPDZQ7PPDGuYxFM=
 20260202212612_chat_message_seq.sql h1:zkT31NSsc0VdturT59w1Tbt4X18v6Nj5CMiNK7Fh1co=
+20260202230735_add-mcp-metadata-title-text.sql h1:hPViiAgN+LSh+9tHmIWgAl3KStFl4S3qFDiJM3vpWyE=

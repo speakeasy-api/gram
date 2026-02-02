@@ -970,6 +970,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   toolset_id UUID NOT NULL,
   project_id UUID NOT NULL,
   external_documentation_url TEXT,
+  external_documentation_text TEXT,
   logo_id UUID,
   instructions TEXT,
   header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
