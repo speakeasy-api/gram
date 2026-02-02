@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.27.2
+
+### Patch Changes
+
+- Updated dependencies [46004f8]
+  - @gram-ai/elements@1.24.2
+
 ## 0.27.1
 
 ### Patch Changes
