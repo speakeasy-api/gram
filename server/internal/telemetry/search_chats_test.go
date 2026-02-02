@@ -31,10 +31,9 @@ func TestSearchChats_LogsDisabled(t *testing.T) {
 		Sort:  "desc",
 	})
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Empty(t, result.Chats, "should return no chats when feature is disabled")
-	require.False(t, result.Enabled, "Enabled should be false when logs feature is disabled")
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "logs are not enabled")
 }
 
 func TestSearchChats_Empty(t *testing.T) {
