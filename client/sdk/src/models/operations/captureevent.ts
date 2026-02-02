@@ -12,21 +12,11 @@ export type CaptureEventSecurityOption1 = {
 };
 
 export type CaptureEventSecurityOption2 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
-export type CaptureEventSecurityOption3 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
-export type CaptureEventSecurityOption4 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
-export type CaptureEventSecurityOption5 = {
+export type CaptureEventSecurityOption3 = {
   chatSessionsTokenHeaderGramChatSession: string;
 };
 
@@ -34,8 +24,6 @@ export type CaptureEventSecurity = {
   option1?: CaptureEventSecurityOption1 | undefined;
   option2?: CaptureEventSecurityOption2 | undefined;
   option3?: CaptureEventSecurityOption3 | undefined;
-  option4?: CaptureEventSecurityOption4 | undefined;
-  option5?: CaptureEventSecurityOption5 | undefined;
 };
 
 export type CaptureEventRequest = {
@@ -91,8 +79,8 @@ export function captureEventSecurityOption1ToJSON(
 
 /** @internal */
 export type CaptureEventSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -101,12 +89,12 @@ export const CaptureEventSecurityOption2$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CaptureEventSecurityOption2
 > = z.object({
-  apikeyHeaderGramKey: z.string(),
   projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
     projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
 
@@ -122,8 +110,7 @@ export function captureEventSecurityOption2ToJSON(
 
 /** @internal */
 export type CaptureEventSecurityOption3$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
+  "chat_sessions_token_header_Gram-Chat-Session": string;
 };
 
 /** @internal */
@@ -132,12 +119,11 @@ export const CaptureEventSecurityOption3$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   CaptureEventSecurityOption3
 > = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
+  chatSessionsTokenHeaderGramChatSession: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    chatSessionsTokenHeaderGramChatSession:
+      "chat_sessions_token_header_Gram-Chat-Session",
   });
 });
 
@@ -152,72 +138,10 @@ export function captureEventSecurityOption3ToJSON(
 }
 
 /** @internal */
-export type CaptureEventSecurityOption4$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const CaptureEventSecurityOption4$outboundSchema: z.ZodType<
-  CaptureEventSecurityOption4$Outbound,
-  z.ZodTypeDef,
-  CaptureEventSecurityOption4
-> = z.object({
-  projectSlugHeaderGramProject: z.string(),
-  sessionHeaderGramSession: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
-  });
-});
-
-export function captureEventSecurityOption4ToJSON(
-  captureEventSecurityOption4: CaptureEventSecurityOption4,
-): string {
-  return JSON.stringify(
-    CaptureEventSecurityOption4$outboundSchema.parse(
-      captureEventSecurityOption4,
-    ),
-  );
-}
-
-/** @internal */
-export type CaptureEventSecurityOption5$Outbound = {
-  "chat_sessions_token_header_Gram-Chat-Session": string;
-};
-
-/** @internal */
-export const CaptureEventSecurityOption5$outboundSchema: z.ZodType<
-  CaptureEventSecurityOption5$Outbound,
-  z.ZodTypeDef,
-  CaptureEventSecurityOption5
-> = z.object({
-  chatSessionsTokenHeaderGramChatSession: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    chatSessionsTokenHeaderGramChatSession:
-      "chat_sessions_token_header_Gram-Chat-Session",
-  });
-});
-
-export function captureEventSecurityOption5ToJSON(
-  captureEventSecurityOption5: CaptureEventSecurityOption5,
-): string {
-  return JSON.stringify(
-    CaptureEventSecurityOption5$outboundSchema.parse(
-      captureEventSecurityOption5,
-    ),
-  );
-}
-
-/** @internal */
 export type CaptureEventSecurity$Outbound = {
   Option1?: CaptureEventSecurityOption1$Outbound | undefined;
   Option2?: CaptureEventSecurityOption2$Outbound | undefined;
   Option3?: CaptureEventSecurityOption3$Outbound | undefined;
-  Option4?: CaptureEventSecurityOption4$Outbound | undefined;
-  Option5?: CaptureEventSecurityOption5$Outbound | undefined;
 };
 
 /** @internal */
@@ -229,15 +153,11 @@ export const CaptureEventSecurity$outboundSchema: z.ZodType<
   option1: z.lazy(() => CaptureEventSecurityOption1$outboundSchema).optional(),
   option2: z.lazy(() => CaptureEventSecurityOption2$outboundSchema).optional(),
   option3: z.lazy(() => CaptureEventSecurityOption3$outboundSchema).optional(),
-  option4: z.lazy(() => CaptureEventSecurityOption4$outboundSchema).optional(),
-  option5: z.lazy(() => CaptureEventSecurityOption5$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
     option3: "Option3",
-    option4: "Option4",
-    option5: "Option5",
   });
 });
 
