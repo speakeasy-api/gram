@@ -175,7 +175,6 @@ var _ = Service("mcpMetadata", func() {
 			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
 			Attribute("logo_asset_id", String, "The asset ID for the MCP install page logo")
 			Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page")
-			Attribute("external_documentation_text", String, "A blob of text for the button on the MCP server page")
 			Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
 			Attribute("default_environment_id", String, "The default environment to load variables from", func() {
 				Format(FormatUUID)
