@@ -18,4 +18,4 @@ ALTER TABLE "chat_messages" ALTER COLUMN "seq" SET NOT NULL;
 ALTER TABLE "chat_messages" ADD CONSTRAINT "chat_messages_seq_key" UNIQUE ("seq");
 
 -- Update the sequence to start after the highest current value
-SELECT setval('chat_messages_seq_seq', (SELECT COALESCE(MAX(seq), 0) FROM chat_messages));
+SELECT setval('chat_messages_seq_seq', (SELECT GREATEST(COALESCE(MAX(seq), 0), 1) FROM chat_messages));
