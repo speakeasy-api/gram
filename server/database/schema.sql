@@ -809,7 +809,6 @@ CREATE TABLE IF NOT EXISTS chat_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   chat_id uuid NOT NULL,
-  message_ids TEXT[] NOT NULL, -- chat message IDs corresponding to this resolution
 
   user_goal TEXT NOT NULL,
   resolution TEXT NOT NULL,
@@ -821,6 +820,15 @@ CREATE TABLE IF NOT EXISTS chat_resolutions (
   CONSTRAINT chat_resolutions_pkey PRIMARY KEY (id),
   CONSTRAINT chat_resolutions_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_resolutions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS chat_resolution_messages (
+  chat_resolution_id uuid NOT NULL,
+  message_id uuid NOT NULL,
+
+  CONSTRAINT chat_resolution_messages_pkey PRIMARY KEY (chat_resolution_id, message_id),
+  CONSTRAINT chat_resolution_messages_chat_resolution_id_fkey FOREIGN KEY (chat_resolution_id) REFERENCES chat_resolutions(id) ON DELETE CASCADE,
+  CONSTRAINT chat_resolution_messages_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS slack_app_connections (
