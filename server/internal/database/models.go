@@ -249,6 +249,21 @@ type ExternalMcpToolDefinition struct {
 	Deleted                    bool
 }
 
+type ExternalOauthClientRegistration struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	OauthServerIssuer     string
+	ClientID              string
+	ClientSecretEncrypted pgtype.Text
+	ClientIDIssuedAt      pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
 type ExternalOauthServerMetadatum struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
@@ -727,4 +742,24 @@ type User struct {
 	LastLogin   pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
+}
+
+type UserOauthToken struct {
+	ID                    uuid.UUID
+	UserID                string
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	ClientRegistrationID  uuid.UUID
+	ToolsetID             uuid.UUID
+	OauthServerIssuer     string
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+	TokenType             pgtype.Text
+	ExpiresAt             pgtype.Timestamptz
+	Scopes                []string
+	ProviderName          pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
 }
