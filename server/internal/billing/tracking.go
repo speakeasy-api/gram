@@ -18,6 +18,7 @@ type ModelUsageSource string
 const (
 	ModelUsageSourceChat   ModelUsageSource = "playground"
 	ModelUsageSourceAgents ModelUsageSource = "agents"
+	ModelUsageSourceGram   ModelUsageSource = "gram"
 )
 
 type ModelUsageEvent struct {

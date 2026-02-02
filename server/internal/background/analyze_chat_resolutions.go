@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -43,8 +43,8 @@ func ExecuteAnalyzeChatResolutionsWorkflow(ctx context.Context, temporalClient c
 	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
 		TaskQueue:             string(TaskQueueMain),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		WorkflowRunTimeout:    3 * time.Minute,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, // Necessary for chats that are resumed after a while
+		WorkflowRunTimeout:    5 * time.Minute,
 	}, AnalyzeChatResolutionsWorkflow, params)
 }
 
@@ -61,32 +61,55 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 
 	var a *Activities
 
-	// Phase 1: Analyze tool call outcomes
+	// Phase 1: Segment the chat into logical breakpoints
+	var segmentOutput activities.SegmentChatOutput
 	err := workflow.ExecuteActivity(
 		ctx,
-		a.AnalyzeToolCallOutcomes,
-		activities.AnalyzeToolCallOutcomesArgs{
+		a.SegmentChat,
+		activities.SegmentChatArgs{
 			ChatID:    params.ChatID,
 			ProjectID: params.ProjectID,
 			OrgID:     params.OrgID,
 		},
-	).Get(ctx, nil)
+	).Get(ctx, &segmentOutput)
 	if err != nil {
-		return fmt.Errorf("failed to analyze tool call outcomes: %w", err)
+		return fmt.Errorf("failed to segment chat: %w", err)
 	}
 
-	// Phase 2: Analyze overall chat resolutions
+	// Delete existing resolutions before analyzing segments
 	err = workflow.ExecuteActivity(
 		ctx,
-		a.AnalyzeChatResolutions,
-		activities.AnalyzeChatResolutionsArgs{
-			ChatID:    params.ChatID,
-			ProjectID: params.ProjectID,
-			OrgID:     params.OrgID,
+		a.DeleteChatResolutions,
+		activities.DeleteChatResolutionsArgs{
+			ChatID: params.ChatID,
 		},
 	).Get(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to analyze chat resolutions: %w", err)
+		return fmt.Errorf("failed to delete existing resolutions: %w", err)
+	}
+
+	// Phase 2: Analyze each segment comprehensively
+	for _, segment := range segmentOutput.Segments {
+		err := workflow.ExecuteActivity(
+			ctx,
+			a.AnalyzeSegment,
+			activities.AnalyzeSegmentArgs{
+				ChatID:     params.ChatID,
+				ProjectID:  params.ProjectID,
+				OrgID:      params.OrgID,
+				StartIndex: segment.StartIndex,
+				EndIndex:   segment.EndIndex,
+			},
+		).Get(ctx, nil)
+		if err != nil {
+			// Log but continue with other segments
+			workflow.GetLogger(ctx).Error("failed to analyze segment",
+				"error", err.Error(),
+				"start_index", segment.StartIndex,
+				"end_index", segment.EndIndex,
+			)
+			continue
+		}
 	}
 
 	return nil

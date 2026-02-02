@@ -80,7 +80,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, firstMessa
 		"Generate a concise title (3-6 words) for this conversation. Return only the title text, no quotes or explanation.",
 		firstMessage,
 		nil,
-		billing.ModelUsageSourceChat,
+		billing.ModelUsageSourceGram,
 	)
 	if err != nil {
 		g.logger.WarnContext(ctx, "failed to generate chat title via OpenRouter", attr.SlogError(err))

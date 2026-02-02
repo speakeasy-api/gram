@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -53,8 +54,9 @@ type Activities struct {
 	executeModelCall              *activities.ExecuteModelCall
 	loadAgentTools                *activities.LoadAgentTools
 	recordAgentExecution          *activities.RecordAgentExecution
-	analyzeToolCallOutcomes       *activities.AnalyzeToolCallOutcomes
-	analyzeChatResolutions        *activities.AnalyzeChatResolutions
+	segmentChat                   *resolution_activities.SegmentChat
+	deleteChatResolutions         *resolution_activities.DeleteChatResolutions
+	analyzeSegment                *resolution_activities.AnalyzeSegment
 }
 
 func NewActivities(
@@ -107,8 +109,9 @@ func NewActivities(
 		executeModelCall:              activities.NewExecuteModelCall(logger, agentsService),
 		loadAgentTools:                activities.NewLoadAgentTools(logger, agentsService),
 		recordAgentExecution:          activities.NewRecordAgentExecution(logger, db),
-		analyzeToolCallOutcomes:       activities.NewAnalyzeToolCallOutcomes(logger, db, openrouterChatClient),
-		analyzeChatResolutions:        activities.NewAnalyzeChatResolutions(logger, db, openrouterChatClient),
+		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, openrouterChatClient),
+		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
+		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, openrouterChatClient),
 	}
 }
 
@@ -212,10 +215,14 @@ func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.Gen
 	return a.generateChatTitle.Do(ctx, input)
 }
 
-func (a *Activities) AnalyzeToolCallOutcomes(ctx context.Context, input activities.AnalyzeToolCallOutcomesArgs) error {
-	return a.analyzeToolCallOutcomes.Do(ctx, input)
+func (a *Activities) SegmentChat(ctx context.Context, input resolution_activities.SegmentChatArgs) (*resolution_activities.SegmentChatOutput, error) {
+	return a.segmentChat.Do(ctx, input)
 }
 
-func (a *Activities) AnalyzeChatResolutions(ctx context.Context, input activities.AnalyzeChatResolutionsArgs) error {
-	return a.analyzeChatResolutions.Do(ctx, input)
+func (a *Activities) DeleteChatResolutions(ctx context.Context, input resolution_activities.DeleteChatResolutionsArgs) error {
+	return a.deleteChatResolutions.Do(ctx, input)
+}
+
+func (a *Activities) AnalyzeSegment(ctx context.Context, input resolution_activities.AnalyzeSegmentArgs) error {
+	return a.analyzeSegment.Do(ctx, input)
 }

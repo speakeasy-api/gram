@@ -1,4 +1,4 @@
-package activities
+package resolution_activities
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -72,7 +73,7 @@ func (a *AnalyzeToolCallOutcomes) Do(ctx context.Context, args AnalyzeToolCallOu
 
 	// Analyze each tool call
 	for _, toolMsg := range toolMessages {
-		if err := a.analyzeToolCall(ctx, args.OrgID, toolMsg, allMessages); err != nil {
+		if err := a.analyzeToolCall(ctx, args.OrgID, args.ProjectID, toolMsg, allMessages); err != nil {
 			a.logger.WarnContext(ctx, "failed to analyze tool call",
 				attr.SlogError(err),
 				slog.String("chat_message_id", toolMsg.ID.String()),
@@ -85,7 +86,7 @@ func (a *AnalyzeToolCallOutcomes) Do(ctx context.Context, args AnalyzeToolCallOu
 	return nil
 }
 
-func (a *AnalyzeToolCallOutcomes) analyzeToolCall(ctx context.Context, orgID string, toolMsg repo.ChatMessage, allMessages []repo.ChatMessage) error {
+func (a *AnalyzeToolCallOutcomes) analyzeToolCall(ctx context.Context, orgID string, projectID uuid.UUID, toolMsg repo.ChatMessage, allMessages []repo.ChatMessage) error {
 	// Find the index of this tool message
 	toolMsgIndex := -1
 	for i, msg := range allMessages {
@@ -129,7 +130,7 @@ func (a *AnalyzeToolCallOutcomes) analyzeToolCall(ctx context.Context, orgID str
 	context := a.formatToolCallContext(assistantMsg, toolMsg, contextMessages)
 
 	// Call LLM to analyze
-	outcome, err := a.analyzeWithLLM(ctx, orgID, context)
+	outcome, err := a.analyzeWithLLM(ctx, orgID, projectID, context)
 	if err != nil {
 		return fmt.Errorf("failed to analyze with LLM: %w", err)
 	}
@@ -181,7 +182,7 @@ func (a *AnalyzeToolCallOutcomes) formatToolCallContext(assistantMsg *repo.ChatM
 	return sb.String()
 }
 
-func (a *AnalyzeToolCallOutcomes) analyzeWithLLM(ctx context.Context, orgID, toolContext string) (*toolCallOutcomeAnalysis, error) {
+func (a *AnalyzeToolCallOutcomes) analyzeWithLLM(ctx context.Context, orgID string, projectID uuid.UUID, toolContext string) (*toolCallOutcomeAnalysis, error) {
 	systemPrompt := `You are analyzing whether a tool call in a conversation was successful.
 
 A tool call is considered:
@@ -189,38 +190,51 @@ A tool call is considered:
 - FAILURE: It executed but didn't return useful data (e.g., empty results due to bad filters, wrong parameters)
 - PARTIAL: It returned some useful data but required follow-up or corrections
 
-Even if a tool technically "succeeded" (no errors), if it returned empty/wrong data and required a corrective call, mark it as FAILURE.
+Even if a tool technically "succeeded" (no errors), if it returned empty/wrong data and required a corrective call, mark it as FAILURE.`
 
-Return your analysis as JSON with this exact structure:
-{
-  "outcome": "success|failure|partial",
-  "notes": "brief explanation of why"
-}`
-
-	userPrompt := fmt.Sprintf("%s\n\nAnalyze this tool call and return JSON.", toolContext)
+	userPrompt := fmt.Sprintf("%s\n\nAnalyze this tool call.", toolContext)
 
 	analysisCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	msg, err := a.chatClient.GetCompletion(analysisCtx, orgID,
+	// Define the JSON schema for structured output
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"outcome": map[string]any{
+				"type":        "string",
+				"enum":        []string{"success", "failure", "partial"},
+				"description": "The outcome of the tool call",
+			},
+			"notes": map[string]any{
+				"type":        "string",
+				"description": "Brief explanation of why this outcome was determined",
+			},
+		},
+		"required":             []string{"outcome", "notes"},
+		"additionalProperties": false,
+	}
+
+	jsonSchemaConfig := or.JSONSchemaConfig{
+		Name:   "tool_call_outcome_analysis",
+		Schema: schema,
+	}
+
+	msg, err := a.chatClient.GetObjectCompletion(
+		analysisCtx,
+		orgID,
+		projectID.String(),
+		"", // Use default model
 		systemPrompt,
 		userPrompt,
-		nil,
-		billing.ModelUsageSourceChat,
+		jsonSchemaConfig,
+		billing.ModelUsageSourceGram,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get LLM completion: %w", err)
 	}
 
 	responseText := strings.TrimSpace(openrouter.GetText(*msg))
-
-	// Try to parse JSON from the response
-	// Sometimes LLMs wrap JSON in code blocks, so try to extract it
-	jsonStart := strings.Index(responseText, "{")
-	jsonEnd := strings.LastIndex(responseText, "}")
-	if jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart {
-		responseText = responseText[jsonStart : jsonEnd+1]
-	}
 
 	var analysis toolCallOutcomeAnalysis
 	if err := json.Unmarshal([]byte(responseText), &analysis); err != nil {
@@ -235,7 +249,7 @@ Return your analysis as JSON with this exact structure:
 		}, nil
 	}
 
-	// Validate the outcome field
+	// Validate the outcome field (should be unnecessary with schema, but keep as safety)
 	if analysis.Outcome != "success" && analysis.Outcome != "failure" && analysis.Outcome != "partial" {
 		analysis.Outcome = "partial"
 	}
