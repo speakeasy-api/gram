@@ -749,7 +749,7 @@ CREATE TABLE IF NOT EXISTS chats (
   user_id TEXT,
   external_user_id TEXT,
   title TEXT,
-  
+
   resolution TEXT,
   resolution_notes TEXT,
 
@@ -1223,6 +1223,9 @@ CREATE TABLE IF NOT EXISTS user_oauth_tokens (
   -- Scoping: per user, per org, per OAuth server (RFC recommendation)
   user_id TEXT NOT NULL,
   organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  client_registration_id uuid NOT NULL,  -- FK to external_oauth_client_registrations
+  toolset_id uuid NOT NULL,  -- FK to toolsets
 
   -- OAuth 2.1 server issuer URL (from AS metadata, e.g., "https://accounts.google.com")
   -- This allows token reuse across MCP servers sharing the same OAuth provider
@@ -1231,9 +1234,9 @@ CREATE TABLE IF NOT EXISTS user_oauth_tokens (
   -- Token data (encrypted at rest via application layer)
   access_token_encrypted TEXT NOT NULL,
   refresh_token_encrypted TEXT,  -- Optional, for refresh flow
-  token_type TEXT NOT NULL DEFAULT 'Bearer',
+  token_type TEXT,
   expires_at timestamptz,  -- When access token expires (NULL if non-expiring)
-  scope TEXT,  -- Space-separated granted scopes
+  scopes TEXT[] NOT NULL,
 
   -- Metadata for debugging/display
   provider_name TEXT,  -- Human-readable name (e.g., "Google", "Atlassian")
@@ -1253,11 +1256,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
 ON user_oauth_tokens (user_id, organization_id, oauth_server_issuer)
 WHERE deleted IS FALSE;
 
--- Index for looking up tokens by user within an org
-CREATE INDEX IF NOT EXISTS user_oauth_tokens_user_org_idx
-ON user_oauth_tokens (user_id, organization_id)
-WHERE deleted IS FALSE;
-
 -- Organization-level OAuth client registrations from Dynamic Client Registration (DCR)
 -- When Gram acts as an OAuth client to external MCP servers using MCP OAuth 2.1,
 -- it needs to register itself via DCR and store the resulting client credentials.
@@ -1265,6 +1263,7 @@ WHERE deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS external_oauth_client_registrations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
 
   -- OAuth server issuer URL (from AS metadata or derived from auth endpoint origin)
   oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> ''),

@@ -73,7 +73,7 @@ type UserOauthToken struct {
 	OauthServerIssuer     string
 	AccessTokenEncrypted  string
 	RefreshTokenEncrypted pgtype.Text
-	TokenType             string
+	TokenType             pgtype.Text
 	ExpiresAt             pgtype.Timestamptz
 	Scope                 pgtype.Text
 	ProviderName          pgtype.Text
