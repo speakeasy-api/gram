@@ -16,23 +16,23 @@ const acceptTeamInvite = `-- name: AcceptTeamInvite :one
 UPDATE team_invites
 SET status = 'accepted', updated_at = clock_timestamp()
 WHERE id = $1 AND status = 'pending' AND deleted IS FALSE
-RETURNING id, organization_id, email, invited_by_user_id, status, token, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING expires_at, created_at, updated_at, deleted_at, organization_id, email, invited_by_user_id, status, token, id, deleted
 `
 
 func (q *Queries) AcceptTeamInvite(ctx context.Context, id uuid.UUID) (TeamInvite, error) {
 	row := q.db.QueryRow(ctx, acceptTeamInvite, id)
 	var i TeamInvite
 	err := row.Scan(
-		&i.ID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.OrganizationID,
 		&i.Email,
 		&i.InvitedByUserID,
 		&i.Status,
 		&i.Token,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.ID,
 		&i.Deleted,
 	)
 	return i, err
@@ -84,13 +84,13 @@ func (q *Queries) CountRecentInvitesByOrg(ctx context.Context, organizationID st
 const createTeamInvite = `-- name: CreateTeamInvite :one
 INSERT INTO team_invites (organization_id, email, invited_by_user_id, status, token, expires_at)
 VALUES ($1, $2, $3, 'pending', $4, $5)
-RETURNING id, organization_id, email, invited_by_user_id, status, token, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING expires_at, created_at, updated_at, deleted_at, organization_id, email, invited_by_user_id, status, token, id, deleted
 `
 
 type CreateTeamInviteParams struct {
 	OrganizationID  string
 	Email           string
-	InvitedByUserID string
+	InvitedByUserID pgtype.Text
 	Token           string
 	ExpiresAt       pgtype.Timestamptz
 }
@@ -105,16 +105,16 @@ func (q *Queries) CreateTeamInvite(ctx context.Context, arg CreateTeamInvitePara
 	)
 	var i TeamInvite
 	err := row.Scan(
-		&i.ID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.OrganizationID,
 		&i.Email,
 		&i.InvitedByUserID,
 		&i.Status,
 		&i.Token,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.ID,
 		&i.Deleted,
 	)
 	return i, err
@@ -169,7 +169,7 @@ func (q *Queries) GetOrganizationSlug(ctx context.Context, id string) (string, e
 }
 
 const getPendingInviteByEmail = `-- name: GetPendingInviteByEmail :one
-SELECT id, organization_id, email, invited_by_user_id, status, token, expires_at, created_at, updated_at, deleted_at, deleted FROM team_invites
+SELECT expires_at, created_at, updated_at, deleted_at, organization_id, email, invited_by_user_id, status, token, id, deleted FROM team_invites
 WHERE organization_id = $1
   AND lower(email) = lower($2)
   AND status = 'pending'
@@ -185,23 +185,23 @@ func (q *Queries) GetPendingInviteByEmail(ctx context.Context, arg GetPendingInv
 	row := q.db.QueryRow(ctx, getPendingInviteByEmail, arg.OrganizationID, arg.Email)
 	var i TeamInvite
 	err := row.Scan(
-		&i.ID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.OrganizationID,
 		&i.Email,
 		&i.InvitedByUserID,
 		&i.Status,
 		&i.Token,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.ID,
 		&i.Deleted,
 	)
 	return i, err
 }
 
 const getTeamInviteByID = `-- name: GetTeamInviteByID :one
-SELECT id, organization_id, email, invited_by_user_id, status, token, expires_at, created_at, updated_at, deleted_at, deleted FROM team_invites
+SELECT expires_at, created_at, updated_at, deleted_at, organization_id, email, invited_by_user_id, status, token, id, deleted FROM team_invites
 WHERE id = $1 AND deleted IS FALSE
 `
 
@@ -209,23 +209,23 @@ func (q *Queries) GetTeamInviteByID(ctx context.Context, id uuid.UUID) (TeamInvi
 	row := q.db.QueryRow(ctx, getTeamInviteByID, id)
 	var i TeamInvite
 	err := row.Scan(
-		&i.ID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.OrganizationID,
 		&i.Email,
 		&i.InvitedByUserID,
 		&i.Status,
 		&i.Token,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.ID,
 		&i.Deleted,
 	)
 	return i, err
 }
 
 const getTeamInviteByToken = `-- name: GetTeamInviteByToken :one
-SELECT id, organization_id, email, invited_by_user_id, status, token, expires_at, created_at, updated_at, deleted_at, deleted FROM team_invites
+SELECT expires_at, created_at, updated_at, deleted_at, organization_id, email, invited_by_user_id, status, token, id, deleted FROM team_invites
 WHERE token = $1 AND deleted IS FALSE
 `
 
@@ -233,16 +233,16 @@ func (q *Queries) GetTeamInviteByToken(ctx context.Context, token string) (TeamI
 	row := q.db.QueryRow(ctx, getTeamInviteByToken, token)
 	var i TeamInvite
 	err := row.Scan(
-		&i.ID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.OrganizationID,
 		&i.Email,
 		&i.InvitedByUserID,
 		&i.Status,
 		&i.Token,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.ID,
 		&i.Deleted,
 	)
 	return i, err
@@ -297,7 +297,7 @@ func (q *Queries) ListOrganizationMembers(ctx context.Context, organizationID st
 }
 
 const listPendingTeamInvites = `-- name: ListPendingTeamInvites :many
-SELECT ti.id, ti.organization_id, ti.email, ti.invited_by_user_id, ti.status, ti.token, ti.expires_at, ti.created_at, ti.updated_at, ti.deleted_at, ti.deleted, u.display_name as invited_by_name
+SELECT ti.expires_at, ti.created_at, ti.updated_at, ti.deleted_at, ti.organization_id, ti.email, ti.invited_by_user_id, ti.status, ti.token, ti.id, ti.deleted, u.display_name as invited_by_name
 FROM team_invites ti
 JOIN users u ON u.id = ti.invited_by_user_id
 WHERE ti.organization_id = $1
@@ -307,16 +307,16 @@ ORDER BY ti.created_at DESC
 `
 
 type ListPendingTeamInvitesRow struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	Email           string
-	InvitedByUserID string
-	Status          string
-	Token           string
 	ExpiresAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
+	OrganizationID  string
+	Email           string
+	InvitedByUserID pgtype.Text
+	Status          string
+	Token           string
+	ID              uuid.UUID
 	Deleted         bool
 	InvitedByName   string
 }
@@ -331,16 +331,16 @@ func (q *Queries) ListPendingTeamInvites(ctx context.Context, organizationID str
 	for rows.Next() {
 		var i ListPendingTeamInvitesRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
 			&i.OrganizationID,
 			&i.Email,
 			&i.InvitedByUserID,
 			&i.Status,
 			&i.Token,
-			&i.ExpiresAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
+			&i.ID,
 			&i.Deleted,
 			&i.InvitedByName,
 		); err != nil {
@@ -376,7 +376,7 @@ const updateTeamInviteExpiryAndToken = `-- name: UpdateTeamInviteExpiryAndToken 
 UPDATE team_invites
 SET expires_at = $1, token = $2, updated_at = clock_timestamp()
 WHERE id = $3 AND deleted IS FALSE
-RETURNING id, organization_id, email, invited_by_user_id, status, token, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING expires_at, created_at, updated_at, deleted_at, organization_id, email, invited_by_user_id, status, token, id, deleted
 `
 
 type UpdateTeamInviteExpiryAndTokenParams struct {
@@ -389,16 +389,16 @@ func (q *Queries) UpdateTeamInviteExpiryAndToken(ctx context.Context, arg Update
 	row := q.db.QueryRow(ctx, updateTeamInviteExpiryAndToken, arg.ExpiresAt, arg.Token, arg.ID)
 	var i TeamInvite
 	err := row.Scan(
-		&i.ID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.OrganizationID,
 		&i.Email,
 		&i.InvitedByUserID,
 		&i.Status,
 		&i.Token,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.ID,
 		&i.Deleted,
 	)
 	return i, err

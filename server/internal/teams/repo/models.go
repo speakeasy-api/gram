@@ -10,15 +10,15 @@ import (
 )
 
 type TeamInvite struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	Email           string
-	InvitedByUserID string
-	Status          string
-	Token           string
 	ExpiresAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
+	OrganizationID  string
+	Email           string
+	InvitedByUserID pgtype.Text
+	Status          string
+	Token           string
+	ID              uuid.UUID
 	Deleted         bool
 }
