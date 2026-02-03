@@ -374,6 +374,12 @@ jobs:
         if: ${{ needs.changes.outputs.server == 'true' }}
         run: mise run go:tidy
 
+      - name: Setup Atlas
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        uses: ariga/setup-atlas@1ffa6444093025c9791791f0de623560359acd02 # v0
+        with:
+          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+
       - name: Run migrations
         if: ${{ needs.changes.outputs.server == 'true' }}
         run: mise run db:migrate
