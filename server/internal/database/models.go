@@ -418,17 +418,18 @@ type McpEnvironmentConfig struct {
 }
 
 type McpMetadatum struct {
-	ID                       uuid.UUID
-	ToolsetID                uuid.UUID
-	ProjectID                uuid.UUID
-	ExternalDocumentationUrl pgtype.Text
-	LogoID                   uuid.NullUUID
-	Instructions             pgtype.Text
-	HeaderDisplayNames       []byte
-	DefaultEnvironmentID     uuid.NullUUID
-	InstallationOverrideUrl  pgtype.Text
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
+	ID                        uuid.UUID
+	ToolsetID                 uuid.UUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	HeaderDisplayNames        []byte
+	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
 }
 
 type McpRegistry struct {
@@ -635,6 +636,20 @@ type SourceEnvironment struct {
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+}
+
+type TeamInvite struct {
+	ExpiresAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	OrganizationID  string
+	Email           string
+	InvitedByUserID pgtype.Text
+	Status          string
+	Token           string
+	ID              uuid.UUID
+	Deleted         bool
 }
 
 type ToolVariation struct {

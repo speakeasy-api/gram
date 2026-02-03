@@ -17,11 +17,12 @@ export default defineConfig({
     // Automatically keep peerDependencies as they are defined in the package.json in sync
     // with the rollupOptions.external list
     externalizeDeps({
-      // We mark deps as false because the plugins default behaviour is externalise all deps.
       deps: false,
       peerDeps: true,
       optionalDeps: false,
       devDeps: false,
+      // react-original is a virtual alias resolved by reactCompat() at consumer build time
+      include: ['react-original'],
     }),
   ],
   build: {
@@ -32,6 +33,8 @@ export default defineConfig({
         elements: resolve(__dirname, 'src/index.ts'),
         server: resolve(__dirname, 'src/server.ts'),
         plugins: resolve(__dirname, 'src/plugins/index.ts'),
+        'compat-plugin': resolve(__dirname, 'src/compat-plugin.ts'),
+        'react-shim': resolve(__dirname, 'src/react-shim.ts'),
       },
       formats: ['es', 'cjs'],
     },
