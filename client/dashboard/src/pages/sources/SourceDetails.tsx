@@ -28,6 +28,7 @@ import {
   Download,
   Eye,
   Globe,
+  History,
   Lock,
   Power,
   Search,
@@ -279,13 +280,28 @@ export default function SourceDetails() {
           <div className="absolute inset-0 bg-linear-to-t from-foreground/50 via-foreground/20 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
             <Stack gap={2}>
-              <div className="flex items-center gap-3 ml-1">
-                <Heading variant="h1" className="text-background">
-                  {source?.name || sourceSlug}
-                </Heading>
-                <Badge variant="neutral">
-                  <Badge.Text>{sourceType}</Badge.Text>
-                </Badge>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 ml-1">
+                  <Heading variant="h1" className="text-background">
+                    {source?.name || sourceSlug}
+                  </Heading>
+                  <Badge variant="neutral">
+                    <Badge.Text>{sourceType}</Badge.Text>
+                  </Badge>
+                </div>
+                {deployment?.deployment?.id && (
+                  <routes.deployments.deployment.Link
+                    params={[deployment.deployment.id]}
+                    className="hover:no-underline"
+                  >
+                    <Button variant="secondary" size="sm">
+                      <Button.LeftIcon>
+                        <History className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>View Deployment</Button.Text>
+                    </Button>
+                  </routes.deployments.deployment.Link>
+                )}
               </div>
               <div className="flex items-center gap-2 ml-1">
                 <Type className="max-w-2xl truncate text-background/70!">
