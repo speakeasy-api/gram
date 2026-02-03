@@ -566,9 +566,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		userID = authCtx.UserID
 		externalUserID = authCtx.ExternalUserID
 	}
-	// If externalUserID not set from auth context, try to extract from session token
-	externalUserID = s.resolveExternalUserID(ctx, externalUserID, sessionToken)
-
 	mcpInputs := &mcpInputs{
 		projectID:        toolset.ProjectID,
 		toolset:          toolset.Slug,
@@ -723,12 +720,6 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 	// Load header display names for remapping
 	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
 
-	// Extract user IDs for telemetry
-	userID := authCtx.UserID
-	externalUserID := authCtx.ExternalUserID
-	// If externalUserID not set from auth context, try to extract from session token
-	externalUserID = s.resolveExternalUserID(ctx, externalUserID, r.Header.Get(constants.ChatSessionsTokenHeader))
-
 	mcpInputs := &mcpInputs{
 		projectID:        *authCtx.ProjectID,
 		toolset:          toolsetSlug,
@@ -739,8 +730,8 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		sessionID:        sessionID,
 		chatID:           r.Header.Get("Gram-Chat-ID"),
 		mode:             resolveToolMode(r, toolset),
-		userID:           userID,
-		externalUserID:   externalUserID,
+		userID:           authCtx.UserID,
+		externalUserID:   authCtx.ExternalUserID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -959,20 +950,4 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 
 	// All strategies failed
 	return ctx, oops.E(oops.CodeUnauthorized, nil, "failed to authorize").Log(ctx, s.logger)
-}
-
-
-// resolveExternalUserID extracts the external user ID from a session token if not already set.
-func (s *Service) resolveExternalUserID(ctx context.Context, current, sessionToken string) string {
-	if current != "" {
-		return current
-	}
-	if sessionToken == "" {
-		return ""
-	}
-	claims, err := s.chatSessionsManager.ValidateToken(ctx, sessionToken)
-	if err != nil || claims == nil || claims.ExternalUserID == nil {
-		return ""
-	}
-	return *claims.ExternalUserID
 }
