@@ -67,7 +67,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"abc123\",\n            \"provided_by\": \"abc123\",\n            \"variable_name\": \"abc123\"\n         }\n      ],\n      \"external_documentation_url\": \"abc123\",\n      \"installation_override_url\": \"https://example.com/foo\",\n      \"instructions\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"toolset_slug\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"6bda7853-634c-4945-8000-c5f1d6e444b0\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Voluptatem eos aut laudantium sequi eveniet.\",\n            \"provided_by\": \"Eius sunt.\",\n            \"variable_name\": \"Adipisci quo.\"\n         },\n         {\n            \"header_display_name\": \"Voluptatem eos aut laudantium sequi eveniet.\",\n            \"provided_by\": \"Eius sunt.\",\n            \"variable_name\": \"Adipisci quo.\"\n         }\n      ],\n      \"external_documentation_url\": \"Et totam.\",\n      \"installation_override_url\": \"http://adamsjacobson.info/sarina.beer\",\n      \"instructions\": \"Voluptas adipisci ratione fugit amet aliquam.\",\n      \"logo_asset_id\": \"Voluptas temporibus sint molestiae quo dicta atque.\",\n      \"toolset_slug\": \"gcr\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
@@ -134,7 +134,7 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 	{
 		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"zk9\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.McpSlug) > 40 {
