@@ -1,4 +1,4 @@
-import { test as base, expect, Page } from "@playwright/test";
+import { test as base, expect, Page, BrowserContext } from "@playwright/test";
 
 /**
  * Extended test fixtures for Gram Dashboard E2E tests.
@@ -10,6 +10,8 @@ import { test as base, expect, Page } from "@playwright/test";
 export type TestFixtures = {
   /** Authenticated page - use when tests require a logged-in user */
   authenticatedPage: Page;
+  /** Authenticated browser context with stored auth state */
+  authenticatedContext: BrowserContext;
   /** Helper to wait for React Query to finish loading */
   waitForQuerySettled: (page: Page) => Promise<void>;
   /** Helper to navigate to a project route */
@@ -62,29 +64,33 @@ export const test = base.extend<TestFixtures>({
     await use(goToProjectRoute);
   },
 
-  authenticatedPage: async ({ page }, use) => {
-    // For E2E tests, we expect the environment to be set up with a test user
-    // The test user should be pre-authenticated via cookies or session storage
-    // If not authenticated, tests will be redirected to login
+  authenticatedContext: async ({ browser }, use) => {
+    // Load auth state from file if PLAYWRIGHT_AUTH_STATE_PATH is set
+    const authStatePath = process.env.PLAYWRIGHT_AUTH_STATE_PATH;
 
-    // Check if we need to authenticate
+    const context = await browser.newContext({
+      storageState: authStatePath || undefined,
+    });
+
+    await use(context);
+    await context.close();
+  },
+
+  authenticatedPage: async ({ authenticatedContext }, use) => {
+    const page = await authenticatedContext.newPage();
+
+    // Navigate to home to verify auth state
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    // If redirected to login, we're not authenticated
+    // Check if we're authenticated
     const isLoginPage =
       page.url().includes("/login") || page.url().includes("/register");
 
-    if (isLoginPage) {
-      // In a real E2E setup, you would:
-      // 1. Use a test account with known credentials
-      // 2. Set up authentication via API before tests
-      // 3. Or use browser context with stored auth state
-
-      // For now, we'll skip tests that require auth if not logged in
+    if (isLoginPage && !process.env.PLAYWRIGHT_AUTH_STATE_PATH) {
       console.warn(
-        "Not authenticated. Tests requiring auth will be skipped. " +
-          "Set up auth state or use PLAYWRIGHT_AUTH_STATE_PATH env var."
+        "Not authenticated. Set PLAYWRIGHT_AUTH_STATE_PATH to a valid auth state file. " +
+          "Generate one by running: npx playwright codegen --save-storage=auth.json"
       );
     }
 
