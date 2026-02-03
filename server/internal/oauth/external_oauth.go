@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -101,19 +102,16 @@ func (s ExternalOAuthState) TTL() time.Duration {
 // ExternalOAuthService handles OAuth flows where Gram acts as the OAuth client
 // to external providers (e.g., Google, Atlassian) for external MCP servers.
 type ExternalOAuthService struct {
-	logger          *slog.Logger
-	oauthRepo       *repo.Queries
-	toolsetsRepo    *toolsets_repo.Queries
-	deploymentsRepo *deployments_repo.Queries
-	externalmcpRepo *externalmcp_repo.Queries
-	projectsRepo    *projects_repo.Queries
-	stateStorage    cache.TypedCacheObject[ExternalOAuthState]
-	serverURL       *url.URL
-	sessionManager  SessionManager
-	enc             interface {
-		Encrypt(plaintext []byte) (string, error)
-		Decrypt(ciphertext string) (string, error)
-	}
+	logger            *slog.Logger
+	oauthRepo         *repo.Queries
+	toolsetsRepo      *toolsets_repo.Queries
+	deploymentsRepo   *deployments_repo.Queries
+	externalmcpRepo   *externalmcp_repo.Queries
+	projectsRepo      *projects_repo.Queries
+	stateStorage      cache.TypedCacheObject[ExternalOAuthState]
+	serverURL         *url.URL
+	sessionManager    SessionManager
+	enc               *encryption.Client
 	httpClient        *http.Client
 	successPageTmpl   *template.Template
 	successScriptHash string
@@ -134,10 +132,7 @@ func NewExternalOAuthService(
 	cacheImpl cache.Cache,
 	serverURL *url.URL,
 	sessionManager SessionManager,
-	enc interface {
-		Encrypt(plaintext []byte) (string, error)
-		Decrypt(ciphertext string) (string, error)
-	},
+	enc *encryption.Client,
 ) *ExternalOAuthService {
 	stateStorage := cache.NewTypedObjectCache[ExternalOAuthState](
 		logger.With(attr.SlogCacheNamespace("external_oauth_state")),
