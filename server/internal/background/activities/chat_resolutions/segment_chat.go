@@ -156,8 +156,10 @@ There are %d messages total (indices 0-%d).`, conversationText, numMessages, num
 	}
 
 	jsonSchemaConfig := or.JSONSchemaConfig{
-		Name:   "chat_segments",
-		Schema: schema,
+		Name:        "chat_segments",
+		Schema:      schema,
+		Description: nil,
+		Strict:      nil,
 	}
 
 	// Use Haiku (cheaper model) for segmentation

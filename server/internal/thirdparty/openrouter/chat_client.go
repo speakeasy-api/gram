@@ -195,11 +195,12 @@ func (c *ChatClient) getCompletionFromMessages(
 	}
 
 	reqBody := OpenAIChatRequest{
-		Model:       modelToUse,
-		Messages:    messages,
-		Stream:      false,
-		Tools:       tools,
-		Temperature: temp,
+		Model:          modelToUse,
+		Messages:       messages,
+		Stream:         false,
+		Tools:          tools,
+		Temperature:    temp,
+		ResponseFormat: nil,
 	}
 
 	if jsonSchema != nil {

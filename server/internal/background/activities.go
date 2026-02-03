@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -216,13 +217,23 @@ func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.Gen
 }
 
 func (a *Activities) SegmentChat(ctx context.Context, input resolution_activities.SegmentChatArgs) (*resolution_activities.SegmentChatOutput, error) {
-	return a.segmentChat.Do(ctx, input)
+	out, err := a.segmentChat.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("segment chat: %w", err)
+	}
+	return out, nil
 }
 
 func (a *Activities) DeleteChatResolutions(ctx context.Context, input resolution_activities.DeleteChatResolutionsArgs) error {
-	return a.deleteChatResolutions.Do(ctx, input)
+	if err := a.deleteChatResolutions.Do(ctx, input); err != nil {
+		return fmt.Errorf("delete chat resolutions: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) AnalyzeSegment(ctx context.Context, input resolution_activities.AnalyzeSegmentArgs) error {
-	return a.analyzeSegment.Do(ctx, input)
+	if err := a.analyzeSegment.Do(ctx, input); err != nil {
+		return fmt.Errorf("analyze segment: %w", err)
+	}
+	return nil
 }

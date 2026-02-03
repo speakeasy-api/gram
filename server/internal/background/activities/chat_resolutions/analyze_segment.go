@@ -105,7 +105,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 			}); err != nil {
 				a.logger.WarnContext(ctx, "failed to update tool call outcome",
 					attr.SlogError(err),
-					slog.String("message_id", msgID.String()),
+					attr.SlogMessageID(msgID.String()),
 				)
 				// Continue with other updates
 			}
@@ -150,9 +150,6 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 
 	a.logger.InfoContext(ctx, "successfully analyzed segment",
 		attr.SlogChatID(args.ChatID.String()),
-		slog.Int("start_index", args.StartIndex),
-		slog.Int("end_index", args.EndIndex),
-		slog.Int("num_tool_calls", len(result.ToolCalls)),
 	)
 
 	return nil
@@ -238,8 +235,10 @@ If there are no tool calls, return an empty array.`, segmentText)
 	}
 
 	jsonSchemaConfig := or.JSONSchemaConfig{
-		Name:   "segment_analysis",
-		Schema: schema,
+		Name:        "segment_analysis",
+		Schema:      schema,
+		Description: nil,
+		Strict:      nil,
 	}
 
 	msg, err := a.chatClient.GetObjectCompletion(
@@ -260,10 +259,6 @@ If there are no tool calls, return an empty array.`, segmentText)
 
 	var result segmentAnalysisResult
 	if err := json.Unmarshal([]byte(responseText), &result); err != nil {
-		a.logger.WarnContext(ctx, "failed to parse LLM response as JSON",
-			attr.SlogError(err),
-			slog.String("llm_response", responseText),
-		)
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 
