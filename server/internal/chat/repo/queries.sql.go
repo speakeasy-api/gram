@@ -96,7 +96,7 @@ func (q *Queries) GetFirstUserChatMessage(ctx context.Context, chatID uuid.UUID)
 }
 
 const getToolCallMessages = `-- name: GetToolCallMessages :many
-SELECT id, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, created_at FROM chat_messages
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, created_at FROM chat_messages
 WHERE chat_id = $1
   AND role = 'tool'
 ORDER BY created_at ASC
@@ -113,6 +113,7 @@ func (q *Queries) GetToolCallMessages(ctx context.Context, chatID uuid.UUID) ([]
 		var i ChatMessage
 		if err := rows.Scan(
 			&i.ID,
+			&i.Seq,
 			&i.ChatID,
 			&i.ProjectID,
 			&i.Role,
