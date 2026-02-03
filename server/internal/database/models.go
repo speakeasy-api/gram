@@ -609,9 +609,9 @@ type SourceEnvironment struct {
 
 type TeamInvite struct {
 	ID              uuid.UUID
-	OrganizationID  string
+	OrganizationID  pgtype.Text
 	Email           string
-	InvitedByUserID string
+	InvitedByUserID pgtype.Text
 	Status          string
 	Token           string
 	ExpiresAt       pgtype.Timestamptz
