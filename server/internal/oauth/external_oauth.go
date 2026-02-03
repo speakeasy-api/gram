@@ -908,11 +908,13 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 	if err != nil {
 		return nil, fmt.Errorf("DCR request failed: %w", err)
 	}
-	defer func() {
+
+	defer o11y.LogDefer(ctx, s.logger, func() error {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			s.logger.WarnContext(ctx, "failed to close DCR response body", attr.SlogError(closeErr))
+			return fmt.Errorf("failed to close DCR response body: %s", attr.SlogError(closeErr))
 		}
-	}()
+		return nil
+	})
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -1022,11 +1024,13 @@ func (s *ExternalOAuthService) exchangeCodeForTokens(
 	if err != nil {
 		return nil, fmt.Errorf("token request: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			s.logger.WarnContext(ctx, "failed to close response body", attr.SlogError(err))
+
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return fmt.Errorf("failed to close token response body: %s", attr.SlogError(closeErr))
 		}
-	}()
+		return nil
+	})
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
