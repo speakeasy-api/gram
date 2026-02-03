@@ -19,3 +19,6 @@ storybook-static
 
 # Allow the bin directory
 !bin
+
+# Local test apps (not committed)
+test-app-r16
