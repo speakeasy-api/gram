@@ -26,6 +26,7 @@ import {
 } from "../mcp/environmentVariableUtils";
 import { useEnvironmentVariables } from "../mcp/useEnvironmentVariables";
 import { useToolset } from "@/hooks/toolTypes";
+import { z } from "zod/v4";
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
@@ -50,6 +51,70 @@ export function getExternalMcpOAuthConfig(
     }
   }
   return undefined;
+}
+
+const ExternalOAuthStatusResponseSchema = z.object({
+  status: z.enum(["authenticated", "needs_auth", "disconnected"]),
+  provider_name: z.string().optional(),
+  expires_at: z.string().optional(),
+});
+
+/**
+ * Hook to check the OAuth status for an external MCP server.
+ * Returns the authentication status which can be used to gate UI rendering.
+ */
+export function useExternalMcpOAuthStatus(
+  toolsetId: string | undefined,
+  mcpOAuthConfig: ExternalMCPToolDefinition | undefined,
+) {
+  const project = useProject();
+  const apiUrl = getServerURL();
+
+  const issuer = mcpOAuthConfig?.oauthAuthorizationEndpoint
+    ? new URL(mcpOAuthConfig.oauthAuthorizationEndpoint).origin
+    : undefined;
+
+  return useQuery({
+    queryKey: ["mcpOauthStatus", toolsetId ?? "", mcpOAuthConfig?.slug ?? ""],
+    queryFn: async () => {
+      if (!issuer || !toolsetId) return { status: "needs_auth" as const };
+
+      const params = new URLSearchParams({
+        toolset_id: toolsetId,
+        issuer: issuer,
+      });
+
+      const response = await fetch(
+        `${apiUrl}/oauth-external/status?${params.toString()}`,
+        {
+          credentials: "include",
+          headers: {
+            "Gram-Project": project.slug,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          return { status: "needs_auth" as const };
+        }
+        throw new Error("Failed to get OAuth status");
+      }
+
+      const parseResult = ExternalOAuthStatusResponseSchema.safeParse(
+        await response.json(),
+      );
+
+      if (!parseResult.success) {
+        throw new Error("Invalid OAuth status response");
+      }
+
+      return parseResult.data;
+    },
+    enabled: !!issuer && !!toolsetId && !!mcpOAuthConfig,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
+  });
 }
 
 export function getAuthStatus(
@@ -110,49 +175,12 @@ function ExternalMcpOAuthConnection({
     ? new URL(mcpOAuthConfig.oauthAuthorizationEndpoint).origin
     : undefined;
 
-  // Query OAuth status
+  // Query OAuth status using the shared hook
   const {
     data: oauthStatus,
     isLoading: statusLoading,
     refetch: refetchStatus,
-  } = useQuery({
-    queryKey: ["mcpOauthStatus", toolset?.id ?? "", mcpOAuthConfig.slug],
-    queryFn: async () => {
-      if (!issuer) return { status: "needs_auth" as const };
-      if (!toolset) return { status: "needs_auth" as const };
-
-      const params = new URLSearchParams({
-        toolset_id: toolset?.id ?? "",
-        issuer: issuer,
-      });
-
-      const response = await fetch(
-        `${apiUrl}/oauth-external/status?${params.toString()}`,
-        {
-          credentials: "include",
-          headers: {
-            "Gram-Project": project.slug,
-          },
-        },
-      );
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return { status: "needs_auth" as const };
-        }
-        throw new Error("Failed to get OAuth status");
-      }
-
-      return response.json() as Promise<{
-        status: "authenticated" | "needs_auth" | "disconnected";
-        provider_name?: string;
-        expires_at?: string;
-      }>;
-    },
-    enabled: !!issuer && !!toolset,
-    staleTime: 30 * 1000,
-    refetchOnWindowFocus: true,
-  });
+  } = useExternalMcpOAuthStatus(toolset?.id, mcpOAuthConfig);
 
   // Disconnect mutation
   const disconnectMutation = useMutation({
