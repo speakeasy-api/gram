@@ -232,7 +232,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			// access regardless of the invite.
 		} else {
 			return &gen.CallbackResult{
-				Location:      "/" + orgSlug,
+				Location:      strings.TrimRight(s.cfg.SignInRedirectURL, "/") + "/" + orgSlug,
 				SessionToken:  session.SessionID,
 				SessionCookie: session.SessionID,
 			}, nil
