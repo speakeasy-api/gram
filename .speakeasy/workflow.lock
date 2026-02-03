@@ -1,4 +1,4 @@
-speakeasyVersion: 1.700.1
+speakeasyVersion: 1.700.2
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
