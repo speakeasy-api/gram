@@ -962,9 +962,9 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 		ProjectID:             projectID,
 		OauthServerIssuer:     oauthConfig.Issuer,
 		ClientID:              dcrResp.ClientID,
-		ClientSecretEncrypted: pgtype.Text{String: stringPtrOrEmpty(encryptedSecret), Valid: encryptedSecret != nil},
-		ClientIDIssuedAt:      pgtype.Timestamptz{Time: timeOrZero(issuedAt), Valid: issuedAt != nil, InfinityModifier: pgtype.Finite},
-		ClientSecretExpiresAt: pgtype.Timestamptz{Time: timeOrZero(expiresAt), Valid: expiresAt != nil, InfinityModifier: pgtype.Finite},
+		ClientSecretEncrypted: conv.PtrToPGTextEmpty(encryptedSecret),
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: conv.PtrValOr(issuedAt, time.Time{}), Valid: issuedAt != nil, InfinityModifier: pgtype.Finite},
+		ClientSecretExpiresAt: pgtype.Timestamptz{Time: conv.PtrValOr(expiresAt, time.Time{}), Valid: expiresAt != nil, InfinityModifier: pgtype.Finite},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("store client registration: %w", err)
@@ -981,22 +981,6 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 	}
 
 	return result, nil
-}
-
-// stringPtrOrEmpty returns the value of the string pointer or empty string if nil
-func stringPtrOrEmpty(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
-// timeOrZero returns the time value or zero time if nil
-func timeOrZero(t *time.Time) time.Time {
-	if t == nil {
-		return time.Time{}
-	}
-	return *t
 }
 
 // ExternalTokenResponse represents the response from an external OAuth token endpoint
