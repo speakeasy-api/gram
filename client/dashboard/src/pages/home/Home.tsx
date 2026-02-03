@@ -199,11 +199,19 @@ export default function Home() {
               <div className="flex flex-col gap-1">
                 <h3 className="font-medium">Host your own tools</h3>
                 <p className="text-sm text-muted-foreground">
-                  Create and deploy custom MCP servers from your APIs
+                  Create and deploy custom MCP servers from your APIs or code
                 </p>
               </div>
             </div>
-            <div className="mt-auto flex justify-end">
+            <div className="mt-auto flex justify-end gap-2">
+              <a
+                href="https://app.getgram.ai/speakeasy-team/sagar/sources/add-function"
+                className="no-underline"
+              >
+                <Button size="sm">
+                  <Button.Text>Deploy code</Button.Text>
+                </Button>
+              </a>
               <routes.sources.addOpenAPI.Link className="no-underline">
                 <Button size="sm">
                   <Button.Text>Upload OpenAPI</Button.Text>
