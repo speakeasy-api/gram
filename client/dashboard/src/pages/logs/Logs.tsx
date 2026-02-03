@@ -397,6 +397,7 @@ const useGramMcpConfig = () => {
         toolsToInclude,
       },
       api: {
+        url: getServerURL(),
         sessionFn: getSession,
       },
       environment: {
