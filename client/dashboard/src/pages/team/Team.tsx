@@ -22,6 +22,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Mail, Send, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function Team() {
   const organization = useOrganization();
@@ -172,7 +178,14 @@ export default function Team() {
       key: "joinedAt",
       header: "Joined",
       width: "200px",
-      render: (member) => <HumanizeDateTime date={member.joinedAt} />,
+      render: (member) => (
+        <Type
+          variant="body"
+          className="text-muted-foreground whitespace-nowrap"
+        >
+          <HumanizeDateTime date={member.joinedAt} />
+        </Type>
+      ),
     },
     {
       key: "actions",
@@ -222,8 +235,15 @@ export default function Team() {
     {
       key: "createdAt",
       header: "Sent",
-      width: "150px",
-      render: (invite) => <HumanizeDateTime date={invite.createdAt} />,
+      width: "200px",
+      render: (invite) => (
+        <Type
+          variant="body"
+          className="text-muted-foreground whitespace-nowrap"
+        >
+          <HumanizeDateTime date={invite.createdAt} />
+        </Type>
+      ),
     },
     {
       key: "expiresAt",
@@ -249,29 +269,39 @@ export default function Team() {
       header: "",
       width: "120px",
       render: (invite) => (
-        <Stack direction="horizontal" gap={1}>
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => handleResendInvite(invite)}
-            title="Resend invite"
-          >
-            <Button.LeftIcon>
-              <Send className="h-4 w-4" />
-            </Button.LeftIcon>
-          </Button>
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => setInviteToCancel(invite)}
-            className="hover:text-destructive"
-            title="Cancel invite"
-          >
-            <Button.LeftIcon>
-              <X className="h-4 w-4" />
-            </Button.LeftIcon>
-          </Button>
-        </Stack>
+        <TooltipProvider delayDuration={0}>
+          <Stack direction="horizontal" gap={1}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => handleResendInvite(invite)}
+                >
+                  <Button.LeftIcon>
+                    <Send className="h-4 w-4" />
+                  </Button.LeftIcon>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Resend invite</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => setInviteToCancel(invite)}
+                  className="hover:text-destructive"
+                >
+                  <Button.LeftIcon>
+                    <X className="h-4 w-4" />
+                  </Button.LeftIcon>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Cancel invite</TooltipContent>
+            </Tooltip>
+          </Stack>
+        </TooltipProvider>
       ),
     },
   ];
