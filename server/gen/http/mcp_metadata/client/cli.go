@@ -134,7 +134,7 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 	{
 		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"zk9\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"5rc\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.McpSlug) > 40 {

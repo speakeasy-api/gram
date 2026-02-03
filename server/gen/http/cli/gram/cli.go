@@ -3481,7 +3481,7 @@ func mcpMetadataExportMcpMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"zk9\"\n   }' --apikey-token \"Ut dolor est asperiores iste cum.\" --session-token \"Itaque ut voluptas non vel.\" --project-slug-input \"Quam esse rerum.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"5rc\"\n   }' --apikey-token \"Sit ea neque mollitia ut dolor est.\" --session-token \"Iste cum ducimus itaque ut voluptas.\" --project-slug-input \"Vel unde quam esse.\"")
 }
 
 // packagesUsage displays the usage of the packages command and its subcommands.
@@ -3519,7 +3519,7 @@ func packagesCreatePackageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages create-package --body '{\n      \"description\": \"ard\",\n      \"image_asset_id\": \"xq7\",\n      \"keywords\": [\n         \"Amet quidem.\",\n         \"Ipsam amet omnis in.\",\n         \"Qui modi quia tempora earum hic.\"\n      ],\n      \"name\": \"uu6\",\n      \"summary\": \"1ef\",\n      \"title\": \"udn\",\n      \"url\": \"qg9\"\n   }' --apikey-token \"Error in.\" --session-token \"Non nam quia.\" --project-slug-input \"Aut maiores.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages create-package --body '{\n      \"description\": \"dkq\",\n      \"image_asset_id\": \"p8o\",\n      \"keywords\": [\n         \"Et ipsam amet omnis.\",\n         \"Qui qui modi quia tempora earum hic.\",\n         \"Reprehenderit est rem ab.\"\n      ],\n      \"name\": \"6ou\",\n      \"summary\": \"fja\",\n      \"title\": \"np1\",\n      \"url\": \"9w3\"\n   }' --apikey-token \"Quia quibusdam.\" --session-token \"Maiores velit aut tempore non totam totam.\" --project-slug-input \"Doloribus pariatur et omnis.\"")
 }
 
 func packagesUpdatePackageUsage() {
@@ -3543,7 +3543,7 @@ func packagesUpdatePackageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages update-package --body '{\n      \"description\": \"dof\",\n      \"id\": \"x70\",\n      \"image_asset_id\": \"kwu\",\n      \"keywords\": [\n         \"Nemo autem.\",\n         \"Dignissimos veritatis reprehenderit ut non.\",\n         \"Alias est earum sit.\"\n      ],\n      \"summary\": \"emm\",\n      \"title\": \"eae\",\n      \"url\": \"0zf\"\n   }' --apikey-token \"Temporibus exercitationem deleniti.\" --session-token \"Omnis labore necessitatibus libero incidunt.\" --project-slug-input \"Quibusdam illo quidem molestias facere.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages update-package --body '{\n      \"description\": \"ytw\",\n      \"id\": \"dof\",\n      \"image_asset_id\": \"o61\",\n      \"keywords\": [\n         \"Sit ut omnis cumque quia.\",\n         \"Temporibus exercitationem deleniti.\",\n         \"Omnis labore necessitatibus libero incidunt.\"\n      ],\n      \"summary\": \"xnb\",\n      \"title\": \"0zf\",\n      \"url\": \"ru8\"\n   }' --apikey-token \"Facere amet.\" --session-token \"Quis delectus officiis.\" --project-slug-input \"Pariatur alias ipsa.\"")
 }
 
 func packagesListPackagesUsage() {
@@ -3565,7 +3565,7 @@ func packagesListPackagesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages list-packages --apikey-token \"Doloremque ut unde ab.\" --session-token \"Totam temporibus et ratione dolores.\" --project-slug-input \"Autem occaecati nam accusamus soluta doloribus.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages list-packages --apikey-token \"Nam accusamus soluta doloribus aut.\" --session-token \"Quaerat odit.\" --project-slug-input \"Aspernatur nemo expedita voluptates vel.\"")
 }
 
 func packagesListVersionsUsage() {
@@ -3589,7 +3589,7 @@ func packagesListVersionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages list-versions --name \"Iure eaque.\" --apikey-token \"Est consequatur quis sed numquam.\" --session-token \"Totam voluptatem sit blanditiis.\" --project-slug-input \"Vel laborum.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages list-versions --name \"Voluptatem sit blanditiis aut vel laborum alias.\" --apikey-token \"Et ipsam rerum.\" --session-token \"Dolor dolore.\" --project-slug-input \"Ipsam qui vel maiores.\"")
 }
 
 func packagesPublishUsage() {
@@ -3613,7 +3613,7 @@ func packagesPublishUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"Mollitia incidunt alias non aut porro dolorem.\",\n      \"name\": \"Voluptatem quo impedit magnam laboriosam esse.\",\n      \"version\": \"Et provident necessitatibus ut est magni quaerat.\",\n      \"visibility\": \"public\"\n   }' --apikey-token \"Ea qui quia.\" --session-token \"Itaque voluptas.\" --project-slug-input \"Soluta quia id quia optio quasi.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"Qui quia id itaque.\",\n      \"name\": \"Alias non.\",\n      \"version\": \"Porro dolorem perferendis nisi.\",\n      \"visibility\": \"private\"\n   }' --apikey-token \"Soluta quia id quia optio quasi.\" --session-token \"Consequatur cumque et in.\" --project-slug-input \"Totam eum dolorum necessitatibus fugit dolore sed.\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.
@@ -3645,7 +3645,7 @@ func featuresSetProductFeatureUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"h5s\"\n   }' --session-token \"Corporis sunt vero magnam voluptas.\" --project-slug-input \"Nisi omnis blanditiis ipsa sint.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": true,\n      \"feature_name\": \"nfr\"\n   }' --session-token \"Aut vero veritatis sit ut.\" --project-slug-input \"A dolores molestiae aperiam molestias eos.\"")
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.
@@ -3683,7 +3683,7 @@ func projectsGetProjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects get-project --slug \"7ry\" --apikey-token \"Sed porro eius est ea esse.\" --session-token \"Itaque adipisci blanditiis voluptas eum hic quam.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects get-project --slug \"h06\" --apikey-token \"Architecto natus et et.\" --session-token \"Officiis qui minus.\"")
 }
 
 func projectsCreateProjectUsage() {
@@ -3705,7 +3705,7 @@ func projectsCreateProjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects create-project --body '{\n      \"name\": \"bjd\",\n      \"organization_id\": \"Inventore assumenda quia aut a voluptatibus ut.\"\n   }' --apikey-token \"Voluptatem iure corrupti nulla.\" --session-token \"Quasi quia omnis qui quisquam.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects create-project --body '{\n      \"name\": \"jds\",\n      \"organization_id\": \"A voluptatibus ut ut.\"\n   }' --apikey-token \"Iure corrupti nulla.\" --session-token \"Quasi quia omnis qui quisquam.\"")
 }
 
 func projectsListProjectsUsage() {
