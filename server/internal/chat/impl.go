@@ -64,6 +64,11 @@ type ChatTitleGenerator interface {
 	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID string) error
 }
 
+// ChatResolutionAnalyzer schedules async chat resolution analysis.
+type ChatResolutionAnalyzer interface {
+	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID string) error
+}
+
 type Service struct {
 	auth                 *auth.Auth
 	db                   *pgxpool.Pool
@@ -74,12 +79,13 @@ type Service struct {
 	logger               *slog.Logger
 	sessions             *sessions.Manager
 	chatSessions         *chatsessions.Manager
-	assetStorage         assets.BlobStore
-	proxyTransport       http.RoundTripper
-	fallbackUsageTracker FallbackModelUsageTracker
-	chatTitleGenerator   ChatTitleGenerator
-	posthog              *posthog.Posthog
-	telemetryService     *telemetry.Service
+	assetStorage            assets.BlobStore
+	proxyTransport          http.RoundTripper
+	fallbackUsageTracker    FallbackModelUsageTracker
+	chatTitleGenerator      ChatTitleGenerator
+	chatResolutionAnalyzer  ChatResolutionAnalyzer
+	posthog                 *posthog.Posthog
+	telemetryService        *telemetry.Service
 }
 
 func NewService(
@@ -91,6 +97,7 @@ func NewService(
 	chatClient *openrouter.ChatClient,
 	fallbackUsageTracker FallbackModelUsageTracker,
 	chatTitleGenerator ChatTitleGenerator,
+	chatResolutionAnalyzer ChatResolutionAnalyzer,
 	posthog *posthog.Posthog,
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
@@ -98,21 +105,22 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:                 auth.New(logger, db, sessions),
-		db:                   db,
-		sessions:             sessions,
-		chatSessions:         chatSessions,
-		logger:               logger,
-		repo:                 repo.New(db),
-		tracer:               otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
-		openRouter:           openRouter,
-		chatClient:           chatClient,
-		assetStorage:         assetStorage,
-		proxyTransport:       cleanhttp.DefaultPooledTransport(),
-		fallbackUsageTracker: fallbackUsageTracker,
-		chatTitleGenerator:   chatTitleGenerator,
-		posthog:              posthog,
-		telemetryService:     telemetryService,
+		auth:                   auth.New(logger, db, sessions),
+		db:                     db,
+		sessions:               sessions,
+		chatSessions:           chatSessions,
+		logger:                 logger,
+		repo:                   repo.New(db),
+		tracer:                 otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		openRouter:             openRouter,
+		chatClient:             chatClient,
+		assetStorage:           assetStorage,
+		proxyTransport:         cleanhttp.DefaultPooledTransport(),
+		fallbackUsageTracker:   fallbackUsageTracker,
+		chatTitleGenerator:     chatTitleGenerator,
+		chatResolutionAnalyzer: chatResolutionAnalyzer,
+		posthog:                posthog,
+		telemetryService:       telemetryService,
 	}
 }
 
@@ -405,6 +413,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		"origin":            metadata.Origin,
 	}
 
+	source := billing.ModelUsageSourcePlayground
+	if metadata.Source == "elements" {
+		source = billing.ModelUsageSourceElements
+	}
+
 	defer func() {
 		if err := s.posthog.CaptureEvent(ctx, "elements_event", authCtx.ActiveOrganizationID, eventProperties); err != nil {
 			s.logger.ErrorContext(ctx, "failed to capture elements event", attr.SlogError(err))
@@ -486,8 +499,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				TotalTokens:      0,
 			},
 			usageSet:           false,
-			isFirstMessage:     chatResult.IsFirstMessage,
-			chatTitleGenerator: s.chatTitleGenerator,
+			isFirstMessage:         chatResult.IsFirstMessage,
+			chatTitleGenerator:     s.chatTitleGenerator,
+			chatResolutionAnalyzer: s.chatResolutionAnalyzer,
 			// GenAI telemetry fields
 			telemetryService: s.telemetryService,
 			userID:           userID,
@@ -543,7 +557,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 					respCaptorWithTracking.messageID,
 					orgID,
 					authCtx.ProjectID.String(),
-					billing.ModelUsageSourceChat,
+					source,
 					respCaptorWithTracking.chatID.String(),
 				); err != nil {
 					// Only schedule fallback for 404 errors (generation not found yet)
@@ -558,7 +572,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 								respCaptorWithTracking.messageID,
 								orgID,
 								authCtx.ProjectID.String(),
-								billing.ModelUsageSourceChat,
+								source,
 								respCaptorWithTracking.chatID.String(),
 							); scheduleErr != nil {
 								s.logger.ErrorContext(ctx, "failed to schedule fallback model usage tracking",
@@ -747,8 +761,9 @@ type responseCaptor struct {
 	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
 	usage                openrouter.Usage
 	// Title generation
-	isFirstMessage     bool
-	chatTitleGenerator ChatTitleGenerator
+	isFirstMessage          bool
+	chatTitleGenerator      ChatTitleGenerator
+	chatResolutionAnalyzer  ChatResolutionAnalyzer
 	// GenAI telemetry
 	telemetryService *telemetry.Service
 	userID           string
@@ -858,6 +873,18 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 				r.orgID,
 			); err != nil {
 				r.logger.WarnContext(r.ctx, "failed to schedule chat title generation", attr.SlogError(err))
+			}
+		}
+
+		// Schedule chat resolution analysis (will reset timer if already scheduled)
+		if r.chatResolutionAnalyzer != nil {
+			if err := r.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
+				context.WithoutCancel(r.ctx),
+				r.chatID,
+				r.projectID,
+				r.orgID,
+			); err != nil {
+				r.logger.WarnContext(r.ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
 			}
 		}
 

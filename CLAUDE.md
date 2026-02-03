@@ -78,6 +78,10 @@ Contains the main application code for the Gram server:
 
 </commands>
 
+### Atlas Migration Troubleshooting
+
+- **"migration file X was added out of order" error**: Rename the migration file to have a timestamp after the latest existing migration (e.g., `20260129_foo.sql` → `20260203000001_foo.sql`), then run `mise db:hash` to regenerate `atlas.sum`.
+
 ## Mise CLI
 
 The `mise` tasks listed in this guide should be used where building, testing or linting is needed. The commands can take arguments directly and don't need a `--` separator. For example, to run the server in development mode, use:
