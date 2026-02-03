@@ -405,6 +405,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		"origin":            metadata.Origin,
 	}
 
+	source := billing.ModelUsageSourcePlayground
+	if metadata.Source == "elements" {
+		source = billing.ModelUsageSourceElements
+	}
+
 	defer func() {
 		if err := s.posthog.CaptureEvent(ctx, "elements_event", authCtx.ActiveOrganizationID, eventProperties); err != nil {
 			s.logger.ErrorContext(ctx, "failed to capture elements event", attr.SlogError(err))
@@ -543,7 +548,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 					respCaptorWithTracking.messageID,
 					orgID,
 					authCtx.ProjectID.String(),
-					billing.ModelUsageSourceChat,
+					source,
 					respCaptorWithTracking.chatID.String(),
 				); err != nil {
 					// Only schedule fallback for 404 errors (generation not found yet)
@@ -558,7 +563,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 								respCaptorWithTracking.messageID,
 								orgID,
 								authCtx.ProjectID.String(),
-								billing.ModelUsageSourceChat,
+								source,
 								respCaptorWithTracking.chatID.String(),
 							); scheduleErr != nil {
 								s.logger.ErrorContext(ctx, "failed to schedule fallback model usage tracking",

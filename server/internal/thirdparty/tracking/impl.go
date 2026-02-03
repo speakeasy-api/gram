@@ -31,6 +31,7 @@ func (c *Composite) TrackModelUsage(ctx context.Context, event billing.ModelUsag
 
 	properties := map[string]any{
 		"organization_id":         event.OrganizationID,
+		"organization_slug":       event.OrganizationSlug,
 		"model":                   event.Model,
 		"source":                  string(event.Source),
 		"input_tokens":            event.InputTokens,
