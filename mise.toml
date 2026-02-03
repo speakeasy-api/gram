@@ -51,7 +51,7 @@ CLICKHOUSE_DATABASE = "default"
 CLICKHOUSE_INSECURE = true
 GRAM_CLICKHOUSE_URL = "clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?secure=true&skip_verify=true"
 ## golang-migrate requires username/password as query parameters instead of in the URL
-GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true"
+GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true"
 
 ############################
 ## Temporal configuration ##
