@@ -44,7 +44,7 @@ func BuildInviteMemberPayload(teamsInviteMemberBody string, teamsInviteMemberSes
 	{
 		err = json.Unmarshal([]byte(teamsInviteMemberBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"wen\",\n      \"organization_id\": \"Esse dolore sed eum beatae dolor.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.email", body.Email, goa.FormatEmail))
 		if utf8.RuneCountInString(body.Email) > 255 {
@@ -122,7 +122,7 @@ func BuildResendInvitePayload(teamsResendInviteBody string, teamsResendInviteSes
 	{
 		err = json.Unmarshal([]byte(teamsResendInviteBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"invite_id\": \"c27e3313-72cd-4267-ac8b-597f907b326a\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"invite_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.invite_id", body.InviteID, goa.FormatUUID))
 		if err != nil {
