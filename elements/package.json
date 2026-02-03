@@ -2,7 +2,7 @@
   "name": "@gram-ai/elements",
   "description": "Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.",
   "type": "module",
-  "version": "1.24.2",
+  "version": "1.25.0",
   "main": "dist/index.js",
   "exports": {
     ".": {
@@ -19,6 +19,11 @@
       "types": "./dist/plugins/index.d.ts",
       "import": "./dist/plugins.js",
       "require": "./dist/plugins.cjs"
+    },
+    "./compat": {
+      "types": "./dist/compat-plugin.d.ts",
+      "import": "./dist/compat-plugin.js",
+      "require": "./dist/compat-plugin.cjs"
     },
     "./elements.css": "./dist/elements.css"
   },
@@ -57,17 +62,17 @@
   "keywords": [],
   "author": "Adam Bull <adam@speakeasy.com>",
   "license": "ISC",
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@10.28.2",
   "peerDependencies": {
     "@assistant-ui/react": "^0.11.0",
     "@assistant-ui/react-ai-sdk": "^1.1.16",
     "@assistant-ui/react-markdown": "^0.11.0",
     "@json-render/react": "^0.2.0",
-    "@types/react": ">=18 <20",
-    "@types/react-dom": ">=18 <20",
+    "@types/react": ">=16.8",
+    "@types/react-dom": ">=16.8",
     "motion": "^12.0.0",
-    "react": ">=18 <20",
-    "react-dom": ">=18 <20",
+    "react": ">=16.8",
+    "react-dom": ">=16.8",
     "remark-gfm": "^4.0.0",
     "shiki": "^3.20.0",
     "zustand": "^5.0.0"

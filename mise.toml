@@ -5,21 +5,21 @@
 # file, you can specify more tools or different version of listed ones below as
 # well as overriding environment variables.
 [tools]
-"aqua:ariga/atlas" = "0.38.0"
-"github:speakeasy-api/speakeasy" = "1.700.1"
+"aqua:ariga/atlas" = "1.0.0"
+"github:speakeasy-api/speakeasy" = "1.700.2"
 "github:FiloSottile/mkcert" = "1.4.4"
-apko = "1.0.1"
-flyctl = "0.4.2"
-go = "1.25.5"
+apko = "1.1.3"
+flyctl = "0.4.6"
+go = "1.25.6"
 golangci-lint = "2.8.0"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.1"
-melange = "0.37.5"
+melange = "0.40.4"
 nodejs = "24.10.0"
-pnpm = "10.18.2"
-watchexec = "2.3.2"
-mprocs = "0.8.2"
+pnpm = "10.28.2"
+watchexec = "2.3.3"
+mprocs = "0.8.3"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
@@ -51,7 +51,7 @@ CLICKHOUSE_DATABASE = "default"
 CLICKHOUSE_INSECURE = true
 GRAM_CLICKHOUSE_URL = "clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?secure=true&skip_verify=true"
 ## golang-migrate requires username/password as query parameters instead of in the URL
-GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true"
+GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true"
 
 ############################
 ## Temporal configuration ##

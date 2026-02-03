@@ -131,7 +131,9 @@ WHERE c.project_id = @project_id AND c.user_id = @user_id;
 SELECT * FROM chats WHERE id = @id;
 
 -- name: ListChatMessages :many
-SELECT * FROM chat_messages WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
+SELECT * FROM chat_messages 
+WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid) 
+ORDER BY seq ASC;
 
 -- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages WHERE chat_id = @chat_id;
