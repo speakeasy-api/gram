@@ -3,3 +3,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# Auth state files (contain session tokens)
+.auth-state.json
+*.auth.json
