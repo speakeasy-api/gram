@@ -88,6 +88,7 @@ export * from "./renderTemplate.js";
 export * from "./renderTemplateByID.js";
 export * from "./resendTeamInvite.js";
 export * from "./revokeAPIKey.js";
+export * from "./searchChats.js";
 export * from "./searchLogs.js";
 export * from "./searchToolCalls.js";
 export * from "./serveChatAttachment.js";

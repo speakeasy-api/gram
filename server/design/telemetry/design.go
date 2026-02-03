@@ -20,10 +20,6 @@ var _ = Service("telemetry", func() {
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
 		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("consumer")
-		})
-		Security(security.ByKey, security.ProjectSlug)
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
@@ -53,10 +49,6 @@ var _ = Service("telemetry", func() {
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
 		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("consumer")
-		})
-		Security(security.ByKey, security.ProjectSlug)
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
@@ -81,15 +73,40 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SearchToolCalls"}`)
 	})
 
+	Method("searchChats", func() {
+		Description("Search and list chat session summaries that match a search filter")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(SearchChatsPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SearchChatsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.searchChats")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "searchChats")
+		Meta("openapi:extension:x-speakeasy-name-override", "searchChats")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SearchChats", "type": "query"}`)
+	})
+
 	Method("captureEvent", func() {
 		Description("Capture a telemetry event and forward it to PostHog")
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
 		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("consumer")
-		})
-		Security(security.ByKey, security.ProjectSlug)
 		Security(security.Session, security.ProjectSlug)
 		Security(security.ChatSessionsToken)
 
@@ -120,9 +137,6 @@ var _ = Service("telemetry", func() {
 		Description("Get aggregated metrics summary for an entire project")
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
-		})
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("consumer")
 		})
 		Security(security.Session, security.ProjectSlug)
 
@@ -187,6 +201,7 @@ var SearchLogsFilter = Type("SearchLogsFilter", func() {
 	})
 	Attribute("service_name", String, "Service name filter")
 	Attribute("gram_urns", ArrayOf(String), "Gram URN filter (one or more URNs)")
+	Attribute("gram_chat_id", String, "Chat ID filter")
 })
 
 var SearchLogsPayload = Type("SearchLogsPayload", func() {
@@ -299,6 +314,83 @@ var ToolCallSummary = Type("ToolCallSummary", func() {
 		"start_time_unix_nano",
 		"log_count",
 		"gram_urn",
+	)
+})
+
+var SearchChatsFilter = Type("SearchChatsFilter", func() {
+	Description("Filter criteria for searching chat sessions")
+
+	Attribute("from", String, "Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("deployment_id", String, "Deployment ID filter", func() {
+		Format(FormatUUID)
+	})
+	Attribute("gram_urn", String, "Gram URN filter (single URN, use gram_urns for multiple)")
+})
+
+var SearchChatsPayload = Type("SearchChatsPayload", func() {
+	Description("Payload for searching chat session summaries")
+
+	Attribute("filter", SearchChatsFilter, "Filter criteria for the search")
+	Attribute("cursor", String, "Cursor for pagination")
+	Attribute("sort", String, "Sort order", func() {
+		Enum("asc", "desc")
+		Default("desc")
+	})
+	Attribute("limit", Int, "Number of items to return (1-1000)", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(50)
+	})
+})
+
+var SearchChatsResult = Type("SearchChatsResult", func() {
+	Description("Result of searching chat session summaries")
+
+	Attribute("chats", ArrayOf(ChatSummaryType), "List of chat session summaries")
+	Attribute("next_cursor", String, "Cursor for next page")
+	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
+
+	Required("chats", "enabled")
+})
+
+var ChatSummaryType = Type("ChatSummary", func() {
+	Description("Summary information for a chat session")
+
+	Attribute("gram_chat_id", String, "Chat session ID")
+	Attribute("start_time_unix_nano", Int64, "Earliest log timestamp in Unix nanoseconds")
+	Attribute("end_time_unix_nano", Int64, "Latest log timestamp in Unix nanoseconds")
+	Attribute("log_count", UInt64, "Total number of logs in this chat session")
+	Attribute("tool_call_count", UInt64, "Number of tool calls in this chat session")
+	Attribute("message_count", UInt64, "Number of LLM completion messages in this chat session")
+	Attribute("duration_seconds", Float64, "Chat session duration in seconds")
+	Attribute("status", String, "Chat session status", func() {
+		Enum("success", "error")
+	})
+	Attribute("user_id", String, "User ID associated with this chat session")
+	Attribute("model", String, "LLM model used in this chat session")
+	Attribute("total_input_tokens", Int64, "Total input tokens used")
+	Attribute("total_output_tokens", Int64, "Total output tokens used")
+	Attribute("total_tokens", Int64, "Total tokens used (input + output)")
+
+	Required(
+		"gram_chat_id",
+		"start_time_unix_nano",
+		"end_time_unix_nano",
+		"log_count",
+		"tool_call_count",
+		"message_count",
+		"duration_seconds",
+		"status",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
 	)
 })
 

@@ -12,16 +12,6 @@ export type SearchToolCallsSecurityOption1 = {
 };
 
 export type SearchToolCallsSecurityOption2 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
-export type SearchToolCallsSecurityOption3 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
-export type SearchToolCallsSecurityOption4 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
@@ -29,8 +19,6 @@ export type SearchToolCallsSecurityOption4 = {
 export type SearchToolCallsSecurity = {
   option1?: SearchToolCallsSecurityOption1 | undefined;
   option2?: SearchToolCallsSecurityOption2 | undefined;
-  option3?: SearchToolCallsSecurityOption3 | undefined;
-  option4?: SearchToolCallsSecurityOption4 | undefined;
 };
 
 export type SearchToolCallsRequest = {
@@ -82,8 +70,8 @@ export function searchToolCallsSecurityOption1ToJSON(
 
 /** @internal */
 export type SearchToolCallsSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -92,12 +80,12 @@ export const SearchToolCallsSecurityOption2$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SearchToolCallsSecurityOption2
 > = z.object({
-  apikeyHeaderGramKey: z.string(),
   projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
     projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
 
@@ -112,73 +100,9 @@ export function searchToolCallsSecurityOption2ToJSON(
 }
 
 /** @internal */
-export type SearchToolCallsSecurityOption3$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
-};
-
-/** @internal */
-export const SearchToolCallsSecurityOption3$outboundSchema: z.ZodType<
-  SearchToolCallsSecurityOption3$Outbound,
-  z.ZodTypeDef,
-  SearchToolCallsSecurityOption3
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-  });
-});
-
-export function searchToolCallsSecurityOption3ToJSON(
-  searchToolCallsSecurityOption3: SearchToolCallsSecurityOption3,
-): string {
-  return JSON.stringify(
-    SearchToolCallsSecurityOption3$outboundSchema.parse(
-      searchToolCallsSecurityOption3,
-    ),
-  );
-}
-
-/** @internal */
-export type SearchToolCallsSecurityOption4$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const SearchToolCallsSecurityOption4$outboundSchema: z.ZodType<
-  SearchToolCallsSecurityOption4$Outbound,
-  z.ZodTypeDef,
-  SearchToolCallsSecurityOption4
-> = z.object({
-  projectSlugHeaderGramProject: z.string(),
-  sessionHeaderGramSession: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
-  });
-});
-
-export function searchToolCallsSecurityOption4ToJSON(
-  searchToolCallsSecurityOption4: SearchToolCallsSecurityOption4,
-): string {
-  return JSON.stringify(
-    SearchToolCallsSecurityOption4$outboundSchema.parse(
-      searchToolCallsSecurityOption4,
-    ),
-  );
-}
-
-/** @internal */
 export type SearchToolCallsSecurity$Outbound = {
   Option1?: SearchToolCallsSecurityOption1$Outbound | undefined;
   Option2?: SearchToolCallsSecurityOption2$Outbound | undefined;
-  Option3?: SearchToolCallsSecurityOption3$Outbound | undefined;
-  Option4?: SearchToolCallsSecurityOption4$Outbound | undefined;
 };
 
 /** @internal */
@@ -191,16 +115,10 @@ export const SearchToolCallsSecurity$outboundSchema: z.ZodType<
     .optional(),
   option2: z.lazy(() => SearchToolCallsSecurityOption2$outboundSchema)
     .optional(),
-  option3: z.lazy(() => SearchToolCallsSecurityOption3$outboundSchema)
-    .optional(),
-  option4: z.lazy(() => SearchToolCallsSecurityOption4$outboundSchema)
-    .optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
-    option3: "Option3",
-    option4: "Option4",
   });
 });
 

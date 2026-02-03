@@ -88,6 +88,7 @@ export * from "./rendertemplatebyid.js";
 export * from "./resendteaminvite.js";
 export * from "./revokeapikey.js";
 export * from "./revokechatsession.js";
+export * from "./searchchats.js";
 export * from "./searchlogs.js";
 export * from "./searchtoolcalls.js";
 export * from "./servechatattachment.js";

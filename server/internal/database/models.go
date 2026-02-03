@@ -57,22 +57,21 @@ type Asset struct {
 }
 
 type Chat struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	UserID          pgtype.Text
-	ExternalUserID  pgtype.Text
-	Title           pgtype.Text
-	Resolution      pgtype.Text
-	ResolutionNotes pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type ChatMessage struct {
 	ID               uuid.UUID
+	Seq              int64
 	ChatID           uuid.UUID
 	ProjectID        uuid.NullUUID
 	Role             string
@@ -98,6 +97,22 @@ type ChatMessage struct {
 	ToolOutcome      pgtype.Text
 	ToolOutcomeNotes pgtype.Text
 	CreatedAt        pgtype.Timestamptz
+}
+
+type ChatResolution struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	ChatID          uuid.UUID
+	UserGoal        string
+	Resolution      string
+	ResolutionNotes string
+	Score           int32
+	CreatedAt       pgtype.Timestamptz
+}
+
+type ChatResolutionMessage struct {
+	ChatResolutionID uuid.UUID
+	MessageID        uuid.UUID
 }
 
 type CustomDomain struct {
@@ -233,6 +248,21 @@ type ExternalMcpToolDefinition struct {
 	UpdatedAt                  pgtype.Timestamptz
 	DeletedAt                  pgtype.Timestamptz
 	Deleted                    bool
+}
+
+type ExternalOauthClientRegistration struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	OauthServerIssuer     string
+	ClientID              string
+	ClientSecretEncrypted pgtype.Text
+	ClientIDIssuedAt      pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
 }
 
 type ExternalOauthServerMetadatum struct {
@@ -388,17 +418,18 @@ type McpEnvironmentConfig struct {
 }
 
 type McpMetadatum struct {
-	ID                       uuid.UUID
-	ToolsetID                uuid.UUID
-	ProjectID                uuid.UUID
-	ExternalDocumentationUrl pgtype.Text
-	LogoID                   uuid.NullUUID
-	Instructions             pgtype.Text
-	HeaderDisplayNames       []byte
-	DefaultEnvironmentID     uuid.NullUUID
-	InstallationOverrideUrl  pgtype.Text
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
+	ID                        uuid.UUID
+	ToolsetID                 uuid.UUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	HeaderDisplayNames        []byte
+	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
 }
 
 type McpRegistry struct {
@@ -608,16 +639,16 @@ type SourceEnvironment struct {
 }
 
 type TeamInvite struct {
-	ID              uuid.UUID
-	OrganizationID  pgtype.Text
-	Email           string
-	InvitedByUserID pgtype.Text
-	Status          string
-	Token           string
 	ExpiresAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
+	OrganizationID  string
+	Email           string
+	InvitedByUserID pgtype.Text
+	Status          string
+	Token           string
+	ID              uuid.UUID
 	Deleted         bool
 }
 
@@ -727,4 +758,24 @@ type User struct {
 	LastLogin   pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
+}
+
+type UserOauthToken struct {
+	ID                    uuid.UUID
+	UserID                string
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	ClientRegistrationID  uuid.UUID
+	ToolsetID             uuid.UUID
+	OauthServerIssuer     string
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+	TokenType             pgtype.Text
+	ExpiresAt             pgtype.Timestamptz
+	Scopes                []string
+	ProviderName          pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
 }

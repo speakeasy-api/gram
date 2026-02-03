@@ -12,10 +12,13 @@ import {
   ThemeSwitcher,
 } from "@speakeasy-api/moonshine";
 import {
+  BugIcon,
   CheckIcon,
   ChevronsUpDown,
   CreditCardIcon,
   LogOutIcon,
+  MailIcon,
+  MessageCircleIcon,
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
@@ -190,6 +193,31 @@ export function TopHeader() {
                 <DropdownMenuItem onClick={() => routes.billing.goTo()}>
                   <CreditCardIcon className="mr-2 h-4 w-4" />
                   Billing
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem asChild>
+                  <a href="mailto:gram@speakeasy.com">
+                    <MailIcon className="mr-2 h-4 w-4" />
+                    Get Support
+                  </a>
+                </DropdownMenuItem>
+                {window.Pylon && (
+                  <DropdownMenuItem onClick={() => window.Pylon("show")}>
+                    <MessageCircleIcon className="mr-2 h-4 w-4" />
+                    Chat with Team
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem asChild>
+                  <a
+                    href="https://github.com/speakeasy-api/gram/issues/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <BugIcon className="mr-2 h-4 w-4" />
+                    Bug or Feature Request
+                  </a>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />

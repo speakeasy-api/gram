@@ -12,16 +12,6 @@ export type SearchLogsSecurityOption1 = {
 };
 
 export type SearchLogsSecurityOption2 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
-export type SearchLogsSecurityOption3 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
-export type SearchLogsSecurityOption4 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
@@ -29,8 +19,6 @@ export type SearchLogsSecurityOption4 = {
 export type SearchLogsSecurity = {
   option1?: SearchLogsSecurityOption1 | undefined;
   option2?: SearchLogsSecurityOption2 | undefined;
-  option3?: SearchLogsSecurityOption3 | undefined;
-  option4?: SearchLogsSecurityOption4 | undefined;
 };
 
 export type SearchLogsRequest = {
@@ -80,8 +68,8 @@ export function searchLogsSecurityOption1ToJSON(
 
 /** @internal */
 export type SearchLogsSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -90,12 +78,12 @@ export const SearchLogsSecurityOption2$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SearchLogsSecurityOption2
 > = z.object({
-  apikeyHeaderGramKey: z.string(),
   projectSlugHeaderGramProject: z.string(),
+  sessionHeaderGramSession: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
     projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
 
@@ -108,69 +96,9 @@ export function searchLogsSecurityOption2ToJSON(
 }
 
 /** @internal */
-export type SearchLogsSecurityOption3$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
-};
-
-/** @internal */
-export const SearchLogsSecurityOption3$outboundSchema: z.ZodType<
-  SearchLogsSecurityOption3$Outbound,
-  z.ZodTypeDef,
-  SearchLogsSecurityOption3
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-  });
-});
-
-export function searchLogsSecurityOption3ToJSON(
-  searchLogsSecurityOption3: SearchLogsSecurityOption3,
-): string {
-  return JSON.stringify(
-    SearchLogsSecurityOption3$outboundSchema.parse(searchLogsSecurityOption3),
-  );
-}
-
-/** @internal */
-export type SearchLogsSecurityOption4$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const SearchLogsSecurityOption4$outboundSchema: z.ZodType<
-  SearchLogsSecurityOption4$Outbound,
-  z.ZodTypeDef,
-  SearchLogsSecurityOption4
-> = z.object({
-  projectSlugHeaderGramProject: z.string(),
-  sessionHeaderGramSession: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
-  });
-});
-
-export function searchLogsSecurityOption4ToJSON(
-  searchLogsSecurityOption4: SearchLogsSecurityOption4,
-): string {
-  return JSON.stringify(
-    SearchLogsSecurityOption4$outboundSchema.parse(searchLogsSecurityOption4),
-  );
-}
-
-/** @internal */
 export type SearchLogsSecurity$Outbound = {
   Option1?: SearchLogsSecurityOption1$Outbound | undefined;
   Option2?: SearchLogsSecurityOption2$Outbound | undefined;
-  Option3?: SearchLogsSecurityOption3$Outbound | undefined;
-  Option4?: SearchLogsSecurityOption4$Outbound | undefined;
 };
 
 /** @internal */
@@ -181,14 +109,10 @@ export const SearchLogsSecurity$outboundSchema: z.ZodType<
 > = z.object({
   option1: z.lazy(() => SearchLogsSecurityOption1$outboundSchema).optional(),
   option2: z.lazy(() => SearchLogsSecurityOption2$outboundSchema).optional(),
-  option3: z.lazy(() => SearchLogsSecurityOption3$outboundSchema).optional(),
-  option4: z.lazy(() => SearchLogsSecurityOption4$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     option1: "Option1",
     option2: "Option2",
-    option3: "Option3",
-    option4: "Option4",
   });
 });
 
