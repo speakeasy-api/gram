@@ -319,6 +319,12 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 		return oops.E(oops.CodeUnexpected, err, "failed to generate state ID").Log(ctx, s.logger)
 	}
 
+	// Build authorization URL
+	authURL, err := url.Parse(oauthConfig.AuthorizationEndpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "invalid authorization endpoint").Log(ctx, s.logger)
+	}
+
 	// Create state object
 	state := ExternalOAuthState{
 		UserID:            authCtx.UserID,
@@ -340,12 +346,6 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 	// Store state in cache
 	if err := s.stateStorage.Store(ctx, state); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to store OAuth state").Log(ctx, s.logger)
-	}
-
-	// Build authorization URL
-	authURL, err := url.Parse(oauthConfig.AuthorizationEndpoint)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "invalid authorization endpoint").Log(ctx, s.logger)
 	}
 
 	callbackURL := fmt.Sprintf("%s/oauth-external/callback", s.serverURL.String())
