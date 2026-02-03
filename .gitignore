@@ -12,8 +12,6 @@ junit-report.xml
 .idea
 /server/goa*
 /server/gram
-/server/gen/http/openapi.yaml
-/server/gen/http/openapi.json
 scratch/
 /local/cache
 /local/ssl
