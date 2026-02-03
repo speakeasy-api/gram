@@ -267,7 +267,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 	invite, err := s.repo.CreateTeamInvite(ctx, repo.CreateTeamInviteParams{
 		OrganizationID:  payload.OrganizationID,
 		Email:           payload.Email,
-		InvitedByUserID: userInfo.UserID,
+		InvitedByUserID: pgtype.Text{String: userInfo.UserID, Valid: true},
 		Token:           token,
 		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, Valid: true, InfinityModifier: 0},
 	})
