@@ -67,7 +67,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"b8769e9f-0255-40d6-a6df-201021742c64\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Veniam ducimus voluptatem harum vitae deleniti.\",\n            \"provided_by\": \"Saepe et est incidunt.\",\n            \"variable_name\": \"Voluptatem harum minus nihil.\"\n         },\n         {\n            \"header_display_name\": \"Veniam ducimus voluptatem harum vitae deleniti.\",\n            \"provided_by\": \"Saepe et est incidunt.\",\n            \"variable_name\": \"Voluptatem harum minus nihil.\"\n         },\n         {\n            \"header_display_name\": \"Veniam ducimus voluptatem harum vitae deleniti.\",\n            \"provided_by\": \"Saepe et est incidunt.\",\n            \"variable_name\": \"Voluptatem harum minus nihil.\"\n         }\n      ],\n      \"external_documentation_url\": \"Enim animi.\",\n      \"installation_override_url\": \"http://grahamrogahn.com/brandt\",\n      \"instructions\": \"Ad laborum dolor quia quis quasi nisi.\",\n      \"logo_asset_id\": \"Et rerum sunt perferendis quam.\",\n      \"toolset_slug\": \"te4\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"abc123\",\n            \"provided_by\": \"abc123\",\n            \"variable_name\": \"abc123\"\n         }\n      ],\n      \"external_documentation_url\": \"abc123\",\n      \"installation_override_url\": \"https://example.com/foo\",\n      \"instructions\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"toolset_slug\": \"aaa\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
@@ -134,7 +134,7 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 	{
 		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"tqo\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"aaa\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.McpSlug) > 40 {

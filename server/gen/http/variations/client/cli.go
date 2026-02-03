@@ -23,7 +23,7 @@ func BuildUpsertGlobalPayload(variationsUpsertGlobalBody string, variationsUpser
 	{
 		err = json.Unmarshal([]byte(variationsUpsertGlobalBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"always\",\n      \"confirm_prompt\": \"Earum sed at distinctio eaque.\",\n      \"description\": \"Rerum non est voluptatem.\",\n      \"name\": \"In est.\",\n      \"src_tool_name\": \"Sunt in rem voluptas officia officia.\",\n      \"src_tool_urn\": \"Ipsum inventore cumque ut placeat dignissimos sit.\",\n      \"summarizer\": \"Ipsa ipsum reprehenderit.\",\n      \"summary\": \"Nulla corporis iure quod sequi rerum quod.\",\n      \"tags\": [\n         \"Occaecati dolorem natus aspernatur.\",\n         \"Aspernatur facilis in earum.\",\n         \"Nulla enim.\",\n         \"Quis blanditiis in sit.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"never\",\n      \"confirm_prompt\": \"abc123\",\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"src_tool_name\": \"abc123\",\n      \"src_tool_urn\": \"abc123\",\n      \"summarizer\": \"abc123\",\n      \"summary\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.Confirm != nil {
 			if !(*body.Confirm == "always" || *body.Confirm == "never" || *body.Confirm == "session") {

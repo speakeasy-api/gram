@@ -2,6 +2,7 @@ package design
 
 import (
 	. "goa.design/goa/v3/dsl"
+	"goa.design/goa/v3/expr"
 	_ "goa.design/plugins/v3/otel"
 
 	_ "github.com/speakeasy-api/gram/server/design/about"
@@ -37,4 +38,5 @@ var _ = API("gram", func() {
 	Title("Gram API Description")
 	Description("Gram is the tools platform for AI agents")
 	Meta("openapi:example", "false")
+	Randomizer(expr.NewDeterministicRandomizer())
 })
