@@ -405,7 +405,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		"origin":            metadata.Origin,
 	}
 
-	source := billing.ModelUsageSourceChat
+	source := billing.ModelUsageSourcePlayground
 	if metadata.Source == "elements" {
 		source = billing.ModelUsageSourceElements
 	}

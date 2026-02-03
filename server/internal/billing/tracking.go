@@ -16,10 +16,10 @@ const (
 type ModelUsageSource string
 
 const (
-	ModelUsageSourceChat     ModelUsageSource = "playground"
-	ModelUsageSourceAgents   ModelUsageSource = "agents"
-	ModelUsageSourceElements ModelUsageSource = "elements"
-	ModelUsageSourceGram     ModelUsageSource = "gram"
+	ModelUsageSourcePlayground ModelUsageSource = "playground"
+	ModelUsageSourceAgents     ModelUsageSource = "agents"
+	ModelUsageSourceElements   ModelUsageSource = "elements"
+	ModelUsageSourceGram       ModelUsageSource = "gram"
 )
 
 type ModelUsageEvent struct {
