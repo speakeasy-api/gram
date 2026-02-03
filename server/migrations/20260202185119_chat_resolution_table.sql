@@ -1,11 +1,4 @@
--- atlas:txtar
-
--- checks/destructive.sql --
--- Verify columns are empty before dropping (DS103).
-SELECT NOT EXISTS (SELECT 1 FROM chats WHERE resolution IS NOT NULL) AS chats_resolution_empty;
-SELECT NOT EXISTS (SELECT 1 FROM chats WHERE resolution_notes IS NOT NULL) AS chats_resolution_notes_empty;
-
--- migration.sql --
+-- atlas:nolint DS103
 -- Modify "chats" table
 -- Columns moved to the new chat_resolutions table below.
 ALTER TABLE "chats" DROP COLUMN "resolution", DROP COLUMN "resolution_notes";
