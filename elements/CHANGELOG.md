@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.25.0
+
+### Minor Changes
+
+- feea712: Add `reactCompat()` Vite plugin for React 16/17 support. Users on older React versions can add one line to their Vite config to polyfill React 18 APIs (`useSyncExternalStore`, `useId`, `useInsertionEffect`, `startTransition`, `useTransition`, `useDeferredValue`) used by Elements and its dependencies.
+
 ## 1.24.2
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # server
 
+## 0.22.1
+
+### Patch Changes
+
+- 0fe62df: Fix internal: billing_usage_report now start_time to be correctly parsed in Loops
+- c9b74af: Adds a new endpoint to list chats grouped by ID
+
 ## 0.22.0
 
 ### Minor Changes
