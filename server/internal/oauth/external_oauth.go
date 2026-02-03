@@ -232,6 +232,9 @@ func (s *ExternalOAuthService) withAuth(h func(w http.ResponseWriter, r *http.Re
 			Scopes:         []string{},
 			RequiredScopes: []string{},
 		})
+		if err != nil {
+			return err
+		}
 
 		return h(w, r.WithContext(ctx))
 	}
