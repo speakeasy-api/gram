@@ -13,6 +13,10 @@ export type AuthLoginRequest = {
    * Optional URL to redirect to after successful authentication
    */
   redirect?: string | undefined;
+  /**
+   * Optional invite token to process after authentication
+   */
+  inviteToken?: string | undefined;
 };
 
 export type AuthLoginResponse = {
@@ -22,6 +26,7 @@ export type AuthLoginResponse = {
 /** @internal */
 export type AuthLoginRequest$Outbound = {
   redirect?: string | undefined;
+  invite_token?: string | undefined;
 };
 
 /** @internal */
@@ -31,6 +36,11 @@ export const AuthLoginRequest$outboundSchema: z.ZodType<
   AuthLoginRequest
 > = z.object({
   redirect: z.string().optional(),
+  inviteToken: z.string().optional(),
+}).transform((v) => {
+  return remap$(v, {
+    inviteToken: "invite_token",
+  });
 });
 
 export function authLoginRequestToJSON(

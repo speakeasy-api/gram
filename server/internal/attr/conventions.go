@@ -167,6 +167,7 @@ const (
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
 	TeamInviteEmailKey             = attribute.Key("gram.team.invite.email")
 	TeamInviteIDKey                = attribute.Key("gram.team.invite.id")
+	TeamInviteStatusKey            = attribute.Key("gram.team.invite.status")
 	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
 	ToolIDKey                      = attribute.Key("gram.tool.id")
 	ToolURNKey                     = attribute.Key("gram.tool.urn")
@@ -693,6 +694,9 @@ func SlogTeamInviteEmail(v string) slog.Attr      { return slog.String(string(Te
 
 func TeamInviteID(v string) attribute.KeyValue { return TeamInviteIDKey.String(v) }
 func SlogTeamInviteID(v string) slog.Attr      { return slog.String(string(TeamInviteIDKey), v) }
+
+func TeamInviteStatus(v string) attribute.KeyValue { return TeamInviteStatusKey.String(v) }
+func SlogTeamInviteStatus(v string) slog.Attr      { return slog.String(string(TeamInviteStatusKey), v) }
 
 func ToolCallSource(v string) attribute.KeyValue { return ToolCallSourceKey.String(v) }
 func SlogToolCallSource(v string) slog.Attr      { return slog.String(string(ToolCallSourceKey), v) }

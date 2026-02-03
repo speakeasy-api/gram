@@ -20,14 +20,12 @@ export function prefetchGetTeamInviteInfo(
   queryClient: QueryClient,
   client$: GramCore,
   request: operations.GetTeamInviteInfoRequest,
-  security?: operations.GetTeamInviteInfoSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildGetTeamInviteInfoQuery(
       client$,
       request,
-      security,
       options,
     ),
   });
@@ -36,7 +34,6 @@ export function prefetchGetTeamInviteInfo(
 export function buildGetTeamInviteInfoQuery(
   client$: GramCore,
   request: operations.GetTeamInviteInfoRequest,
-  security?: operations.GetTeamInviteInfoSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -45,10 +42,7 @@ export function buildGetTeamInviteInfoQuery(
   ) => Promise<GetTeamInviteInfoQueryData>;
 } {
   return {
-    queryKey: queryKeyGetTeamInviteInfo({
-      token: request.token,
-      gramSession: request.gramSession,
-    }),
+    queryKey: queryKeyGetTeamInviteInfo({ token: request.token }),
     queryFn: async function getTeamInviteInfoQueryFn(
       ctx,
     ): Promise<GetTeamInviteInfoQueryData> {
@@ -66,7 +60,6 @@ export function buildGetTeamInviteInfoQuery(
       return unwrapAsync(teamsGetInviteInfo(
         client$,
         request,
-        security,
         mergedOptions,
       ));
     },
@@ -74,7 +67,7 @@ export function buildGetTeamInviteInfoQuery(
 }
 
 export function queryKeyGetTeamInviteInfo(
-  parameters: { token: string; gramSession?: string | undefined },
+  parameters: { token: string },
 ): QueryKey {
   return ["@gram/client", "teams", "getInviteInfo", parameters];
 }

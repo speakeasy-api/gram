@@ -1900,6 +1900,13 @@ paths:
                   schema:
                     description: Optional URL to redirect to after successful authentication
                     type: string
+                - allowEmptyValue: true
+                  description: Optional invite token to process after authentication
+                  in: query
+                  name: invite_token
+                  schema:
+                    description: Optional invite token to process after authentication
+                    type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -7781,93 +7788,6 @@ paths:
             x-speakeasy-name-override: updateSlackConnection
             x-speakeasy-react-hook:
                 name: updateSlackConnection
-    /rpc/teams.acceptInvite:
-        post:
-            description: Accept a team invite using a token from an invite email.
-            operationId: acceptTeamInvite
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/ServeChatAttachmentSignedForm'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/AcceptInviteResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: acceptInvite teams
-            tags:
-                - teams
-            x-speakeasy-name-override: acceptInvite
-            x-speakeasy-react-hook:
-                name: AcceptTeamInvite
     /rpc/teams.cancelInvite:
         delete:
             description: Cancel a pending invite.
@@ -7967,13 +7887,6 @@ paths:
                   schema:
                     description: The invite token from the email link
                     type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
             responses:
                 "200":
                     content:
@@ -8035,8 +7948,6 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
             summary: getInviteInfo teams
             tags:
                 - teams
@@ -11604,14 +11515,6 @@ paths:
                 name: UpsertGlobalVariation
 components:
     schemas:
-        AcceptInviteResult:
-            type: object
-            properties:
-                organization_slug:
-                    type: string
-                    description: The slug of the organization the user was added to
-            required:
-                - organization_slug
         AddDeploymentPackageForm:
             type: object
             properties:

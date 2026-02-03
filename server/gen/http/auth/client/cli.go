@@ -36,15 +36,22 @@ func BuildCallbackPayload(authCallbackCode string, authCallbackState string) (*a
 
 // BuildLoginPayload builds the payload for the auth login endpoint from CLI
 // flags.
-func BuildLoginPayload(authLoginRedirect string) (*auth.LoginPayload, error) {
+func BuildLoginPayload(authLoginRedirect string, authLoginInviteToken string) (*auth.LoginPayload, error) {
 	var redirect *string
 	{
 		if authLoginRedirect != "" {
 			redirect = &authLoginRedirect
 		}
 	}
+	var inviteToken *string
+	{
+		if authLoginInviteToken != "" {
+			inviteToken = &authLoginInviteToken
+		}
+	}
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
+	v.InviteToken = inviteToken
 
 	return v, nil
 }
@@ -101,7 +108,7 @@ func BuildRegisterPayload(authRegisterBody string, authRegisterSessionToken stri
 	{
 		err = json.Unmarshal([]byte(authRegisterBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"org_name\": \"Accusantium voluptate vel est vel.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"org_name\": \"Eveniet ea qui est mollitia alias reiciendis.\"\n   }'")
 		}
 	}
 	var sessionToken *string

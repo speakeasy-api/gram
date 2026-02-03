@@ -3,53 +3,17 @@
  */
 
 import * as z from "zod/v3";
-import { remap as remap$ } from "../../lib/primitives.js";
-
-export type GetTeamInviteInfoSecurity = {
-  sessionHeaderGramSession?: string | undefined;
-};
 
 export type GetTeamInviteInfoRequest = {
   /**
    * The invite token from the email link
    */
   token: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
-
-/** @internal */
-export type GetTeamInviteInfoSecurity$Outbound = {
-  "session_header_Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const GetTeamInviteInfoSecurity$outboundSchema: z.ZodType<
-  GetTeamInviteInfoSecurity$Outbound,
-  z.ZodTypeDef,
-  GetTeamInviteInfoSecurity
-> = z.object({
-  sessionHeaderGramSession: z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    sessionHeaderGramSession: "session_header_Gram-Session",
-  });
-});
-
-export function getTeamInviteInfoSecurityToJSON(
-  getTeamInviteInfoSecurity: GetTeamInviteInfoSecurity,
-): string {
-  return JSON.stringify(
-    GetTeamInviteInfoSecurity$outboundSchema.parse(getTeamInviteInfoSecurity),
-  );
-}
 
 /** @internal */
 export type GetTeamInviteInfoRequest$Outbound = {
   token: string;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -59,11 +23,6 @@ export const GetTeamInviteInfoRequest$outboundSchema: z.ZodType<
   GetTeamInviteInfoRequest
 > = z.object({
   token: z.string(),
-  gramSession: z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    gramSession: "Gram-Session",
-  });
 });
 
 export function getTeamInviteInfoRequestToJSON(

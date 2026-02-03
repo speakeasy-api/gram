@@ -242,11 +242,12 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 			redirect    *string
 			inviteToken *string
 		)
-		redirectRaw := r.URL.Query().Get("redirect")
+		qp := r.URL.Query()
+		redirectRaw := qp.Get("redirect")
 		if redirectRaw != "" {
 			redirect = &redirectRaw
 		}
-		inviteTokenRaw := r.URL.Query().Get("invite_token")
+		inviteTokenRaw := qp.Get("invite_token")
 		if inviteTokenRaw != "" {
 			inviteToken = &inviteTokenRaw
 		}

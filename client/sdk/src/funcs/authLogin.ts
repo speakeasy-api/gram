@@ -91,6 +91,7 @@ async function $do(
   const path = pathToFunc("/rpc/auth.login")();
 
   const query = encodeFormQuery({
+    "invite_token": payload?.invite_token,
     "redirect": payload?.redirect,
   });
 

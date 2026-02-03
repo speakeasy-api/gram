@@ -140,12 +140,12 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				hasValidInvite = true
 			} else {
 				s.logger.WarnContext(ctx, "invite token is not eligible for whitelist bypass",
-					slog.String("status", invite.Status),
+					attr.SlogTeamInviteStatus(invite.Status),
 				)
 			}
 		} else {
 			s.logger.WarnContext(ctx, "invite token in state did not resolve to a valid invite",
-				slog.String("error", lookupErr.Error()),
+				attr.SlogError(lookupErr),
 			)
 		}
 	}
@@ -632,8 +632,8 @@ func (s *Service) processInviteToken(ctx context.Context, token, userID, userEma
 			return "", fmt.Errorf("invite was sent to a different email address")
 		}
 		s.logger.WarnContext(ctx, "dev mode: skipping invite email match check",
-			slog.String("invite_email", invite.Email),
-			slog.String("user_email", userEmail),
+			attr.SlogTeamInviteEmail(invite.Email),
+			attr.SlogUserEmail(userEmail),
 		)
 	}
 
@@ -686,9 +686,9 @@ func (s *Service) processInviteToken(ctx context.Context, token, userID, userEma
 	}
 
 	s.logger.InfoContext(ctx, "team invite accepted via oauth callback",
-		slog.String("organization_id", invite.OrganizationID),
-		slog.String("user_id", userID),
-		slog.String("invite_id", invite.ID.String()),
+		attr.SlogOrganizationID(invite.OrganizationID),
+		attr.SlogUserID(userID),
+		attr.SlogTeamInviteID(invite.ID.String()),
 	)
 
 	return orgSlug, nil

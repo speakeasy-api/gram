@@ -24,7 +24,7 @@ func BuildSearchLogsPayload(telemetrySearchLogsBody string, telemetrySearchLogsA
 	{
 		err = json.Unmarshal([]byte(telemetrySearchLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Et commodi ratione repellendus.\",\n      \"filter\": {\n         \"deployment_id\": \"4d2f4115-645a-4a68-8fa9-fc28db014161\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"b1975f88-9802-46bd-98d9-af67d146a0f3\",\n         \"gram_chat_id\": \"Nesciunt omnis aliquam quo.\",\n         \"gram_urn\": \"Eveniet ut quod laboriosam sit beatae deleniti.\",\n         \"gram_urns\": [\n            \"Et reiciendis consequuntur mollitia magni.\",\n            \"Ab voluptatum consequatur enim.\",\n            \"Vero provident facilis facilis voluptate.\",\n            \"Vero maiores inventore a atque et quam.\"\n         ],\n         \"http_method\": \"GET\",\n         \"http_route\": \"Aut sint ut exercitationem maiores ut cumque.\",\n         \"http_status_code\": 799349145,\n         \"service_name\": \"Adipisci sit culpa est corrupti ea.\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"68e7bb379ed9161e13472ecc5ea29458\"\n      },\n      \"limit\": 786,\n      \"sort\": \"desc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Molestias esse ducimus ut sint.\",\n      \"filter\": {\n         \"deployment_id\": \"fcc9c8f1-b7a0-47ff-b7b2-9277a4854ba7\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"ba690c9c-1d18-44ed-a6d9-e1716ad04ddd\",\n         \"gram_chat_id\": \"Excepturi fugiat ut aliquid in qui sint.\",\n         \"gram_urn\": \"Unde cum.\",\n         \"gram_urns\": [\n            \"Corporis consequatur velit perspiciatis maxime facere reiciendis.\",\n            \"Cumque amet provident vitae consequuntur iste aut.\"\n         ],\n         \"http_method\": \"OPTIONS\",\n         \"http_route\": \"Nesciunt et fuga nemo quasi voluptas.\",\n         \"http_status_code\": 826932839,\n         \"service_name\": \"Quas eaque atque est placeat consequatur nobis.\",\n         \"severity_text\": \"DEBUG\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"c4264c7bc2ebc7c05b010ae1d96e9905\"\n      },\n      \"limit\": 56,\n      \"sort\": \"desc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -80,7 +80,7 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	{
 		err = json.Unmarshal([]byte(telemetrySearchToolCallsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Sint nostrum molestiae.\",\n      \"filter\": {\n         \"deployment_id\": \"c5d7ff9d-8434-4f0f-b8b2-a8db9201aba6\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"05e07315-0215-42c3-a558-ff43ee678410\",\n         \"gram_urn\": \"Aliquid autem.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 601,\n      \"sort\": \"asc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Et similique soluta.\",\n      \"filter\": {\n         \"deployment_id\": \"e40ae05e-a703-4c38-9411-16dca819c244\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"26e4fce4-bc47-404f-b60e-6183230846ca\",\n         \"gram_urn\": \"Ipsam voluptatibus.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 321,\n      \"sort\": \"asc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -136,7 +136,7 @@ func BuildSearchChatsPayload(telemetrySearchChatsBody string, telemetrySearchCha
 	{
 		err = json.Unmarshal([]byte(telemetrySearchChatsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Quia accusantium vitae dignissimos.\",\n      \"filter\": {\n         \"deployment_id\": \"3e79163f-006a-40ea-999c-7ba22567b5d5\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"gram_urn\": \"Quaerat placeat.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 973,\n      \"sort\": \"desc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"Enim non iure dolores et impedit beatae.\",\n      \"filter\": {\n         \"deployment_id\": \"c6632aa1-a106-47c1-bca1-6436932e8191\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"gram_urn\": \"Alias tempore maxime quae aperiam blanditiis et.\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 767,\n      \"sort\": \"asc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -192,7 +192,7 @@ func BuildCaptureEventPayload(telemetryCaptureEventBody string, telemetryCapture
 	{
 		err = json.Unmarshal([]byte(telemetryCaptureEventBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"distinct_id\": \"Vel nihil voluptas.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"distinct_id\": \"Rerum ut pariatur amet sed repellendus optio.\",\n      \"event\": \"button_clicked\",\n      \"properties\": {\n         \"button_name\": \"submit\",\n         \"page\": \"checkout\",\n         \"value\": 100\n      }\n   }'")
 		}
 		if utf8.RuneCountInString(body.Event) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event", body.Event, utf8.RuneCountInString(body.Event), 1, true))

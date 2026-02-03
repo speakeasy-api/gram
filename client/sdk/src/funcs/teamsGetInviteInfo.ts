@@ -3,12 +3,11 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -35,7 +34,6 @@ import { Result } from "../types/fp.js";
 export function teamsGetInviteInfo(
   client: GramCore,
   request: operations.GetTeamInviteInfoRequest,
-  security?: operations.GetTeamInviteInfoSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -54,7 +52,6 @@ export function teamsGetInviteInfo(
   return new APIPromise($do(
     client,
     request,
-    security,
     options,
   ));
 }
@@ -62,7 +59,6 @@ export function teamsGetInviteInfo(
 async function $do(
   client: GramCore,
   request: operations.GetTeamInviteInfoRequest,
-  security?: operations.GetTeamInviteInfoSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -100,21 +96,7 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
-
-  const requestSecurity = resolveSecurity(
-    [
-      {
-        fieldName: "Gram-Session",
-        type: "apiKey:header",
-        value: security?.sessionHeaderGramSession,
-      },
-    ],
-  );
 
   const context = {
     options: client._options,
@@ -122,9 +104,9 @@ async function $do(
     operationID: "getTeamInviteInfo",
     oAuth2Scopes: null,
 
-    resolvedSecurity: requestSecurity,
+    resolvedSecurity: null,
 
-    securitySource: security,
+    securitySource: null,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -132,7 +114,6 @@ async function $do(
   };
 
   const requestRes = client._createRequest(context, {
-    security: requestSecurity,
     method: "GET",
     baseURL: options?.serverURL,
     path: path,

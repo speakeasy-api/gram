@@ -257,7 +257,6 @@ run();
 
 ### [Teams](docs/sdks/teams/README.md)
 
-* [acceptInvite](docs/sdks/teams/README.md#acceptinvite) - acceptInvite teams
 * [cancelInvite](docs/sdks/teams/README.md#cancelinvite) - cancelInvite teams
 * [getInviteInfo](docs/sdks/teams/README.md#getinviteinfo) - getInviteInfo teams
 * [inviteMember](docs/sdks/teams/README.md#invitemember) - inviteMember teams
@@ -410,7 +409,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`slackSlackCallback`](docs/sdks/slack/README.md#slackcallback) - callback slack
 - [`slackSlackLogin`](docs/sdks/slack/README.md#slacklogin) - login slack
 - [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
-- [`teamsAcceptInvite`](docs/sdks/teams/README.md#acceptinvite) - acceptInvite teams
 - [`teamsCancelInvite`](docs/sdks/teams/README.md#cancelinvite) - cancelInvite teams
 - [`teamsGetInviteInfo`](docs/sdks/teams/README.md#getinviteinfo) - getInviteInfo teams
 - [`teamsInviteMember`](docs/sdks/teams/README.md#invitemember) - inviteMember teams
@@ -474,7 +472,6 @@ To learn about this feature and how to get started, check
 
 <summary>Available React hooks</summary>
 
-- [`useAcceptTeamInviteMutation`](docs/sdks/teams/README.md#acceptinvite) - acceptInvite teams
 - [`useActiveDeployment`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets

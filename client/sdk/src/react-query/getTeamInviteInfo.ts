@@ -60,7 +60,6 @@ export type GetTeamInviteInfoQueryError =
  */
 export function useGetTeamInviteInfo(
   request: operations.GetTeamInviteInfoRequest,
-  security?: operations.GetTeamInviteInfoSecurity | undefined,
   options?: QueryHookOptions<
     GetTeamInviteInfoQueryData,
     GetTeamInviteInfoQueryError
@@ -71,7 +70,6 @@ export function useGetTeamInviteInfo(
     ...buildGetTeamInviteInfoQuery(
       client,
       request,
-      security,
       options,
     ),
     ...options,
@@ -86,7 +84,6 @@ export function useGetTeamInviteInfo(
  */
 export function useGetTeamInviteInfoSuspense(
   request: operations.GetTeamInviteInfoRequest,
-  security?: operations.GetTeamInviteInfoSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetTeamInviteInfoQueryData,
     GetTeamInviteInfoQueryError
@@ -100,7 +97,6 @@ export function useGetTeamInviteInfoSuspense(
     ...buildGetTeamInviteInfoQuery(
       client,
       request,
-      security,
       options,
     ),
     ...options,
@@ -109,9 +105,7 @@ export function useGetTeamInviteInfoSuspense(
 
 export function setGetTeamInviteInfoData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: { token: string; gramSession?: string | undefined },
-  ],
+  queryKeyBase: [parameters: { token: string }],
   data: GetTeamInviteInfoQueryData,
 ): GetTeamInviteInfoQueryData | undefined {
   const key = queryKeyGetTeamInviteInfo(...queryKeyBase);
@@ -121,9 +115,7 @@ export function setGetTeamInviteInfoData(
 
 export function invalidateGetTeamInviteInfo(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { token: string; gramSession?: string | undefined }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { token: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
