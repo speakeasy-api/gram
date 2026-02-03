@@ -21,4 +21,4 @@ CREATE TABLE "team_invites" (
 -- Create index "team_invites_organization_id_email_pending_key" to table: "team_invites"
 CREATE UNIQUE INDEX "team_invites_organization_id_email_pending_key" ON "team_invites" ("organization_id", "email") WHERE ((deleted IS FALSE) AND (status = 'pending'::text) AND (organization_id IS NOT NULL));
 -- Create index "team_invites_token_key" to table: "team_invites"
-CREATE UNIQUE INDEX "team_invites_token_key" ON "team_invites" ("token") WHERE (deleted IS FALSE);
+CREATE UNIQUE INDEX "team_invites_token_key" ON "team_invites" ("token");

@@ -1237,7 +1237,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS team_invites_organization_id_email_pending_key
 ON team_invites (organization_id, email)
 WHERE deleted IS FALSE AND status = 'pending' AND organization_id IS NOT NULL;
 
--- Index for looking up invites by token
+-- Index for looking up invites by token (unconditional to prevent token reuse)
 CREATE UNIQUE INDEX IF NOT EXISTS team_invites_token_key
-ON team_invites (token)
-WHERE deleted IS FALSE;
+ON team_invites (token);
