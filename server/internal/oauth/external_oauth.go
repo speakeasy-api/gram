@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -105,22 +106,33 @@ func (s ExternalOAuthState) TTL() time.Duration {
 // ExternalOAuthService handles OAuth flows where Gram acts as the OAuth client
 // to external providers (e.g., Google, Atlassian) for external MCP servers.
 type ExternalOAuthService struct {
-	logger            *slog.Logger
-	oauthRepo         *repo.Queries
-	toolsetsRepo      *toolsets_repo.Queries
-	deploymentsRepo   *deployments_repo.Queries
-	externalmcpRepo   *externalmcp_repo.Queries
-	projectsRepo      *projects_repo.Queries
-	stateStorage      cache.TypedCacheObject[ExternalOAuthState]
-	serverURL         *url.URL
-	auth              *auth.Auth
-	enc               *encryption.Client
-	httpClient        *http.Client
-	successPageTmpl   *template.Template
-	successScriptHash string
-	successScriptData []byte
-	successStyleHash  string
-	successStyleData  []byte
+	logger               *slog.Logger
+	oauthRepo            *repo.Queries
+	toolsetsRepo         *toolsets_repo.Queries
+	deploymentsRepo      *deployments_repo.Queries
+	externalmcpRepo      *externalmcp_repo.Queries
+	projectsRepo         *projects_repo.Queries
+	stateStorage         cache.TypedCacheObject[ExternalOAuthState]
+	serverURL            *url.URL
+	allowedRedirectHosts []string
+	auth                 *auth.Auth
+	enc                  *encryption.Client
+	httpClient           *http.Client
+	successPageTmpl      *template.Template
+	successScriptHash    string
+	successScriptData    []byte
+	successStyleHash     string
+	successStyleData     []byte
+}
+
+type ExternalOAuthServiceConfig struct {
+	ServerURL            *url.URL
+	AllowedRedirectHosts []string
+}
+
+// isAllowedRedirectHost checks if the given hostname is in the allowed list.
+func (s *ExternalOAuthService) isAllowedRedirectHost(host string) bool {
+	return slices.Contains(s.allowedRedirectHosts, host)
 }
 
 // NewExternalOAuthService creates a new ExternalOAuthService
@@ -128,9 +140,9 @@ func NewExternalOAuthService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	cacheImpl cache.Cache,
-	serverURL *url.URL,
 	auth *auth.Auth,
 	enc *encryption.Client,
+	cfg ExternalOAuthServiceConfig,
 ) *ExternalOAuthService {
 	stateStorage := cache.NewTypedObjectCache[ExternalOAuthState](
 		logger.With(attr.SlogCacheNamespace("external_oauth_state")),
@@ -147,22 +159,23 @@ func NewExternalOAuthService(
 	styleHashStr := hex.EncodeToString(styleHash[:])[:8]
 
 	return &ExternalOAuthService{
-		logger:            logger.With(attr.SlogComponent("external_oauth")),
-		oauthRepo:         repo.New(db),
-		toolsetsRepo:      toolsets_repo.New(db),
-		deploymentsRepo:   deployments_repo.New(db),
-		externalmcpRepo:   externalmcp_repo.New(db),
-		projectsRepo:      projects_repo.New(db),
-		stateStorage:      stateStorage,
-		serverURL:         serverURL,
-		auth:              auth,
-		enc:               enc,
-		httpClient:        retryablehttp.NewClient().StandardClient(),
-		successPageTmpl:   successPageTmpl,
-		successScriptHash: scriptHashStr,
-		successScriptData: externalOAuthSuccessScriptData,
-		successStyleHash:  styleHashStr,
-		successStyleData:  externalOAuthSuccessStyleData,
+		logger:               logger.With(attr.SlogComponent("external_oauth")),
+		oauthRepo:            repo.New(db),
+		toolsetsRepo:         toolsets_repo.New(db),
+		deploymentsRepo:      deployments_repo.New(db),
+		externalmcpRepo:      externalmcp_repo.New(db),
+		projectsRepo:         projects_repo.New(db),
+		stateStorage:         stateStorage,
+		serverURL:            cfg.ServerURL,
+		allowedRedirectHosts: cfg.AllowedRedirectHosts,
+		auth:                 auth,
+		enc:                  enc,
+		httpClient:           retryablehttp.NewClient().StandardClient(),
+		successPageTmpl:      successPageTmpl,
+		successScriptHash:    scriptHashStr,
+		successScriptData:    externalOAuthSuccessScriptData,
+		successStyleHash:     styleHashStr,
+		successStyleData:     externalOAuthSuccessStyleData,
 	}
 }
 
@@ -262,25 +275,13 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 
 	externalMCPSlug := r.URL.Query().Get("external_mcp_slug")
 
-	// Validate redirect_uri origin matches server origin to prevent open redirects.
-	// In local dev the frontend and backend run on different ports, so we only
-	// compare the hostname (without port) when the server is on localhost.
+	// Validate redirect_uri hostname is in the allowed list to prevent open redirects.
 	parsedRedirect, err := url.Parse(redirectURI)
 	if err != nil || parsedRedirect.Scheme == "" || parsedRedirect.Host == "" {
 		return oops.E(oops.CodeBadRequest, nil, "invalid redirect_uri").Log(ctx, s.logger)
 	}
-	serverHost := s.serverURL.Hostname()
-	redirectHost := parsedRedirect.Hostname()
-	if serverHost == "localhost" || serverHost == "127.0.0.1" {
-		// Local dev: allow any localhost redirect regardless of port
-		if redirectHost != "localhost" && redirectHost != "127.0.0.1" {
-			return oops.E(oops.CodeBadRequest, nil, "redirect_uri must be localhost in local mode").Log(ctx, s.logger)
-		}
-	} else {
-		// Prod/dev: strict origin match (scheme + host + port)
-		if parsedRedirect.Scheme != s.serverURL.Scheme || parsedRedirect.Host != s.serverURL.Host {
-			return oops.E(oops.CodeBadRequest, nil, "redirect_uri origin must match server origin").Log(ctx, s.logger)
-		}
+	if !s.isAllowedRedirectHost(parsedRedirect.Hostname()) {
+		return oops.E(oops.CodeBadRequest, nil, "redirect_uri hostname not allowed").Log(ctx, s.logger)
 	}
 
 	toolsetID, err := uuid.Parse(toolsetIDStr)
@@ -1056,22 +1057,12 @@ func (s *ExternalOAuthService) redirectWithError(w http.ResponseWriter, r *http.
 		return oops.E(oops.CodeUnexpected, err, "invalid redirect URI").Log(r.Context(), s.logger)
 	}
 
-	// Defense-in-depth: validate redirect URI origin matches server origin.
+	// Defense-in-depth: validate redirect URI hostname is in the allowed list.
 	// Fall back to JSON error response if validation fails.
-	serverHost := s.serverURL.Hostname()
-	redirectHost := parsed.Hostname()
-	if serverHost == "localhost" || serverHost == "127.0.0.1" {
-		if redirectHost != "localhost" && redirectHost != "127.0.0.1" {
-			s.logger.WarnContext(r.Context(), "redirectWithError: redirect_uri origin mismatch, returning JSON error instead",
-				attr.SlogOAuthRedirectURIFull(redirectURI))
-			return s.redirectWithError(w, r, "", errorCode, errorDesc)
-		}
-	} else {
-		if parsed.Scheme != s.serverURL.Scheme || parsed.Host != s.serverURL.Host {
-			s.logger.WarnContext(r.Context(), "redirectWithError: redirect_uri origin mismatch, returning JSON error instead",
-				attr.SlogOAuthRedirectURIFull(redirectURI))
-			return s.redirectWithError(w, r, "", errorCode, errorDesc)
-		}
+	if !s.isAllowedRedirectHost(parsed.Hostname()) {
+		s.logger.WarnContext(r.Context(), "redirectWithError: redirect_uri hostname not allowed, returning JSON error instead",
+			attr.SlogOAuthRedirectURIFull(redirectURI))
+		return s.redirectWithError(w, r, "", errorCode, errorDesc)
 	}
 
 	params := parsed.Query()

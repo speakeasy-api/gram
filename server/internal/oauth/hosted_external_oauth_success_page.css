@@ -15,19 +15,13 @@ body {
   --color-feedback-green-100: hsl(102, 35%, 93%);
   --color-feedback-green-300: hsl(99, 30%, 73%);
   --color-feedback-green-700: hsl(105, 24%, 27%);
-  --color-brand-blue-600: hsl(215, 71%, 40%);
-  --color-feedback-violet-600: hsl(268, 75%, 31%);
 
   --text-default: var(--color-neutral-700);
   --text-default-success: var(--color-feedback-green-700);
-  --bg-surface-secondary-default: var(--color-neutral-100);
   --bg-surface-primary-default: var(--color-base-white);
   --bg-success-softest: var(--color-feedback-green-100);
   --border-success-softest: var(--color-feedback-green-300);
-  --color-link-default: var(--color-brand-blue-600);
-  --color-link-visited-primary: var(--color-feedback-violet-600);
   --fill-neutral-highlight: var(--color-base-black);
-  --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
 
   margin: 0;
   padding: 0;
@@ -35,38 +29,34 @@ body {
   font-family: var(--font-diatype);
   font-weight: 300;
   color: var(--text-default);
-  background: var(--bg-surface-secondary-default);
+  background: var(--bg-surface-primary-default);
 }
 
 .main {
-  padding: 6rem 1rem;
-}
-
-@media (min-width: 768px) {
-  .main {
-    padding: 6rem 6rem;
-  }
-}
-
-@media (min-width: 1024px) {
-  .main {
-    padding: 6rem 13rem;
-  }
-}
-
-a {
-  text-decoration: none;
-  color: var(--color-link-default);
-}
-
-a:visited {
-  color: var(--color-link-visited-primary);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 100vh;
+  padding: 2rem;
+  position: relative;
 }
 
 .success-container {
-  max-width: 600px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  max-width: 320px;
+  width: 100%;
   text-align: center;
+}
+
+.gram-logo {
+  width: 80px;
+  height: auto;
+  margin-bottom: 0.5rem;
 }
 
 .success-content {
@@ -100,87 +90,28 @@ a:visited {
 
 .success-title {
   margin: 0;
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 300;
   color: var(--fill-neutral-highlight);
 }
 
 .success-description {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1rem;
   color: var(--text-default);
   line-height: 1.6;
 }
 
-@property --gradient-rotation {
-  syntax: "<angle>";
-  inherits: true;
-  initial-value: 0deg;
-}
-
-.gram-brand-badge {
-  position: fixed;
-  bottom: 1.25rem;
-  right: 1rem;
-  transition: --gradient-rotation 250ms var(--ease-in-out-quad);
-  --mouse-center-offset-x: 0;
-  --mouse-center-offset-y: 0;
-  --gradient-rotation: calc(
-    -1 * atan2(var(--mouse-center-offset-x), var(--mouse-center-offset-y)) -
-      90deg
-  );
-  --border-radius-px: 2px;
-  --border-px: 1px;
-  --gradient-stops:
-    hsl(334, 54%, 13%), hsl(4, 67%, 47%), hsl(23, 96%, 62%), hsl(68, 52%, 72%),
-    hsl(108, 24%, 41%), hsl(154, 100%, 7%), hsl(220, 100%, 12%),
-    hsl(214, 69%, 50%), hsl(216, 100%, 80%), hsl(334, 54%, 13%);
-}
-
-.gram-brand-badge::before {
+.speakeasy-footer {
   position: absolute;
-  content: "";
-  background: conic-gradient(
-    from var(--gradient-rotation),
-    var(--gradient-stops)
-  );
-  z-index: -1;
-  border-radius: var(--border-radius-px);
-  width: calc(100% + 2 * var(--border-px));
-  height: calc(100% + 2 * var(--border-px));
-  left: calc(-1 * var(--border-px));
-  top: calc(-1 * var(--border-px));
-}
-
-.gram-brand-badge::after {
-  content: "";
-  position: absolute;
-  border-radius: var(--border-radius-px);
-  width: calc(100% + 2 * var(--border-px));
-  height: calc(100% + 2 * var(--border-px));
-  left: calc(-1 * var(--border-px));
-  top: calc(-1 * var(--border-px));
-  background: conic-gradient(
-    from var(--gradient-rotation),
-    var(--gradient-stops)
-  );
-  filter: blur(0px);
-  transition: filter 250ms var(--ease-in-out-quad);
-  z-index: -2;
-}
-
-.gram-brand-badge:hover::after {
-  filter: blur(2px);
-}
-
-.gram-brand-badge div {
+  bottom: 4rem;
+  left: 0;
+  right: 0;
   display: flex;
-  gap: 4px;
+  justify-content: center;
   align-items: center;
-  background: var(--bg-surface-primary-default);
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: var(--border-radius-px);
-  padding: 0.25rem 0.5rem;
+}
+
+.speakeasy-logo {
+  color: var(--fill-neutral-highlight);
 }
