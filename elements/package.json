@@ -62,7 +62,7 @@
   "keywords": [],
   "author": "Adam Bull <adam@speakeasy.com>",
   "license": "ISC",
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@10.28.2",
   "peerDependencies": {
     "@assistant-ui/react": "^0.11.0",
     "@assistant-ui/react-ai-sdk": "^1.1.16",
