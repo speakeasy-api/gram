@@ -142,7 +142,41 @@ func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemProm
 	return c.GetCompletionFromMessages(ctx, orgID, "", messages, tools, nil, "", usageSource)
 }
 
+func (c *ChatClient) GetObjectCompletion(ctx context.Context, orgID string, projectID string, model string, systemPrompt string, prompt string, jsonSchema or.JSONSchemaConfig, usageSource billing.ModelUsageSource) (*or.Message, error) {
+	var messages []or.Message
+
+	// Optional system prompt
+	if systemPrompt != "" {
+		messages = append(messages, or.CreateMessageSystem(or.SystemMessage{
+			Content: or.CreateSystemMessageContentStr(systemPrompt),
+			Name:    nil,
+		}))
+	}
+
+	// User message
+	messages = append(messages, or.CreateMessageUser(or.UserMessage{
+		Content: or.CreateUserMessageContentStr(prompt),
+		Name:    nil,
+	}))
+
+	return c.getCompletionFromMessages(ctx, orgID, projectID, messages, nil, nil, model, &jsonSchema, usageSource)
+}
+
 func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, projectID string, messages []or.Message, tools []Tool, temperature *float64, model string, usageSource billing.ModelUsageSource) (*or.Message, error) {
+	return c.getCompletionFromMessages(ctx, orgID, projectID, messages, tools, temperature, model, nil, usageSource)
+}
+
+func (c *ChatClient) getCompletionFromMessages(
+	ctx context.Context,
+	orgID string,
+	projectID string,
+	messages []or.Message,
+	tools []Tool,
+	temperature *float64,
+	model string,
+	jsonSchema *or.JSONSchemaConfig,
+	usageSource billing.ModelUsageSource,
+) (*or.Message, error) {
 	openrouterKey, err := c.openRouter.ProvisionAPIKey(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
@@ -161,11 +195,20 @@ func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string
 	}
 
 	reqBody := OpenAIChatRequest{
-		Model:       modelToUse,
-		Messages:    messages,
-		Stream:      false,
-		Tools:       tools,
-		Temperature: temp,
+		Model:          modelToUse,
+		Messages:       messages,
+		Stream:         false,
+		Tools:          tools,
+		Temperature:    temp,
+		ResponseFormat: nil,
+	}
+
+	if jsonSchema != nil {
+		jsonSchemaConfig := or.ResponseFormatJSONSchema{
+			JSONSchema: *jsonSchema,
+		}
+		responseFormat := or.CreateResponseFormatJSONSchema(jsonSchemaConfig)
+		reqBody.ResponseFormat = &responseFormat
 	}
 
 	data, err := json.Marshal(reqBody)

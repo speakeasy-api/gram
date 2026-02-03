@@ -163,11 +163,12 @@ func GetToolCallID(msg or.Message) *string {
 
 // OpenAIChatRequest represents the request structure for OpenAI chat completions
 type OpenAIChatRequest struct {
-	Model       string       `json:"model"`
-	Messages    []or.Message `json:"messages"`
-	Stream      bool         `json:"stream"`
-	Tools       []Tool       `json:"tools,omitempty"`
-	Temperature float32      `json:"temperature,omitempty"`
+	Model          string             `json:"model"`
+	Messages       []or.Message       `json:"messages"`
+	Stream         bool               `json:"stream"`
+	Tools          []Tool             `json:"tools,omitempty"`
+	Temperature    float32            `json:"temperature,omitempty"`
+	ResponseFormat *or.ResponseFormat `json:"response_format,omitempty"`
 }
 
 // ToolCallFunction represents the function part of a tool call
