@@ -212,22 +212,23 @@ func (q *Queries) InsertChatResolutionMessage(ctx context.Context, arg InsertCha
 }
 
 const listAllChats = `-- name: ListAllChats :many
-SELECT 
+SELECT
     c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
             0
         )
-    )::integer as num_messages 
+    )::integer as num_messages
     , (
         COALESCE(
             (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
             0
         )
     )::integer as total_tokens
-FROM chats c 
+FROM chats c
 WHERE c.project_id = $1
+ORDER BY c.updated_at DESC
 `
 
 type ListAllChatsRow struct {
@@ -373,22 +374,23 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 }
 
 const listChatsForExternalUser = `-- name: ListChatsForExternalUser :many
-SELECT 
+SELECT
     c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
             0
         )
-    )::integer as num_messages 
+    )::integer as num_messages
     , (
         COALESCE(
             (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
             0
         )
     )::integer as total_tokens
-FROM chats c 
+FROM chats c
 WHERE c.project_id = $1 AND c.external_user_id = $2
+ORDER BY c.updated_at DESC
 `
 
 type ListChatsForExternalUserParams struct {
@@ -445,22 +447,23 @@ func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsFor
 }
 
 const listChatsForUser = `-- name: ListChatsForUser :many
-SELECT 
+SELECT
     c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
             0
         )
-    )::integer as num_messages 
+    )::integer as num_messages
     , (
         COALESCE(
             (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
             0
         )
     )::integer as total_tokens
-FROM chats c 
+FROM chats c
 WHERE c.project_id = $1 AND c.user_id = $2
+ORDER BY c.updated_at DESC
 `
 
 type ListChatsForUserParams struct {
