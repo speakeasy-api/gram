@@ -80,12 +80,6 @@ export default function Team() {
   };
 
   const inviteMutation = useInviteTeamMemberMutation({
-    onSuccess: async () => {
-      await invalidateTeamData();
-      toast.success(`Invite sent to ${inviteEmail}`);
-      setInviteEmail("");
-      setIsInviteDialogOpen(false);
-    },
     onError: () => {
       toast.error("Failed to send invite");
     },
@@ -139,16 +133,27 @@ export default function Team() {
 
   const handleInvite = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
+    const submittedEmail = inviteEmail.trim();
+    if (!submittedEmail) return;
 
-    inviteMutation.mutate({
-      request: {
-        inviteMemberForm: {
-          organizationId: organization.id,
-          email: inviteEmail,
+    inviteMutation.mutate(
+      {
+        request: {
+          inviteMemberForm: {
+            organizationId: organization.id,
+            email: submittedEmail,
+          },
         },
       },
-    });
+      {
+        onSuccess: async () => {
+          await invalidateTeamData();
+          toast.success(`Invite sent to ${submittedEmail}`);
+          setInviteEmail("");
+          setIsInviteDialogOpen(false);
+        },
+      },
+    );
   };
 
   const handleRemoveMember = () => {

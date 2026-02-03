@@ -496,6 +496,19 @@ func (s *Service) RemoveMember(ctx context.Context, payload *gen.RemoveMemberPay
 		return oops.E(oops.CodeUnexpected, err, "failed to remove member from org via speakeasy").Log(ctx, s.logger)
 	}
 
+	// Soft-delete the local relationship so the member list updates immediately.
+	// The Speakeasy API is the source of truth; this is a local cache optimisation.
+	if err := s.repo.SoftDeleteOrganizationMember(ctx, repo.SoftDeleteOrganizationMemberParams{
+		OrganizationID: payload.OrganizationID,
+		UserID:         payload.UserID,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to soft-delete local org membership",
+			attr.SlogError(err),
+			attr.SlogUserID(payload.UserID),
+			attr.SlogOrganizationID(payload.OrganizationID),
+		)
+	}
+
 	// Invalidate the removed user's cache so their org list is refreshed.
 	if err := s.sessions.InvalidateUserInfoCache(ctx, payload.UserID); err != nil {
 		s.logger.ErrorContext(ctx, "failed to invalidate removed user's cache",

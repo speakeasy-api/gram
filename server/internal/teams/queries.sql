@@ -73,6 +73,13 @@ JOIN users u ON u.id = ti.invited_by_user_id
 JOIN organization_metadata om ON om.id = ti.organization_id
 WHERE ti.token = @token AND ti.deleted IS FALSE;
 
+-- name: SoftDeleteOrganizationMember :exec
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id
+  AND deleted IS FALSE;
+
 -- name: CountRecentInvitesByOrg :one
 SELECT count(*) FROM team_invites
 WHERE organization_id = @organization_id

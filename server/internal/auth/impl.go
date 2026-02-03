@@ -636,6 +636,9 @@ func (s *Service) processInviteToken(ctx context.Context, token, userID, userEma
 		)
 	}
 
+	// The organization slug in organization_metadata is the Speakeasy workspace
+	// slug (set from the SSO connection during Info() materialisation), so it
+	// can be used directly as the workspace identifier for the team API.
 	orgSlug, err := s.teamsRepo.GetOrganizationSlug(ctx, invite.OrganizationID)
 	if err != nil {
 		return "", fmt.Errorf("getting organization slug: %w", err)

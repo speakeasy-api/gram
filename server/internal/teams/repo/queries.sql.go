@@ -336,6 +336,24 @@ func (q *Queries) ListPendingTeamInvites(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const softDeleteOrganizationMember = `-- name: SoftDeleteOrganizationMember :exec
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND user_id = $2
+  AND deleted IS FALSE
+`
+
+type SoftDeleteOrganizationMemberParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) SoftDeleteOrganizationMember(ctx context.Context, arg SoftDeleteOrganizationMemberParams) error {
+	_, err := q.db.Exec(ctx, softDeleteOrganizationMember, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const updateTeamInviteExpiryAndToken = `-- name: UpdateTeamInviteExpiryAndToken :one
 UPDATE team_invites
 SET expires_at = $1, token = $2, updated_at = clock_timestamp()
