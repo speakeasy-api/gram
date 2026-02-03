@@ -102,12 +102,13 @@ test.describe("Authentication", () => {
       // Should be redirected to login or show login page
       // The exact behavior depends on the auth state
       const url = page.url();
+      const pathname = new URL(url).pathname;
       const isAuthPage =
-        url.includes("/login") || url.includes("/register") || url === "/";
+        url.includes("/login") || url.includes("/register") || pathname === "/";
 
       // If not authenticated, should be on login page or redirected
       if (isAuthPage) {
-        expect(pageHelpers.isOnLoginPage(page) || url === "/").toBeTruthy();
+        expect(pageHelpers.isOnLoginPage(page) || pathname === "/").toBeTruthy();
       }
     });
 
