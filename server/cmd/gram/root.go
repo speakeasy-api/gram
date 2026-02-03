@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/KimMachineGun/automemlimit/memlimit"
+	//	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -55,10 +55,10 @@ func newApp() *cli.App {
 			)
 
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
-			_, err := memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(nil))
-			if err != nil {
-				logger.ErrorContext(c.Context, "automemlimit", attr.SlogError(err))
-			}
+			// _, err := memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(nil))
+			// if err != nil {
+			// 	logger.ErrorContext(c.Context, "automemlimit", attr.SlogError(err))
+			// }
 
 			c.Context = PushLogger(c.Context, logger)
 

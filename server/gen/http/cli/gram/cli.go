@@ -3457,7 +3457,7 @@ func mcpMetadataSetMcpMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata set-mcp-metadata --body '{\n      \"default_environment_id\": \"6bda7853-634c-4945-8000-c5f1d6e444b0\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Voluptatem eos aut laudantium sequi eveniet.\",\n            \"provided_by\": \"Eius sunt.\",\n            \"variable_name\": \"Adipisci quo.\"\n         },\n         {\n            \"header_display_name\": \"Voluptatem eos aut laudantium sequi eveniet.\",\n            \"provided_by\": \"Eius sunt.\",\n            \"variable_name\": \"Adipisci quo.\"\n         }\n      ],\n      \"external_documentation_url\": \"Et totam.\",\n      \"installation_override_url\": \"http://adamsjacobson.info/sarina.beer\",\n      \"instructions\": \"Voluptas adipisci ratione fugit amet aliquam.\",\n      \"logo_asset_id\": \"Voluptas temporibus sint molestiae quo dicta atque.\",\n      \"toolset_slug\": \"gcr\"\n   }' --apikey-token \"Aliquid at et et est.\" --session-token \"Eum culpa voluptatem est.\" --project-slug-input \"Quae et ipsa quidem doloribus aut.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata set-mcp-metadata --body '{\n      \"default_environment_id\": \"6bda7853-634c-4df2-83df-0e51f6536adc\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"Aliquid at et et est.\",\n            \"provided_by\": \"Eum culpa voluptatem est.\",\n            \"variable_name\": \"Eius sunt.\"\n         },\n         {\n            \"header_display_name\": \"Aliquid at et et est.\",\n            \"provided_by\": \"Eum culpa voluptatem est.\",\n            \"variable_name\": \"Eius sunt.\"\n         },\n         {\n            \"header_display_name\": \"Aliquid at et et est.\",\n            \"provided_by\": \"Eum culpa voluptatem est.\",\n            \"variable_name\": \"Eius sunt.\"\n         }\n      ],\n      \"external_documentation_text\": \"Voluptas adipisci ratione fugit amet aliquam.\",\n      \"external_documentation_url\": \"Et totam.\",\n      \"installation_override_url\": \"http://satterfieldluettgen.info/missouri.kiehn\",\n      \"instructions\": \"Rem corrupti et iste ex quia unde.\",\n      \"logo_asset_id\": \"Voluptas temporibus sint molestiae quo dicta atque.\",\n      \"toolset_slug\": \"gcr\"\n   }' --apikey-token \"Quae et ipsa quidem doloribus aut.\" --session-token \"Doloribus quia quae.\" --project-slug-input \"Sint dolorem maxime nesciunt quisquam maiores maiores.\"")
 }
 
 func mcpMetadataExportMcpMetadataUsage() {
@@ -3481,7 +3481,7 @@ func mcpMetadataExportMcpMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"5rc\"\n   }' --apikey-token \"Sit ea neque mollitia ut dolor est.\" --session-token \"Iste cum ducimus itaque ut voluptas.\" --project-slug-input \"Vel unde quam esse.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"6x6\"\n   }' --apikey-token \"Cum ducimus itaque ut voluptas.\" --session-token \"Vel unde quam esse.\" --project-slug-input \"Adipisci ipsum quidem voluptatum voluptatum.\"")
 }
 
 // packagesUsage displays the usage of the packages command and its subcommands.
@@ -3519,7 +3519,7 @@ func packagesCreatePackageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages create-package --body '{\n      \"description\": \"dkq\",\n      \"image_asset_id\": \"p8o\",\n      \"keywords\": [\n         \"Et ipsam amet omnis.\",\n         \"Qui qui modi quia tempora earum hic.\",\n         \"Reprehenderit est rem ab.\"\n      ],\n      \"name\": \"6ou\",\n      \"summary\": \"fja\",\n      \"title\": \"np1\",\n      \"url\": \"9w3\"\n   }' --apikey-token \"Quia quibusdam.\" --session-token \"Maiores velit aut tempore non totam totam.\" --project-slug-input \"Doloribus pariatur et omnis.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages create-package --body '{\n      \"description\": \"qg9\",\n      \"image_asset_id\": \"p8o\",\n      \"keywords\": [\n         \"Amet omnis.\",\n         \"Qui qui modi quia tempora earum hic.\",\n         \"Reprehenderit est rem ab.\"\n      ],\n      \"name\": \"udn\",\n      \"summary\": \"ard\",\n      \"title\": \"1ef\",\n      \"url\": \"350\"\n   }' --apikey-token \"Quia quibusdam.\" --session-token \"Maiores velit aut tempore non totam totam.\" --project-slug-input \"Doloribus pariatur et omnis.\"")
 }
 
 func packagesUpdatePackageUsage() {
