@@ -19,8 +19,8 @@ import {
 import { TeamInvite, TeamMember } from "@gram/client/models/components";
 import { Button, Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mail, Send, Trash2, UserPlus, Users, X } from "lucide-react";
-import { useState } from "react";
+import { Send, Trash2, UserPlus, Users, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Tooltip,
@@ -28,6 +28,25 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+function getMemberColors(id: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    hash ^= id.charCodeAt(i);
+    hash +=
+      (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  hash = hash >>> 0;
+  const hue1 = hash % 360;
+  const hue2 = (hue1 + ((hash >> 8) % 360)) % 360;
+  const saturation = Math.max(65, (hash >> 16) % 100);
+  const angle = (hash >> 24) % 360;
+  return {
+    from: `hsl(${hue1}, ${saturation}%, 65%)`,
+    to: `hsl(${hue2}, ${saturation}%, 60%)`,
+    angle,
+  };
+}
 
 export default function Team() {
   const organization = useOrganization();
@@ -38,6 +57,10 @@ export default function Team() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
   const [inviteToCancel, setInviteToCancel] = useState<TeamInvite | null>(null);
+  const [recentResends, setRecentResends] = useState<Record<string, number>>(
+    {},
+  );
+  const [, setTick] = useState(0);
 
   const { data: membersData } = useListTeamMembersSuspense({
     organizationId: organization.id,
@@ -100,6 +123,20 @@ export default function Team() {
     },
   });
 
+  // Re-render periodically to update resend cooldown timers
+  useEffect(() => {
+    if (Object.keys(recentResends).length === 0) return;
+    const interval = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(interval);
+  }, [recentResends]);
+
+  const getResendCooldown = (inviteId: string): number => {
+    const resentAt = recentResends[inviteId];
+    if (!resentAt) return 0;
+    const remaining = 5 * 60 * 1000 - (Date.now() - resentAt);
+    return Math.max(0, remaining);
+  };
+
   const handleInvite = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
@@ -136,13 +173,23 @@ export default function Team() {
   };
 
   const handleResendInvite = (invite: TeamInvite) => {
-    resendInviteMutation.mutate({
-      request: {
-        resendInviteRequestBody: {
-          inviteId: invite.id,
+    resendInviteMutation.mutate(
+      {
+        request: {
+          resendInviteRequestBody: {
+            inviteId: invite.id,
+          },
         },
       },
-    });
+      {
+        onSuccess: () => {
+          setRecentResends((prev) => ({
+            ...prev,
+            [invite.id]: Date.now(),
+          }));
+        },
+      },
+    );
   };
 
   const memberColumns: Column<TeamMember>[] = [
@@ -159,8 +206,18 @@ export default function Team() {
               className="w-8 h-8 rounded-full"
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-              <Users className="w-4 h-4 text-muted-foreground" />
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white"
+              style={{
+                backgroundImage: `linear-gradient(${getMemberColors(member.id).angle}deg, ${getMemberColors(member.id).from}, ${getMemberColors(member.id).to})`,
+              }}
+            >
+              {member.displayName
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .toUpperCase()
+                .slice(0, 2)}
             </div>
           )}
           <Stack direction="vertical" gap={0}>
@@ -217,20 +274,44 @@ export default function Team() {
       key: "email",
       header: "Email",
       width: "1fr",
-      render: (invite) => (
-        <Stack direction="horizontal" align="center" gap={3}>
-          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-            <Mail className="w-4 h-4 text-muted-foreground" />
-          </div>
-          <Type variant="body">{invite.email}</Type>
-        </Stack>
-      ),
+      render: (invite) => {
+        const isExpired = invite.expiresAt < new Date();
+        return (
+          <Stack
+            direction="horizontal"
+            align="center"
+            gap={3}
+            className={isExpired ? "opacity-50" : ""}
+          >
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white shrink-0"
+              style={{
+                backgroundImage: `linear-gradient(${getMemberColors(invite.email).angle}deg, ${getMemberColors(invite.email).from}, ${getMemberColors(invite.email).to})`,
+              }}
+            >
+              {invite.email
+                .split("@")[0]
+                ?.replace(/[^a-zA-Z]/g, "")
+                .slice(0, 2)
+                .toUpperCase() || "?"}
+            </div>
+            <Type variant="body">{invite.email}</Type>
+          </Stack>
+        );
+      },
     },
     {
       key: "invitedBy",
       header: "Invited by",
       width: "200px",
-      render: (invite) => <Type variant="body">{invite.invitedBy}</Type>,
+      render: (invite) => (
+        <Type
+          variant="body"
+          className={invite.expiresAt < new Date() ? "opacity-50" : ""}
+        >
+          {invite.invitedBy}
+        </Type>
+      ),
     },
     {
       key: "createdAt",
@@ -239,7 +320,7 @@ export default function Team() {
       render: (invite) => (
         <Type
           variant="body"
-          className="text-muted-foreground whitespace-nowrap"
+          className={`text-muted-foreground whitespace-nowrap ${invite.expiresAt < new Date() ? "opacity-50" : ""}`}
         >
           <HumanizeDateTime date={invite.createdAt} />
         </Type>
@@ -273,17 +354,24 @@ export default function Team() {
           <Stack direction="horizontal" gap={1}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => handleResendInvite(invite)}
-                >
-                  <Button.LeftIcon>
-                    <Send className="h-4 w-4" />
-                  </Button.LeftIcon>
-                </Button>
+                <div className="inline-flex">
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => handleResendInvite(invite)}
+                    disabled={getResendCooldown(invite.id) > 0}
+                  >
+                    <Button.LeftIcon>
+                      <Send className="h-4 w-4" />
+                    </Button.LeftIcon>
+                  </Button>
+                </div>
               </TooltipTrigger>
-              <TooltipContent>Resend invite</TooltipContent>
+              <TooltipContent>
+                {getResendCooldown(invite.id) > 0
+                  ? `Wait ${Math.ceil(getResendCooldown(invite.id) / 60_000)} min to resend`
+                  : "Resend invite"}
+              </TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
