@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/smithy-go/ptr"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
@@ -636,9 +635,9 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	}
 
 	if connected {
-		response.ExpiresAt = ptr.String(token.ExpiresAt.Time.Format(time.RFC3339))
+		response.ExpiresAt = conv.Ptr(token.ExpiresAt.Time.Format(time.RFC3339))
 		if token.ProviderName.Valid {
-			response.ProviderName = ptr.String(token.ProviderName.String)
+			response.ProviderName = conv.Ptr(token.ProviderName.String)
 		}
 	}
 
