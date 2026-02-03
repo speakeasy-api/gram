@@ -30,7 +30,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -637,44 +636,28 @@ func (s *Service) processInviteToken(ctx context.Context, token, userID, userEma
 		)
 	}
 
-	// Use a transaction to atomically add the member and accept the invite.
-	dbtx, err := s.db.Begin(ctx)
+	orgSlug, err := s.teamsRepo.GetOrganizationSlug(ctx, invite.OrganizationID)
 	if err != nil {
-		return "", fmt.Errorf("beginning transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error {
-		return dbtx.Rollback(ctx)
-	})
-
-	tx := s.teamsRepo.WithTx(dbtx)
-
-	if err := tx.AddOrganizationMember(ctx, teamsRepo.AddOrganizationMemberParams{
-		OrganizationID: invite.OrganizationID,
-		UserID:         userID,
-	}); err != nil {
-		return "", fmt.Errorf("adding member to organization: %w", err)
+		return "", fmt.Errorf("getting organization slug: %w", err)
 	}
 
-	if _, err := tx.AcceptTeamInvite(ctx, invite.ID); err != nil {
+	// Add user to the org's workspaces via Speakeasy API.
+	if err := s.sessions.AddUserToOrg(ctx, []string{orgSlug}, userEmail); err != nil {
+		return "", fmt.Errorf("adding user to org via speakeasy: %w", err)
+	}
+
+	// Mark the invite as accepted.
+	if _, err := s.teamsRepo.AcceptTeamInvite(ctx, invite.ID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", fmt.Errorf("invite is no longer pending (concurrent accept)")
 		}
 		return "", fmt.Errorf("accepting invite: %w", err)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("committing transaction: %w", err)
-	}
-
 	if err := s.sessions.InvalidateUserInfoCache(ctx, userID); err != nil {
 		s.logger.ErrorContext(ctx, "failed to invalidate user info cache after invite accept",
 			attr.SlogError(err),
 		)
-	}
-
-	orgSlug, err := s.teamsRepo.GetOrganizationSlug(ctx, invite.OrganizationID)
-	if err != nil {
-		return "", fmt.Errorf("getting organization slug: %w", err)
 	}
 
 	// Update session to point at the invited org.

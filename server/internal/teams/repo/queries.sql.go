@@ -38,24 +38,6 @@ func (q *Queries) AcceptTeamInvite(ctx context.Context, id uuid.UUID) (TeamInvit
 	return i, err
 }
 
-const addOrganizationMember = `-- name: AddOrganizationMember :exec
-INSERT INTO organization_user_relationships (organization_id, user_id)
-VALUES ($1, $2)
-ON CONFLICT (organization_id, user_id) DO UPDATE SET
-    deleted_at = NULL,
-    updated_at = clock_timestamp()
-`
-
-type AddOrganizationMemberParams struct {
-	OrganizationID string
-	UserID         string
-}
-
-func (q *Queries) AddOrganizationMember(ctx context.Context, arg AddOrganizationMemberParams) error {
-	_, err := q.db.Exec(ctx, addOrganizationMember, arg.OrganizationID, arg.UserID)
-	return err
-}
-
 const cancelTeamInvite = `-- name: CancelTeamInvite :exec
 UPDATE team_invites
 SET status = 'cancelled', deleted_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -352,24 +334,6 @@ func (q *Queries) ListPendingTeamInvites(ctx context.Context, organizationID str
 		return nil, err
 	}
 	return items, nil
-}
-
-const removeOrganizationMember = `-- name: RemoveOrganizationMember :exec
-UPDATE organization_user_relationships
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1
-  AND user_id = $2
-  AND deleted IS FALSE
-`
-
-type RemoveOrganizationMemberParams struct {
-	OrganizationID string
-	UserID         string
-}
-
-func (q *Queries) RemoveOrganizationMember(ctx context.Context, arg RemoveOrganizationMemberParams) error {
-	_, err := q.db.Exec(ctx, removeOrganizationMember, arg.OrganizationID, arg.UserID)
-	return err
 }
 
 const updateTeamInviteExpiryAndToken = `-- name: UpdateTeamInviteExpiryAndToken :one

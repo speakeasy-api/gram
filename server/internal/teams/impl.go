@@ -483,11 +483,25 @@ func (s *Service) RemoveMember(ctx context.Context, payload *gen.RemoveMemberPay
 		return oops.C(oops.CodeNotFound)
 	}
 
-	if err := s.repo.RemoveOrganizationMember(ctx, repo.RemoveOrganizationMemberParams{
-		OrganizationID: payload.OrganizationID,
-		UserID:         payload.UserID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to remove member").Log(ctx, s.logger)
+	// Find workspace slugs for the org from caller's user info.
+	var workspaceSlugs []string
+	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org genAuth.OrganizationEntry) bool {
+		return org.ID == payload.OrganizationID
+	}); orgIdx >= 0 {
+		workspaceSlugs = userInfo.Organizations[orgIdx].UserWorkspaceSlugs
+	}
+
+	// Remove user from org workspaces via Speakeasy API.
+	if err := s.sessions.RemoveUserFromOrg(ctx, workspaceSlugs, payload.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to remove member from org via speakeasy").Log(ctx, s.logger)
+	}
+
+	// Invalidate the removed user's cache so their org list is refreshed.
+	if err := s.sessions.InvalidateUserInfoCache(ctx, payload.UserID); err != nil {
+		s.logger.ErrorContext(ctx, "failed to invalidate removed user's cache",
+			attr.SlogError(err),
+			attr.SlogUserID(payload.UserID),
+		)
 	}
 
 	s.logger.InfoContext(ctx, "team member removed",

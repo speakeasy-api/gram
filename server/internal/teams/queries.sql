@@ -57,20 +57,6 @@ WHERE our.organization_id = @organization_id
   AND our.deleted IS FALSE
 ORDER BY our.created_at ASC;
 
--- name: RemoveOrganizationMember :exec
-UPDATE organization_user_relationships
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND user_id = @user_id
-  AND deleted IS FALSE;
-
--- name: AddOrganizationMember :exec
-INSERT INTO organization_user_relationships (organization_id, user_id)
-VALUES (@organization_id, @user_id)
-ON CONFLICT (organization_id, user_id) DO UPDATE SET
-    deleted_at = NULL,
-    updated_at = clock_timestamp();
-
 -- name: GetOrganizationSlug :one
 SELECT slug FROM organization_metadata WHERE id = @id;
 
