@@ -24,9 +24,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
@@ -110,7 +113,7 @@ type ExternalOAuthService struct {
 	projectsRepo      *projects_repo.Queries
 	stateStorage      cache.TypedCacheObject[ExternalOAuthState]
 	serverURL         *url.URL
-	sessionManager    SessionManager
+	auth              *auth.Auth
 	enc               *encryption.Client
 	httpClient        *http.Client
 	successPageTmpl   *template.Template
@@ -120,18 +123,13 @@ type ExternalOAuthService struct {
 	successStyleData  []byte
 }
 
-// SessionManager interface for authenticating session tokens
-type SessionManager interface {
-	Authenticate(ctx context.Context, key string, canStubAuth bool) (context.Context, error)
-}
-
 // NewExternalOAuthService creates a new ExternalOAuthService
 func NewExternalOAuthService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	cacheImpl cache.Cache,
 	serverURL *url.URL,
-	sessionManager SessionManager,
+	auth *auth.Auth,
 	enc *encryption.Client,
 ) *ExternalOAuthService {
 	stateStorage := cache.NewTypedObjectCache[ExternalOAuthState](
@@ -157,7 +155,7 @@ func NewExternalOAuthService(
 		projectsRepo:      projects_repo.New(db),
 		stateStorage:      stateStorage,
 		serverURL:         serverURL,
-		sessionManager:    sessionManager,
+		auth:              auth,
 		enc:               enc,
 		httpClient:        retryablehttp.NewClient().StandardClient(),
 		successPageTmpl:   successPageTmpl,
@@ -174,22 +172,22 @@ func NewExternalOAuthService(
 func AttachExternalOAuth(mux goahttp.Muxer, service *ExternalOAuthService) {
 	// External OAuth authorization endpoint - initiates OAuth flow with external provider
 	o11y.AttachHandler(mux, "GET", "/oauth-external/authorize", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.handleExternalAuthorize).ServeHTTP(w, r)
+		oops.ErrHandle(service.logger, service.withAuth(service.handleExternalAuthorize)).ServeHTTP(w, r)
+	})
+
+	// Disconnect OAuth connection
+	o11y.AttachHandler(mux, "DELETE", "/oauth-external/disconnect", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.withAuth(service.handleExternalDisconnect)).ServeHTTP(w, r)
+	})
+
+	// Check OAuth connection status for a toolset (query params: toolset_id, issuer)
+	o11y.AttachHandler(mux, "GET", "/oauth-external/status", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.withAuth(service.handleExternalStatus)).ServeHTTP(w, r)
 	})
 
 	// External OAuth callback - handles callback from external provider
 	o11y.AttachHandler(mux, "GET", "/oauth-external/callback", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleExternalCallback).ServeHTTP(w, r)
-	})
-
-	// Check OAuth connection status for a toolset (query params: toolset_id, issuer)
-	o11y.AttachHandler(mux, "GET", "/oauth-external/status", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.handleExternalStatus).ServeHTTP(w, r)
-	})
-
-	// Disconnect OAuth connection
-	o11y.AttachHandler(mux, "DELETE", "/oauth-external/disconnect", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.handleExternalDisconnect).ServeHTTP(w, r)
 	})
 
 	// External OAuth success page static assets (with cache busting hash)
@@ -201,28 +199,54 @@ func AttachExternalOAuth(mux goahttp.Muxer, service *ExternalOAuthService) {
 	})
 }
 
+func (s *ExternalOAuthService) withAuth(h func(w http.ResponseWriter, r *http.Request) error) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		ctx := r.Context()
+
+		sessionToken, ok := contextvalues.GetSessionTokenFromContext(ctx)
+		if !ok {
+			return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
+		}
+
+		// ctx, err = s.sessionManager.Authenticate(ctx, cookie.Value, false)
+		ctx, err := s.auth.Authorize(ctx, sessionToken, &security.APIKeyScheme{
+			Name:           constants.SessionSecurityScheme,
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		})
+		if err != nil {
+			return err
+		}
+
+		projectSlug := r.Header.Get(constants.ProjectHeader)
+		if projectSlug == "" {
+			projectSlug = r.URL.Query().Get("project")
+		}
+
+		if projectSlug == "" {
+			return oops.E(oops.CodeBadRequest, nil, "project is required").Log(ctx, s.logger)
+		}
+
+		ctx, err = s.auth.Authorize(ctx, projectSlug, &security.APIKeyScheme{
+			Name:           constants.ProjectSlugSecuritySchema,
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		})
+		if err != nil {
+			return err
+		}
+
+		return h(w, r.WithContext(ctx))
+	}
+}
+
 // handleExternalAuthorize initiates the OAuth flow with an external provider
 func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	// Try to get session from context (set by middleware from cookie)
-	// If not available, try to authenticate from session query parameter
-	// This is needed because popup windows may not share cookies across origins
-
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		sessionToken := r.URL.Query().Get("session")
-		if sessionToken != "" {
-			var err error
-			ctx, err = s.sessionManager.Authenticate(ctx, sessionToken, false)
-			if err != nil {
-				return oops.E(oops.CodeUnauthorized, err, "invalid session").Log(ctx, s.logger)
-			}
-			authCtx, ok = contextvalues.GetAuthContext(ctx)
-		}
-		if !ok || authCtx == nil {
-			return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
-		}
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
 	}
 
 	// Parse query parameters
@@ -237,21 +261,6 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 	}
 
 	externalMCPSlug := r.URL.Query().Get("external_mcp_slug")
-
-	var projectID uuid.UUID
-	if authCtx.ProjectID != nil {
-		projectID = *authCtx.ProjectID
-	} else {
-		project, err := s.projectsRepo.GetProjectBySlug(ctx, projects_repo.GetProjectBySlugParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Slug:           "default",
-		})
-		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "failed to get default project").Log(ctx, s.logger)
-		}
-
-		projectID = project.ID
-	}
 
 	// Validate redirect_uri origin matches server origin to prevent open redirects.
 	// In local dev the frontend and backend run on different ports, so we only
@@ -297,7 +306,7 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 	}
 
 	// Get or register OAuth client via DCR (for MCP OAuth 2.1)
-	oauthClient, err := s.getOrRegisterClient(ctx, authCtx.ActiveOrganizationID, projectID, oauthConfig)
+	oauthClient, err := s.getOrRegisterClient(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, oauthConfig)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to register OAuth client").Log(ctx, s.logger)
 	}
@@ -329,7 +338,7 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 	state := ExternalOAuthState{
 		UserID:            authCtx.UserID,
 		OrganizationID:    authCtx.ActiveOrganizationID,
-		ProjectID:         projectID,
+		ProjectID:         *authCtx.ProjectID,
 		ToolsetID:         toolsetID,
 		RedirectURI:       redirectURI,
 		CodeVerifier:      codeVerifier,
@@ -550,20 +559,8 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 
 	// Get user session - try context first, then Gram-Session header
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		// Try session header (for cross-origin requests from dashboard)
-		sessionToken := r.Header.Get("Gram-Session")
-		if sessionToken != "" {
-			var err error
-			ctx, err = s.sessionManager.Authenticate(ctx, sessionToken, false)
-			if err != nil {
-				return oops.E(oops.CodeUnauthorized, err, "invalid session").Log(ctx, s.logger)
-			}
-			authCtx, ok = contextvalues.GetAuthContext(ctx)
-		}
-		if !ok || authCtx == nil {
-			return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
-		}
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
 	}
 
 	// Parse query parameters - issuer is required for status check
@@ -654,20 +651,8 @@ func (s *ExternalOAuthService) handleExternalDisconnect(w http.ResponseWriter, r
 
 	// Get user session - try context first, then Gram-Session header
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		// Try session header (for cross-origin requests from dashboard)
-		sessionToken := r.Header.Get("Gram-Session")
-		if sessionToken != "" {
-			var err error
-			ctx, err = s.sessionManager.Authenticate(ctx, sessionToken, false)
-			if err != nil {
-				return oops.E(oops.CodeUnauthorized, err, "invalid session").Log(ctx, s.logger)
-			}
-			authCtx, ok = contextvalues.GetAuthContext(ctx)
-		}
-		if !ok || authCtx == nil {
-			return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
-		}
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
 	}
 
 	issuer := r.URL.Query().Get("issuer")
@@ -689,7 +674,7 @@ func (s *ExternalOAuthService) handleExternalDisconnect(w http.ResponseWriter, r
 		attr.SlogOAuthIssuer(issuer))
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to encode response", attr.SlogError(err))
