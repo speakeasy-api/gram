@@ -334,6 +334,25 @@ export function InstallPageConfigForm({ toolset }: ConfigFormProps) {
               )}
             </div>
             <div>
+              <Heading> Documentation Text </Heading>
+              <Type muted small className="max-w-2xl">
+                What your custom link will say on the MCP page
+              </Type>
+            </div>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="View Docs"
+                className="w-full"
+                {...form.urlInputHandlers}
+              />
+              {form.valid.message && (
+                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                  {form.valid.message}
+                </span>
+              )}
+            </div>
+            <div>
               <Heading> Installation Override URL </Heading>
               <Type muted small className="max-w-2xl">
                 A URL to redirect to instead of the default installation page
