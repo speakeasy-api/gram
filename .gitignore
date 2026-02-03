@@ -12,6 +12,9 @@ junit-report.xml
 .idea
 /server/goa*
 /server/gram
+# Goa generates OpenAPI v2 specs with non-deterministic examples. Nothing consumes them.
+/server/gen/http/openapi.yaml
+/server/gen/http/openapi.json
 scratch/
 /local/cache
 /local/ssl

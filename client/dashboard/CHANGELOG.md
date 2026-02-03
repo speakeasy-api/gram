@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.27.3
+
+### Patch Changes
+
+- 85d64ad: Add support links to user dropdown menu (Get Support, Chat with Team, Bug or Feature Request)
+- Updated dependencies [feea712]
+- Updated dependencies [c9b74af]
+  - @gram-ai/elements@1.25.0
+  - @gram/client@0.26.13
+
 ## 0.27.2
 
 ### Patch Changes
