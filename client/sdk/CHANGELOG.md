@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.26.13
+
+### Patch Changes
+
+- c9b74af: Adds a new endpoint to list chats grouped by ID
+
 ## 0.26.9
 
 ### Patch Changes

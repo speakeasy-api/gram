@@ -1,4 +1,6 @@
+-- atlas:nolint DS103
 -- Modify "chats" table
+-- Columns moved to the new chat_resolutions table below.
 ALTER TABLE "chats" DROP COLUMN "resolution", DROP COLUMN "resolution_notes";
 -- Create "chat_resolutions" table
 CREATE TABLE "chat_resolutions" (
