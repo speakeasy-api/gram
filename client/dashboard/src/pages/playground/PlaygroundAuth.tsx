@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PrivateInput } from "@/components/ui/private-input";
 import { Type } from "@/components/ui/type";
-import { useSession } from "@/contexts/Auth";
+import { useProject } from "@/contexts/Auth";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
@@ -101,10 +101,9 @@ function ExternalMcpOAuthConnection({
   mcpOAuthConfig: ExternalMCPToolDefinition;
 }) {
   const { data: toolset } = useToolset(toolsetSlug);
-
+  const project = useProject();
   const queryClient = useQueryClient();
   const apiUrl = getServerURL();
-  const session = useSession();
 
   // Use the authorization endpoint as the issuer for querying status
   const issuer = mcpOAuthConfig.oauthAuthorizationEndpoint
@@ -132,7 +131,7 @@ function ExternalMcpOAuthConnection({
         {
           credentials: "include",
           headers: {
-            "Gram-Session": session.session,
+            "Gram-Project": project.slug,
           },
         },
       );
@@ -174,7 +173,7 @@ function ExternalMcpOAuthConnection({
           method: "DELETE",
           credentials: "include",
           headers: {
-            "Gram-Session": session.session,
+            "Gram-Project": project.slug,
           },
         },
       );
@@ -207,8 +206,7 @@ function ExternalMcpOAuthConnection({
       toolset_id: toolset?.id ?? "",
       external_mcp_slug: mcpOAuthConfig.slug,
       redirect_uri: window.location.href.split("?")[0],
-      // Pass session token for popup windows that don't share cookies
-      session: session.session,
+      project: project.slug,
     });
 
     const authUrl = `${apiUrl}/oauth-external/authorize?${params.toString()}`;
@@ -317,9 +315,9 @@ function OAuthConnection({
   toolsetId: string;
   toolset: Toolset;
 }) {
-  const session = useSession();
   const queryClient = useQueryClient();
   const apiUrl = getServerURL();
+  const project = useProject();
 
   // Extract OAuth metadata from toolset
   const oauthMetadata = toolset.externalOauthServer?.metadata as
@@ -344,7 +342,7 @@ function OAuthConnection({
         `${apiUrl}/oauth-external/status?${params.toString()}`,
         {
           headers: {
-            "Gram-Session": session.session,
+            "Gram-Project": project.slug,
           },
         },
       );
@@ -382,7 +380,7 @@ function OAuthConnection({
         {
           method: "DELETE",
           headers: {
-            "Gram-Session": session.session,
+            "Gram-Project": project.slug,
           },
         },
       );
