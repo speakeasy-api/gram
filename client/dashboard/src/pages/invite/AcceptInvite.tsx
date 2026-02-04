@@ -7,7 +7,9 @@ import { Button } from "@speakeasy-api/moonshine";
 
 export default function AcceptInvite() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const token = searchParams.get("token");
+  const error = searchParams.get("error");
 
   // Prevent invite token from leaking via HTTP Referer headers
   useEffect(() => {
@@ -19,6 +21,23 @@ export default function AcceptInvite() {
       document.head.removeChild(meta);
     };
   }, []);
+
+  if (error === "already_member") {
+    return (
+      <InvitePage>
+        <p className="text-sm text-muted-foreground text-center">
+          You&apos;re already a member of another organization. Please leave
+          your current organization before accepting this invite.
+        </p>
+        <Button
+          variant="secondary"
+          onClick={() => navigate("/", { replace: true })}
+        >
+          <Button.Text>Go to dashboard</Button.Text>
+        </Button>
+      </InvitePage>
+    );
+  }
 
   if (!token) {
     return (

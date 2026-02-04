@@ -157,6 +157,25 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}, nil
 	}
 
+	// Gram enforces single-org membership. If the user already belongs to an
+	// organization and is trying to accept an invite, redirect back to the
+	// invite page with an error instead of proceeding.
+	if hasValidInvite && len(userInfo.Organizations) > 0 {
+		s.logger.WarnContext(ctx, "user already belongs to an organization, rejecting invite",
+			attr.SlogUserID(userInfo.UserID),
+			attr.SlogOrganizationID(userInfo.Organizations[0].ID),
+		)
+		inviteURL := fmt.Sprintf("%s/invite?token=%s&error=already_member",
+			strings.TrimRight(s.cfg.SignInRedirectURL, "/"),
+			url.QueryEscape(state.InviteToken),
+		)
+		return &gen.CallbackResult{
+			Location:      inviteURL,
+			SessionToken:  "",
+			SessionCookie: "",
+		}, nil
+	}
+
 	session := sessions.Session{
 		SessionID:            idToken,
 		UserID:               userInfo.UserID,
