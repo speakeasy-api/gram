@@ -95,13 +95,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-// sendInviteEmail sends a team invite email via Loops. Failures are logged but
-// not propagated — the invite is still created in the database regardless.
-func (s *Service) sendInviteEmail(ctx context.Context, email, token, teammateFirstName, teammateEmail, workspaceName string) {
+// sendInviteEmail sends a team invite email via Loops.
+func (s *Service) sendInviteEmail(ctx context.Context, email, token, teammateFirstName, teammateEmail, workspaceName string) error {
 	transactionalID := loops.TransactionalID(loops.TemplateTeamInvite)
 	if transactionalID == "" {
 		s.logger.DebugContext(ctx, "skipping invite email: no transactional ID registered")
-		return
+		return nil
 	}
 
 	inviteURL := fmt.Sprintf("%s/invite?token=%s", strings.TrimRight(s.cfg.SiteURL, "/"), token)
@@ -117,11 +116,10 @@ func (s *Service) sendInviteEmail(ctx context.Context, email, token, teammateFir
 		},
 		AddToAudience: true,
 	}); err != nil {
-		s.logger.ErrorContext(ctx, "failed to send invite email via Loops",
-			attr.SlogError(err),
-			attr.SlogTeamInviteEmail(email),
-		)
+		return fmt.Errorf("sending invite email via Loops: %w", err)
 	}
+
+	return nil
 }
 
 // firstName extracts the first name from a display name.
@@ -280,7 +278,20 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		invitedByName = *userInfo.DisplayName
 	}
 
-	s.sendInviteEmail(ctx, payload.Email, token, firstName(invitedByName), userInfo.Email, orgName(userInfo, payload.OrganizationID))
+	if err := s.sendInviteEmail(ctx, payload.Email, token, firstName(invitedByName), userInfo.Email, orgName(userInfo, payload.OrganizationID)); err != nil {
+		s.logger.ErrorContext(ctx, "failed to send invite email, cancelling invite",
+			attr.SlogError(err),
+			attr.SlogTeamInviteEmail(payload.Email),
+			attr.SlogTeamInviteID(invite.ID.String()),
+		)
+		if cancelErr := s.repo.CancelTeamInvite(ctx, invite.ID); cancelErr != nil {
+			s.logger.ErrorContext(ctx, "failed to cancel invite after email failure",
+				attr.SlogError(cancelErr),
+				attr.SlogTeamInviteID(invite.ID.String()),
+			)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email")
+	}
 
 	s.logger.InfoContext(ctx, "team invite created",
 		attr.SlogOrganizationID(payload.OrganizationID),
@@ -407,7 +418,9 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 		invitedByName = *userInfo.DisplayName
 	}
 
-	s.sendInviteEmail(ctx, invite.Email, newToken, firstName(invitedByName), userInfo.Email, orgName(userInfo, invite.OrganizationID))
+	if err := s.sendInviteEmail(ctx, invite.Email, newToken, firstName(invitedByName), userInfo.Email, orgName(userInfo, invite.OrganizationID)); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").Log(ctx, s.logger, attr.SlogTeamInviteID(invite.ID.String()))
+	}
 
 	s.logger.InfoContext(ctx, "team invite resent",
 		attr.SlogOrganizationID(invite.OrganizationID),
