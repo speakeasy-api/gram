@@ -591,16 +591,16 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 		return oops.E(oops.CodeForbidden, nil, "access denied").Log(ctx, s.logger)
 	}
 
-	// Check if user has a token for this OAuth server (issuer)
+	// Check if user has a token for this toolset
 	s.logger.InfoContext(ctx, "checking OAuth token status",
 		attr.SlogUserID(authCtx.UserID),
 		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-		attr.SlogOAuthIssuer(issuer))
+		attr.SlogToolsetID(toolsetID.String()))
 
 	token, err := s.oauthRepo.GetUserOAuthToken(ctx, repo.GetUserOAuthTokenParams{
-		UserID:            authCtx.UserID,
-		OrganizationID:    authCtx.ActiveOrganizationID,
-		OauthServerIssuer: issuer,
+		UserID:         authCtx.UserID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ToolsetID:      toolsetID,
 	})
 
 	if err != nil {
@@ -656,23 +656,28 @@ func (s *ExternalOAuthService) handleExternalDisconnect(w http.ResponseWriter, r
 		return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
 	}
 
-	issuer := r.URL.Query().Get("issuer")
-	if issuer == "" {
-		return oops.E(oops.CodeBadRequest, nil, "issuer is required").Log(ctx, s.logger)
+	toolsetIDStr := r.URL.Query().Get("toolset_id")
+	if toolsetIDStr == "" {
+		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").Log(ctx, s.logger)
+	}
+
+	toolsetID, err := uuid.Parse(toolsetIDStr)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
 	}
 
 	// Delete token
-	if err := s.oauthRepo.DeleteUserOAuthTokenByIssuer(ctx, repo.DeleteUserOAuthTokenByIssuerParams{
-		UserID:            authCtx.UserID,
-		OrganizationID:    authCtx.ActiveOrganizationID,
-		OauthServerIssuer: issuer,
+	if err := s.oauthRepo.DeleteUserOAuthTokenByToolset(ctx, repo.DeleteUserOAuthTokenByToolsetParams{
+		UserID:         authCtx.UserID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ToolsetID:      toolsetID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to disconnect OAuth").Log(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "OAuth token disconnected",
 		attr.SlogUserID(authCtx.UserID),
-		attr.SlogOAuthIssuer(issuer))
+		attr.SlogToolsetID(toolsetID.String()))
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{
