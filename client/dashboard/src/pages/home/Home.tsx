@@ -203,18 +203,11 @@ export default function Home() {
               <div className="flex flex-col gap-1">
                 <h3 className="font-medium">Host your own tools</h3>
                 <p className="text-sm text-muted-foreground">
-                  Create and deploy custom MCP servers from your APIs or code
+                  Create and deploy custom MCP servers from your APIs
                 </p>
               </div>
             </div>
-            <div className="mt-auto flex justify-end gap-2">
-              {isFunctionsEnabled && (
-                <routes.sources.addFunction.Link className="no-underline">
-                  <Button size="sm">
-                    <Button.Text>Deploy code</Button.Text>
-                  </Button>
-                </routes.sources.addFunction.Link>
-              )}
+            <div className="mt-auto flex justify-end">
               <routes.sources.addOpenAPI.Link className="no-underline">
                 <Button size="sm">
                   <Button.Text>Upload OpenAPI</Button.Text>
@@ -222,31 +215,30 @@ export default function Home() {
               </routes.sources.addOpenAPI.Link>
             </div>
           </div>
-          <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
-            <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
-            <div className="flex flex-row items-start gap-2">
-              <Code
-                className="h-[18px] w-[18px] mt-0.5 shrink-0"
-                strokeWidth={1.5}
-              />
-              <div className="flex flex-col gap-1">
-                <h3 className="font-medium">Deploy code</h3>
-                <p className="text-sm text-muted-foreground">
-                  Write and deploy custom functions as MCP tools
-                </p>
+          {isFunctionsEnabled && (
+            <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
+              <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
+              <div className="flex flex-row items-start gap-2">
+                <Code
+                  className="h-[18px] w-[18px] mt-0.5 shrink-0"
+                  strokeWidth={1.5}
+                />
+                <div className="flex flex-col gap-1">
+                  <h3 className="font-medium">Deploy code</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Write and deploy custom functions as MCP tools
+                  </p>
+                </div>
+              </div>
+              <div className="mt-auto flex justify-end">
+                <routes.sources.addFunction.Link className="no-underline">
+                  <Button size="sm">
+                    <Button.Text>Get started</Button.Text>
+                  </Button>
+                </routes.sources.addFunction.Link>
               </div>
             </div>
-            <div className="mt-auto flex justify-end">
-              <a
-                href="https://app.getgram.ai/speakeasy-team/sagar/sources/add-function"
-                className="no-underline"
-              >
-                <Button size="sm">
-                  <Button.Text>Get started</Button.Text>
-                </Button>
-              </a>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Featured Servers Section */}
