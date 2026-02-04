@@ -36,6 +36,7 @@ func NewClient(createPackage, updatePackage, listPackages, listVersions, publish
 // CreatePackage calls the "createPackage" endpoint of the "packages" service.
 // CreatePackage may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -59,6 +60,7 @@ func (c *Client) CreatePackage(ctx context.Context, p *CreatePackagePayload) (re
 // UpdatePackage may return the following errors:
 //   - "not_modified" (type *NotModified)
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -81,6 +83,7 @@ func (c *Client) UpdatePackage(ctx context.Context, p *UpdatePackagePayload) (re
 // ListPackages calls the "listPackages" endpoint of the "packages" service.
 // ListPackages may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -103,6 +106,7 @@ func (c *Client) ListPackages(ctx context.Context, p *ListPackagesPayload) (res 
 // ListVersions calls the "listVersions" endpoint of the "packages" service.
 // ListVersions may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -125,6 +129,7 @@ func (c *Client) ListVersions(ctx context.Context, p *ListVersionsPayload) (res 
 // Publish calls the "publish" endpoint of the "packages" service.
 // Publish may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

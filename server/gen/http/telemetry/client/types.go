@@ -139,6 +139,24 @@ type SearchLogsUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SearchLogsLogsDisabledResponseBody is the type of the "telemetry" service
+// "searchLogs" endpoint HTTP response body for the "logs_disabled" error.
+type SearchLogsLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SearchLogsForbiddenResponseBody is the type of the "telemetry" service
 // "searchLogs" endpoint HTTP response body for the "forbidden" error.
 type SearchLogsForbiddenResponseBody struct {
@@ -307,6 +325,25 @@ type SearchLogsGatewayErrorResponseBody struct {
 // service "searchToolCalls" endpoint HTTP response body for the "unauthorized"
 // error.
 type SearchToolCallsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SearchToolCallsLogsDisabledResponseBody is the type of the "telemetry"
+// service "searchToolCalls" endpoint HTTP response body for the
+// "logs_disabled" error.
+type SearchToolCallsLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -505,6 +542,24 @@ type SearchChatsUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SearchChatsLogsDisabledResponseBody is the type of the "telemetry" service
+// "searchChats" endpoint HTTP response body for the "logs_disabled" error.
+type SearchChatsLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SearchChatsForbiddenResponseBody is the type of the "telemetry" service
 // "searchChats" endpoint HTTP response body for the "forbidden" error.
 type SearchChatsForbiddenResponseBody struct {
@@ -672,6 +727,24 @@ type SearchChatsGatewayErrorResponseBody struct {
 // CaptureEventUnauthorizedResponseBody is the type of the "telemetry" service
 // "captureEvent" endpoint HTTP response body for the "unauthorized" error.
 type CaptureEventUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CaptureEventLogsDisabledResponseBody is the type of the "telemetry" service
+// "captureEvent" endpoint HTTP response body for the "logs_disabled" error.
+type CaptureEventLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -855,6 +928,25 @@ type CaptureEventGatewayErrorResponseBody struct {
 // "telemetry" service "getProjectMetricsSummary" endpoint HTTP response body
 // for the "unauthorized" error.
 type GetProjectMetricsSummaryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetProjectMetricsSummaryLogsDisabledResponseBody is the type of the
+// "telemetry" service "getProjectMetricsSummary" endpoint HTTP response body
+// for the "logs_disabled" error.
+type GetProjectMetricsSummaryLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1374,6 +1466,21 @@ func NewSearchLogsUnauthorized(body *SearchLogsUnauthorizedResponseBody) *goa.Se
 	return v
 }
 
+// NewSearchLogsLogsDisabled builds a telemetry service searchLogs endpoint
+// logs_disabled error.
+func NewSearchLogsLogsDisabled(body *SearchLogsLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewSearchLogsForbidden builds a telemetry service searchLogs endpoint
 // forbidden error.
 func NewSearchLogsForbidden(body *SearchLogsForbiddenResponseBody) *goa.ServiceError {
@@ -1531,6 +1638,21 @@ func NewSearchToolCallsResultOK(body *SearchToolCallsResponseBody) *telemetry.Se
 // NewSearchToolCallsUnauthorized builds a telemetry service searchToolCalls
 // endpoint unauthorized error.
 func NewSearchToolCallsUnauthorized(body *SearchToolCallsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSearchToolCallsLogsDisabled builds a telemetry service searchToolCalls
+// endpoint logs_disabled error.
+func NewSearchToolCallsLogsDisabled(body *SearchToolCallsLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1712,6 +1834,21 @@ func NewSearchChatsUnauthorized(body *SearchChatsUnauthorizedResponseBody) *goa.
 	return v
 }
 
+// NewSearchChatsLogsDisabled builds a telemetry service searchChats endpoint
+// logs_disabled error.
+func NewSearchChatsLogsDisabled(body *SearchChatsLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewSearchChatsForbidden builds a telemetry service searchChats endpoint
 // forbidden error.
 func NewSearchChatsForbidden(body *SearchChatsForbiddenResponseBody) *goa.ServiceError {
@@ -1860,6 +1997,21 @@ func NewCaptureEventResultOK(body *CaptureEventResponseBody) *telemetry.CaptureE
 // NewCaptureEventUnauthorized builds a telemetry service captureEvent endpoint
 // unauthorized error.
 func NewCaptureEventUnauthorized(body *CaptureEventUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCaptureEventLogsDisabled builds a telemetry service captureEvent endpoint
+// logs_disabled error.
+func NewCaptureEventLogsDisabled(body *CaptureEventLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2021,6 +2173,21 @@ func NewGetProjectMetricsSummaryGetMetricsSummaryResultOK(body *GetProjectMetric
 // NewGetProjectMetricsSummaryUnauthorized builds a telemetry service
 // getProjectMetricsSummary endpoint unauthorized error.
 func NewGetProjectMetricsSummaryUnauthorized(body *GetProjectMetricsSummaryUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetProjectMetricsSummaryLogsDisabled builds a telemetry service
+// getProjectMetricsSummary endpoint logs_disabled error.
+func NewGetProjectMetricsSummaryLogsDisabled(body *GetProjectMetricsSummaryLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2254,6 +2421,30 @@ func ValidateGetProjectMetricsSummaryResponseBody(body *GetProjectMetricsSummary
 // ValidateSearchLogsUnauthorizedResponseBody runs the validations defined on
 // searchLogs_unauthorized_response_body
 func ValidateSearchLogsUnauthorizedResponseBody(body *SearchLogsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchLogsLogsDisabledResponseBody runs the validations defined on
+// searchLogs_logs_disabled_response_body
+func ValidateSearchLogsLogsDisabledResponseBody(body *SearchLogsLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2515,6 +2706,30 @@ func ValidateSearchToolCallsUnauthorizedResponseBody(body *SearchToolCallsUnauth
 	return
 }
 
+// ValidateSearchToolCallsLogsDisabledResponseBody runs the validations defined
+// on searchToolCalls_logs_disabled_response_body
+func ValidateSearchToolCallsLogsDisabledResponseBody(body *SearchToolCallsLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSearchToolCallsForbiddenResponseBody runs the validations defined on
 // searchToolCalls_forbidden_response_body
 func ValidateSearchToolCallsForbiddenResponseBody(body *SearchToolCallsForbiddenResponseBody) (err error) {
@@ -2734,6 +2949,30 @@ func ValidateSearchToolCallsGatewayErrorResponseBody(body *SearchToolCallsGatewa
 // ValidateSearchChatsUnauthorizedResponseBody runs the validations defined on
 // searchChats_unauthorized_response_body
 func ValidateSearchChatsUnauthorizedResponseBody(body *SearchChatsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSearchChatsLogsDisabledResponseBody runs the validations defined on
+// searchChats_logs_disabled_response_body
+func ValidateSearchChatsLogsDisabledResponseBody(body *SearchChatsLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2995,6 +3234,30 @@ func ValidateCaptureEventUnauthorizedResponseBody(body *CaptureEventUnauthorized
 	return
 }
 
+// ValidateCaptureEventLogsDisabledResponseBody runs the validations defined on
+// captureEvent_logs_disabled_response_body
+func ValidateCaptureEventLogsDisabledResponseBody(body *CaptureEventLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCaptureEventForbiddenResponseBody runs the validations defined on
 // captureEvent_forbidden_response_body
 func ValidateCaptureEventForbiddenResponseBody(body *CaptureEventForbiddenResponseBody) (err error) {
@@ -3214,6 +3477,30 @@ func ValidateCaptureEventGatewayErrorResponseBody(body *CaptureEventGatewayError
 // ValidateGetProjectMetricsSummaryUnauthorizedResponseBody runs the
 // validations defined on getProjectMetricsSummary_unauthorized_response_body
 func ValidateGetProjectMetricsSummaryUnauthorizedResponseBody(body *GetProjectMetricsSummaryUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetProjectMetricsSummaryLogsDisabledResponseBody runs the
+// validations defined on getProjectMetricsSummary_logs_disabled_response_body
+func ValidateGetProjectMetricsSummaryLogsDisabledResponseBody(body *GetProjectMetricsSummaryLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

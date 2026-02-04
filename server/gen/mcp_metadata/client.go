@@ -34,6 +34,7 @@ func NewClient(getMcpMetadata, setMcpMetadata, exportMcpMetadata goa.Endpoint) *
 // service.
 // GetMcpMetadata may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -57,6 +58,7 @@ func (c *Client) GetMcpMetadata(ctx context.Context, p *GetMcpMetadataPayload) (
 // service.
 // SetMcpMetadata may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -80,6 +82,7 @@ func (c *Client) SetMcpMetadata(ctx context.Context, p *SetMcpMetadataPayload) (
 // "mcpMetadata" service.
 // ExportMcpMetadata may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

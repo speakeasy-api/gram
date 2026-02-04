@@ -74,6 +74,7 @@ func EncodeListCatalogRequest(encoder func(*http.Request) goahttp.Encoder) func(
 // response body should be restored after having been read.
 // DecodeListCatalogResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -129,19 +130,40 @@ func DecodeListCatalogResponse(decoder func(*http.Response) goahttp.Decoder, res
 			}
 			return nil, NewListCatalogUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ListCatalogForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body ListCatalogLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				}
+				err = ValidateListCatalogLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				}
+				return nil, NewListCatalogLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body ListCatalogForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "listCatalog", err)
+				}
+				err = ValidateListCatalogForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
+				}
+				return nil, NewListCatalogForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "listCatalog", resp.StatusCode, string(body))
 			}
-			err = ValidateListCatalogForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpRegistries", "listCatalog", err)
-			}
-			return nil, NewListCatalogForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListCatalogBadRequestResponseBody

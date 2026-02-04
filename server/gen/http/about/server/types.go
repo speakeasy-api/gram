@@ -29,6 +29,24 @@ type OpenapiUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// OpenapiLogsDisabledResponseBody is the type of the "about" service "openapi"
+// endpoint HTTP response body for the "logs_disabled" error.
+type OpenapiLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // OpenapiForbiddenResponseBody is the type of the "about" service "openapi"
 // endpoint HTTP response body for the "forbidden" error.
 type OpenapiForbiddenResponseBody struct {
@@ -195,6 +213,20 @@ type OpenapiGatewayErrorResponseBody struct {
 // result of the "openapi" endpoint of the "about" service.
 func NewOpenapiUnauthorizedResponseBody(res *goa.ServiceError) *OpenapiUnauthorizedResponseBody {
 	body := &OpenapiUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOpenapiLogsDisabledResponseBody builds the HTTP response body from the
+// result of the "openapi" endpoint of the "about" service.
+func NewOpenapiLogsDisabledResponseBody(res *goa.ServiceError) *OpenapiLogsDisabledResponseBody {
+	body := &OpenapiLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

@@ -34,6 +34,7 @@ func NewClient(createKey, listKeys, revokeKey, verifyKey goa.Endpoint) *Client {
 // CreateKey calls the "createKey" endpoint of the "keys" service.
 // CreateKey may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -56,6 +57,7 @@ func (c *Client) CreateKey(ctx context.Context, p *CreateKeyPayload) (res *Key, 
 // ListKeys calls the "listKeys" endpoint of the "keys" service.
 // ListKeys may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -78,6 +80,7 @@ func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListKey
 // RevokeKey calls the "revokeKey" endpoint of the "keys" service.
 // RevokeKey may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -96,6 +99,7 @@ func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (err error)
 // VerifyKey calls the "verifyKey" endpoint of the "keys" service.
 // VerifyKey may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

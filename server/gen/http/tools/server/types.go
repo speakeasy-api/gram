@@ -39,6 +39,24 @@ type ListToolsUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListToolsLogsDisabledResponseBody is the type of the "tools" service
+// "listTools" endpoint HTTP response body for the "logs_disabled" error.
+type ListToolsLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListToolsForbiddenResponseBody is the type of the "tools" service
 // "listTools" endpoint HTTP response body for the "forbidden" error.
 type ListToolsForbiddenResponseBody struct {
@@ -515,6 +533,20 @@ func NewListToolsResponseBody(res *tools.ListToolsResult) *ListToolsResponseBody
 // result of the "listTools" endpoint of the "tools" service.
 func NewListToolsUnauthorizedResponseBody(res *goa.ServiceError) *ListToolsUnauthorizedResponseBody {
 	body := &ListToolsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsLogsDisabledResponseBody builds the HTTP response body from the
+// result of the "listTools" endpoint of the "tools" service.
+func NewListToolsLogsDisabledResponseBody(res *goa.ServiceError) *ListToolsLogsDisabledResponseBody {
+	body := &ListToolsLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

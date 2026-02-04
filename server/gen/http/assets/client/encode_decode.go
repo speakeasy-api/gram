@@ -56,6 +56,7 @@ func EncodeServeImageRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 // should be restored after having been read.
 // DecodeServeImageResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -132,19 +133,40 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			return nil, NewServeImageUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ServeImageForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "serveImage", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body ServeImageLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveImage", err)
+				}
+				err = ValidateServeImageLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveImage", err)
+				}
+				return nil, NewServeImageLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body ServeImageForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveImage", err)
+				}
+				err = ValidateServeImageForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveImage", err)
+				}
+				return nil, NewServeImageForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "serveImage", resp.StatusCode, string(body))
 			}
-			err = ValidateServeImageForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "serveImage", err)
-			}
-			return nil, NewServeImageForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ServeImageBadRequestResponseBody
@@ -333,6 +355,7 @@ func EncodeUploadImageRequest(encoder func(*http.Request) goahttp.Encoder) func(
 // should be restored after having been read.
 // DecodeUploadImageResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -388,19 +411,40 @@ func DecodeUploadImageResponse(decoder func(*http.Response) goahttp.Decoder, res
 			}
 			return nil, NewUploadImageUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body UploadImageForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "uploadImage", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body UploadImageLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadImage", err)
+				}
+				err = ValidateUploadImageLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadImage", err)
+				}
+				return nil, NewUploadImageLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body UploadImageForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadImage", err)
+				}
+				err = ValidateUploadImageForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadImage", err)
+				}
+				return nil, NewUploadImageForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "uploadImage", resp.StatusCode, string(body))
 			}
-			err = ValidateUploadImageForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "uploadImage", err)
-			}
-			return nil, NewUploadImageForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UploadImageBadRequestResponseBody
@@ -602,6 +646,7 @@ func EncodeUploadFunctionsRequest(encoder func(*http.Request) goahttp.Encoder) f
 // response body should be restored after having been read.
 // DecodeUploadFunctionsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -657,19 +702,40 @@ func DecodeUploadFunctionsResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			return nil, NewUploadFunctionsUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body UploadFunctionsForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body UploadFunctionsLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+				}
+				err = ValidateUploadFunctionsLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+				}
+				return nil, NewUploadFunctionsLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body UploadFunctionsForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+				}
+				err = ValidateUploadFunctionsForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+				}
+				return nil, NewUploadFunctionsForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "uploadFunctions", resp.StatusCode, string(body))
 			}
-			err = ValidateUploadFunctionsForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
-			}
-			return nil, NewUploadFunctionsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UploadFunctionsBadRequestResponseBody
@@ -871,6 +937,7 @@ func EncodeUploadOpenAPIv3Request(encoder func(*http.Request) goahttp.Encoder) f
 // response body should be restored after having been read.
 // DecodeUploadOpenAPIv3Response may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -926,19 +993,40 @@ func DecodeUploadOpenAPIv3Response(decoder func(*http.Response) goahttp.Decoder,
 			}
 			return nil, NewUploadOpenAPIv3Unauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body UploadOpenAPIv3ForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body UploadOpenAPIv3LogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+				}
+				err = ValidateUploadOpenAPIv3LogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+				}
+				return nil, NewUploadOpenAPIv3LogsDisabled(&body)
+			case "forbidden":
+				var (
+					body UploadOpenAPIv3ForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadOpenAPIv3", err)
+				}
+				err = ValidateUploadOpenAPIv3ForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
+				}
+				return nil, NewUploadOpenAPIv3Forbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "uploadOpenAPIv3", resp.StatusCode, string(body))
 			}
-			err = ValidateUploadOpenAPIv3ForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "uploadOpenAPIv3", err)
-			}
-			return nil, NewUploadOpenAPIv3Forbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UploadOpenAPIv3BadRequestResponseBody
@@ -1127,6 +1215,7 @@ func EncodeFetchOpenAPIv3FromURLRequest(encoder func(*http.Request) goahttp.Enco
 // the response body should be restored after having been read.
 // DecodeFetchOpenAPIv3FromURLResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1182,19 +1271,40 @@ func DecodeFetchOpenAPIv3FromURLResponse(decoder func(*http.Response) goahttp.De
 			}
 			return nil, NewFetchOpenAPIv3FromURLUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body FetchOpenAPIv3FromURLForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "fetchOpenAPIv3FromURL", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body FetchOpenAPIv3FromURLLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "fetchOpenAPIv3FromURL", err)
+				}
+				err = ValidateFetchOpenAPIv3FromURLLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "fetchOpenAPIv3FromURL", err)
+				}
+				return nil, NewFetchOpenAPIv3FromURLLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body FetchOpenAPIv3FromURLForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "fetchOpenAPIv3FromURL", err)
+				}
+				err = ValidateFetchOpenAPIv3FromURLForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "fetchOpenAPIv3FromURL", err)
+				}
+				return nil, NewFetchOpenAPIv3FromURLForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "fetchOpenAPIv3FromURL", resp.StatusCode, string(body))
 			}
-			err = ValidateFetchOpenAPIv3FromURLForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "fetchOpenAPIv3FromURL", err)
-			}
-			return nil, NewFetchOpenAPIv3FromURLForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body FetchOpenAPIv3FromURLBadRequestResponseBody
@@ -1365,6 +1475,7 @@ func EncodeServeOpenAPIv3Request(encoder func(*http.Request) goahttp.Encoder) fu
 // body should be restored after having been read.
 // DecodeServeOpenAPIv3Response may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1436,19 +1547,40 @@ func DecodeServeOpenAPIv3Response(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewServeOpenAPIv3Unauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ServeOpenAPIv3ForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body ServeOpenAPIv3LogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+				}
+				err = ValidateServeOpenAPIv3LogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+				}
+				return nil, NewServeOpenAPIv3LogsDisabled(&body)
+			case "forbidden":
+				var (
+					body ServeOpenAPIv3ForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveOpenAPIv3", err)
+				}
+				err = ValidateServeOpenAPIv3ForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
+				}
+				return nil, NewServeOpenAPIv3Forbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "serveOpenAPIv3", resp.StatusCode, string(body))
 			}
-			err = ValidateServeOpenAPIv3ForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "serveOpenAPIv3", err)
-			}
-			return nil, NewServeOpenAPIv3Forbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ServeOpenAPIv3BadRequestResponseBody
@@ -1619,6 +1751,7 @@ func EncodeServeFunctionRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // body should be restored after having been read.
 // DecodeServeFunctionResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1690,19 +1823,40 @@ func DecodeServeFunctionResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewServeFunctionUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ServeFunctionForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "serveFunction", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body ServeFunctionLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveFunction", err)
+				}
+				err = ValidateServeFunctionLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveFunction", err)
+				}
+				return nil, NewServeFunctionLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body ServeFunctionForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveFunction", err)
+				}
+				err = ValidateServeFunctionForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveFunction", err)
+				}
+				return nil, NewServeFunctionForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "serveFunction", resp.StatusCode, string(body))
 			}
-			err = ValidateServeFunctionForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "serveFunction", err)
-			}
-			return nil, NewServeFunctionForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ServeFunctionBadRequestResponseBody
@@ -1873,6 +2027,7 @@ func EncodeListAssetsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 // should be restored after having been read.
 // DecodeListAssetsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1928,19 +2083,40 @@ func DecodeListAssetsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			return nil, NewListAssetsUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ListAssetsForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body ListAssetsLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+				}
+				err = ValidateListAssetsLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+				}
+				return nil, NewListAssetsLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body ListAssetsForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+				}
+				err = ValidateListAssetsForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+				}
+				return nil, NewListAssetsForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "listAssets", resp.StatusCode, string(body))
 			}
-			err = ValidateListAssetsForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "listAssets", err)
-			}
-			return nil, NewListAssetsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListAssetsBadRequestResponseBody
@@ -2134,6 +2310,7 @@ func EncodeUploadChatAttachmentRequest(encoder func(*http.Request) goahttp.Encod
 // the response body should be restored after having been read.
 // DecodeUploadChatAttachmentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -2189,19 +2366,40 @@ func DecodeUploadChatAttachmentResponse(decoder func(*http.Response) goahttp.Dec
 			}
 			return nil, NewUploadChatAttachmentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body UploadChatAttachmentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body UploadChatAttachmentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+				}
+				err = ValidateUploadChatAttachmentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+				}
+				return nil, NewUploadChatAttachmentLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body UploadChatAttachmentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadChatAttachment", err)
+				}
+				err = ValidateUploadChatAttachmentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
+				}
+				return nil, NewUploadChatAttachmentForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "uploadChatAttachment", resp.StatusCode, string(body))
 			}
-			err = ValidateUploadChatAttachmentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "uploadChatAttachment", err)
-			}
-			return nil, NewUploadChatAttachmentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UploadChatAttachmentBadRequestResponseBody
@@ -2390,6 +2588,7 @@ func EncodeServeChatAttachmentRequest(encoder func(*http.Request) goahttp.Encode
 // response body should be restored after having been read.
 // DecodeServeChatAttachmentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -2461,19 +2660,40 @@ func DecodeServeChatAttachmentResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			return nil, NewServeChatAttachmentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ServeChatAttachmentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body ServeChatAttachmentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+				}
+				err = ValidateServeChatAttachmentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+				}
+				return nil, NewServeChatAttachmentLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body ServeChatAttachmentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveChatAttachment", err)
+				}
+				err = ValidateServeChatAttachmentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
+				}
+				return nil, NewServeChatAttachmentForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "serveChatAttachment", resp.StatusCode, string(body))
 			}
-			err = ValidateServeChatAttachmentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
-			}
-			return nil, NewServeChatAttachmentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ServeChatAttachmentBadRequestResponseBody
@@ -2653,6 +2873,7 @@ func EncodeCreateSignedChatAttachmentURLRequest(encoder func(*http.Request) goah
 // controls whether the response body should be restored after having been read.
 // DecodeCreateSignedChatAttachmentURLResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -2708,19 +2929,40 @@ func DecodeCreateSignedChatAttachmentURLResponse(decoder func(*http.Response) go
 			}
 			return nil, NewCreateSignedChatAttachmentURLUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CreateSignedChatAttachmentURLForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body CreateSignedChatAttachmentURLLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+				}
+				err = ValidateCreateSignedChatAttachmentURLLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+				}
+				return nil, NewCreateSignedChatAttachmentURLLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body CreateSignedChatAttachmentURLForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "createSignedChatAttachmentURL", err)
+				}
+				err = ValidateCreateSignedChatAttachmentURLForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
+				}
+				return nil, NewCreateSignedChatAttachmentURLForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "createSignedChatAttachmentURL", resp.StatusCode, string(body))
 			}
-			err = ValidateCreateSignedChatAttachmentURLForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "createSignedChatAttachmentURL", err)
-			}
-			return nil, NewCreateSignedChatAttachmentURLForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateSignedChatAttachmentURLBadRequestResponseBody
@@ -2883,6 +3125,7 @@ func EncodeServeChatAttachmentSignedRequest(encoder func(*http.Request) goahttp.
 // controls whether the response body should be restored after having been read.
 // DecodeServeChatAttachmentSignedResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -2959,19 +3202,40 @@ func DecodeServeChatAttachmentSignedResponse(decoder func(*http.Response) goahtt
 			}
 			return nil, NewServeChatAttachmentSignedUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ServeChatAttachmentSignedForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body ServeChatAttachmentSignedLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+				}
+				err = ValidateServeChatAttachmentSignedLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+				}
+				return nil, NewServeChatAttachmentSignedLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body ServeChatAttachmentSignedForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveChatAttachmentSigned", err)
+				}
+				err = ValidateServeChatAttachmentSignedForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
+				}
+				return nil, NewServeChatAttachmentSignedForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "serveChatAttachmentSigned", resp.StatusCode, string(body))
 			}
-			err = ValidateServeChatAttachmentSignedForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
-			}
-			return nil, NewServeChatAttachmentSignedForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ServeChatAttachmentSignedBadRequestResponseBody

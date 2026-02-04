@@ -43,6 +43,7 @@ func NewClient(getDeployment, getLatestDeployment, getActiveDeployment, createDe
 // service.
 // GetDeployment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -66,6 +67,7 @@ func (c *Client) GetDeployment(ctx context.Context, p *GetDeploymentPayload) (re
 // "deployments" service.
 // GetLatestDeployment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -89,6 +91,7 @@ func (c *Client) GetLatestDeployment(ctx context.Context, p *GetLatestDeployment
 // "deployments" service.
 // GetActiveDeployment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -112,6 +115,7 @@ func (c *Client) GetActiveDeployment(ctx context.Context, p *GetActiveDeployment
 // service.
 // CreateDeployment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -134,6 +138,7 @@ func (c *Client) CreateDeployment(ctx context.Context, p *CreateDeploymentPayloa
 // Evolve calls the "evolve" endpoint of the "deployments" service.
 // Evolve may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -156,6 +161,7 @@ func (c *Client) Evolve(ctx context.Context, p *EvolvePayload) (res *EvolveResul
 // Redeploy calls the "redeploy" endpoint of the "deployments" service.
 // Redeploy may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -179,6 +185,7 @@ func (c *Client) Redeploy(ctx context.Context, p *RedeployPayload) (res *Redeplo
 // service.
 // ListDeployments may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -202,6 +209,7 @@ func (c *Client) ListDeployments(ctx context.Context, p *ListDeploymentsPayload)
 // "deployments" service.
 // GetDeploymentLogs may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

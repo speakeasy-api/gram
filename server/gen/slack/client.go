@@ -36,6 +36,7 @@ func NewClient(callback, login, getSlackConnection, updateSlackConnection, delet
 // Callback calls the "callback" endpoint of the "slack" service.
 // Callback may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -58,6 +59,7 @@ func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *Callbac
 // Login calls the "login" endpoint of the "slack" service.
 // Login may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -81,6 +83,7 @@ func (c *Client) Login(ctx context.Context, p *LoginPayload) (res *LoginResult, 
 // service.
 // GetSlackConnection may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -104,6 +107,7 @@ func (c *Client) GetSlackConnection(ctx context.Context, p *GetSlackConnectionPa
 // "slack" service.
 // UpdateSlackConnection may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -127,6 +131,7 @@ func (c *Client) UpdateSlackConnection(ctx context.Context, p *UpdateSlackConnec
 // "slack" service.
 // DeleteSlackConnection may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

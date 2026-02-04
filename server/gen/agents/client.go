@@ -32,6 +32,7 @@ func NewClient(createResponse, getResponse, deleteResponse goa.Endpoint) *Client
 // CreateResponse calls the "createResponse" endpoint of the "agents" service.
 // CreateResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -54,6 +55,7 @@ func (c *Client) CreateResponse(ctx context.Context, p *CreateResponsePayload) (
 // GetResponse calls the "getResponse" endpoint of the "agents" service.
 // GetResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -76,6 +78,7 @@ func (c *Client) GetResponse(ctx context.Context, p *GetResponsePayload) (res *A
 // DeleteResponse calls the "deleteResponse" endpoint of the "agents" service.
 // DeleteResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

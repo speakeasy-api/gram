@@ -34,6 +34,7 @@ func NewClient(listChats, loadChat, generateTitle, creditUsage goa.Endpoint) *Cl
 // ListChats calls the "listChats" endpoint of the "chat" service.
 // ListChats may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -56,6 +57,7 @@ func (c *Client) ListChats(ctx context.Context, p *ListChatsPayload) (res *ListC
 // LoadChat calls the "loadChat" endpoint of the "chat" service.
 // LoadChat may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -78,6 +80,7 @@ func (c *Client) LoadChat(ctx context.Context, p *LoadChatPayload) (res *Chat, e
 // GenerateTitle calls the "generateTitle" endpoint of the "chat" service.
 // GenerateTitle may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -100,6 +103,7 @@ func (c *Client) GenerateTitle(ctx context.Context, p *GenerateTitlePayload) (re
 // CreditUsage calls the "creditUsage" endpoint of the "chat" service.
 // CreditUsage may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

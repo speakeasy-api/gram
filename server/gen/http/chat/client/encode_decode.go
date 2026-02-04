@@ -62,6 +62,7 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // restored after having been read.
 // DecodeListChatsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -117,19 +118,40 @@ func DecodeListChatsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			}
 			return nil, NewListChatsUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ListChatsForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "listChats", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body ListChatsLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "listChats", err)
+				}
+				err = ValidateListChatsLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "listChats", err)
+				}
+				return nil, NewListChatsLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body ListChatsForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "listChats", err)
+				}
+				err = ValidateListChatsForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "listChats", err)
+				}
+				return nil, NewListChatsForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "listChats", resp.StatusCode, string(body))
 			}
-			err = ValidateListChatsForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "listChats", err)
-			}
-			return nil, NewListChatsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListChatsBadRequestResponseBody
@@ -303,6 +325,7 @@ func EncodeLoadChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 // restored after having been read.
 // DecodeLoadChatResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -358,19 +381,40 @@ func DecodeLoadChatResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			}
 			return nil, NewLoadChatUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body LoadChatForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "loadChat", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body LoadChatLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "loadChat", err)
+				}
+				err = ValidateLoadChatLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "loadChat", err)
+				}
+				return nil, NewLoadChatLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body LoadChatForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "loadChat", err)
+				}
+				err = ValidateLoadChatForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "loadChat", err)
+				}
+				return nil, NewLoadChatForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "loadChat", resp.StatusCode, string(body))
 			}
-			err = ValidateLoadChatForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "loadChat", err)
-			}
-			return nil, NewLoadChatForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body LoadChatBadRequestResponseBody
@@ -545,6 +589,7 @@ func EncodeGenerateTitleRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // should be restored after having been read.
 // DecodeGenerateTitleResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -600,19 +645,40 @@ func DecodeGenerateTitleResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewGenerateTitleUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GenerateTitleForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body GenerateTitleLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				}
+				err = ValidateGenerateTitleLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				}
+				return nil, NewGenerateTitleLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body GenerateTitleForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "generateTitle", err)
+				}
+				err = ValidateGenerateTitleForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
+				}
+				return nil, NewGenerateTitleForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "generateTitle", resp.StatusCode, string(body))
 			}
-			err = ValidateGenerateTitleForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "generateTitle", err)
-			}
-			return nil, NewGenerateTitleForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GenerateTitleBadRequestResponseBody
@@ -783,6 +849,7 @@ func EncodeCreditUsageRequest(encoder func(*http.Request) goahttp.Encoder) func(
 // should be restored after having been read.
 // DecodeCreditUsageResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -838,19 +905,40 @@ func DecodeCreditUsageResponse(decoder func(*http.Response) goahttp.Decoder, res
 			}
 			return nil, NewCreditUsageUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CreditUsageForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "creditUsage", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body CreditUsageLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "creditUsage", err)
+				}
+				err = ValidateCreditUsageLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "creditUsage", err)
+				}
+				return nil, NewCreditUsageLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body CreditUsageForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "creditUsage", err)
+				}
+				err = ValidateCreditUsageForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "creditUsage", err)
+				}
+				return nil, NewCreditUsageForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "creditUsage", resp.StatusCode, string(body))
 			}
-			err = ValidateCreditUsageForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "creditUsage", err)
-			}
-			return nil, NewCreditUsageForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreditUsageBadRequestResponseBody

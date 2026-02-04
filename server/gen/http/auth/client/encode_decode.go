@@ -58,6 +58,7 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 // restored after having been read.
 // DecodeCallbackResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -135,19 +136,40 @@ func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			}
 			return nil, NewCallbackUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CallbackForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "callback", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body CallbackLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "callback", err)
+				}
+				err = ValidateCallbackLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "callback", err)
+				}
+				return nil, NewCallbackLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body CallbackForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "callback", err)
+				}
+				err = ValidateCallbackForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "callback", err)
+				}
+				return nil, NewCallbackForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "callback", resp.StatusCode, string(body))
 			}
-			err = ValidateCallbackForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "callback", err)
-			}
-			return nil, NewCallbackForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CallbackBadRequestResponseBody
@@ -311,6 +333,7 @@ func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 // restored after having been read.
 // DecodeLoginResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -366,19 +389,40 @@ func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 			}
 			return nil, NewLoginUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body LoginForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "login", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body LoginLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "login", err)
+				}
+				err = ValidateLoginLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "login", err)
+				}
+				return nil, NewLoginLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body LoginForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "login", err)
+				}
+				err = ValidateLoginForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "login", err)
+				}
+				return nil, NewLoginForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "login", resp.StatusCode, string(body))
 			}
-			err = ValidateLoginForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "login", err)
-			}
-			return nil, NewLoginForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body LoginBadRequestResponseBody
@@ -549,6 +593,7 @@ func EncodeSwitchScopesRequest(encoder func(*http.Request) goahttp.Encoder) func
 // should be restored after having been read.
 // DecodeSwitchScopesResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -620,19 +665,40 @@ func DecodeSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewSwitchScopesUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body SwitchScopesForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body SwitchScopesLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+				}
+				err = ValidateSwitchScopesLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+				}
+				return nil, NewSwitchScopesLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body SwitchScopesForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "switchScopes", err)
+				}
+				err = ValidateSwitchScopesForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
+				}
+				return nil, NewSwitchScopesForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "switchScopes", resp.StatusCode, string(body))
 			}
-			err = ValidateSwitchScopesForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
-			}
-			return nil, NewSwitchScopesForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SwitchScopesBadRequestResponseBody
@@ -795,6 +861,7 @@ func EncodeLogoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 // restored after having been read.
 // DecodeLogoutResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -858,19 +925,40 @@ func DecodeLogoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			}
 			return nil, NewLogoutUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body LogoutForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "logout", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body LogoutLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "logout", err)
+				}
+				err = ValidateLogoutLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "logout", err)
+				}
+				return nil, NewLogoutLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body LogoutForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "logout", err)
+				}
+				err = ValidateLogoutForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "logout", err)
+				}
+				return nil, NewLogoutForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "logout", resp.StatusCode, string(body))
 			}
-			err = ValidateLogoutForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "logout", err)
-			}
-			return nil, NewLogoutForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body LogoutBadRequestResponseBody
@@ -1037,6 +1125,7 @@ func EncodeRegisterRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 // restored after having been read.
 // DecodeRegisterResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1079,19 +1168,40 @@ func DecodeRegisterResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			}
 			return nil, NewRegisterUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body RegisterForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "register", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body RegisterLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "register", err)
+				}
+				err = ValidateRegisterLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "register", err)
+				}
+				return nil, NewRegisterLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body RegisterForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "register", err)
+				}
+				err = ValidateRegisterForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "register", err)
+				}
+				return nil, NewRegisterForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "register", resp.StatusCode, string(body))
 			}
-			err = ValidateRegisterForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "register", err)
-			}
-			return nil, NewRegisterForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body RegisterBadRequestResponseBody
@@ -1254,6 +1364,7 @@ func EncodeInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 // after having been read.
 // DecodeInfoResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1336,19 +1447,40 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 			}
 			return nil, NewInfoUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body InfoForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "info", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body InfoLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "info", err)
+				}
+				err = ValidateInfoLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "info", err)
+				}
+				return nil, NewInfoLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body InfoForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "info", err)
+				}
+				err = ValidateInfoForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "info", err)
+				}
+				return nil, NewInfoForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "info", resp.StatusCode, string(body))
 			}
-			err = ValidateInfoForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "info", err)
-			}
-			return nil, NewInfoForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body InfoBadRequestResponseBody

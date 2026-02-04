@@ -58,6 +58,7 @@ func EncodeGetPeriodUsageRequest(encoder func(*http.Request) goahttp.Encoder) fu
 // body should be restored after having been read.
 // DecodeGetPeriodUsageResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -113,19 +114,40 @@ func DecodeGetPeriodUsageResponse(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewGetPeriodUsageUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetPeriodUsageForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "getPeriodUsage", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body GetPeriodUsageLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getPeriodUsage", err)
+				}
+				err = ValidateGetPeriodUsageLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getPeriodUsage", err)
+				}
+				return nil, NewGetPeriodUsageLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body GetPeriodUsageForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getPeriodUsage", err)
+				}
+				err = ValidateGetPeriodUsageForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getPeriodUsage", err)
+				}
+				return nil, NewGetPeriodUsageForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getPeriodUsage", resp.StatusCode, string(body))
 			}
-			err = ValidateGetPeriodUsageForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "getPeriodUsage", err)
-			}
-			return nil, NewGetPeriodUsageForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetPeriodUsageBadRequestResponseBody
@@ -272,6 +294,7 @@ func (c *Client) BuildGetUsageTiersRequest(ctx context.Context, v any) (*http.Re
 // should be restored after having been read.
 // DecodeGetUsageTiersResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -327,19 +350,40 @@ func DecodeGetUsageTiersResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewGetUsageTiersUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetUsageTiersForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body GetUsageTiersLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+				}
+				err = ValidateGetUsageTiersLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+				}
+				return nil, NewGetUsageTiersLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body GetUsageTiersForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+				}
+				err = ValidateGetUsageTiersForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+				}
+				return nil, NewGetUsageTiersForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getUsageTiers", resp.StatusCode, string(body))
 			}
-			err = ValidateGetUsageTiersForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
-			}
-			return nil, NewGetUsageTiersForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetUsageTiersBadRequestResponseBody
@@ -507,6 +551,7 @@ func EncodeCreateCustomerSessionRequest(encoder func(*http.Request) goahttp.Enco
 // the response body should be restored after having been read.
 // DecodeCreateCustomerSessionResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -557,19 +602,40 @@ func DecodeCreateCustomerSessionResponse(decoder func(*http.Response) goahttp.De
 			}
 			return nil, NewCreateCustomerSessionUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CreateCustomerSessionForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCustomerSession", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body CreateCustomerSessionLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createCustomerSession", err)
+				}
+				err = ValidateCreateCustomerSessionLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createCustomerSession", err)
+				}
+				return nil, NewCreateCustomerSessionLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body CreateCustomerSessionForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createCustomerSession", err)
+				}
+				err = ValidateCreateCustomerSessionForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createCustomerSession", err)
+				}
+				return nil, NewCreateCustomerSessionForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "createCustomerSession", resp.StatusCode, string(body))
 			}
-			err = ValidateCreateCustomerSessionForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "createCustomerSession", err)
-			}
-			return nil, NewCreateCustomerSessionForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateCustomerSessionBadRequestResponseBody
@@ -736,6 +802,7 @@ func EncodeCreateCheckoutRequest(encoder func(*http.Request) goahttp.Encoder) fu
 // body should be restored after having been read.
 // DecodeCreateCheckoutResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -786,19 +853,40 @@ func DecodeCreateCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewCreateCheckoutUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CreateCheckoutForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body CreateCheckoutLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				}
+				err = ValidateCreateCheckoutLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				}
+				return nil, NewCreateCheckoutLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body CreateCheckoutForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				}
+				err = ValidateCreateCheckoutForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				}
+				return nil, NewCreateCheckoutForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "createCheckout", resp.StatusCode, string(body))
 			}
-			err = ValidateCreateCheckoutForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
-			}
-			return nil, NewCreateCheckoutForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateCheckoutBadRequestResponseBody

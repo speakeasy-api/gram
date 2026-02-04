@@ -58,6 +58,24 @@ type GetDomainUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetDomainLogsDisabledResponseBody is the type of the "domains" service
+// "getDomain" endpoint HTTP response body for the "logs_disabled" error.
+type GetDomainLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetDomainForbiddenResponseBody is the type of the "domains" service
 // "getDomain" endpoint HTTP response body for the "forbidden" error.
 type GetDomainForbiddenResponseBody struct {
@@ -223,6 +241,24 @@ type GetDomainGatewayErrorResponseBody struct {
 // CreateDomainUnauthorizedResponseBody is the type of the "domains" service
 // "createDomain" endpoint HTTP response body for the "unauthorized" error.
 type CreateDomainUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDomainLogsDisabledResponseBody is the type of the "domains" service
+// "createDomain" endpoint HTTP response body for the "logs_disabled" error.
+type CreateDomainLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -405,6 +441,24 @@ type CreateDomainGatewayErrorResponseBody struct {
 // DeleteDomainUnauthorizedResponseBody is the type of the "domains" service
 // "deleteDomain" endpoint HTTP response body for the "unauthorized" error.
 type DeleteDomainUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDomainLogsDisabledResponseBody is the type of the "domains" service
+// "deleteDomain" endpoint HTTP response body for the "logs_disabled" error.
+type DeleteDomainLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -614,6 +668,20 @@ func NewGetDomainUnauthorizedResponseBody(res *goa.ServiceError) *GetDomainUnaut
 	return body
 }
 
+// NewGetDomainLogsDisabledResponseBody builds the HTTP response body from the
+// result of the "getDomain" endpoint of the "domains" service.
+func NewGetDomainLogsDisabledResponseBody(res *goa.ServiceError) *GetDomainLogsDisabledResponseBody {
+	body := &GetDomainLogsDisabledResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetDomainForbiddenResponseBody builds the HTTP response body from the
 // result of the "getDomain" endpoint of the "domains" service.
 func NewGetDomainForbiddenResponseBody(res *goa.ServiceError) *GetDomainForbiddenResponseBody {
@@ -754,6 +822,20 @@ func NewCreateDomainUnauthorizedResponseBody(res *goa.ServiceError) *CreateDomai
 	return body
 }
 
+// NewCreateDomainLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "createDomain" endpoint of the "domains" service.
+func NewCreateDomainLogsDisabledResponseBody(res *goa.ServiceError) *CreateDomainLogsDisabledResponseBody {
+	body := &CreateDomainLogsDisabledResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateDomainForbiddenResponseBody builds the HTTP response body from the
 // result of the "createDomain" endpoint of the "domains" service.
 func NewCreateDomainForbiddenResponseBody(res *goa.ServiceError) *CreateDomainForbiddenResponseBody {
@@ -884,6 +966,20 @@ func NewCreateDomainGatewayErrorResponseBody(res *goa.ServiceError) *CreateDomai
 // the result of the "deleteDomain" endpoint of the "domains" service.
 func NewDeleteDomainUnauthorizedResponseBody(res *goa.ServiceError) *DeleteDomainUnauthorizedResponseBody {
 	body := &DeleteDomainUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDomainLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "deleteDomain" endpoint of the "domains" service.
+func NewDeleteDomainLogsDisabledResponseBody(res *goa.ServiceError) *DeleteDomainLogsDisabledResponseBody {
+	body := &DeleteDomainLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

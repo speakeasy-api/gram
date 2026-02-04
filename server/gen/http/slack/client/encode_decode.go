@@ -55,6 +55,7 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 // restored after having been read.
 // DecodeCallbackResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -110,19 +111,40 @@ func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			}
 			return nil, NewCallbackUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CallbackForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "callback", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body CallbackLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "callback", err)
+				}
+				err = ValidateCallbackLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "callback", err)
+				}
+				return nil, NewCallbackLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body CallbackForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "callback", err)
+				}
+				err = ValidateCallbackForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "callback", err)
+				}
+				return nil, NewCallbackForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slack", "callback", resp.StatusCode, string(body))
 			}
-			err = ValidateCallbackForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "callback", err)
-			}
-			return nil, NewCallbackForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CallbackBadRequestResponseBody
@@ -302,6 +324,7 @@ func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 // restored after having been read.
 // DecodeLoginResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -357,19 +380,40 @@ func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 			}
 			return nil, NewLoginUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body LoginForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "login", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body LoginLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "login", err)
+				}
+				err = ValidateLoginLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "login", err)
+				}
+				return nil, NewLoginLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body LoginForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "login", err)
+				}
+				err = ValidateLoginForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "login", err)
+				}
+				return nil, NewLoginForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slack", "login", resp.StatusCode, string(body))
 			}
-			err = ValidateLoginForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "login", err)
-			}
-			return nil, NewLoginForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body LoginBadRequestResponseBody
@@ -536,6 +580,7 @@ func EncodeGetSlackConnectionRequest(encoder func(*http.Request) goahttp.Encoder
 // response body should be restored after having been read.
 // DecodeGetSlackConnectionResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -591,19 +636,40 @@ func DecodeGetSlackConnectionResponse(decoder func(*http.Response) goahttp.Decod
 			}
 			return nil, NewGetSlackConnectionUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetSlackConnectionForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body GetSlackConnectionLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
+				}
+				err = ValidateGetSlackConnectionLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
+				}
+				return nil, NewGetSlackConnectionLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body GetSlackConnectionForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
+				}
+				err = ValidateGetSlackConnectionForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
+				}
+				return nil, NewGetSlackConnectionForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slack", "getSlackConnection", resp.StatusCode, string(body))
 			}
-			err = ValidateGetSlackConnectionForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-			}
-			return nil, NewGetSlackConnectionForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetSlackConnectionBadRequestResponseBody
@@ -775,6 +841,7 @@ func EncodeUpdateSlackConnectionRequest(encoder func(*http.Request) goahttp.Enco
 // the response body should be restored after having been read.
 // DecodeUpdateSlackConnectionResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -830,19 +897,40 @@ func DecodeUpdateSlackConnectionResponse(decoder func(*http.Response) goahttp.De
 			}
 			return nil, NewUpdateSlackConnectionUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body UpdateSlackConnectionForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body UpdateSlackConnectionLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				}
+				err = ValidateUpdateSlackConnectionLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				}
+				return nil, NewUpdateSlackConnectionLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body UpdateSlackConnectionForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				}
+				err = ValidateUpdateSlackConnectionForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				}
+				return nil, NewUpdateSlackConnectionForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slack", "updateSlackConnection", resp.StatusCode, string(body))
 			}
-			err = ValidateUpdateSlackConnectionForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
-			}
-			return nil, NewUpdateSlackConnectionForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UpdateSlackConnectionBadRequestResponseBody
@@ -1010,6 +1098,7 @@ func EncodeDeleteSlackConnectionRequest(encoder func(*http.Request) goahttp.Enco
 // the response body should be restored after having been read.
 // DecodeDeleteSlackConnectionResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1052,19 +1141,40 @@ func DecodeDeleteSlackConnectionResponse(decoder func(*http.Response) goahttp.De
 			}
 			return nil, NewDeleteSlackConnectionUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body DeleteSlackConnectionForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body DeleteSlackConnectionLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+				}
+				err = ValidateDeleteSlackConnectionLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+				}
+				return nil, NewDeleteSlackConnectionLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body DeleteSlackConnectionForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+				}
+				err = ValidateDeleteSlackConnectionForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+				}
+				return nil, NewDeleteSlackConnectionForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slack", "deleteSlackConnection", resp.StatusCode, string(body))
 			}
-			err = ValidateDeleteSlackConnectionForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
-			}
-			return nil, NewDeleteSlackConnectionForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body DeleteSlackConnectionBadRequestResponseBody

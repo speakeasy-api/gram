@@ -115,6 +115,25 @@ type GetMcpMetadataUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetMcpMetadataLogsDisabledResponseBody is the type of the "mcpMetadata"
+// service "getMcpMetadata" endpoint HTTP response body for the "logs_disabled"
+// error.
+type GetMcpMetadataLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetMcpMetadataForbiddenResponseBody is the type of the "mcpMetadata" service
 // "getMcpMetadata" endpoint HTTP response body for the "forbidden" error.
 type GetMcpMetadataForbiddenResponseBody struct {
@@ -301,6 +320,25 @@ type SetMcpMetadataUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetMcpMetadataLogsDisabledResponseBody is the type of the "mcpMetadata"
+// service "setMcpMetadata" endpoint HTTP response body for the "logs_disabled"
+// error.
+type SetMcpMetadataLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SetMcpMetadataForbiddenResponseBody is the type of the "mcpMetadata" service
 // "setMcpMetadata" endpoint HTTP response body for the "forbidden" error.
 type SetMcpMetadataForbiddenResponseBody struct {
@@ -472,6 +510,25 @@ type SetMcpMetadataGatewayErrorResponseBody struct {
 // service "exportMcpMetadata" endpoint HTTP response body for the
 // "unauthorized" error.
 type ExportMcpMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExportMcpMetadataLogsDisabledResponseBody is the type of the "mcpMetadata"
+// service "exportMcpMetadata" endpoint HTTP response body for the
+// "logs_disabled" error.
+type ExportMcpMetadataLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -819,6 +876,20 @@ func NewGetMcpMetadataUnauthorizedResponseBody(res *goa.ServiceError) *GetMcpMet
 	return body
 }
 
+// NewGetMcpMetadataLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "getMcpMetadata" endpoint of the "mcpMetadata" service.
+func NewGetMcpMetadataLogsDisabledResponseBody(res *goa.ServiceError) *GetMcpMetadataLogsDisabledResponseBody {
+	body := &GetMcpMetadataLogsDisabledResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetMcpMetadataForbiddenResponseBody builds the HTTP response body from
 // the result of the "getMcpMetadata" endpoint of the "mcpMetadata" service.
 func NewGetMcpMetadataForbiddenResponseBody(res *goa.ServiceError) *GetMcpMetadataForbiddenResponseBody {
@@ -951,6 +1022,20 @@ func NewGetMcpMetadataGatewayErrorResponseBody(res *goa.ServiceError) *GetMcpMet
 // the result of the "setMcpMetadata" endpoint of the "mcpMetadata" service.
 func NewSetMcpMetadataUnauthorizedResponseBody(res *goa.ServiceError) *SetMcpMetadataUnauthorizedResponseBody {
 	body := &SetMcpMetadataUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMcpMetadataLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "setMcpMetadata" endpoint of the "mcpMetadata" service.
+func NewSetMcpMetadataLogsDisabledResponseBody(res *goa.ServiceError) *SetMcpMetadataLogsDisabledResponseBody {
+	body := &SetMcpMetadataLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1094,6 +1179,21 @@ func NewSetMcpMetadataGatewayErrorResponseBody(res *goa.ServiceError) *SetMcpMet
 // service.
 func NewExportMcpMetadataUnauthorizedResponseBody(res *goa.ServiceError) *ExportMcpMetadataUnauthorizedResponseBody {
 	body := &ExportMcpMetadataUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExportMcpMetadataLogsDisabledResponseBody builds the HTTP response body
+// from the result of the "exportMcpMetadata" endpoint of the "mcpMetadata"
+// service.
+func NewExportMcpMetadataLogsDisabledResponseBody(res *goa.ServiceError) *ExportMcpMetadataLogsDisabledResponseBody {
+	body := &ExportMcpMetadataLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

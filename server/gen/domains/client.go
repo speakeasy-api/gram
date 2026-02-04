@@ -32,6 +32,7 @@ func NewClient(getDomain, createDomain, deleteDomain goa.Endpoint) *Client {
 // GetDomain calls the "getDomain" endpoint of the "domains" service.
 // GetDomain may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -54,6 +55,7 @@ func (c *Client) GetDomain(ctx context.Context, p *GetDomainPayload) (res *Custo
 // CreateDomain calls the "createDomain" endpoint of the "domains" service.
 // CreateDomain may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -72,6 +74,7 @@ func (c *Client) CreateDomain(ctx context.Context, p *CreateDomainPayload) (err 
 // DeleteDomain calls the "deleteDomain" endpoint of the "domains" service.
 // DeleteDomain may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

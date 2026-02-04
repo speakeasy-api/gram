@@ -72,6 +72,24 @@ type UpsertGlobalUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpsertGlobalLogsDisabledResponseBody is the type of the "variations" service
+// "upsertGlobal" endpoint HTTP response body for the "logs_disabled" error.
+type UpsertGlobalLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UpsertGlobalForbiddenResponseBody is the type of the "variations" service
 // "upsertGlobal" endpoint HTTP response body for the "forbidden" error.
 type UpsertGlobalForbiddenResponseBody struct {
@@ -254,6 +272,24 @@ type DeleteGlobalUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DeleteGlobalLogsDisabledResponseBody is the type of the "variations" service
+// "deleteGlobal" endpoint HTTP response body for the "logs_disabled" error.
+type DeleteGlobalLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteGlobalForbiddenResponseBody is the type of the "variations" service
 // "deleteGlobal" endpoint HTTP response body for the "forbidden" error.
 type DeleteGlobalForbiddenResponseBody struct {
@@ -421,6 +457,24 @@ type DeleteGlobalGatewayErrorResponseBody struct {
 // ListGlobalUnauthorizedResponseBody is the type of the "variations" service
 // "listGlobal" endpoint HTTP response body for the "unauthorized" error.
 type ListGlobalUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGlobalLogsDisabledResponseBody is the type of the "variations" service
+// "listGlobal" endpoint HTTP response body for the "logs_disabled" error.
+type ListGlobalLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -678,6 +732,20 @@ func NewUpsertGlobalUnauthorizedResponseBody(res *goa.ServiceError) *UpsertGloba
 	return body
 }
 
+// NewUpsertGlobalLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "upsertGlobal" endpoint of the "variations" service.
+func NewUpsertGlobalLogsDisabledResponseBody(res *goa.ServiceError) *UpsertGlobalLogsDisabledResponseBody {
+	body := &UpsertGlobalLogsDisabledResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUpsertGlobalForbiddenResponseBody builds the HTTP response body from the
 // result of the "upsertGlobal" endpoint of the "variations" service.
 func NewUpsertGlobalForbiddenResponseBody(res *goa.ServiceError) *UpsertGlobalForbiddenResponseBody {
@@ -818,6 +886,20 @@ func NewDeleteGlobalUnauthorizedResponseBody(res *goa.ServiceError) *DeleteGloba
 	return body
 }
 
+// NewDeleteGlobalLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "deleteGlobal" endpoint of the "variations" service.
+func NewDeleteGlobalLogsDisabledResponseBody(res *goa.ServiceError) *DeleteGlobalLogsDisabledResponseBody {
+	body := &DeleteGlobalLogsDisabledResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteGlobalForbiddenResponseBody builds the HTTP response body from the
 // result of the "deleteGlobal" endpoint of the "variations" service.
 func NewDeleteGlobalForbiddenResponseBody(res *goa.ServiceError) *DeleteGlobalForbiddenResponseBody {
@@ -948,6 +1030,20 @@ func NewDeleteGlobalGatewayErrorResponseBody(res *goa.ServiceError) *DeleteGloba
 // result of the "listGlobal" endpoint of the "variations" service.
 func NewListGlobalUnauthorizedResponseBody(res *goa.ServiceError) *ListGlobalUnauthorizedResponseBody {
 	body := &ListGlobalUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGlobalLogsDisabledResponseBody builds the HTTP response body from the
+// result of the "listGlobal" endpoint of the "variations" service.
+func NewListGlobalLogsDisabledResponseBody(res *goa.ServiceError) *ListGlobalLogsDisabledResponseBody {
+	body := &ListGlobalLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

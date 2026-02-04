@@ -40,6 +40,7 @@ func NewClient(getProject, createProject, listProjects, setLogo, listAllowedOrig
 // GetProject calls the "getProject" endpoint of the "projects" service.
 // GetProject may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -62,6 +63,7 @@ func (c *Client) GetProject(ctx context.Context, p *GetProjectPayload) (res *Get
 // CreateProject calls the "createProject" endpoint of the "projects" service.
 // CreateProject may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -84,6 +86,7 @@ func (c *Client) CreateProject(ctx context.Context, p *CreateProjectPayload) (re
 // ListProjects calls the "listProjects" endpoint of the "projects" service.
 // ListProjects may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -106,6 +109,7 @@ func (c *Client) ListProjects(ctx context.Context, p *ListProjectsPayload) (res 
 // SetLogo calls the "setLogo" endpoint of the "projects" service.
 // SetLogo may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -129,6 +133,7 @@ func (c *Client) SetLogo(ctx context.Context, p *SetLogoPayload) (res *SetProjec
 // service.
 // ListAllowedOrigins may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -152,6 +157,7 @@ func (c *Client) ListAllowedOrigins(ctx context.Context, p *ListAllowedOriginsPa
 // "projects" service.
 // UpsertAllowedOrigin may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -174,6 +180,7 @@ func (c *Client) UpsertAllowedOrigin(ctx context.Context, p *UpsertAllowedOrigin
 // DeleteProject calls the "deleteProject" endpoint of the "projects" service.
 // DeleteProject may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

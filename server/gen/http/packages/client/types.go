@@ -118,6 +118,24 @@ type CreatePackageUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreatePackageLogsDisabledResponseBody is the type of the "packages" service
+// "createPackage" endpoint HTTP response body for the "logs_disabled" error.
+type CreatePackageLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CreatePackageForbiddenResponseBody is the type of the "packages" service
 // "createPackage" endpoint HTTP response body for the "forbidden" error.
 type CreatePackageForbiddenResponseBody struct {
@@ -285,6 +303,24 @@ type CreatePackageGatewayErrorResponseBody struct {
 // UpdatePackageUnauthorizedResponseBody is the type of the "packages" service
 // "updatePackage" endpoint HTTP response body for the "unauthorized" error.
 type UpdatePackageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePackageLogsDisabledResponseBody is the type of the "packages" service
+// "updatePackage" endpoint HTTP response body for the "logs_disabled" error.
+type UpdatePackageLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -488,6 +524,24 @@ type ListPackagesUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListPackagesLogsDisabledResponseBody is the type of the "packages" service
+// "listPackages" endpoint HTTP response body for the "logs_disabled" error.
+type ListPackagesLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListPackagesForbiddenResponseBody is the type of the "packages" service
 // "listPackages" endpoint HTTP response body for the "forbidden" error.
 type ListPackagesForbiddenResponseBody struct {
@@ -670,6 +724,24 @@ type ListVersionsUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListVersionsLogsDisabledResponseBody is the type of the "packages" service
+// "listVersions" endpoint HTTP response body for the "logs_disabled" error.
+type ListVersionsLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListVersionsForbiddenResponseBody is the type of the "packages" service
 // "listVersions" endpoint HTTP response body for the "forbidden" error.
 type ListVersionsForbiddenResponseBody struct {
@@ -837,6 +909,24 @@ type ListVersionsGatewayErrorResponseBody struct {
 // PublishUnauthorizedResponseBody is the type of the "packages" service
 // "publish" endpoint HTTP response body for the "unauthorized" error.
 type PublishUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PublishLogsDisabledResponseBody is the type of the "packages" service
+// "publish" endpoint HTTP response body for the "logs_disabled" error.
+type PublishLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1141,6 +1231,21 @@ func NewCreatePackageUnauthorized(body *CreatePackageUnauthorizedResponseBody) *
 	return v
 }
 
+// NewCreatePackageLogsDisabled builds a packages service createPackage
+// endpoint logs_disabled error.
+func NewCreatePackageLogsDisabled(body *CreatePackageLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCreatePackageForbidden builds a packages service createPackage endpoint
 // forbidden error.
 func NewCreatePackageForbidden(body *CreatePackageForbiddenResponseBody) *goa.ServiceError {
@@ -1288,6 +1393,21 @@ func NewUpdatePackageResultOK(body *UpdatePackageResponseBody) *packages.UpdateP
 // NewUpdatePackageUnauthorized builds a packages service updatePackage
 // endpoint unauthorized error.
 func NewUpdatePackageUnauthorized(body *UpdatePackageUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePackageLogsDisabled builds a packages service updatePackage
+// endpoint logs_disabled error.
+func NewUpdatePackageLogsDisabled(body *UpdatePackageLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1476,6 +1596,21 @@ func NewListPackagesUnauthorized(body *ListPackagesUnauthorizedResponseBody) *go
 	return v
 }
 
+// NewListPackagesLogsDisabled builds a packages service listPackages endpoint
+// logs_disabled error.
+func NewListPackagesLogsDisabled(body *ListPackagesLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListPackagesForbidden builds a packages service listPackages endpoint
 // forbidden error.
 func NewListPackagesForbidden(body *ListPackagesForbiddenResponseBody) *goa.ServiceError {
@@ -1643,6 +1778,21 @@ func NewListVersionsUnauthorized(body *ListVersionsUnauthorizedResponseBody) *go
 	return v
 }
 
+// NewListVersionsLogsDisabled builds a packages service listVersions endpoint
+// logs_disabled error.
+func NewListVersionsLogsDisabled(body *ListVersionsLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListVersionsForbidden builds a packages service listVersions endpoint
 // forbidden error.
 func NewListVersionsForbidden(body *ListVersionsForbiddenResponseBody) *goa.ServiceError {
@@ -1791,6 +1941,21 @@ func NewPublishPackageResultOK(body *PublishResponseBody) *packages.PublishPacka
 // NewPublishUnauthorized builds a packages service publish endpoint
 // unauthorized error.
 func NewPublishUnauthorized(body *PublishUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPublishLogsDisabled builds a packages service publish endpoint
+// logs_disabled error.
+func NewPublishLogsDisabled(body *PublishLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2050,6 +2215,30 @@ func ValidateCreatePackageUnauthorizedResponseBody(body *CreatePackageUnauthoriz
 	return
 }
 
+// ValidateCreatePackageLogsDisabledResponseBody runs the validations defined
+// on createPackage_logs_disabled_response_body
+func ValidateCreatePackageLogsDisabledResponseBody(body *CreatePackageLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCreatePackageForbiddenResponseBody runs the validations defined on
 // createPackage_forbidden_response_body
 func ValidateCreatePackageForbiddenResponseBody(body *CreatePackageForbiddenResponseBody) (err error) {
@@ -2269,6 +2458,30 @@ func ValidateCreatePackageGatewayErrorResponseBody(body *CreatePackageGatewayErr
 // ValidateUpdatePackageUnauthorizedResponseBody runs the validations defined
 // on updatePackage_unauthorized_response_body
 func ValidateUpdatePackageUnauthorizedResponseBody(body *UpdatePackageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePackageLogsDisabledResponseBody runs the validations defined
+// on updatePackage_logs_disabled_response_body
+func ValidateUpdatePackageLogsDisabledResponseBody(body *UpdatePackageLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2539,6 +2752,30 @@ func ValidateListPackagesUnauthorizedResponseBody(body *ListPackagesUnauthorized
 	return
 }
 
+// ValidateListPackagesLogsDisabledResponseBody runs the validations defined on
+// listPackages_logs_disabled_response_body
+func ValidateListPackagesLogsDisabledResponseBody(body *ListPackagesLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListPackagesForbiddenResponseBody runs the validations defined on
 // listPackages_forbidden_response_body
 func ValidateListPackagesForbiddenResponseBody(body *ListPackagesForbiddenResponseBody) (err error) {
@@ -2779,6 +3016,30 @@ func ValidateListVersionsUnauthorizedResponseBody(body *ListVersionsUnauthorized
 	return
 }
 
+// ValidateListVersionsLogsDisabledResponseBody runs the validations defined on
+// listVersions_logs_disabled_response_body
+func ValidateListVersionsLogsDisabledResponseBody(body *ListVersionsLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListVersionsForbiddenResponseBody runs the validations defined on
 // listVersions_forbidden_response_body
 func ValidateListVersionsForbiddenResponseBody(body *ListVersionsForbiddenResponseBody) (err error) {
@@ -2998,6 +3259,30 @@ func ValidateListVersionsGatewayErrorResponseBody(body *ListVersionsGatewayError
 // ValidatePublishUnauthorizedResponseBody runs the validations defined on
 // publish_unauthorized_response_body
 func ValidatePublishUnauthorizedResponseBody(body *PublishUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePublishLogsDisabledResponseBody runs the validations defined on
+// publish_logs_disabled_response_body
+func ValidatePublishLogsDisabledResponseBody(body *PublishLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

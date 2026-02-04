@@ -56,6 +56,24 @@ type GetPeriodUsageUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetPeriodUsageLogsDisabledResponseBody is the type of the "usage" service
+// "getPeriodUsage" endpoint HTTP response body for the "logs_disabled" error.
+type GetPeriodUsageLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetPeriodUsageForbiddenResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body for the "forbidden" error.
 type GetPeriodUsageForbiddenResponseBody struct {
@@ -223,6 +241,24 @@ type GetPeriodUsageGatewayErrorResponseBody struct {
 // GetUsageTiersUnauthorizedResponseBody is the type of the "usage" service
 // "getUsageTiers" endpoint HTTP response body for the "unauthorized" error.
 type GetUsageTiersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUsageTiersLogsDisabledResponseBody is the type of the "usage" service
+// "getUsageTiers" endpoint HTTP response body for the "logs_disabled" error.
+type GetUsageTiersLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -421,6 +457,25 @@ type CreateCustomerSessionUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateCustomerSessionLogsDisabledResponseBody is the type of the "usage"
+// service "createCustomerSession" endpoint HTTP response body for the
+// "logs_disabled" error.
+type CreateCustomerSessionLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CreateCustomerSessionForbiddenResponseBody is the type of the "usage"
 // service "createCustomerSession" endpoint HTTP response body for the
 // "forbidden" error.
@@ -593,6 +648,24 @@ type CreateCustomerSessionGatewayErrorResponseBody struct {
 // CreateCheckoutUnauthorizedResponseBody is the type of the "usage" service
 // "createCheckout" endpoint HTTP response body for the "unauthorized" error.
 type CreateCheckoutUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateCheckoutLogsDisabledResponseBody is the type of the "usage" service
+// "createCheckout" endpoint HTTP response body for the "logs_disabled" error.
+type CreateCheckoutLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -824,6 +897,21 @@ func NewGetPeriodUsageUnauthorized(body *GetPeriodUsageUnauthorizedResponseBody)
 	return v
 }
 
+// NewGetPeriodUsageLogsDisabled builds a usage service getPeriodUsage endpoint
+// logs_disabled error.
+func NewGetPeriodUsageLogsDisabled(body *GetPeriodUsageLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetPeriodUsageForbidden builds a usage service getPeriodUsage endpoint
 // forbidden error.
 func NewGetPeriodUsageForbidden(body *GetPeriodUsageForbiddenResponseBody) *goa.ServiceError {
@@ -973,6 +1061,21 @@ func NewGetUsageTiersUsageTiersOK(body *GetUsageTiersResponseBody) *usage.UsageT
 // NewGetUsageTiersUnauthorized builds a usage service getUsageTiers endpoint
 // unauthorized error.
 func NewGetUsageTiersUnauthorized(body *GetUsageTiersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUsageTiersLogsDisabled builds a usage service getUsageTiers endpoint
+// logs_disabled error.
+func NewGetUsageTiersLogsDisabled(body *GetUsageTiersLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1135,6 +1238,21 @@ func NewCreateCustomerSessionUnauthorized(body *CreateCustomerSessionUnauthorize
 	return v
 }
 
+// NewCreateCustomerSessionLogsDisabled builds a usage service
+// createCustomerSession endpoint logs_disabled error.
+func NewCreateCustomerSessionLogsDisabled(body *CreateCustomerSessionLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCreateCustomerSessionForbidden builds a usage service
 // createCustomerSession endpoint forbidden error.
 func NewCreateCustomerSessionForbidden(body *CreateCustomerSessionForbiddenResponseBody) *goa.ServiceError {
@@ -1273,6 +1391,21 @@ func NewCreateCustomerSessionGatewayError(body *CreateCustomerSessionGatewayErro
 // NewCreateCheckoutUnauthorized builds a usage service createCheckout endpoint
 // unauthorized error.
 func NewCreateCheckoutUnauthorized(body *CreateCheckoutUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateCheckoutLogsDisabled builds a usage service createCheckout endpoint
+// logs_disabled error.
+func NewCreateCheckoutLogsDisabled(body *CreateCheckoutLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1474,6 +1607,30 @@ func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err err
 // ValidateGetPeriodUsageUnauthorizedResponseBody runs the validations defined
 // on getPeriodUsage_unauthorized_response_body
 func ValidateGetPeriodUsageUnauthorizedResponseBody(body *GetPeriodUsageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPeriodUsageLogsDisabledResponseBody runs the validations defined
+// on getPeriodUsage_logs_disabled_response_body
+func ValidateGetPeriodUsageLogsDisabledResponseBody(body *GetPeriodUsageLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1735,6 +1892,30 @@ func ValidateGetUsageTiersUnauthorizedResponseBody(body *GetUsageTiersUnauthoriz
 	return
 }
 
+// ValidateGetUsageTiersLogsDisabledResponseBody runs the validations defined
+// on getUsageTiers_logs_disabled_response_body
+func ValidateGetUsageTiersLogsDisabledResponseBody(body *GetUsageTiersLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetUsageTiersForbiddenResponseBody runs the validations defined on
 // getUsageTiers_forbidden_response_body
 func ValidateGetUsageTiersForbiddenResponseBody(body *GetUsageTiersForbiddenResponseBody) (err error) {
@@ -1954,6 +2135,30 @@ func ValidateGetUsageTiersGatewayErrorResponseBody(body *GetUsageTiersGatewayErr
 // ValidateCreateCustomerSessionUnauthorizedResponseBody runs the validations
 // defined on createCustomerSession_unauthorized_response_body
 func ValidateCreateCustomerSessionUnauthorizedResponseBody(body *CreateCustomerSessionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateCustomerSessionLogsDisabledResponseBody runs the validations
+// defined on createCustomerSession_logs_disabled_response_body
+func ValidateCreateCustomerSessionLogsDisabledResponseBody(body *CreateCustomerSessionLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2195,6 +2400,30 @@ func ValidateCreateCustomerSessionGatewayErrorResponseBody(body *CreateCustomerS
 // ValidateCreateCheckoutUnauthorizedResponseBody runs the validations defined
 // on createCheckout_unauthorized_response_body
 func ValidateCreateCheckoutUnauthorizedResponseBody(body *CreateCheckoutUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateCheckoutLogsDisabledResponseBody runs the validations defined
+// on createCheckout_logs_disabled_response_body
+func ValidateCreateCheckoutLogsDisabledResponseBody(body *CreateCheckoutLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

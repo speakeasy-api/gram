@@ -62,6 +62,7 @@ func EncodeSetProductFeatureRequest(encoder func(*http.Request) goahttp.Encoder)
 // response body should be restored after having been read.
 // DecodeSetProductFeatureResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -104,19 +105,40 @@ func DecodeSetProductFeatureResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			return nil, NewSetProductFeatureUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body SetProductFeatureForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("features", "setProductFeature", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body SetProductFeatureLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("features", "setProductFeature", err)
+				}
+				err = ValidateSetProductFeatureLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("features", "setProductFeature", err)
+				}
+				return nil, NewSetProductFeatureLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body SetProductFeatureForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("features", "setProductFeature", err)
+				}
+				err = ValidateSetProductFeatureForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("features", "setProductFeature", err)
+				}
+				return nil, NewSetProductFeatureForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("features", "setProductFeature", resp.StatusCode, string(body))
 			}
-			err = ValidateSetProductFeatureForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("features", "setProductFeature", err)
-			}
-			return nil, NewSetProductFeatureForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SetProductFeatureBadRequestResponseBody

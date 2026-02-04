@@ -58,6 +58,7 @@ func EncodeCreateKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // restored after having been read.
 // DecodeCreateKeyResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -113,19 +114,40 @@ func DecodeCreateKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			}
 			return nil, NewCreateKeyUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CreateKeyForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body CreateKeyLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+				}
+				err = ValidateCreateKeyLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "createKey", err)
+				}
+				return nil, NewCreateKeyLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body CreateKeyForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "createKey", err)
+				}
+				err = ValidateCreateKeyForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "createKey", err)
+				}
+				return nil, NewCreateKeyForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "createKey", resp.StatusCode, string(body))
 			}
-			err = ValidateCreateKeyForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("keys", "createKey", err)
-			}
-			return nil, NewCreateKeyForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateKeyBadRequestResponseBody
@@ -288,6 +310,7 @@ func EncodeListKeysRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 // restored after having been read.
 // DecodeListKeysResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -343,19 +366,40 @@ func DecodeListKeysResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			}
 			return nil, NewListKeysUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ListKeysForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body ListKeysLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+				}
+				err = ValidateListKeysLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+				}
+				return nil, NewListKeysLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body ListKeysForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "listKeys", err)
+				}
+				err = ValidateListKeysForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "listKeys", err)
+				}
+				return nil, NewListKeysForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "listKeys", resp.StatusCode, string(body))
 			}
-			err = ValidateListKeysForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("keys", "listKeys", err)
-			}
-			return nil, NewListKeysForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListKeysBadRequestResponseBody
@@ -521,6 +565,7 @@ func EncodeRevokeKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // restored after having been read.
 // DecodeRevokeKeyResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -563,19 +608,40 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			}
 			return nil, NewRevokeKeyUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body RevokeKeyForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body RevokeKeyLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+				}
+				err = ValidateRevokeKeyLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+				}
+				return nil, NewRevokeKeyLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body RevokeKeyForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "revokeKey", err)
+				}
+				err = ValidateRevokeKeyForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
+				}
+				return nil, NewRevokeKeyForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "revokeKey", resp.StatusCode, string(body))
 			}
-			err = ValidateRevokeKeyForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("keys", "revokeKey", err)
-			}
-			return nil, NewRevokeKeyForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body RevokeKeyBadRequestResponseBody
@@ -738,6 +804,7 @@ func EncodeVerifyKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // restored after having been read.
 // DecodeVerifyKeyResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -793,19 +860,40 @@ func DecodeVerifyKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			}
 			return nil, NewVerifyKeyUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body VerifyKeyForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body VerifyKeyLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+				}
+				err = ValidateVerifyKeyLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+				}
+				return nil, NewVerifyKeyLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body VerifyKeyForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+				}
+				err = ValidateVerifyKeyForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+				}
+				return nil, NewVerifyKeyForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "verifyKey", resp.StatusCode, string(body))
 			}
-			err = ValidateVerifyKeyForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
-			}
-			return nil, NewVerifyKeyForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body VerifyKeyBadRequestResponseBody

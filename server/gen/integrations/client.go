@@ -30,6 +30,7 @@ func NewClient(get, list goa.Endpoint) *Client {
 // Get calls the "get" endpoint of the "integrations" service.
 // Get may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -52,6 +53,7 @@ func (c *Client) Get(ctx context.Context, p *GetPayload) (res *GetIntegrationRes
 // List calls the "list" endpoint of the "integrations" service.
 // List may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

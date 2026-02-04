@@ -48,6 +48,7 @@ func NewClient(createEnvironment, listEnvironments, updateEnvironment, deleteEnv
 // "environments" service.
 // CreateEnvironment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -71,6 +72,7 @@ func (c *Client) CreateEnvironment(ctx context.Context, p *CreateEnvironmentPayl
 // service.
 // ListEnvironments may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -94,6 +96,7 @@ func (c *Client) ListEnvironments(ctx context.Context, p *ListEnvironmentsPayloa
 // "environments" service.
 // UpdateEnvironment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -117,6 +120,7 @@ func (c *Client) UpdateEnvironment(ctx context.Context, p *UpdateEnvironmentPayl
 // "environments" service.
 // DeleteEnvironment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -136,6 +140,7 @@ func (c *Client) DeleteEnvironment(ctx context.Context, p *DeleteEnvironmentPayl
 // the "environments" service.
 // SetSourceEnvironmentLink may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -159,6 +164,7 @@ func (c *Client) SetSourceEnvironmentLink(ctx context.Context, p *SetSourceEnvir
 // of the "environments" service.
 // DeleteSourceEnvironmentLink may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -178,6 +184,7 @@ func (c *Client) DeleteSourceEnvironmentLink(ctx context.Context, p *DeleteSourc
 // "environments" service.
 // GetSourceEnvironment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -201,6 +208,7 @@ func (c *Client) GetSourceEnvironment(ctx context.Context, p *GetSourceEnvironme
 // the "environments" service.
 // SetToolsetEnvironmentLink may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -224,6 +232,7 @@ func (c *Client) SetToolsetEnvironmentLink(ctx context.Context, p *SetToolsetEnv
 // endpoint of the "environments" service.
 // DeleteToolsetEnvironmentLink may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -243,6 +252,7 @@ func (c *Client) DeleteToolsetEnvironmentLink(ctx context.Context, p *DeleteTool
 // "environments" service.
 // GetToolsetEnvironment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

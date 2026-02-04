@@ -67,6 +67,24 @@ type CallbackUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CallbackLogsDisabledResponseBody is the type of the "slack" service
+// "callback" endpoint HTTP response body for the "logs_disabled" error.
+type CallbackLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CallbackForbiddenResponseBody is the type of the "slack" service "callback"
 // endpoint HTTP response body for the "forbidden" error.
 type CallbackForbiddenResponseBody struct {
@@ -232,6 +250,24 @@ type CallbackGatewayErrorResponseBody struct {
 // LoginUnauthorizedResponseBody is the type of the "slack" service "login"
 // endpoint HTTP response body for the "unauthorized" error.
 type LoginUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// LoginLogsDisabledResponseBody is the type of the "slack" service "login"
+// endpoint HTTP response body for the "logs_disabled" error.
+type LoginLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -413,6 +449,25 @@ type LoginGatewayErrorResponseBody struct {
 // service "getSlackConnection" endpoint HTTP response body for the
 // "unauthorized" error.
 type GetSlackConnectionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSlackConnectionLogsDisabledResponseBody is the type of the "slack"
+// service "getSlackConnection" endpoint HTTP response body for the
+// "logs_disabled" error.
+type GetSlackConnectionLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -612,6 +667,25 @@ type UpdateSlackConnectionUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdateSlackConnectionLogsDisabledResponseBody is the type of the "slack"
+// service "updateSlackConnection" endpoint HTTP response body for the
+// "logs_disabled" error.
+type UpdateSlackConnectionLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UpdateSlackConnectionForbiddenResponseBody is the type of the "slack"
 // service "updateSlackConnection" endpoint HTTP response body for the
 // "forbidden" error.
@@ -785,6 +859,25 @@ type UpdateSlackConnectionGatewayErrorResponseBody struct {
 // service "deleteSlackConnection" endpoint HTTP response body for the
 // "unauthorized" error.
 type DeleteSlackConnectionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteSlackConnectionLogsDisabledResponseBody is the type of the "slack"
+// service "deleteSlackConnection" endpoint HTTP response body for the
+// "logs_disabled" error.
+type DeleteSlackConnectionLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1002,6 +1095,21 @@ func NewCallbackUnauthorized(body *CallbackUnauthorizedResponseBody) *goa.Servic
 	return v
 }
 
+// NewCallbackLogsDisabled builds a slack service callback endpoint
+// logs_disabled error.
+func NewCallbackLogsDisabled(body *CallbackLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCallbackForbidden builds a slack service callback endpoint forbidden
 // error.
 func NewCallbackForbidden(body *CallbackForbiddenResponseBody) *goa.ServiceError {
@@ -1146,6 +1254,21 @@ func NewLoginResultTemporaryRedirect(location string) *slack.LoginResult {
 // NewLoginUnauthorized builds a slack service login endpoint unauthorized
 // error.
 func NewLoginUnauthorized(body *LoginUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewLoginLogsDisabled builds a slack service login endpoint logs_disabled
+// error.
+func NewLoginLogsDisabled(body *LoginLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1304,6 +1427,21 @@ func NewGetSlackConnectionResultOK(body *GetSlackConnectionResponseBody) *slack.
 // NewGetSlackConnectionUnauthorized builds a slack service getSlackConnection
 // endpoint unauthorized error.
 func NewGetSlackConnectionUnauthorized(body *GetSlackConnectionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSlackConnectionLogsDisabled builds a slack service getSlackConnection
+// endpoint logs_disabled error.
+func NewGetSlackConnectionLogsDisabled(body *GetSlackConnectionLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1480,6 +1618,21 @@ func NewUpdateSlackConnectionUnauthorized(body *UpdateSlackConnectionUnauthorize
 	return v
 }
 
+// NewUpdateSlackConnectionLogsDisabled builds a slack service
+// updateSlackConnection endpoint logs_disabled error.
+func NewUpdateSlackConnectionLogsDisabled(body *UpdateSlackConnectionLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdateSlackConnectionForbidden builds a slack service
 // updateSlackConnection endpoint forbidden error.
 func NewUpdateSlackConnectionForbidden(body *UpdateSlackConnectionForbiddenResponseBody) *goa.ServiceError {
@@ -1618,6 +1771,21 @@ func NewUpdateSlackConnectionGatewayError(body *UpdateSlackConnectionGatewayErro
 // NewDeleteSlackConnectionUnauthorized builds a slack service
 // deleteSlackConnection endpoint unauthorized error.
 func NewDeleteSlackConnectionUnauthorized(body *DeleteSlackConnectionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteSlackConnectionLogsDisabled builds a slack service
+// deleteSlackConnection endpoint logs_disabled error.
+func NewDeleteSlackConnectionLogsDisabled(body *DeleteSlackConnectionLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1822,6 +1990,30 @@ func ValidateUpdateSlackConnectionResponseBody(body *UpdateSlackConnectionRespon
 // ValidateCallbackUnauthorizedResponseBody runs the validations defined on
 // callback_unauthorized_response_body
 func ValidateCallbackUnauthorizedResponseBody(body *CallbackUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCallbackLogsDisabledResponseBody runs the validations defined on
+// callback_logs_disabled_response_body
+func ValidateCallbackLogsDisabledResponseBody(body *CallbackLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2083,6 +2275,30 @@ func ValidateLoginUnauthorizedResponseBody(body *LoginUnauthorizedResponseBody) 
 	return
 }
 
+// ValidateLoginLogsDisabledResponseBody runs the validations defined on
+// login_logs_disabled_response_body
+func ValidateLoginLogsDisabledResponseBody(body *LoginLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateLoginForbiddenResponseBody runs the validations defined on
 // login_forbidden_response_body
 func ValidateLoginForbiddenResponseBody(body *LoginForbiddenResponseBody) (err error) {
@@ -2302,6 +2518,30 @@ func ValidateLoginGatewayErrorResponseBody(body *LoginGatewayErrorResponseBody) 
 // ValidateGetSlackConnectionUnauthorizedResponseBody runs the validations
 // defined on getSlackConnection_unauthorized_response_body
 func ValidateGetSlackConnectionUnauthorizedResponseBody(body *GetSlackConnectionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSlackConnectionLogsDisabledResponseBody runs the validations
+// defined on getSlackConnection_logs_disabled_response_body
+func ValidateGetSlackConnectionLogsDisabledResponseBody(body *GetSlackConnectionLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2563,6 +2803,30 @@ func ValidateUpdateSlackConnectionUnauthorizedResponseBody(body *UpdateSlackConn
 	return
 }
 
+// ValidateUpdateSlackConnectionLogsDisabledResponseBody runs the validations
+// defined on updateSlackConnection_logs_disabled_response_body
+func ValidateUpdateSlackConnectionLogsDisabledResponseBody(body *UpdateSlackConnectionLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUpdateSlackConnectionForbiddenResponseBody runs the validations
 // defined on updateSlackConnection_forbidden_response_body
 func ValidateUpdateSlackConnectionForbiddenResponseBody(body *UpdateSlackConnectionForbiddenResponseBody) (err error) {
@@ -2783,6 +3047,30 @@ func ValidateUpdateSlackConnectionGatewayErrorResponseBody(body *UpdateSlackConn
 // ValidateDeleteSlackConnectionUnauthorizedResponseBody runs the validations
 // defined on deleteSlackConnection_unauthorized_response_body
 func ValidateDeleteSlackConnectionUnauthorizedResponseBody(body *DeleteSlackConnectionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteSlackConnectionLogsDisabledResponseBody runs the validations
+// defined on deleteSlackConnection_logs_disabled_response_body
+func ValidateDeleteSlackConnectionLogsDisabledResponseBody(body *DeleteSlackConnectionLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

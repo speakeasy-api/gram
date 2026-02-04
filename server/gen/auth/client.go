@@ -38,6 +38,7 @@ func NewClient(callback, login, switchScopes, logout, register, info goa.Endpoin
 // Callback calls the "callback" endpoint of the "auth" service.
 // Callback may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -60,6 +61,7 @@ func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *Callbac
 // Login calls the "login" endpoint of the "auth" service.
 // Login may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -82,6 +84,7 @@ func (c *Client) Login(ctx context.Context, p *LoginPayload) (res *LoginResult, 
 // SwitchScopes calls the "switchScopes" endpoint of the "auth" service.
 // SwitchScopes may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -104,6 +107,7 @@ func (c *Client) SwitchScopes(ctx context.Context, p *SwitchScopesPayload) (res 
 // Logout calls the "logout" endpoint of the "auth" service.
 // Logout may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -126,6 +130,7 @@ func (c *Client) Logout(ctx context.Context, p *LogoutPayload) (res *LogoutResul
 // Register calls the "register" endpoint of the "auth" service.
 // Register may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -144,6 +149,7 @@ func (c *Client) Register(ctx context.Context, p *RegisterPayload) (err error) {
 // Info calls the "info" endpoint of the "auth" service.
 // Info may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

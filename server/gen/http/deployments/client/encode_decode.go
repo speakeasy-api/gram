@@ -66,6 +66,7 @@ func EncodeGetDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // response body should be restored after having been read.
 // DecodeGetDeploymentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -121,19 +122,40 @@ func DecodeGetDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewGetDeploymentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetDeploymentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body GetDeploymentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+				}
+				err = ValidateGetDeploymentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+				}
+				return nil, NewGetDeploymentLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body GetDeploymentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getDeployment", err)
+				}
+				err = ValidateGetDeploymentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
+				}
+				return nil, NewGetDeploymentForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "getDeployment", resp.StatusCode, string(body))
 			}
-			err = ValidateGetDeploymentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("deployments", "getDeployment", err)
-			}
-			return nil, NewGetDeploymentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetDeploymentBadRequestResponseBody
@@ -305,6 +327,7 @@ func EncodeGetLatestDeploymentRequest(encoder func(*http.Request) goahttp.Encode
 // whether the response body should be restored after having been read.
 // DecodeGetLatestDeploymentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -360,19 +383,40 @@ func DecodeGetLatestDeploymentResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			return nil, NewGetLatestDeploymentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetLatestDeploymentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body GetLatestDeploymentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+				}
+				err = ValidateGetLatestDeploymentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+				}
+				return nil, NewGetLatestDeploymentLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body GetLatestDeploymentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getLatestDeployment", err)
+				}
+				err = ValidateGetLatestDeploymentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
+				}
+				return nil, NewGetLatestDeploymentForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "getLatestDeployment", resp.StatusCode, string(body))
 			}
-			err = ValidateGetLatestDeploymentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("deployments", "getLatestDeployment", err)
-			}
-			return nil, NewGetLatestDeploymentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetLatestDeploymentBadRequestResponseBody
@@ -544,6 +588,7 @@ func EncodeGetActiveDeploymentRequest(encoder func(*http.Request) goahttp.Encode
 // whether the response body should be restored after having been read.
 // DecodeGetActiveDeploymentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -599,19 +644,40 @@ func DecodeGetActiveDeploymentResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			return nil, NewGetActiveDeploymentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetActiveDeploymentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body GetActiveDeploymentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+				}
+				err = ValidateGetActiveDeploymentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+				}
+				return nil, NewGetActiveDeploymentLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body GetActiveDeploymentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+				}
+				err = ValidateGetActiveDeploymentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+				}
+				return nil, NewGetActiveDeploymentForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "getActiveDeployment", resp.StatusCode, string(body))
 			}
-			err = ValidateGetActiveDeploymentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
-			}
-			return nil, NewGetActiveDeploymentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetActiveDeploymentBadRequestResponseBody
@@ -790,6 +856,7 @@ func EncodeCreateDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) 
 // response body should be restored after having been read.
 // DecodeCreateDeploymentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -845,19 +912,40 @@ func DecodeCreateDeploymentResponse(decoder func(*http.Response) goahttp.Decoder
 			}
 			return nil, NewCreateDeploymentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CreateDeploymentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body CreateDeploymentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+				}
+				err = ValidateCreateDeploymentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+				}
+				return nil, NewCreateDeploymentLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body CreateDeploymentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "createDeployment", err)
+				}
+				err = ValidateCreateDeploymentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
+				}
+				return nil, NewCreateDeploymentForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "createDeployment", resp.StatusCode, string(body))
 			}
-			err = ValidateCreateDeploymentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("deployments", "createDeployment", err)
-			}
-			return nil, NewCreateDeploymentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateDeploymentBadRequestResponseBody
@@ -1032,6 +1120,7 @@ func EncodeEvolveRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 // should be restored after having been read.
 // DecodeEvolveResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1087,19 +1176,40 @@ func DecodeEvolveResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			}
 			return nil, NewEvolveUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body EvolveForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body EvolveLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+				}
+				err = ValidateEvolveLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+				}
+				return nil, NewEvolveLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body EvolveForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "evolve", err)
+				}
+				err = ValidateEvolveForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "evolve", err)
+				}
+				return nil, NewEvolveForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "evolve", resp.StatusCode, string(body))
 			}
-			err = ValidateEvolveForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("deployments", "evolve", err)
-			}
-			return nil, NewEvolveForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body EvolveBadRequestResponseBody
@@ -1274,6 +1384,7 @@ func EncodeRedeployRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 // body should be restored after having been read.
 // DecodeRedeployResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1329,19 +1440,40 @@ func DecodeRedeployResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			}
 			return nil, NewRedeployUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body RedeployForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body RedeployLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+				}
+				err = ValidateRedeployLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+				}
+				return nil, NewRedeployLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body RedeployForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "redeploy", err)
+				}
+				err = ValidateRedeployForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
+				}
+				return nil, NewRedeployForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "redeploy", resp.StatusCode, string(body))
 			}
-			err = ValidateRedeployForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("deployments", "redeploy", err)
-			}
-			return nil, NewRedeployForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body RedeployBadRequestResponseBody
@@ -1517,6 +1649,7 @@ func EncodeListDeploymentsRequest(encoder func(*http.Request) goahttp.Encoder) f
 // response body should be restored after having been read.
 // DecodeListDeploymentsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1572,19 +1705,40 @@ func DecodeListDeploymentsResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			return nil, NewListDeploymentsUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ListDeploymentsForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body ListDeploymentsLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+				}
+				err = ValidateListDeploymentsLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+				}
+				return nil, NewListDeploymentsLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body ListDeploymentsForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "listDeployments", err)
+				}
+				err = ValidateListDeploymentsForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
+				}
+				return nil, NewListDeploymentsForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "listDeployments", resp.StatusCode, string(body))
 			}
-			err = ValidateListDeploymentsForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("deployments", "listDeployments", err)
-			}
-			return nil, NewListDeploymentsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListDeploymentsBadRequestResponseBody
@@ -1761,6 +1915,7 @@ func EncodeGetDeploymentLogsRequest(encoder func(*http.Request) goahttp.Encoder)
 // response body should be restored after having been read.
 // DecodeGetDeploymentLogsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1816,19 +1971,40 @@ func DecodeGetDeploymentLogsResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			return nil, NewGetDeploymentLogsUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetDeploymentLogsForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("deployments", "getDeploymentLogs", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "logs_disabled":
+				var (
+					body GetDeploymentLogsLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getDeploymentLogs", err)
+				}
+				err = ValidateGetDeploymentLogsLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getDeploymentLogs", err)
+				}
+				return nil, NewGetDeploymentLogsLogsDisabled(&body)
+			case "forbidden":
+				var (
+					body GetDeploymentLogsForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getDeploymentLogs", err)
+				}
+				err = ValidateGetDeploymentLogsForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getDeploymentLogs", err)
+				}
+				return nil, NewGetDeploymentLogsForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "getDeploymentLogs", resp.StatusCode, string(body))
 			}
-			err = ValidateGetDeploymentLogsForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("deployments", "getDeploymentLogs", err)
-			}
-			return nil, NewGetDeploymentLogsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetDeploymentLogsBadRequestResponseBody

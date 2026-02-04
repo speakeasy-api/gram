@@ -36,6 +36,7 @@ func NewClient(searchLogs, searchToolCalls, searchChats, captureEvent, getProjec
 // SearchLogs calls the "searchLogs" endpoint of the "telemetry" service.
 // SearchLogs may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -59,6 +60,7 @@ func (c *Client) SearchLogs(ctx context.Context, p *SearchLogsPayload) (res *Sea
 // service.
 // SearchToolCalls may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -81,6 +83,7 @@ func (c *Client) SearchToolCalls(ctx context.Context, p *SearchToolCallsPayload)
 // SearchChats calls the "searchChats" endpoint of the "telemetry" service.
 // SearchChats may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -103,6 +106,7 @@ func (c *Client) SearchChats(ctx context.Context, p *SearchChatsPayload) (res *S
 // CaptureEvent calls the "captureEvent" endpoint of the "telemetry" service.
 // CaptureEvent may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -126,6 +130,7 @@ func (c *Client) CaptureEvent(ctx context.Context, p *CaptureEventPayload) (res 
 // the "telemetry" service.
 // GetProjectMetricsSummary may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

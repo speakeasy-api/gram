@@ -140,6 +140,25 @@ type CreateTemplateUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateTemplateLogsDisabledResponseBody is the type of the "templates"
+// service "createTemplate" endpoint HTTP response body for the "logs_disabled"
+// error.
+type CreateTemplateLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreateTemplateForbiddenResponseBody is the type of the "templates" service
 // "createTemplate" endpoint HTTP response body for the "forbidden" error.
 type CreateTemplateForbiddenResponseBody struct {
@@ -309,6 +328,25 @@ type CreateTemplateGatewayErrorResponseBody struct {
 // service "updateTemplate" endpoint HTTP response body for the "unauthorized"
 // error.
 type UpdateTemplateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateTemplateLogsDisabledResponseBody is the type of the "templates"
+// service "updateTemplate" endpoint HTTP response body for the "logs_disabled"
+// error.
+type UpdateTemplateLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -507,6 +545,24 @@ type GetTemplateUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetTemplateLogsDisabledResponseBody is the type of the "templates" service
+// "getTemplate" endpoint HTTP response body for the "logs_disabled" error.
+type GetTemplateLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetTemplateForbiddenResponseBody is the type of the "templates" service
 // "getTemplate" endpoint HTTP response body for the "forbidden" error.
 type GetTemplateForbiddenResponseBody struct {
@@ -674,6 +730,24 @@ type GetTemplateGatewayErrorResponseBody struct {
 // ListTemplatesUnauthorizedResponseBody is the type of the "templates" service
 // "listTemplates" endpoint HTTP response body for the "unauthorized" error.
 type ListTemplatesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemplatesLogsDisabledResponseBody is the type of the "templates" service
+// "listTemplates" endpoint HTTP response body for the "logs_disabled" error.
+type ListTemplatesLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -857,6 +931,25 @@ type ListTemplatesGatewayErrorResponseBody struct {
 // service "deleteTemplate" endpoint HTTP response body for the "unauthorized"
 // error.
 type DeleteTemplateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteTemplateLogsDisabledResponseBody is the type of the "templates"
+// service "deleteTemplate" endpoint HTTP response body for the "logs_disabled"
+// error.
+type DeleteTemplateLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1056,6 +1149,25 @@ type RenderTemplateByIDUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RenderTemplateByIDLogsDisabledResponseBody is the type of the "templates"
+// service "renderTemplateByID" endpoint HTTP response body for the
+// "logs_disabled" error.
+type RenderTemplateByIDLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RenderTemplateByIDForbiddenResponseBody is the type of the "templates"
 // service "renderTemplateByID" endpoint HTTP response body for the "forbidden"
 // error.
@@ -1230,6 +1342,25 @@ type RenderTemplateByIDGatewayErrorResponseBody struct {
 // service "renderTemplate" endpoint HTTP response body for the "unauthorized"
 // error.
 type RenderTemplateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenderTemplateLogsDisabledResponseBody is the type of the "templates"
+// service "renderTemplate" endpoint HTTP response body for the "logs_disabled"
+// error.
+type RenderTemplateLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1583,6 +1714,20 @@ func NewCreateTemplateUnauthorizedResponseBody(res *goa.ServiceError) *CreateTem
 	return body
 }
 
+// NewCreateTemplateLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "createTemplate" endpoint of the "templates" service.
+func NewCreateTemplateLogsDisabledResponseBody(res *goa.ServiceError) *CreateTemplateLogsDisabledResponseBody {
+	body := &CreateTemplateLogsDisabledResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateTemplateForbiddenResponseBody builds the HTTP response body from
 // the result of the "createTemplate" endpoint of the "templates" service.
 func NewCreateTemplateForbiddenResponseBody(res *goa.ServiceError) *CreateTemplateForbiddenResponseBody {
@@ -1714,6 +1859,20 @@ func NewCreateTemplateGatewayErrorResponseBody(res *goa.ServiceError) *CreateTem
 // the result of the "updateTemplate" endpoint of the "templates" service.
 func NewUpdateTemplateUnauthorizedResponseBody(res *goa.ServiceError) *UpdateTemplateUnauthorizedResponseBody {
 	body := &UpdateTemplateUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateTemplateLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "updateTemplate" endpoint of the "templates" service.
+func NewUpdateTemplateLogsDisabledResponseBody(res *goa.ServiceError) *UpdateTemplateLogsDisabledResponseBody {
+	body := &UpdateTemplateLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1865,6 +2024,20 @@ func NewGetTemplateUnauthorizedResponseBody(res *goa.ServiceError) *GetTemplateU
 	return body
 }
 
+// NewGetTemplateLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "getTemplate" endpoint of the "templates" service.
+func NewGetTemplateLogsDisabledResponseBody(res *goa.ServiceError) *GetTemplateLogsDisabledResponseBody {
+	body := &GetTemplateLogsDisabledResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetTemplateForbiddenResponseBody builds the HTTP response body from the
 // result of the "getTemplate" endpoint of the "templates" service.
 func NewGetTemplateForbiddenResponseBody(res *goa.ServiceError) *GetTemplateForbiddenResponseBody {
@@ -2005,6 +2178,20 @@ func NewListTemplatesUnauthorizedResponseBody(res *goa.ServiceError) *ListTempla
 	return body
 }
 
+// NewListTemplatesLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "listTemplates" endpoint of the "templates" service.
+func NewListTemplatesLogsDisabledResponseBody(res *goa.ServiceError) *ListTemplatesLogsDisabledResponseBody {
+	body := &ListTemplatesLogsDisabledResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListTemplatesForbiddenResponseBody builds the HTTP response body from the
 // result of the "listTemplates" endpoint of the "templates" service.
 func NewListTemplatesForbiddenResponseBody(res *goa.ServiceError) *ListTemplatesForbiddenResponseBody {
@@ -2135,6 +2322,20 @@ func NewListTemplatesGatewayErrorResponseBody(res *goa.ServiceError) *ListTempla
 // the result of the "deleteTemplate" endpoint of the "templates" service.
 func NewDeleteTemplateUnauthorizedResponseBody(res *goa.ServiceError) *DeleteTemplateUnauthorizedResponseBody {
 	body := &DeleteTemplateUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteTemplateLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "deleteTemplate" endpoint of the "templates" service.
+func NewDeleteTemplateLogsDisabledResponseBody(res *goa.ServiceError) *DeleteTemplateLogsDisabledResponseBody {
+	body := &DeleteTemplateLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2287,6 +2488,21 @@ func NewRenderTemplateByIDUnauthorizedResponseBody(res *goa.ServiceError) *Rende
 	return body
 }
 
+// NewRenderTemplateByIDLogsDisabledResponseBody builds the HTTP response body
+// from the result of the "renderTemplateByID" endpoint of the "templates"
+// service.
+func NewRenderTemplateByIDLogsDisabledResponseBody(res *goa.ServiceError) *RenderTemplateByIDLogsDisabledResponseBody {
+	body := &RenderTemplateByIDLogsDisabledResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRenderTemplateByIDForbiddenResponseBody builds the HTTP response body
 // from the result of the "renderTemplateByID" endpoint of the "templates"
 // service.
@@ -2423,6 +2639,20 @@ func NewRenderTemplateByIDGatewayErrorResponseBody(res *goa.ServiceError) *Rende
 // the result of the "renderTemplate" endpoint of the "templates" service.
 func NewRenderTemplateUnauthorizedResponseBody(res *goa.ServiceError) *RenderTemplateUnauthorizedResponseBody {
 	body := &RenderTemplateUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenderTemplateLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "renderTemplate" endpoint of the "templates" service.
+func NewRenderTemplateLogsDisabledResponseBody(res *goa.ServiceError) *RenderTemplateLogsDisabledResponseBody {
+	body := &RenderTemplateLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

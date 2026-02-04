@@ -32,6 +32,7 @@ func NewClient(upsertGlobal, deleteGlobal, listGlobal goa.Endpoint) *Client {
 // UpsertGlobal calls the "upsertGlobal" endpoint of the "variations" service.
 // UpsertGlobal may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -54,6 +55,7 @@ func (c *Client) UpsertGlobal(ctx context.Context, p *UpsertGlobalPayload) (res 
 // DeleteGlobal calls the "deleteGlobal" endpoint of the "variations" service.
 // DeleteGlobal may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -76,6 +78,7 @@ func (c *Client) DeleteGlobal(ctx context.Context, p *DeleteGlobalPayload) (res 
 // ListGlobal calls the "listGlobal" endpoint of the "variations" service.
 // ListGlobal may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
