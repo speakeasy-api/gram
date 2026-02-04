@@ -92,11 +92,11 @@ export default function LogsPage() {
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     throwOnError: false,
     retry: (failureCount, error) => {
-      // Don't retry on 403 errors (e.g., logs disabled)
+      // Don't retry on 404 errors (logs disabled)
       if (
         error instanceof Error &&
         "statusCode" in error &&
-        error.statusCode === 403
+        error.statusCode === 404
       ) {
         return false;
       }
@@ -218,8 +218,7 @@ export default function LogsPage() {
                 className="overflow-y-auto flex-1"
                 onScroll={handleScroll}
               >
-                {error instanceof ServiceError &&
-                error.data$.name === "logs_disabled" ? (
+                {error instanceof ServiceError && error.statusCode === 404 ? (
                   <div className="py-12 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-3">
                       <span>Logs are disabled for your organization.</span>

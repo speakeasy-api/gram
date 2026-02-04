@@ -10,9 +10,6 @@ import (
 // level including transport mappings (i.e. HTTP status codes).
 func DeclareErrorResponses() {
 	Error(string(oops.CodeUnauthorized), func() { Description(oops.CodeUnauthorized.UserMessage()) })
-	// CodeLogsDisabled is declared before CodeForbidden so that CodeForbidden
-	// takes precedence in the OpenAPI spec (both use HTTP 403)
-	Error(string(oops.CodeLogsDisabled), func() { Description(oops.CodeLogsDisabled.UserMessage()) })
 	Error(string(oops.CodeForbidden), func() { Description(oops.CodeForbidden.UserMessage()) })
 	Error(string(oops.CodeBadRequest), func() { Description(oops.CodeBadRequest.UserMessage()) })
 	Error(string(oops.CodeNotFound), func() { Description(oops.CodeNotFound.UserMessage()) })
@@ -34,11 +31,6 @@ func DeclareErrorResponses() {
 
 	HTTP(func() {
 		Response(string(oops.CodeUnauthorized), StatusUnauthorized, func() {
-			ContentType("application/json")
-		})
-		// CodeLogsDisabled is declared before CodeForbidden so that CodeForbidden
-		// takes precedence in the OpenAPI spec (both use HTTP 403)
-		Response(string(oops.CodeLogsDisabled), StatusForbidden, func() {
 			ContentType("application/json")
 		})
 		Response(string(oops.CodeForbidden), StatusForbidden, func() {

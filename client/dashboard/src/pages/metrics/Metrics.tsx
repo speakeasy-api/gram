@@ -50,11 +50,11 @@ export default function MetricsPage() {
     },
     throwOnError: false,
     retry: (failureCount, error) => {
-      // Don't retry on 403 errors (e.g., logs disabled)
+      // Don't retry on 404 errors (logs disabled)
       if (
         error instanceof Error &&
         "statusCode" in error &&
-        error.statusCode === 403
+        error.statusCode === 404
       ) {
         return false;
       }
@@ -157,8 +157,7 @@ export default function MetricsPage() {
 
             {isPending ? (
               <MetricsLoadingSkeleton />
-            ) : error instanceof ServiceError &&
-              error.data$.name === "logs_disabled" ? (
+            ) : error instanceof ServiceError && error.statusCode === 404 ? (
               <MetricsDisabledState
                 onEnableLogs={handleEnableLogs}
                 isMutating={isMutatingLogs}
