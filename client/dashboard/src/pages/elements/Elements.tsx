@@ -277,6 +277,7 @@ export default function ChatElements() {
           request: {
             createRequestBody: {
               embedOrigin: window.location.origin,
+              userIdentifier: session.user.id,
             },
           },
         });

@@ -422,6 +422,14 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		if chatID != "" {
 			attrRecorder[attr.GenAIConversationIDKey] = chatID
 		}
+		if authCtx != nil {
+			if authCtx.UserID != "" {
+				attrRecorder[attr.UserIDKey] = authCtx.UserID
+			}
+			if authCtx.ExternalUserID != "" {
+				attrRecorder[attr.ExternalUserIDKey] = authCtx.ExternalUserID
+			}
+		}
 
 		logParams := tm.LogParams{
 			Timestamp: time.Now(),

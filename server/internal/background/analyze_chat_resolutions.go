@@ -1,0 +1,116 @@
+package background
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
+)
+
+type AnalyzeChatResolutionsParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+// ChatResolutionAnalyzer schedules async chat resolution analysis.
+type ChatResolutionAnalyzer interface {
+	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID string) error
+}
+
+// TemporalChatResolutionAnalyzer implements ChatResolutionAnalyzer using Temporal.
+type TemporalChatResolutionAnalyzer struct {
+	Temporal client.Client
+}
+
+func (t *TemporalChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID string) error {
+	_, err := ExecuteAnalyzeChatResolutionsWorkflow(ctx, t.Temporal, AnalyzeChatResolutionsParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+		OrgID:     orgID,
+	})
+	return err
+}
+
+func ExecuteAnalyzeChatResolutionsWorkflow(ctx context.Context, temporalClient client.Client, params AnalyzeChatResolutionsParams) (client.WorkflowRun, error) {
+	id := fmt.Sprintf("v1:analyze-chat-resolutions:%s", params.ChatID.String())
+	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    id,
+		TaskQueue:             string(TaskQueueMain),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, // Necessary for chats that are resumed after a while
+		WorkflowRunTimeout:    5 * time.Minute,
+	}, AnalyzeChatResolutionsWorkflow, params)
+}
+
+func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatResolutionsParams) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 90 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:    3,
+			InitialInterval:    5 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    60 * time.Second,
+		},
+	})
+
+	var a *Activities
+
+	// Phase 1: Segment the chat into logical breakpoints
+	var segmentOutput activities.SegmentChatOutput
+	err := workflow.ExecuteActivity(
+		ctx,
+		a.SegmentChat,
+		activities.SegmentChatArgs{
+			ChatID:    params.ChatID,
+			ProjectID: params.ProjectID,
+			OrgID:     params.OrgID,
+		},
+	).Get(ctx, &segmentOutput)
+	if err != nil {
+		return fmt.Errorf("failed to segment chat: %w", err)
+	}
+
+	// Delete existing resolutions before analyzing segments
+	err = workflow.ExecuteActivity(
+		ctx,
+		a.DeleteChatResolutions,
+		activities.DeleteChatResolutionsArgs{
+			ChatID: params.ChatID,
+		},
+	).Get(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing resolutions: %w", err)
+	}
+
+	// Phase 2: Analyze each segment comprehensively
+	for _, segment := range segmentOutput.Segments {
+		err := workflow.ExecuteActivity(
+			ctx,
+			a.AnalyzeSegment,
+			activities.AnalyzeSegmentArgs{
+				ChatID:     params.ChatID,
+				ProjectID:  params.ProjectID,
+				OrgID:      params.OrgID,
+				StartIndex: segment.StartIndex,
+				EndIndex:   segment.EndIndex,
+			},
+		).Get(ctx, nil)
+		if err != nil {
+			// Log but continue with other segments
+			workflow.GetLogger(ctx).Error("failed to analyze segment",
+				"error", err.Error(),
+				"start_index", segment.StartIndex,
+				"end_index", segment.EndIndex,
+			)
+			continue
+		}
+	}
+
+	return nil
+}
