@@ -14,93 +14,102 @@ if (process.env["GRAM_SSL_KEY_FILE"] && process.env["GRAM_SSL_CERT_FILE"]) {
   cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
 }
 
+// These env vars are only needed for local development (dev server proxy)
+// Production builds don't need them - the proxy is not used and __GRAM_SERVER_URL__ can be empty
 const serverUrl = process.env["GRAM_SERVER_URL"];
-if (!serverUrl) {
-  throw new Error("GRAM_SERVER_URL environment variable is not set");
-}
-
 const siteUrl = process.env["GRAM_SITE_URL"];
-if (!siteUrl) {
-  throw new Error("GRAM_SITE_URL environment variable is not set");
-}
 
 // https://vite.dev/config/
-export default defineConfig({
-  define: {
-    __GRAM_SERVER_URL__: JSON.stringify(siteUrl),
-    __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
-  },
-  build: {
-    target: "es2022",
-    sourcemap: true,
-    rollupOptions: {
-      input: {
-        main: path.resolve(__dirname, "index.html"),
-      },
-      output: {
-        manualChunks: {
-          "lucide-react": ["lucide-react"],
-          moonshine: ["@speakeasy-api/moonshine"],
-          three: [
-            "@react-three/drei",
-            "@react-three/fiber",
-            "@react-three/postprocessing",
-            "three",
-          ],
-          externals: [
-            "posthog-js",
-            "react",
-            "react-dom",
-            "react-error-boundary",
-            "react-router",
-            "sonner",
-            "vaul",
-            "zod",
-          ],
+export default defineConfig(({ command }) => {
+  const isDev = command === "serve";
+
+  if (!siteUrl) {
+    throw new Error("GRAM_SITE_URL env var must be set");
+  }
+
+  if (isDev && !serverUrl) {
+    throw new Error("GRAM_SERVER_URL must be set for local development");
+  }
+
+  return {
+    define: {
+      __GRAM_SERVER_URL__: JSON.stringify(siteUrl),
+      __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
+    },
+    build: {
+      target: "es2022",
+      sourcemap: true,
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, "index.html"),
+        },
+        output: {
+          manualChunks: {
+            "lucide-react": ["lucide-react"],
+            moonshine: ["@speakeasy-api/moonshine"],
+            three: [
+              "@react-three/drei",
+              "@react-three/fiber",
+              "@react-three/postprocessing",
+              "three",
+            ],
+            externals: [
+              "posthog-js",
+              "react",
+              "react-dom",
+              "react-error-boundary",
+              "react-router",
+              "sonner",
+              "vaul",
+              "zod",
+            ],
+          },
         },
       },
     },
-  },
-  esbuild: {
-    target: "es2022",
-  },
-  optimizeDeps: {
-    include: ["monaco-editor"],
-    esbuildOptions: {
+    esbuild: {
       target: "es2022",
     },
-  },
-  server: {
-    host: true,
-    allowedHosts: ["localhost", "127.0.0.1", "devbox"],
-    https: key && cert ? { key, cert } : void 0,
-    // Setting these up to side-step cors issues experienced during
-    // development. Specifically, the Vercel AI SDK does not forward cookies
-    // (Eg: gram_session) to the server.
-    proxy: {
-      "/rpc": serverUrl,
-      "/chat": serverUrl,
-      "/mcp": serverUrl,
-      "/oauth": serverUrl,
-      "/.well-known": serverUrl,
+    optimizeDeps: {
+      include: ["monaco-editor"],
+      esbuildOptions: {
+        target: "es2022",
+      },
     },
-  },
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      // Ensure single instances of React and related packages across all dependencies
-      react: path.resolve(__dirname, "node_modules/react"),
-      "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
-      // Deduplicate @assistant-ui packages to ensure context is shared
-      "@assistant-ui/react": path.resolve(
-        __dirname,
-        "node_modules/@assistant-ui/react",
-      ),
-      "@assistant-ui/react-markdown": path.resolve(
-        __dirname,
-        "node_modules/@assistant-ui/react-markdown",
-      ),
+    server: {
+      host: true,
+      allowedHosts: ["localhost", "127.0.0.1", "devbox"],
+      https: key && cert ? { key, cert } : void 0,
+      // Setting these up to side-step cors issues experienced during
+      // development. Specifically, the Vercel AI SDK does not forward cookies
+      // (Eg: gram_session) to the server.
+      proxy: serverUrl
+        ? {
+            "/rpc": serverUrl,
+            "/chat": serverUrl,
+            "/mcp": serverUrl,
+            "/oauth": serverUrl,
+            "/.well-known": serverUrl,
+          }
+        : undefined,
     },
-  },
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+        // Ensure single instances of React and related packages across all dependencies
+        react: path.resolve(__dirname, "node_modules/react"),
+        "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
+        // Deduplicate @assistant-ui packages to ensure context is shared
+        "@assistant-ui/react": path.resolve(
+          __dirname,
+          "node_modules/@assistant-ui/react",
+        ),
+        "@assistant-ui/react-markdown": path.resolve(
+          __dirname,
+          "node_modules/@assistant-ui/react-markdown",
+        ),
+      },
+    },
+  };
 });
