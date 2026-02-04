@@ -3,4 +3,7 @@
 
 set -e
 
+# Elements is a dependency of the dashboard and must be built first
+pnpm --filter ./elements build
+
 exec pnpm --filter ./client/dashboard dev
