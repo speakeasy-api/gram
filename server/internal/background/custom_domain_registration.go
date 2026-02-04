@@ -18,6 +18,13 @@ type CustomDomainRegistrationParams struct {
 	Domain string
 }
 
+type CustomDomainDeletionParams struct {
+	OrgID          string
+	Domain         string
+	IngressName    string
+	CertSecretName string
+}
+
 type CustomDomainRegistrationClient struct {
 	Temporal client.Client
 }
@@ -40,16 +47,18 @@ func (c *CustomDomainRegistrationClient) GetDeletionID(orgID string, domain stri
 	return fmt.Sprintf("v1:custom-domain-deletion:%s:%s", orgID, domain)
 }
 
-func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error) {
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string) (client.WorkflowRun, error) {
 	id := c.GetDeletionID(orgID, domain)
 	return c.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
 		TaskQueue:             string(TaskQueueMain),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:    5 * time.Minute,
-	}, CustomDomainDeletionWorkflow, CustomDomainRegistrationParams{
-		OrgID:  orgID,
-		Domain: domain,
+	}, CustomDomainDeletionWorkflow, CustomDomainDeletionParams{
+		OrgID:          orgID,
+		Domain:         domain,
+		IngressName:    ingressName,
+		CertSecretName: certSecretName,
 	})
 }
 
@@ -96,7 +105,7 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 	err = workflow.ExecuteActivity(
 		ingressCreateCtx,
 		a.CustomDomainIngress,
-		activities.CustomDomainIngressArgs{OrgID: params.OrgID, Domain: params.Domain, Action: activities.CustomDomainIngressActionSetup},
+		activities.CustomDomainIngressArgs{OrgID: params.OrgID, Domain: params.Domain, Action: activities.CustomDomainIngressActionSetup, IngressName: "", CertSecretName: ""},
 	).Get(ingressCreateCtx, nil)
 	if err != nil {
 		logger.Error("failed to create custom domain ingress", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
@@ -106,7 +115,7 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 	return nil
 }
 
-func CustomDomainDeletionWorkflow(ctx workflow.Context, params CustomDomainRegistrationParams) error {
+func CustomDomainDeletionWorkflow(ctx workflow.Context, params CustomDomainDeletionParams) error {
 	logger := workflow.GetLogger(ctx)
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 60 * time.Second,
@@ -119,7 +128,13 @@ func CustomDomainDeletionWorkflow(ctx workflow.Context, params CustomDomainRegis
 	err := workflow.ExecuteActivity(
 		ctx,
 		a.CustomDomainIngress,
-		activities.CustomDomainIngressArgs{OrgID: params.OrgID, Domain: params.Domain, Action: activities.CustomDomainIngressActionDelete},
+		activities.CustomDomainIngressArgs{
+			OrgID:          params.OrgID,
+			Domain:         params.Domain,
+			Action:         activities.CustomDomainIngressActionDelete,
+			IngressName:    params.IngressName,
+			CertSecretName: params.CertSecretName,
+		},
 	).Get(ctx, nil)
 	if err != nil {
 		logger.Error("failed to delete custom domain ingress", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)

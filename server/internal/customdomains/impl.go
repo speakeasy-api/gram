@@ -36,7 +36,7 @@ type Service struct {
 type TemporalClient interface {
 	GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
 	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error)
-	ExecuteCustomDomainDeletion(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error)
+	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string) (client.WorkflowRun, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -125,7 +125,7 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 	}
 
 	if domain.Activated {
-		if _, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain); err != nil {
+		if _, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.IngressName.String, domain.CertSecretName.String); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start custom domain deletion workflow").Log(ctx, s.logger)
 		}
 	}
