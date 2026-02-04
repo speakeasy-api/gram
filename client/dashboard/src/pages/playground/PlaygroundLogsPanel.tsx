@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { TelemetryLogRecord } from "@gram/client/models/components";
+import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { useGramContext, useToolset } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
@@ -101,6 +102,7 @@ export function PlaygroundLogsPanel({
   const {
     data,
     isPending,
+    error,
     refetch: fetchLogs,
   } = useQuery({
     queryKey: ["playground-logs", gramUrns],
@@ -115,10 +117,15 @@ export function PlaygroundLogsPanel({
         }),
       ),
     refetchInterval: 5000,
+    throwOnError: false,
   });
 
   const logs = data?.logs || [];
-  const logsEnabled = data?.enabled ?? true;
+  // Logs are disabled if we get a 404 error (endpoint returns 404 when disabled)
+  // or if the response explicitly says enabled: false
+  const logsDisabled =
+    (error instanceof ServiceError && error.statusCode === 404) ||
+    data?.enabled === false;
 
   return (
     <div className="h-full flex flex-col border-l">
@@ -157,7 +164,7 @@ export function PlaygroundLogsPanel({
             <Type variant="small" className="text-muted-foreground">
               {isPending
                 ? "Loading logs..."
-                : !logsEnabled
+                : logsDisabled
                   ? "Logs are not enabled for this organization"
                   : "No logs yet"}
             </Type>

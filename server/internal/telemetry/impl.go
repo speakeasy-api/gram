@@ -100,7 +100,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}
 
 	if !params.enabled {
-		return &telem_gen.SearchLogsResult{Logs: []*telem_gen.TelemetryLogRecord{}, Enabled: false, NextCursor: nil}, nil
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	// Extract SearchLogs-specific filter fields
@@ -181,7 +181,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	if !params.enabled {
-		return &telem_gen.SearchToolCallsResult{ToolCalls: []*telem_gen.ToolCallSummary{}, Enabled: false, NextCursor: nil}, nil
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	// Extract SearchToolCalls-specific filter fields
@@ -247,7 +247,7 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 	}
 
 	if !params.enabled {
-		return nil, oops.E(oops.CodeForbidden, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	var deploymentID, gramURN string
@@ -315,7 +315,7 @@ func (s *Service) GetProjectMetricsSummary(ctx context.Context, payload *telem_g
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeForbidden, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
