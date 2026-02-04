@@ -67,7 +67,6 @@ func EncodeCreateTemplateRequest(encoder func(*http.Request) goahttp.Encoder) fu
 // body should be restored after having been read.
 // DecodeCreateTemplateResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -123,40 +122,19 @@ func DecodeCreateTemplateResponse(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewCreateTemplateUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body CreateTemplateLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "createTemplate", err)
-				}
-				err = ValidateCreateTemplateLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "createTemplate", err)
-				}
-				return nil, NewCreateTemplateLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body CreateTemplateForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "createTemplate", err)
-				}
-				err = ValidateCreateTemplateForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "createTemplate", err)
-				}
-				return nil, NewCreateTemplateForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("templates", "createTemplate", resp.StatusCode, string(body))
+			var (
+				body CreateTemplateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "createTemplate", err)
 			}
+			err = ValidateCreateTemplateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "createTemplate", err)
+			}
+			return nil, NewCreateTemplateForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateTemplateBadRequestResponseBody
@@ -331,7 +309,6 @@ func EncodeUpdateTemplateRequest(encoder func(*http.Request) goahttp.Encoder) fu
 // body should be restored after having been read.
 // DecodeUpdateTemplateResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -387,40 +364,19 @@ func DecodeUpdateTemplateResponse(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewUpdateTemplateUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body UpdateTemplateLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
-				}
-				err = ValidateUpdateTemplateLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
-				}
-				return nil, NewUpdateTemplateLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body UpdateTemplateForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
-				}
-				err = ValidateUpdateTemplateForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
-				}
-				return nil, NewUpdateTemplateForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("templates", "updateTemplate", resp.StatusCode, string(body))
+			var (
+				body UpdateTemplateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "updateTemplate", err)
 			}
+			err = ValidateUpdateTemplateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "updateTemplate", err)
+			}
+			return nil, NewUpdateTemplateForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UpdateTemplateBadRequestResponseBody
@@ -599,7 +555,6 @@ func EncodeGetTemplateRequest(encoder func(*http.Request) goahttp.Encoder) func(
 // body should be restored after having been read.
 // DecodeGetTemplateResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -655,40 +610,19 @@ func DecodeGetTemplateResponse(decoder func(*http.Response) goahttp.Decoder, res
 			}
 			return nil, NewGetTemplateUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body GetTemplateLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "getTemplate", err)
-				}
-				err = ValidateGetTemplateLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "getTemplate", err)
-				}
-				return nil, NewGetTemplateLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body GetTemplateForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "getTemplate", err)
-				}
-				err = ValidateGetTemplateForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "getTemplate", err)
-				}
-				return nil, NewGetTemplateForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("templates", "getTemplate", resp.StatusCode, string(body))
+			var (
+				body GetTemplateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "getTemplate", err)
 			}
+			err = ValidateGetTemplateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "getTemplate", err)
+			}
+			return nil, NewGetTemplateForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetTemplateBadRequestResponseBody
@@ -859,7 +793,6 @@ func EncodeListTemplatesRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // body should be restored after having been read.
 // DecodeListTemplatesResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -915,40 +848,19 @@ func DecodeListTemplatesResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewListTemplatesUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body ListTemplatesLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "listTemplates", err)
-				}
-				err = ValidateListTemplatesLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "listTemplates", err)
-				}
-				return nil, NewListTemplatesLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body ListTemplatesForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "listTemplates", err)
-				}
-				err = ValidateListTemplatesForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "listTemplates", err)
-				}
-				return nil, NewListTemplatesForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("templates", "listTemplates", resp.StatusCode, string(body))
+			var (
+				body ListTemplatesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "listTemplates", err)
 			}
+			err = ValidateListTemplatesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "listTemplates", err)
+			}
+			return nil, NewListTemplatesForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListTemplatesBadRequestResponseBody
@@ -1127,7 +1039,6 @@ func EncodeDeleteTemplateRequest(encoder func(*http.Request) goahttp.Encoder) fu
 // body should be restored after having been read.
 // DecodeDeleteTemplateResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1170,40 +1081,19 @@ func DecodeDeleteTemplateResponse(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewDeleteTemplateUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body DeleteTemplateLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "deleteTemplate", err)
-				}
-				err = ValidateDeleteTemplateLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "deleteTemplate", err)
-				}
-				return nil, NewDeleteTemplateLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body DeleteTemplateForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "deleteTemplate", err)
-				}
-				err = ValidateDeleteTemplateForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "deleteTemplate", err)
-				}
-				return nil, NewDeleteTemplateForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("templates", "deleteTemplate", resp.StatusCode, string(body))
+			var (
+				body DeleteTemplateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "deleteTemplate", err)
 			}
+			err = ValidateDeleteTemplateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "deleteTemplate", err)
+			}
+			return nil, NewDeleteTemplateForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body DeleteTemplateBadRequestResponseBody
@@ -1382,7 +1272,6 @@ func EncodeRenderTemplateByIDRequest(encoder func(*http.Request) goahttp.Encoder
 // response body should be restored after having been read.
 // DecodeRenderTemplateByIDResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1438,40 +1327,19 @@ func DecodeRenderTemplateByIDResponse(decoder func(*http.Response) goahttp.Decod
 			}
 			return nil, NewRenderTemplateByIDUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body RenderTemplateByIDLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
-				}
-				err = ValidateRenderTemplateByIDLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
-				}
-				return nil, NewRenderTemplateByIDLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body RenderTemplateByIDForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
-				}
-				err = ValidateRenderTemplateByIDForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
-				}
-				return nil, NewRenderTemplateByIDForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("templates", "renderTemplateByID", resp.StatusCode, string(body))
+			var (
+				body RenderTemplateByIDForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplateByID", err)
 			}
+			err = ValidateRenderTemplateByIDForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplateByID", err)
+			}
+			return nil, NewRenderTemplateByIDForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body RenderTemplateByIDBadRequestResponseBody
@@ -1646,7 +1514,6 @@ func EncodeRenderTemplateRequest(encoder func(*http.Request) goahttp.Encoder) fu
 // body should be restored after having been read.
 // DecodeRenderTemplateResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1702,40 +1569,19 @@ func DecodeRenderTemplateResponse(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewRenderTemplateUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body RenderTemplateLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "renderTemplate", err)
-				}
-				err = ValidateRenderTemplateLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "renderTemplate", err)
-				}
-				return nil, NewRenderTemplateLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body RenderTemplateForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("templates", "renderTemplate", err)
-				}
-				err = ValidateRenderTemplateForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("templates", "renderTemplate", err)
-				}
-				return nil, NewRenderTemplateForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("templates", "renderTemplate", resp.StatusCode, string(body))
+			var (
+				body RenderTemplateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("templates", "renderTemplate", err)
 			}
+			err = ValidateRenderTemplateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("templates", "renderTemplate", err)
+			}
+			return nil, NewRenderTemplateForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body RenderTemplateBadRequestResponseBody

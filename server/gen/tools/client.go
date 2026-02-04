@@ -28,7 +28,6 @@ func NewClient(listTools goa.Endpoint) *Client {
 // ListTools calls the "listTools" endpoint of the "tools" service.
 // ListTools may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

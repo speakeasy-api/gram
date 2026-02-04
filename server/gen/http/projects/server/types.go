@@ -99,24 +99,6 @@ type GetProjectUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetProjectLogsDisabledResponseBody is the type of the "projects" service
-// "getProject" endpoint HTTP response body for the "logs_disabled" error.
-type GetProjectLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GetProjectForbiddenResponseBody is the type of the "projects" service
 // "getProject" endpoint HTTP response body for the "forbidden" error.
 type GetProjectForbiddenResponseBody struct {
@@ -283,24 +265,6 @@ type GetProjectGatewayErrorResponseBody struct {
 // CreateProjectUnauthorizedResponseBody is the type of the "projects" service
 // "createProject" endpoint HTTP response body for the "unauthorized" error.
 type CreateProjectUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateProjectLogsDisabledResponseBody is the type of the "projects" service
-// "createProject" endpoint HTTP response body for the "logs_disabled" error.
-type CreateProjectLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -498,24 +462,6 @@ type ListProjectsUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListProjectsLogsDisabledResponseBody is the type of the "projects" service
-// "listProjects" endpoint HTTP response body for the "logs_disabled" error.
-type ListProjectsLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ListProjectsForbiddenResponseBody is the type of the "projects" service
 // "listProjects" endpoint HTTP response body for the "forbidden" error.
 type ListProjectsForbiddenResponseBody struct {
@@ -698,24 +644,6 @@ type SetLogoUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SetLogoLogsDisabledResponseBody is the type of the "projects" service
-// "setLogo" endpoint HTTP response body for the "logs_disabled" error.
-type SetLogoLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // SetLogoForbiddenResponseBody is the type of the "projects" service "setLogo"
 // endpoint HTTP response body for the "forbidden" error.
 type SetLogoForbiddenResponseBody struct {
@@ -882,25 +810,6 @@ type SetLogoGatewayErrorResponseBody struct {
 // service "listAllowedOrigins" endpoint HTTP response body for the
 // "unauthorized" error.
 type ListAllowedOriginsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListAllowedOriginsLogsDisabledResponseBody is the type of the "projects"
-// service "listAllowedOrigins" endpoint HTTP response body for the
-// "logs_disabled" error.
-type ListAllowedOriginsLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1103,25 +1012,6 @@ type UpsertAllowedOriginUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertAllowedOriginLogsDisabledResponseBody is the type of the "projects"
-// service "upsertAllowedOrigin" endpoint HTTP response body for the
-// "logs_disabled" error.
-type UpsertAllowedOriginLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // UpsertAllowedOriginForbiddenResponseBody is the type of the "projects"
 // service "upsertAllowedOrigin" endpoint HTTP response body for the
 // "forbidden" error.
@@ -1295,24 +1185,6 @@ type UpsertAllowedOriginGatewayErrorResponseBody struct {
 // DeleteProjectUnauthorizedResponseBody is the type of the "projects" service
 // "deleteProject" endpoint HTTP response body for the "unauthorized" error.
 type DeleteProjectUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteProjectLogsDisabledResponseBody is the type of the "projects" service
-// "deleteProject" endpoint HTTP response body for the "logs_disabled" error.
-type DeleteProjectLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1627,20 +1499,6 @@ func NewGetProjectUnauthorizedResponseBody(res *goa.ServiceError) *GetProjectUna
 	return body
 }
 
-// NewGetProjectLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "getProject" endpoint of the "projects" service.
-func NewGetProjectLogsDisabledResponseBody(res *goa.ServiceError) *GetProjectLogsDisabledResponseBody {
-	body := &GetProjectLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewGetProjectForbiddenResponseBody builds the HTTP response body from the
 // result of the "getProject" endpoint of the "projects" service.
 func NewGetProjectForbiddenResponseBody(res *goa.ServiceError) *GetProjectForbiddenResponseBody {
@@ -1771,20 +1629,6 @@ func NewGetProjectGatewayErrorResponseBody(res *goa.ServiceError) *GetProjectGat
 // the result of the "createProject" endpoint of the "projects" service.
 func NewCreateProjectUnauthorizedResponseBody(res *goa.ServiceError) *CreateProjectUnauthorizedResponseBody {
 	body := &CreateProjectUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateProjectLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "createProject" endpoint of the "projects" service.
-func NewCreateProjectLogsDisabledResponseBody(res *goa.ServiceError) *CreateProjectLogsDisabledResponseBody {
-	body := &CreateProjectLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1935,20 +1779,6 @@ func NewListProjectsUnauthorizedResponseBody(res *goa.ServiceError) *ListProject
 	return body
 }
 
-// NewListProjectsLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "listProjects" endpoint of the "projects" service.
-func NewListProjectsLogsDisabledResponseBody(res *goa.ServiceError) *ListProjectsLogsDisabledResponseBody {
-	body := &ListProjectsLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewListProjectsForbiddenResponseBody builds the HTTP response body from the
 // result of the "listProjects" endpoint of the "projects" service.
 func NewListProjectsForbiddenResponseBody(res *goa.ServiceError) *ListProjectsForbiddenResponseBody {
@@ -2079,20 +1909,6 @@ func NewListProjectsGatewayErrorResponseBody(res *goa.ServiceError) *ListProject
 // result of the "setLogo" endpoint of the "projects" service.
 func NewSetLogoUnauthorizedResponseBody(res *goa.ServiceError) *SetLogoUnauthorizedResponseBody {
 	body := &SetLogoUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetLogoLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "setLogo" endpoint of the "projects" service.
-func NewSetLogoLogsDisabledResponseBody(res *goa.ServiceError) *SetLogoLogsDisabledResponseBody {
-	body := &SetLogoLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2234,21 +2050,6 @@ func NewSetLogoGatewayErrorResponseBody(res *goa.ServiceError) *SetLogoGatewayEr
 // service.
 func NewListAllowedOriginsUnauthorizedResponseBody(res *goa.ServiceError) *ListAllowedOriginsUnauthorizedResponseBody {
 	body := &ListAllowedOriginsUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListAllowedOriginsLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "listAllowedOrigins" endpoint of the "projects"
-// service.
-func NewListAllowedOriginsLogsDisabledResponseBody(res *goa.ServiceError) *ListAllowedOriginsLogsDisabledResponseBody {
-	body := &ListAllowedOriginsLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2406,21 +2207,6 @@ func NewUpsertAllowedOriginUnauthorizedResponseBody(res *goa.ServiceError) *Upse
 	return body
 }
 
-// NewUpsertAllowedOriginLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "upsertAllowedOrigin" endpoint of the "projects"
-// service.
-func NewUpsertAllowedOriginLogsDisabledResponseBody(res *goa.ServiceError) *UpsertAllowedOriginLogsDisabledResponseBody {
-	body := &UpsertAllowedOriginLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewUpsertAllowedOriginForbiddenResponseBody builds the HTTP response body
 // from the result of the "upsertAllowedOrigin" endpoint of the "projects"
 // service.
@@ -2559,20 +2345,6 @@ func NewUpsertAllowedOriginGatewayErrorResponseBody(res *goa.ServiceError) *Upse
 // the result of the "deleteProject" endpoint of the "projects" service.
 func NewDeleteProjectUnauthorizedResponseBody(res *goa.ServiceError) *DeleteProjectUnauthorizedResponseBody {
 	body := &DeleteProjectUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteProjectLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "deleteProject" endpoint of the "projects" service.
-func NewDeleteProjectLogsDisabledResponseBody(res *goa.ServiceError) *DeleteProjectLogsDisabledResponseBody {
-	body := &DeleteProjectLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

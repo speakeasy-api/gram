@@ -41,7 +41,6 @@ func NewClient(createTemplate, updateTemplate, getTemplate, listTemplates, delet
 // service.
 // CreateTemplate may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -65,7 +64,6 @@ func (c *Client) CreateTemplate(ctx context.Context, p *CreateTemplatePayload) (
 // service.
 // UpdateTemplate may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -88,7 +86,6 @@ func (c *Client) UpdateTemplate(ctx context.Context, p *UpdateTemplatePayload) (
 // GetTemplate calls the "getTemplate" endpoint of the "templates" service.
 // GetTemplate may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -111,7 +108,6 @@ func (c *Client) GetTemplate(ctx context.Context, p *GetTemplatePayload) (res *G
 // ListTemplates calls the "listTemplates" endpoint of the "templates" service.
 // ListTemplates may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -135,7 +131,6 @@ func (c *Client) ListTemplates(ctx context.Context, p *ListTemplatesPayload) (re
 // service.
 // DeleteTemplate may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -155,7 +150,6 @@ func (c *Client) DeleteTemplate(ctx context.Context, p *DeleteTemplatePayload) (
 // "templates" service.
 // RenderTemplateByID may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -179,7 +173,6 @@ func (c *Client) RenderTemplateByID(ctx context.Context, p *RenderTemplateByIDPa
 // service.
 // RenderTemplate may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

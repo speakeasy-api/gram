@@ -51,7 +51,6 @@ func NewClient(serveImage, uploadImage, uploadFunctions, uploadOpenAPIv3, fetchO
 // ServeImage calls the "serveImage" endpoint of the "assets" service.
 // ServeImage may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -75,7 +74,6 @@ func (c *Client) ServeImage(ctx context.Context, p *ServeImageForm) (res *ServeI
 // UploadImage calls the "uploadImage" endpoint of the "assets" service.
 // UploadImage may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -98,7 +96,6 @@ func (c *Client) UploadImage(ctx context.Context, p *UploadImageForm, req io.Rea
 // UploadFunctions calls the "uploadFunctions" endpoint of the "assets" service.
 // UploadFunctions may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -121,7 +118,6 @@ func (c *Client) UploadFunctions(ctx context.Context, p *UploadFunctionsForm, re
 // UploadOpenAPIv3 calls the "uploadOpenAPIv3" endpoint of the "assets" service.
 // UploadOpenAPIv3 may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -145,7 +141,6 @@ func (c *Client) UploadOpenAPIv3(ctx context.Context, p *UploadOpenAPIv3Form, re
 // "assets" service.
 // FetchOpenAPIv3FromURL may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -168,7 +163,6 @@ func (c *Client) FetchOpenAPIv3FromURL(ctx context.Context, p *FetchOpenAPIv3Fro
 // ServeOpenAPIv3 calls the "serveOpenAPIv3" endpoint of the "assets" service.
 // ServeOpenAPIv3 may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -192,7 +186,6 @@ func (c *Client) ServeOpenAPIv3(ctx context.Context, p *ServeOpenAPIv3Form) (res
 // ServeFunction calls the "serveFunction" endpoint of the "assets" service.
 // ServeFunction may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -216,7 +209,6 @@ func (c *Client) ServeFunction(ctx context.Context, p *ServeFunctionForm) (res *
 // ListAssets calls the "listAssets" endpoint of the "assets" service.
 // ListAssets may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -240,7 +232,6 @@ func (c *Client) ListAssets(ctx context.Context, p *ListAssetsPayload) (res *Lis
 // "assets" service.
 // UploadChatAttachment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -264,7 +255,6 @@ func (c *Client) UploadChatAttachment(ctx context.Context, p *UploadChatAttachme
 // service.
 // ServeChatAttachment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -289,7 +279,6 @@ func (c *Client) ServeChatAttachment(ctx context.Context, p *ServeChatAttachment
 // endpoint of the "assets" service.
 // CreateSignedChatAttachmentURL may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -313,7 +302,6 @@ func (c *Client) CreateSignedChatAttachmentURL(ctx context.Context, p *CreateSig
 // the "assets" service.
 // ServeChatAttachmentSigned may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

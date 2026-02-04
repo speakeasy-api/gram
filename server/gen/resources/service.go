@@ -70,11 +70,6 @@ func MakeUnauthorized(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "unauthorized", false, false, false)
 }
 
-// MakeLogsDisabled builds a goa.ServiceError from an error.
-func MakeLogsDisabled(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "logs_disabled", false, false, false)
-}
-
 // MakeForbidden builds a goa.ServiceError from an error.
 func MakeForbidden(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "forbidden", false, false, false)

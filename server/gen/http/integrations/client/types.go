@@ -43,24 +43,6 @@ type GetUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetLogsDisabledResponseBody is the type of the "integrations" service "get"
-// endpoint HTTP response body for the "logs_disabled" error.
-type GetLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // GetForbiddenResponseBody is the type of the "integrations" service "get"
 // endpoint HTTP response body for the "forbidden" error.
 type GetForbiddenResponseBody struct {
@@ -226,24 +208,6 @@ type GetGatewayErrorResponseBody struct {
 // ListUnauthorizedResponseBody is the type of the "integrations" service
 // "list" endpoint HTTP response body for the "unauthorized" error.
 type ListUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListLogsDisabledResponseBody is the type of the "integrations" service
-// "list" endpoint HTTP response body for the "logs_disabled" error.
-type ListLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -486,21 +450,6 @@ func NewGetUnauthorized(body *GetUnauthorizedResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewGetLogsDisabled builds a integrations service get endpoint logs_disabled
-// error.
-func NewGetLogsDisabled(body *GetLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewGetForbidden builds a integrations service get endpoint forbidden error.
 func NewGetForbidden(body *GetForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
@@ -652,21 +601,6 @@ func NewListIntegrationsResultOK(body *ListResponseBody) *integrations.ListInteg
 // NewListUnauthorized builds a integrations service list endpoint unauthorized
 // error.
 func NewListUnauthorized(body *ListUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListLogsDisabled builds a integrations service list endpoint
-// logs_disabled error.
-func NewListLogsDisabled(body *ListLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -835,30 +769,6 @@ func ValidateListResponseBody(body *ListResponseBody) (err error) {
 // ValidateGetUnauthorizedResponseBody runs the validations defined on
 // get_unauthorized_response_body
 func ValidateGetUnauthorizedResponseBody(body *GetUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetLogsDisabledResponseBody runs the validations defined on
-// get_logs_disabled_response_body
-func ValidateGetLogsDisabledResponseBody(body *GetLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1099,30 +1009,6 @@ func ValidateGetGatewayErrorResponseBody(body *GetGatewayErrorResponseBody) (err
 // ValidateListUnauthorizedResponseBody runs the validations defined on
 // list_unauthorized_response_body
 func ValidateListUnauthorizedResponseBody(body *ListUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListLogsDisabledResponseBody runs the validations defined on
-// list_logs_disabled_response_body
-func ValidateListLogsDisabledResponseBody(body *ListLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

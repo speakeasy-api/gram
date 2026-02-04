@@ -34,7 +34,6 @@ func NewClient(getPeriodUsage, getUsageTiers, createCustomerSession, createCheck
 // GetPeriodUsage calls the "getPeriodUsage" endpoint of the "usage" service.
 // GetPeriodUsage may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -57,7 +56,6 @@ func (c *Client) GetPeriodUsage(ctx context.Context, p *GetPeriodUsagePayload) (
 // GetUsageTiers calls the "getUsageTiers" endpoint of the "usage" service.
 // GetUsageTiers may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -81,7 +79,6 @@ func (c *Client) GetUsageTiers(ctx context.Context) (res *UsageTiers, err error)
 // "usage" service.
 // CreateCustomerSession may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -104,7 +101,6 @@ func (c *Client) CreateCustomerSession(ctx context.Context, p *CreateCustomerSes
 // CreateCheckout calls the "createCheckout" endpoint of the "usage" service.
 // CreateCheckout may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

@@ -141,24 +141,6 @@ type SearchLogsUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SearchLogsLogsDisabledResponseBody is the type of the "telemetry" service
-// "searchLogs" endpoint HTTP response body for the "logs_disabled" error.
-type SearchLogsLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // SearchLogsForbiddenResponseBody is the type of the "telemetry" service
 // "searchLogs" endpoint HTTP response body for the "forbidden" error.
 type SearchLogsForbiddenResponseBody struct {
@@ -327,25 +309,6 @@ type SearchLogsGatewayErrorResponseBody struct {
 // service "searchToolCalls" endpoint HTTP response body for the "unauthorized"
 // error.
 type SearchToolCallsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchToolCallsLogsDisabledResponseBody is the type of the "telemetry"
-// service "searchToolCalls" endpoint HTTP response body for the
-// "logs_disabled" error.
-type SearchToolCallsLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -544,24 +507,6 @@ type SearchChatsUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SearchChatsLogsDisabledResponseBody is the type of the "telemetry" service
-// "searchChats" endpoint HTTP response body for the "logs_disabled" error.
-type SearchChatsLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // SearchChatsForbiddenResponseBody is the type of the "telemetry" service
 // "searchChats" endpoint HTTP response body for the "forbidden" error.
 type SearchChatsForbiddenResponseBody struct {
@@ -729,24 +674,6 @@ type SearchChatsGatewayErrorResponseBody struct {
 // CaptureEventUnauthorizedResponseBody is the type of the "telemetry" service
 // "captureEvent" endpoint HTTP response body for the "unauthorized" error.
 type CaptureEventUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CaptureEventLogsDisabledResponseBody is the type of the "telemetry" service
-// "captureEvent" endpoint HTTP response body for the "logs_disabled" error.
-type CaptureEventLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -930,25 +857,6 @@ type CaptureEventGatewayErrorResponseBody struct {
 // "telemetry" service "getProjectMetricsSummary" endpoint HTTP response body
 // for the "unauthorized" error.
 type GetProjectMetricsSummaryUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetProjectMetricsSummaryLogsDisabledResponseBody is the type of the
-// "telemetry" service "getProjectMetricsSummary" endpoint HTTP response body
-// for the "logs_disabled" error.
-type GetProjectMetricsSummaryLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1429,20 +1337,6 @@ func NewSearchLogsUnauthorizedResponseBody(res *goa.ServiceError) *SearchLogsUna
 	return body
 }
 
-// NewSearchLogsLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "searchLogs" endpoint of the "telemetry" service.
-func NewSearchLogsLogsDisabledResponseBody(res *goa.ServiceError) *SearchLogsLogsDisabledResponseBody {
-	body := &SearchLogsLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewSearchLogsForbiddenResponseBody builds the HTTP response body from the
 // result of the "searchLogs" endpoint of the "telemetry" service.
 func NewSearchLogsForbiddenResponseBody(res *goa.ServiceError) *SearchLogsForbiddenResponseBody {
@@ -1573,20 +1467,6 @@ func NewSearchLogsGatewayErrorResponseBody(res *goa.ServiceError) *SearchLogsGat
 // from the result of the "searchToolCalls" endpoint of the "telemetry" service.
 func NewSearchToolCallsUnauthorizedResponseBody(res *goa.ServiceError) *SearchToolCallsUnauthorizedResponseBody {
 	body := &SearchToolCallsUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchToolCallsLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "searchToolCalls" endpoint of the "telemetry" service.
-func NewSearchToolCallsLogsDisabledResponseBody(res *goa.ServiceError) *SearchToolCallsLogsDisabledResponseBody {
-	body := &SearchToolCallsLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1738,20 +1618,6 @@ func NewSearchChatsUnauthorizedResponseBody(res *goa.ServiceError) *SearchChatsU
 	return body
 }
 
-// NewSearchChatsLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "searchChats" endpoint of the "telemetry" service.
-func NewSearchChatsLogsDisabledResponseBody(res *goa.ServiceError) *SearchChatsLogsDisabledResponseBody {
-	body := &SearchChatsLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewSearchChatsForbiddenResponseBody builds the HTTP response body from the
 // result of the "searchChats" endpoint of the "telemetry" service.
 func NewSearchChatsForbiddenResponseBody(res *goa.ServiceError) *SearchChatsForbiddenResponseBody {
@@ -1882,20 +1748,6 @@ func NewSearchChatsGatewayErrorResponseBody(res *goa.ServiceError) *SearchChatsG
 // the result of the "captureEvent" endpoint of the "telemetry" service.
 func NewCaptureEventUnauthorizedResponseBody(res *goa.ServiceError) *CaptureEventUnauthorizedResponseBody {
 	body := &CaptureEventUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCaptureEventLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "captureEvent" endpoint of the "telemetry" service.
-func NewCaptureEventLogsDisabledResponseBody(res *goa.ServiceError) *CaptureEventLogsDisabledResponseBody {
-	body := &CaptureEventLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2037,21 +1889,6 @@ func NewCaptureEventGatewayErrorResponseBody(res *goa.ServiceError) *CaptureEven
 // "telemetry" service.
 func NewGetProjectMetricsSummaryUnauthorizedResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryUnauthorizedResponseBody {
 	body := &GetProjectMetricsSummaryUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetProjectMetricsSummaryLogsDisabledResponseBody builds the HTTP response
-// body from the result of the "getProjectMetricsSummary" endpoint of the
-// "telemetry" service.
-func NewGetProjectMetricsSummaryLogsDisabledResponseBody(res *goa.ServiceError) *GetProjectMetricsSummaryLogsDisabledResponseBody {
-	body := &GetProjectMetricsSummaryLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

@@ -30,7 +30,6 @@ func NewClient(create, revoke goa.Endpoint) *Client {
 // Create calls the "create" endpoint of the "chatSessions" service.
 // Create may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
@@ -53,7 +52,6 @@ func (c *Client) Create(ctx context.Context, p *CreatePayload) (res *CreateResul
 // Revoke calls the "revoke" endpoint of the "chatSessions" service.
 // Revoke may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found

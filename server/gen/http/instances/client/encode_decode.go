@@ -70,7 +70,6 @@ func EncodeGetInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(
 // body should be restored after having been read.
 // DecodeGetInstanceResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -126,40 +125,19 @@ func DecodeGetInstanceResponse(decoder func(*http.Response) goahttp.Decoder, res
 			}
 			return nil, NewGetInstanceUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body GetInstanceLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
-				}
-				err = ValidateGetInstanceLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("instances", "getInstance", err)
-				}
-				return nil, NewGetInstanceLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body GetInstanceForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
-				}
-				err = ValidateGetInstanceForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("instances", "getInstance", err)
-				}
-				return nil, NewGetInstanceForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("instances", "getInstance", resp.StatusCode, string(body))
+			var (
+				body GetInstanceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("instances", "getInstance", err)
 			}
+			err = ValidateGetInstanceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("instances", "getInstance", err)
+			}
+			return nil, NewGetInstanceForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetInstanceBadRequestResponseBody

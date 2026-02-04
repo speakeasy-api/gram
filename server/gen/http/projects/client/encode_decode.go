@@ -62,7 +62,6 @@ func EncodeGetProjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 // should be restored after having been read.
 // DecodeGetProjectResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -118,40 +117,19 @@ func DecodeGetProjectResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			return nil, NewGetProjectUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body GetProjectLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "getProject", err)
-				}
-				err = ValidateGetProjectLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "getProject", err)
-				}
-				return nil, NewGetProjectLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body GetProjectForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "getProject", err)
-				}
-				err = ValidateGetProjectForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "getProject", err)
-				}
-				return nil, NewGetProjectForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("projects", "getProject", resp.StatusCode, string(body))
+			var (
+				body GetProjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "getProject", err)
 			}
+			err = ValidateGetProjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "getProject", err)
+			}
+			return nil, NewGetProjectForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetProjectBadRequestResponseBody
@@ -322,7 +300,6 @@ func EncodeCreateProjectRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // body should be restored after having been read.
 // DecodeCreateProjectResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -378,40 +355,19 @@ func DecodeCreateProjectResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewCreateProjectUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body CreateProjectLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "createProject", err)
-				}
-				err = ValidateCreateProjectLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "createProject", err)
-				}
-				return nil, NewCreateProjectLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body CreateProjectForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "createProject", err)
-				}
-				err = ValidateCreateProjectForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "createProject", err)
-				}
-				return nil, NewCreateProjectForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("projects", "createProject", resp.StatusCode, string(body))
+			var (
+				body CreateProjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createProject", err)
 			}
+			err = ValidateCreateProjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createProject", err)
+			}
+			return nil, NewCreateProjectForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateProjectBadRequestResponseBody
@@ -581,7 +537,6 @@ func EncodeListProjectsRequest(encoder func(*http.Request) goahttp.Encoder) func
 // body should be restored after having been read.
 // DecodeListProjectsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -637,40 +592,19 @@ func DecodeListProjectsResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewListProjectsUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body ListProjectsLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
-				}
-				err = ValidateListProjectsLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "listProjects", err)
-				}
-				return nil, NewListProjectsLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body ListProjectsForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
-				}
-				err = ValidateListProjectsForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "listProjects", err)
-				}
-				return nil, NewListProjectsForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("projects", "listProjects", resp.StatusCode, string(body))
+			var (
+				body ListProjectsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listProjects", err)
 			}
+			err = ValidateListProjectsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listProjects", err)
+			}
+			return nil, NewListProjectsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListProjectsBadRequestResponseBody
@@ -845,7 +779,6 @@ func EncodeSetLogoRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 // should be restored after having been read.
 // DecodeSetLogoResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -901,40 +834,19 @@ func DecodeSetLogoResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			}
 			return nil, NewSetLogoUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body SetLogoLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
-				}
-				err = ValidateSetLogoLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "setLogo", err)
-				}
-				return nil, NewSetLogoLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body SetLogoForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
-				}
-				err = ValidateSetLogoForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "setLogo", err)
-				}
-				return nil, NewSetLogoForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("projects", "setLogo", resp.StatusCode, string(body))
+			var (
+				body SetLogoForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
 			}
+			err = ValidateSetLogoForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+			}
+			return nil, NewSetLogoForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SetLogoBadRequestResponseBody
@@ -1106,7 +1018,6 @@ func EncodeListAllowedOriginsRequest(encoder func(*http.Request) goahttp.Encoder
 // response body should be restored after having been read.
 // DecodeListAllowedOriginsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1162,40 +1073,19 @@ func DecodeListAllowedOriginsResponse(decoder func(*http.Response) goahttp.Decod
 			}
 			return nil, NewListAllowedOriginsUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body ListAllowedOriginsLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
-				}
-				err = ValidateListAllowedOriginsLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
-				}
-				return nil, NewListAllowedOriginsLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body ListAllowedOriginsForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
-				}
-				err = ValidateListAllowedOriginsForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
-				}
-				return nil, NewListAllowedOriginsForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("projects", "listAllowedOrigins", resp.StatusCode, string(body))
+			var (
+				body ListAllowedOriginsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listAllowedOrigins", err)
 			}
+			err = ValidateListAllowedOriginsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listAllowedOrigins", err)
+			}
+			return nil, NewListAllowedOriginsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListAllowedOriginsBadRequestResponseBody
@@ -1371,7 +1261,6 @@ func EncodeUpsertAllowedOriginRequest(encoder func(*http.Request) goahttp.Encode
 // the response body should be restored after having been read.
 // DecodeUpsertAllowedOriginResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1427,40 +1316,19 @@ func DecodeUpsertAllowedOriginResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			return nil, NewUpsertAllowedOriginUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body UpsertAllowedOriginLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
-				}
-				err = ValidateUpsertAllowedOriginLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
-				}
-				return nil, NewUpsertAllowedOriginLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body UpsertAllowedOriginForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
-				}
-				err = ValidateUpsertAllowedOriginForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
-				}
-				return nil, NewUpsertAllowedOriginForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("projects", "upsertAllowedOrigin", resp.StatusCode, string(body))
+			var (
+				body UpsertAllowedOriginForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "upsertAllowedOrigin", err)
 			}
+			err = ValidateUpsertAllowedOriginForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "upsertAllowedOrigin", err)
+			}
+			return nil, NewUpsertAllowedOriginForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UpsertAllowedOriginBadRequestResponseBody
@@ -1630,7 +1498,6 @@ func EncodeDeleteProjectRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // body should be restored after having been read.
 // DecodeDeleteProjectResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1673,40 +1540,19 @@ func DecodeDeleteProjectResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewDeleteProjectUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body DeleteProjectLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
-				}
-				err = ValidateDeleteProjectLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
-				}
-				return nil, NewDeleteProjectLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body DeleteProjectForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
-				}
-				err = ValidateDeleteProjectForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
-				}
-				return nil, NewDeleteProjectForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("projects", "deleteProject", resp.StatusCode, string(body))
+			var (
+				body DeleteProjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "deleteProject", err)
 			}
+			err = ValidateDeleteProjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "deleteProject", err)
+			}
+			return nil, NewDeleteProjectForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body DeleteProjectBadRequestResponseBody

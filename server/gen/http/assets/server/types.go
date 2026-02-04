@@ -101,24 +101,6 @@ type ServeImageUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeImageLogsDisabledResponseBody is the type of the "assets" service
-// "serveImage" endpoint HTTP response body for the "logs_disabled" error.
-type ServeImageLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ServeImageForbiddenResponseBody is the type of the "assets" service
 // "serveImage" endpoint HTTP response body for the "forbidden" error.
 type ServeImageForbiddenResponseBody struct {
@@ -284,24 +266,6 @@ type ServeImageGatewayErrorResponseBody struct {
 // UploadImageUnauthorizedResponseBody is the type of the "assets" service
 // "uploadImage" endpoint HTTP response body for the "unauthorized" error.
 type UploadImageUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UploadImageLogsDisabledResponseBody is the type of the "assets" service
-// "uploadImage" endpoint HTTP response body for the "logs_disabled" error.
-type UploadImageLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -483,24 +447,6 @@ type UploadImageGatewayErrorResponseBody struct {
 // UploadFunctionsUnauthorizedResponseBody is the type of the "assets" service
 // "uploadFunctions" endpoint HTTP response body for the "unauthorized" error.
 type UploadFunctionsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UploadFunctionsLogsDisabledResponseBody is the type of the "assets" service
-// "uploadFunctions" endpoint HTTP response body for the "logs_disabled" error.
-type UploadFunctionsLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -698,24 +644,6 @@ type UploadOpenAPIv3UnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UploadOpenAPIv3LogsDisabledResponseBody is the type of the "assets" service
-// "uploadOpenAPIv3" endpoint HTTP response body for the "logs_disabled" error.
-type UploadOpenAPIv3LogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // UploadOpenAPIv3ForbiddenResponseBody is the type of the "assets" service
 // "uploadOpenAPIv3" endpoint HTTP response body for the "forbidden" error.
 type UploadOpenAPIv3ForbiddenResponseBody struct {
@@ -884,25 +812,6 @@ type UploadOpenAPIv3GatewayErrorResponseBody struct {
 // service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
 // "unauthorized" error.
 type FetchOpenAPIv3FromURLUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// FetchOpenAPIv3FromURLLogsDisabledResponseBody is the type of the "assets"
-// service "fetchOpenAPIv3FromURL" endpoint HTTP response body for the
-// "logs_disabled" error.
-type FetchOpenAPIv3FromURLLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1106,24 +1015,6 @@ type ServeOpenAPIv3UnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeOpenAPIv3LogsDisabledResponseBody is the type of the "assets" service
-// "serveOpenAPIv3" endpoint HTTP response body for the "logs_disabled" error.
-type ServeOpenAPIv3LogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ServeOpenAPIv3ForbiddenResponseBody is the type of the "assets" service
 // "serveOpenAPIv3" endpoint HTTP response body for the "forbidden" error.
 type ServeOpenAPIv3ForbiddenResponseBody struct {
@@ -1291,24 +1182,6 @@ type ServeOpenAPIv3GatewayErrorResponseBody struct {
 // ServeFunctionUnauthorizedResponseBody is the type of the "assets" service
 // "serveFunction" endpoint HTTP response body for the "unauthorized" error.
 type ServeFunctionUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ServeFunctionLogsDisabledResponseBody is the type of the "assets" service
-// "serveFunction" endpoint HTTP response body for the "logs_disabled" error.
-type ServeFunctionLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1506,24 +1379,6 @@ type ListAssetsUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListAssetsLogsDisabledResponseBody is the type of the "assets" service
-// "listAssets" endpoint HTTP response body for the "logs_disabled" error.
-type ListAssetsLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ListAssetsForbiddenResponseBody is the type of the "assets" service
 // "listAssets" endpoint HTTP response body for the "forbidden" error.
 type ListAssetsForbiddenResponseBody struct {
@@ -1690,25 +1545,6 @@ type ListAssetsGatewayErrorResponseBody struct {
 // service "uploadChatAttachment" endpoint HTTP response body for the
 // "unauthorized" error.
 type UploadChatAttachmentUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UploadChatAttachmentLogsDisabledResponseBody is the type of the "assets"
-// service "uploadChatAttachment" endpoint HTTP response body for the
-// "logs_disabled" error.
-type UploadChatAttachmentLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1911,25 +1747,6 @@ type ServeChatAttachmentUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ServeChatAttachmentLogsDisabledResponseBody is the type of the "assets"
-// service "serveChatAttachment" endpoint HTTP response body for the
-// "logs_disabled" error.
-type ServeChatAttachmentLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ServeChatAttachmentForbiddenResponseBody is the type of the "assets" service
 // "serveChatAttachment" endpoint HTTP response body for the "forbidden" error.
 type ServeChatAttachmentForbiddenResponseBody struct {
@@ -2101,25 +1918,6 @@ type ServeChatAttachmentGatewayErrorResponseBody struct {
 // "assets" service "createSignedChatAttachmentURL" endpoint HTTP response body
 // for the "unauthorized" error.
 type CreateSignedChatAttachmentURLUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateSignedChatAttachmentURLLogsDisabledResponseBody is the type of the
-// "assets" service "createSignedChatAttachmentURL" endpoint HTTP response body
-// for the "logs_disabled" error.
-type CreateSignedChatAttachmentURLLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2310,25 +2108,6 @@ type CreateSignedChatAttachmentURLGatewayErrorResponseBody struct {
 // "assets" service "serveChatAttachmentSigned" endpoint HTTP response body for
 // the "unauthorized" error.
 type ServeChatAttachmentSignedUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ServeChatAttachmentSignedLogsDisabledResponseBody is the type of the
-// "assets" service "serveChatAttachmentSigned" endpoint HTTP response body for
-// the "logs_disabled" error.
-type ServeChatAttachmentSignedLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2628,20 +2407,6 @@ func NewServeImageUnauthorizedResponseBody(res *goa.ServiceError) *ServeImageUna
 	return body
 }
 
-// NewServeImageLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "serveImage" endpoint of the "assets" service.
-func NewServeImageLogsDisabledResponseBody(res *goa.ServiceError) *ServeImageLogsDisabledResponseBody {
-	body := &ServeImageLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewServeImageForbiddenResponseBody builds the HTTP response body from the
 // result of the "serveImage" endpoint of the "assets" service.
 func NewServeImageForbiddenResponseBody(res *goa.ServiceError) *ServeImageForbiddenResponseBody {
@@ -2782,20 +2547,6 @@ func NewUploadImageUnauthorizedResponseBody(res *goa.ServiceError) *UploadImageU
 	return body
 }
 
-// NewUploadImageLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "uploadImage" endpoint of the "assets" service.
-func NewUploadImageLogsDisabledResponseBody(res *goa.ServiceError) *UploadImageLogsDisabledResponseBody {
-	body := &UploadImageLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewUploadImageForbiddenResponseBody builds the HTTP response body from the
 // result of the "uploadImage" endpoint of the "assets" service.
 func NewUploadImageForbiddenResponseBody(res *goa.ServiceError) *UploadImageForbiddenResponseBody {
@@ -2926,20 +2677,6 @@ func NewUploadImageGatewayErrorResponseBody(res *goa.ServiceError) *UploadImageG
 // from the result of the "uploadFunctions" endpoint of the "assets" service.
 func NewUploadFunctionsUnauthorizedResponseBody(res *goa.ServiceError) *UploadFunctionsUnauthorizedResponseBody {
 	body := &UploadFunctionsUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUploadFunctionsLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "uploadFunctions" endpoint of the "assets" service.
-func NewUploadFunctionsLogsDisabledResponseBody(res *goa.ServiceError) *UploadFunctionsLogsDisabledResponseBody {
-	body := &UploadFunctionsLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3091,20 +2828,6 @@ func NewUploadOpenAPIv3UnauthorizedResponseBody(res *goa.ServiceError) *UploadOp
 	return body
 }
 
-// NewUploadOpenAPIv3LogsDisabledResponseBody builds the HTTP response body
-// from the result of the "uploadOpenAPIv3" endpoint of the "assets" service.
-func NewUploadOpenAPIv3LogsDisabledResponseBody(res *goa.ServiceError) *UploadOpenAPIv3LogsDisabledResponseBody {
-	body := &UploadOpenAPIv3LogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewUploadOpenAPIv3ForbiddenResponseBody builds the HTTP response body from
 // the result of the "uploadOpenAPIv3" endpoint of the "assets" service.
 func NewUploadOpenAPIv3ForbiddenResponseBody(res *goa.ServiceError) *UploadOpenAPIv3ForbiddenResponseBody {
@@ -3237,21 +2960,6 @@ func NewUploadOpenAPIv3GatewayErrorResponseBody(res *goa.ServiceError) *UploadOp
 // service.
 func NewFetchOpenAPIv3FromURLUnauthorizedResponseBody(res *goa.ServiceError) *FetchOpenAPIv3FromURLUnauthorizedResponseBody {
 	body := &FetchOpenAPIv3FromURLUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewFetchOpenAPIv3FromURLLogsDisabledResponseBody builds the HTTP response
-// body from the result of the "fetchOpenAPIv3FromURL" endpoint of the "assets"
-// service.
-func NewFetchOpenAPIv3FromURLLogsDisabledResponseBody(res *goa.ServiceError) *FetchOpenAPIv3FromURLLogsDisabledResponseBody {
-	body := &FetchOpenAPIv3FromURLLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3411,20 +3119,6 @@ func NewServeOpenAPIv3UnauthorizedResponseBody(res *goa.ServiceError) *ServeOpen
 	return body
 }
 
-// NewServeOpenAPIv3LogsDisabledResponseBody builds the HTTP response body from
-// the result of the "serveOpenAPIv3" endpoint of the "assets" service.
-func NewServeOpenAPIv3LogsDisabledResponseBody(res *goa.ServiceError) *ServeOpenAPIv3LogsDisabledResponseBody {
-	body := &ServeOpenAPIv3LogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewServeOpenAPIv3ForbiddenResponseBody builds the HTTP response body from
 // the result of the "serveOpenAPIv3" endpoint of the "assets" service.
 func NewServeOpenAPIv3ForbiddenResponseBody(res *goa.ServiceError) *ServeOpenAPIv3ForbiddenResponseBody {
@@ -3556,20 +3250,6 @@ func NewServeOpenAPIv3GatewayErrorResponseBody(res *goa.ServiceError) *ServeOpen
 // the result of the "serveFunction" endpoint of the "assets" service.
 func NewServeFunctionUnauthorizedResponseBody(res *goa.ServiceError) *ServeFunctionUnauthorizedResponseBody {
 	body := &ServeFunctionUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewServeFunctionLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "serveFunction" endpoint of the "assets" service.
-func NewServeFunctionLogsDisabledResponseBody(res *goa.ServiceError) *ServeFunctionLogsDisabledResponseBody {
-	body := &ServeFunctionLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3720,20 +3400,6 @@ func NewListAssetsUnauthorizedResponseBody(res *goa.ServiceError) *ListAssetsUna
 	return body
 }
 
-// NewListAssetsLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "listAssets" endpoint of the "assets" service.
-func NewListAssetsLogsDisabledResponseBody(res *goa.ServiceError) *ListAssetsLogsDisabledResponseBody {
-	body := &ListAssetsLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewListAssetsForbiddenResponseBody builds the HTTP response body from the
 // result of the "listAssets" endpoint of the "assets" service.
 func NewListAssetsForbiddenResponseBody(res *goa.ServiceError) *ListAssetsForbiddenResponseBody {
@@ -3865,21 +3531,6 @@ func NewListAssetsGatewayErrorResponseBody(res *goa.ServiceError) *ListAssetsGat
 // service.
 func NewUploadChatAttachmentUnauthorizedResponseBody(res *goa.ServiceError) *UploadChatAttachmentUnauthorizedResponseBody {
 	body := &UploadChatAttachmentUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUploadChatAttachmentLogsDisabledResponseBody builds the HTTP response
-// body from the result of the "uploadChatAttachment" endpoint of the "assets"
-// service.
-func NewUploadChatAttachmentLogsDisabledResponseBody(res *goa.ServiceError) *UploadChatAttachmentLogsDisabledResponseBody {
-	body := &UploadChatAttachmentLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4040,21 +3691,6 @@ func NewServeChatAttachmentUnauthorizedResponseBody(res *goa.ServiceError) *Serv
 	return body
 }
 
-// NewServeChatAttachmentLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "serveChatAttachment" endpoint of the "assets"
-// service.
-func NewServeChatAttachmentLogsDisabledResponseBody(res *goa.ServiceError) *ServeChatAttachmentLogsDisabledResponseBody {
-	body := &ServeChatAttachmentLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewServeChatAttachmentForbiddenResponseBody builds the HTTP response body
 // from the result of the "serveChatAttachment" endpoint of the "assets"
 // service.
@@ -4194,21 +3830,6 @@ func NewServeChatAttachmentGatewayErrorResponseBody(res *goa.ServiceError) *Serv
 // endpoint of the "assets" service.
 func NewCreateSignedChatAttachmentURLUnauthorizedResponseBody(res *goa.ServiceError) *CreateSignedChatAttachmentURLUnauthorizedResponseBody {
 	body := &CreateSignedChatAttachmentURLUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateSignedChatAttachmentURLLogsDisabledResponseBody builds the HTTP
-// response body from the result of the "createSignedChatAttachmentURL"
-// endpoint of the "assets" service.
-func NewCreateSignedChatAttachmentURLLogsDisabledResponseBody(res *goa.ServiceError) *CreateSignedChatAttachmentURLLogsDisabledResponseBody {
-	body := &CreateSignedChatAttachmentURLLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4359,21 +3980,6 @@ func NewCreateSignedChatAttachmentURLGatewayErrorResponseBody(res *goa.ServiceEr
 // the "assets" service.
 func NewServeChatAttachmentSignedUnauthorizedResponseBody(res *goa.ServiceError) *ServeChatAttachmentSignedUnauthorizedResponseBody {
 	body := &ServeChatAttachmentSignedUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewServeChatAttachmentSignedLogsDisabledResponseBody builds the HTTP
-// response body from the result of the "serveChatAttachmentSigned" endpoint of
-// the "assets" service.
-func NewServeChatAttachmentSignedLogsDisabledResponseBody(res *goa.ServiceError) *ServeChatAttachmentSignedLogsDisabledResponseBody {
-	body := &ServeChatAttachmentSignedLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

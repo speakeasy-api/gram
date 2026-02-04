@@ -111,24 +111,6 @@ type CreateResponseUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateResponseLogsDisabledResponseBody is the type of the "agents" service
-// "createResponse" endpoint HTTP response body for the "logs_disabled" error.
-type CreateResponseLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // CreateResponseForbiddenResponseBody is the type of the "agents" service
 // "createResponse" endpoint HTTP response body for the "forbidden" error.
 type CreateResponseForbiddenResponseBody struct {
@@ -311,24 +293,6 @@ type GetResponseUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetResponseLogsDisabledResponseBody is the type of the "agents" service
-// "getResponse" endpoint HTTP response body for the "logs_disabled" error.
-type GetResponseLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // GetResponseForbiddenResponseBody is the type of the "agents" service
 // "getResponse" endpoint HTTP response body for the "forbidden" error.
 type GetResponseForbiddenResponseBody struct {
@@ -495,24 +459,6 @@ type GetResponseGatewayErrorResponseBody struct {
 // DeleteResponseUnauthorizedResponseBody is the type of the "agents" service
 // "deleteResponse" endpoint HTTP response body for the "unauthorized" error.
 type DeleteResponseUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteResponseLogsDisabledResponseBody is the type of the "agents" service
-// "deleteResponse" endpoint HTTP response body for the "logs_disabled" error.
-type DeleteResponseLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -803,21 +749,6 @@ func NewCreateResponseUnauthorized(body *CreateResponseUnauthorizedResponseBody)
 	return v
 }
 
-// NewCreateResponseLogsDisabled builds a agents service createResponse
-// endpoint logs_disabled error.
-func NewCreateResponseLogsDisabled(body *CreateResponseLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewCreateResponseForbidden builds a agents service createResponse endpoint
 // forbidden error.
 func NewCreateResponseForbidden(body *CreateResponseForbiddenResponseBody) *goa.ServiceError {
@@ -992,21 +923,6 @@ func NewGetResponseUnauthorized(body *GetResponseUnauthorizedResponseBody) *goa.
 	return v
 }
 
-// NewGetResponseLogsDisabled builds a agents service getResponse endpoint
-// logs_disabled error.
-func NewGetResponseLogsDisabled(body *GetResponseLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewGetResponseForbidden builds a agents service getResponse endpoint
 // forbidden error.
 func NewGetResponseForbidden(body *GetResponseForbiddenResponseBody) *goa.ServiceError {
@@ -1145,21 +1061,6 @@ func NewGetResponseGatewayError(body *GetResponseGatewayErrorResponseBody) *goa.
 // NewDeleteResponseUnauthorized builds a agents service deleteResponse
 // endpoint unauthorized error.
 func NewDeleteResponseUnauthorized(body *DeleteResponseUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewDeleteResponseLogsDisabled builds a agents service deleteResponse
-// endpoint logs_disabled error.
-func NewDeleteResponseLogsDisabled(body *DeleteResponseLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1396,30 +1297,6 @@ func ValidateGetResponseResponseBody(body *GetResponseResponseBody) (err error) 
 // ValidateCreateResponseUnauthorizedResponseBody runs the validations defined
 // on createResponse_unauthorized_response_body
 func ValidateCreateResponseUnauthorizedResponseBody(body *CreateResponseUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCreateResponseLogsDisabledResponseBody runs the validations defined
-// on createResponse_logs_disabled_response_body
-func ValidateCreateResponseLogsDisabledResponseBody(body *CreateResponseLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1681,30 +1558,6 @@ func ValidateGetResponseUnauthorizedResponseBody(body *GetResponseUnauthorizedRe
 	return
 }
 
-// ValidateGetResponseLogsDisabledResponseBody runs the validations defined on
-// getResponse_logs_disabled_response_body
-func ValidateGetResponseLogsDisabledResponseBody(body *GetResponseLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateGetResponseForbiddenResponseBody runs the validations defined on
 // getResponse_forbidden_response_body
 func ValidateGetResponseForbiddenResponseBody(body *GetResponseForbiddenResponseBody) (err error) {
@@ -1924,30 +1777,6 @@ func ValidateGetResponseGatewayErrorResponseBody(body *GetResponseGatewayErrorRe
 // ValidateDeleteResponseUnauthorizedResponseBody runs the validations defined
 // on deleteResponse_unauthorized_response_body
 func ValidateDeleteResponseUnauthorizedResponseBody(body *DeleteResponseUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteResponseLogsDisabledResponseBody runs the validations defined
-// on deleteResponse_logs_disabled_response_body
-func ValidateDeleteResponseLogsDisabledResponseBody(body *DeleteResponseLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

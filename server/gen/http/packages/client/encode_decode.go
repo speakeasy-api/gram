@@ -66,7 +66,6 @@ func EncodeCreatePackageRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // body should be restored after having been read.
 // DecodeCreatePackageResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -122,40 +121,19 @@ func DecodeCreatePackageResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewCreatePackageUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body CreatePackageLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
-				}
-				err = ValidateCreatePackageLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("packages", "createPackage", err)
-				}
-				return nil, NewCreatePackageLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body CreatePackageForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
-				}
-				err = ValidateCreatePackageForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("packages", "createPackage", err)
-				}
-				return nil, NewCreatePackageForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("packages", "createPackage", resp.StatusCode, string(body))
+			var (
+				body CreatePackageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "createPackage", err)
 			}
+			err = ValidateCreatePackageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "createPackage", err)
+			}
+			return nil, NewCreatePackageForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreatePackageBadRequestResponseBody
@@ -330,7 +308,6 @@ func EncodeUpdatePackageRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // body should be restored after having been read.
 // DecodeUpdatePackageResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -387,40 +364,19 @@ func DecodeUpdatePackageResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewUpdatePackageUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body UpdatePackageLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("packages", "updatePackage", err)
-				}
-				err = ValidateUpdatePackageLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("packages", "updatePackage", err)
-				}
-				return nil, NewUpdatePackageLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body UpdatePackageForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("packages", "updatePackage", err)
-				}
-				err = ValidateUpdatePackageForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("packages", "updatePackage", err)
-				}
-				return nil, NewUpdatePackageForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("packages", "updatePackage", resp.StatusCode, string(body))
+			var (
+				body UpdatePackageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "updatePackage", err)
 			}
+			err = ValidateUpdatePackageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "updatePackage", err)
+			}
+			return nil, NewUpdatePackageForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UpdatePackageBadRequestResponseBody
@@ -605,7 +561,6 @@ func EncodeListPackagesRequest(encoder func(*http.Request) goahttp.Encoder) func
 // body should be restored after having been read.
 // DecodeListPackagesResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -661,40 +616,19 @@ func DecodeListPackagesResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewListPackagesUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body ListPackagesLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("packages", "listPackages", err)
-				}
-				err = ValidateListPackagesLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("packages", "listPackages", err)
-				}
-				return nil, NewListPackagesLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body ListPackagesForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("packages", "listPackages", err)
-				}
-				err = ValidateListPackagesForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("packages", "listPackages", err)
-				}
-				return nil, NewListPackagesForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("packages", "listPackages", resp.StatusCode, string(body))
+			var (
+				body ListPackagesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listPackages", err)
 			}
+			err = ValidateListPackagesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listPackages", err)
+			}
+			return nil, NewListPackagesForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListPackagesBadRequestResponseBody
@@ -868,7 +802,6 @@ func EncodeListVersionsRequest(encoder func(*http.Request) goahttp.Encoder) func
 // body should be restored after having been read.
 // DecodeListVersionsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -924,40 +857,19 @@ func DecodeListVersionsResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewListVersionsUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body ListVersionsLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
-				}
-				err = ValidateListVersionsLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("packages", "listVersions", err)
-				}
-				return nil, NewListVersionsLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body ListVersionsForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
-				}
-				err = ValidateListVersionsForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("packages", "listVersions", err)
-				}
-				return nil, NewListVersionsForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("packages", "listVersions", resp.StatusCode, string(body))
+			var (
+				body ListVersionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "listVersions", err)
 			}
+			err = ValidateListVersionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "listVersions", err)
+			}
+			return nil, NewListVersionsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListVersionsBadRequestResponseBody
@@ -1132,7 +1044,6 @@ func EncodePublishRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 // should be restored after having been read.
 // DecodePublishResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
@@ -1188,40 +1099,19 @@ func DecodePublishResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			}
 			return nil, NewPublishUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "logs_disabled":
-				var (
-					body PublishLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("packages", "publish", err)
-				}
-				err = ValidatePublishLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("packages", "publish", err)
-				}
-				return nil, NewPublishLogsDisabled(&body)
-			case "forbidden":
-				var (
-					body PublishForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("packages", "publish", err)
-				}
-				err = ValidatePublishForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("packages", "publish", err)
-				}
-				return nil, NewPublishForbidden(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("packages", "publish", resp.StatusCode, string(body))
+			var (
+				body PublishForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("packages", "publish", err)
 			}
+			err = ValidatePublishForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("packages", "publish", err)
+			}
+			return nil, NewPublishForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body PublishBadRequestResponseBody

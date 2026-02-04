@@ -85,20 +85,6 @@ func EncodeServeImageError(encoder func(context.Context, http.ResponseWriter) go
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
 			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewServeImageLogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -335,20 +321,6 @@ func EncodeUploadImageError(encoder func(context.Context, http.ResponseWriter) g
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUploadImageLogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
 			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
@@ -587,20 +559,6 @@ func EncodeUploadFunctionsError(encoder func(context.Context, http.ResponseWrite
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
 			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUploadFunctionsLogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -838,20 +796,6 @@ func EncodeUploadOpenAPIv3Error(encoder func(context.Context, http.ResponseWrite
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
 			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUploadOpenAPIv3LogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -1088,20 +1032,6 @@ func EncodeFetchOpenAPIv3FromURLError(encoder func(context.Context, http.Respons
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
 			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewFetchOpenAPIv3FromURLLogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -1325,20 +1255,6 @@ func EncodeServeOpenAPIv3Error(encoder func(context.Context, http.ResponseWriter
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewServeOpenAPIv3LogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
 			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
@@ -1564,20 +1480,6 @@ func EncodeServeFunctionError(encoder func(context.Context, http.ResponseWriter)
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
 			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewServeFunctionLogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -1793,20 +1695,6 @@ func EncodeListAssetsError(encoder func(context.Context, http.ResponseWriter) go
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListAssetsLogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
 			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
@@ -2057,20 +1945,6 @@ func EncodeUploadChatAttachmentError(encoder func(context.Context, http.Response
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
 			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUploadChatAttachmentLogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -2306,20 +2180,6 @@ func EncodeServeChatAttachmentError(encoder func(context.Context, http.ResponseW
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewServeChatAttachmentLogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
 			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
@@ -2569,20 +2429,6 @@ func EncodeCreateSignedChatAttachmentURLError(encoder func(context.Context, http
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
 			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewCreateSignedChatAttachmentURLLogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -2779,20 +2625,6 @@ func EncodeServeChatAttachmentSignedError(encoder func(context.Context, http.Res
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "logs_disabled":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewServeChatAttachmentSignedLogsDisabledResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
 			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError

@@ -73,24 +73,6 @@ type UpsertGlobalUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertGlobalLogsDisabledResponseBody is the type of the "variations" service
-// "upsertGlobal" endpoint HTTP response body for the "logs_disabled" error.
-type UpsertGlobalLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // UpsertGlobalForbiddenResponseBody is the type of the "variations" service
 // "upsertGlobal" endpoint HTTP response body for the "forbidden" error.
 type UpsertGlobalForbiddenResponseBody struct {
@@ -273,24 +255,6 @@ type DeleteGlobalUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DeleteGlobalLogsDisabledResponseBody is the type of the "variations" service
-// "deleteGlobal" endpoint HTTP response body for the "logs_disabled" error.
-type DeleteGlobalLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // DeleteGlobalForbiddenResponseBody is the type of the "variations" service
 // "deleteGlobal" endpoint HTTP response body for the "forbidden" error.
 type DeleteGlobalForbiddenResponseBody struct {
@@ -458,24 +422,6 @@ type DeleteGlobalGatewayErrorResponseBody struct {
 // ListGlobalUnauthorizedResponseBody is the type of the "variations" service
 // "listGlobal" endpoint HTTP response body for the "unauthorized" error.
 type ListGlobalUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListGlobalLogsDisabledResponseBody is the type of the "variations" service
-// "listGlobal" endpoint HTTP response body for the "logs_disabled" error.
-type ListGlobalLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -727,21 +673,6 @@ func NewUpsertGlobalUnauthorized(body *UpsertGlobalUnauthorizedResponseBody) *go
 	return v
 }
 
-// NewUpsertGlobalLogsDisabled builds a variations service upsertGlobal
-// endpoint logs_disabled error.
-func NewUpsertGlobalLogsDisabled(body *UpsertGlobalLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewUpsertGlobalForbidden builds a variations service upsertGlobal endpoint
 // forbidden error.
 func NewUpsertGlobalForbidden(body *UpsertGlobalForbiddenResponseBody) *goa.ServiceError {
@@ -890,21 +821,6 @@ func NewDeleteGlobalToolVariationResultOK(body *DeleteGlobalResponseBody) *varia
 // NewDeleteGlobalUnauthorized builds a variations service deleteGlobal
 // endpoint unauthorized error.
 func NewDeleteGlobalUnauthorized(body *DeleteGlobalUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewDeleteGlobalLogsDisabled builds a variations service deleteGlobal
-// endpoint logs_disabled error.
-func NewDeleteGlobalLogsDisabled(body *DeleteGlobalLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1071,21 +987,6 @@ func NewListGlobalListVariationsResultOK(body *ListGlobalResponseBody) *variatio
 // NewListGlobalUnauthorized builds a variations service listGlobal endpoint
 // unauthorized error.
 func NewListGlobalUnauthorized(body *ListGlobalUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListGlobalLogsDisabled builds a variations service listGlobal endpoint
-// logs_disabled error.
-func NewListGlobalLogsDisabled(body *ListGlobalLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1275,30 +1176,6 @@ func ValidateListGlobalResponseBody(body *ListGlobalResponseBody) (err error) {
 // ValidateUpsertGlobalUnauthorizedResponseBody runs the validations defined on
 // upsertGlobal_unauthorized_response_body
 func ValidateUpsertGlobalUnauthorizedResponseBody(body *UpsertGlobalUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpsertGlobalLogsDisabledResponseBody runs the validations defined on
-// upsertGlobal_logs_disabled_response_body
-func ValidateUpsertGlobalLogsDisabledResponseBody(body *UpsertGlobalLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1560,30 +1437,6 @@ func ValidateDeleteGlobalUnauthorizedResponseBody(body *DeleteGlobalUnauthorized
 	return
 }
 
-// ValidateDeleteGlobalLogsDisabledResponseBody runs the validations defined on
-// deleteGlobal_logs_disabled_response_body
-func ValidateDeleteGlobalLogsDisabledResponseBody(body *DeleteGlobalLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateDeleteGlobalForbiddenResponseBody runs the validations defined on
 // deleteGlobal_forbidden_response_body
 func ValidateDeleteGlobalForbiddenResponseBody(body *DeleteGlobalForbiddenResponseBody) (err error) {
@@ -1803,30 +1656,6 @@ func ValidateDeleteGlobalGatewayErrorResponseBody(body *DeleteGlobalGatewayError
 // ValidateListGlobalUnauthorizedResponseBody runs the validations defined on
 // listGlobal_unauthorized_response_body
 func ValidateListGlobalUnauthorizedResponseBody(body *ListGlobalUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListGlobalLogsDisabledResponseBody runs the validations defined on
-// listGlobal_logs_disabled_response_body
-func ValidateListGlobalLogsDisabledResponseBody(body *ListGlobalLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -39,24 +39,6 @@ type ListResourcesUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListResourcesLogsDisabledResponseBody is the type of the "resources" service
-// "listResources" endpoint HTTP response body for the "logs_disabled" error.
-type ListResourcesLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ListResourcesForbiddenResponseBody is the type of the "resources" service
 // "listResources" endpoint HTTP response body for the "forbidden" error.
 type ListResourcesForbiddenResponseBody struct {
@@ -287,20 +269,6 @@ func NewListResourcesResponseBody(res *resources.ListResourcesResult) *ListResou
 // the result of the "listResources" endpoint of the "resources" service.
 func NewListResourcesUnauthorizedResponseBody(res *goa.ServiceError) *ListResourcesUnauthorizedResponseBody {
 	body := &ListResourcesUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListResourcesLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "listResources" endpoint of the "resources" service.
-func NewListResourcesLogsDisabledResponseBody(res *goa.ServiceError) *ListResourcesLogsDisabledResponseBody {
-	body := &ListResourcesLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
