@@ -166,6 +166,12 @@ func handleResourcesRead(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		if payload.userID != "" {
+			logAttrs[attr.UserIDKey] = payload.userID
+		}
+		if payload.externalUserID != "" {
+			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
+		}
 
 		params := tm.LogParams{
 			Timestamp: time.Now(),
