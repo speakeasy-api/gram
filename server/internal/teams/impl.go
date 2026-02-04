@@ -223,17 +223,16 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		return nil, err
 	}
 
-	// Rate limit: max 50 invites per organization per 24 hours.
-	recentCount, err := s.repo.CountRecentInvitesByOrg(ctx, payload.OrganizationID)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to check invite rate limit").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to start transaction").Log(ctx, s.logger)
 	}
-	if recentCount >= 50 {
-		return nil, oops.E(oops.CodeInvalid, nil, "too many invites sent in the last 24 hours, please try again later")
-	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback is a no-op after commit
+
+	txRepo := s.repo.WithTx(tx)
 
 	// Check if there's already a pending invite for this email
-	existingInvite, err := s.repo.GetPendingInviteByEmail(ctx, repo.GetPendingInviteByEmailParams{
+	existingInvite, err := txRepo.GetPendingInviteByEmail(ctx, repo.GetPendingInviteByEmailParams{
 		OrganizationID: payload.OrganizationID,
 		Email:          payload.Email,
 	})
@@ -245,7 +244,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 	}
 
 	// Check if user is already a member
-	members, err := s.repo.ListOrganizationMembers(ctx, payload.OrganizationID)
+	members, err := txRepo.ListOrganizationMembers(ctx, payload.OrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to check existing members").Log(ctx, s.logger)
 	}
@@ -262,13 +261,19 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 
 	expiresAt := time.Now().Add(s.cfg.inviteExpiry())
 
-	invite, err := s.repo.CreateTeamInvite(ctx, repo.CreateTeamInviteParams{
+	// Atomically insert the invite only if the rate limit has not been reached.
+	// Returns pgx.ErrNoRows when the org already has >= 50 invites in the last 24h.
+	invite, err := txRepo.CreateTeamInvite(ctx, repo.CreateTeamInviteParams{
 		OrganizationID:  payload.OrganizationID,
 		Email:           payload.Email,
 		InvitedByUserID: pgtype.Text{String: userInfo.UserID, Valid: true},
 		Token:           token,
 		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, Valid: true, InfinityModifier: 0},
+		MaxRecent:       50,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeInvalid, nil, "too many invites sent in the last 24 hours, please try again later")
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create invite").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
 	}
@@ -279,18 +284,14 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 	}
 
 	if err := s.sendInviteEmail(ctx, payload.Email, token, firstName(invitedByName), userInfo.Email, orgName(userInfo, payload.OrganizationID)); err != nil {
-		s.logger.ErrorContext(ctx, "failed to send invite email, cancelling invite",
-			attr.SlogError(err),
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").Log(ctx, s.logger,
 			attr.SlogTeamInviteEmail(payload.Email),
 			attr.SlogTeamInviteID(invite.ID.String()),
 		)
-		if cancelErr := s.repo.CancelTeamInvite(ctx, invite.ID); cancelErr != nil {
-			s.logger.ErrorContext(ctx, "failed to cancel invite after email failure",
-				attr.SlogError(cancelErr),
-				attr.SlogTeamInviteID(invite.ID.String()),
-			)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit invite").Log(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "team invite created",

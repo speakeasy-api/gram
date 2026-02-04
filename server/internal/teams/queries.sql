@@ -1,6 +1,15 @@
 -- name: CreateTeamInvite :one
+-- Atomically inserts a new invite only if the organization has fewer than
+-- @max_recent invites in the last 24 hours. Returns no rows when the rate
+-- limit is exceeded.
 INSERT INTO team_invites (organization_id, email, invited_by_user_id, status, token, expires_at)
-VALUES (@organization_id, @email, @invited_by_user_id, 'pending', @token, @expires_at)
+SELECT @organization_id, @email, @invited_by_user_id, 'pending', @token, @expires_at
+WHERE (
+  SELECT count(*) FROM team_invites ti
+  WHERE ti.organization_id = @organization_id
+    AND ti.created_at > now() - interval '24 hours'
+    AND ti.deleted IS FALSE
+) < sqlc.arg(max_recent)::bigint
 RETURNING *;
 
 -- name: GetTeamInviteByID :one
@@ -80,8 +89,3 @@ WHERE organization_id = @organization_id
   AND user_id = @user_id
   AND deleted IS FALSE;
 
--- name: CountRecentInvitesByOrg :one
-SELECT count(*) FROM team_invites
-WHERE organization_id = @organization_id
-  AND created_at > now() - interval '24 hours'
-  AND deleted IS FALSE;

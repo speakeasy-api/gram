@@ -49,23 +49,15 @@ func (q *Queries) CancelTeamInvite(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const countRecentInvitesByOrg = `-- name: CountRecentInvitesByOrg :one
-SELECT count(*) FROM team_invites
-WHERE organization_id = $1
-  AND created_at > now() - interval '24 hours'
-  AND deleted IS FALSE
-`
-
-func (q *Queries) CountRecentInvitesByOrg(ctx context.Context, organizationID string) (int64, error) {
-	row := q.db.QueryRow(ctx, countRecentInvitesByOrg, organizationID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createTeamInvite = `-- name: CreateTeamInvite :one
 INSERT INTO team_invites (organization_id, email, invited_by_user_id, status, token, expires_at)
-VALUES ($1, $2, $3, 'pending', $4, $5)
+SELECT $1, $2, $3, 'pending', $4, $5
+WHERE (
+  SELECT count(*) FROM team_invites ti
+  WHERE ti.organization_id = $1
+    AND ti.created_at > now() - interval '24 hours'
+    AND ti.deleted IS FALSE
+) < $6::bigint
 RETURNING expires_at, created_at, updated_at, deleted_at, organization_id, email, invited_by_user_id, status, token, id, deleted
 `
 
@@ -75,8 +67,12 @@ type CreateTeamInviteParams struct {
 	InvitedByUserID pgtype.Text
 	Token           string
 	ExpiresAt       pgtype.Timestamptz
+	MaxRecent       int64
 }
 
+// Atomically inserts a new invite only if the organization has fewer than
+// @max_recent invites in the last 24 hours. Returns no rows when the rate
+// limit is exceeded.
 func (q *Queries) CreateTeamInvite(ctx context.Context, arg CreateTeamInviteParams) (TeamInvite, error) {
 	row := q.db.QueryRow(ctx, createTeamInvite,
 		arg.OrganizationID,
@@ -84,6 +80,7 @@ func (q *Queries) CreateTeamInvite(ctx context.Context, arg CreateTeamInvitePara
 		arg.InvitedByUserID,
 		arg.Token,
 		arg.ExpiresAt,
+		arg.MaxRecent,
 	)
 	var i TeamInvite
 	err := row.Scan(
