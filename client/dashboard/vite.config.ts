@@ -82,13 +82,15 @@ export default defineConfig(({ command }) => {
       // Setting these up to side-step cors issues experienced during
       // development. Specifically, the Vercel AI SDK does not forward cookies
       // (Eg: gram_session) to the server.
-      proxy: {
-        "/rpc": serverUrl,
-        "/chat": serverUrl,
-        "/mcp": serverUrl,
-        "/oauth": serverUrl,
-        "/.well-known": serverUrl,
-      },
+      proxy: serverUrl
+        ? {
+            "/rpc": serverUrl,
+            "/chat": serverUrl,
+            "/mcp": serverUrl,
+            "/oauth": serverUrl,
+            "/.well-known": serverUrl,
+          }
+        : undefined,
     },
     plugins: [react(), tailwindcss()],
     resolve: {
