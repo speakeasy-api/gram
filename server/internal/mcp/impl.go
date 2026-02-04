@@ -495,7 +495,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		w.Header().Set("WWW-Authenticate", wwwAuth)
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	case !toolset.McpIsPublic:
-		// Private MCP - always allow sessionToken fallback since private servers require user authentication
+		// Private MCP - always allow chatSessionJwt fallback since private servers require user authentication
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
 		token := authToken
 		if token == "" {
@@ -516,6 +516,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
+		// Public MCP without OAuth - allow chatSessionJwt fallback
 		token := authToken
 		if token == "" {
 			token = chatSessionJwt
