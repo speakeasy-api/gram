@@ -283,14 +283,21 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		invitedByName = *userInfo.DisplayName
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit invite").Log(ctx, s.logger)
+	}
+
 	if err := s.sendInviteEmail(ctx, payload.Email, token, firstName(invitedByName), userInfo.Email, orgName(userInfo, payload.OrganizationID)); err != nil {
+		// Invite is committed but email failed — cancel it so it can be retried.
+		if cancelErr := s.repo.CancelTeamInvite(ctx, invite.ID); cancelErr != nil {
+			s.logger.ErrorContext(ctx, "failed to cancel invite after email failure",
+				attr.SlogTeamInviteID(invite.ID.String()),
+				attr.SlogError(cancelErr),
+			)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").Log(ctx, s.logger,
 			attr.SlogTeamInviteID(invite.ID.String()),
 		)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit invite").Log(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "team invite created",
