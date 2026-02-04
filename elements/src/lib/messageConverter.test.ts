@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from 'vitest'
 import {
+  convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
   convertGramMessagePartsToUIMessageParts,
   type GramChatMessage,
@@ -208,5 +209,34 @@ describe('convertGramMessagesToUIMessages - tool call deduplication', () => {
       (p) => p.type === 'dynamic-tool'
     )
     expect(second).toHaveLength(1)
+  })
+})
+
+describe('convertGramMessagesToExported - string content with tool calls', () => {
+  it('includes tool calls when assistant message has string content', () => {
+    const messages: GramChatMessage[] = [
+      makeMsg({ role: 'user', content: 'Search for deals' }),
+      makeMsg({
+        role: 'assistant',
+        content: 'Let me search.',
+        tool_calls: makeToolCallsJSON([
+          { id: 'tc_1', name: 'hubspot_search_deals' },
+        ]),
+      } as Partial<GramChatMessage> & { role: string }),
+    ]
+
+    const result = convertGramMessagesToExported(messages)
+    const assistantEntry = result.messages.find(
+      (m) => m.message.role === 'assistant'
+    )!
+    const toolCallParts = (assistantEntry.message as any).content.filter(
+      (p: any) => p.type === 'tool-call'
+    )
+    expect(toolCallParts).toHaveLength(1)
+    expect(toolCallParts[0]).toMatchObject({
+      type: 'tool-call',
+      toolCallId: 'tc_1',
+      toolName: 'hubspot_search_deals',
+    })
   })
 })

@@ -146,16 +146,14 @@ function buildAssistantContentParts(
     return []
   }
 
-  if (typeof msg.content === 'string' || !msg.content) {
-    return [
-      {
-        type: 'text',
-        text: msg.content ?? '',
-      },
-    ]
-  }
-
   const parts: ThreadAssistantMessagePart[] = []
+
+  if (typeof msg.content === 'string' || !msg.content) {
+    parts.push({
+      type: 'text',
+      text: msg.content ?? '',
+    })
+  }
 
   const toolCallsJSON = (msg as any).tool_calls as FIXME<
     string | undefined,
