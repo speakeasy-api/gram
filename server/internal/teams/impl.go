@@ -501,16 +501,17 @@ func (s *Service) RemoveMember(ctx context.Context, payload *gen.RemoveMemberPay
 		return oops.C(oops.CodeNotFound)
 	}
 
-	// Find workspace slugs for the org from caller's user info.
-	var workspaceSlugs []string
-	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org genAuth.OrganizationEntry) bool {
-		return org.ID == payload.OrganizationID
-	}); orgIdx >= 0 {
-		workspaceSlugs = userInfo.Organizations[orgIdx].UserWorkspaceSlugs
+	// Look up the authoritative org slug from the database rather than relying
+	// on the caller's cached workspace slugs which may be empty or stale.
+	orgSlug, err := s.repo.GetOrganizationSlug(ctx, payload.OrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to resolve organization slug").Log(ctx, s.logger,
+			attr.SlogOrganizationID(payload.OrganizationID),
+		)
 	}
 
 	// Remove user from org workspaces via Speakeasy API.
-	if err := s.sessions.RemoveUserFromOrg(ctx, workspaceSlugs, payload.UserID); err != nil {
+	if err := s.sessions.RemoveUserFromOrg(ctx, []string{orgSlug}, payload.UserID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to remove member from org via speakeasy").Log(ctx, s.logger)
 	}
 
