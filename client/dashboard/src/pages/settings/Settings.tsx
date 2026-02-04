@@ -604,7 +604,7 @@ export default function Settings() {
             <Dialog.Header>
               <Dialog.Title>Connect a Custom Domain</Dialog.Title>
             </Dialog.Header>
-            <div className="space-y-6 py-4">
+            <div className="space-y-6 py-4 min-h-[420px]">
               <div>
                 <Type
                   variant="body"
@@ -702,7 +702,7 @@ export default function Settings() {
                   {registerDomainMutation.isPending
                     ? "Registering..."
                     : domain?.domain
-                      ? "Verify"
+                      ? "Reverify"
                       : "Register"}
                 </Button>
               </div>
