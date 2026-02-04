@@ -51,7 +51,11 @@ export default function MetricsPage() {
     throwOnError: false,
     retry: (failureCount, error) => {
       // Don't retry on 403 errors (e.g., logs disabled)
-      if (error instanceof Error && "statusCode" in error && error.statusCode === 403) {
+      if (
+        error instanceof Error &&
+        "statusCode" in error &&
+        error.statusCode === 403
+      ) {
         return false;
       }
       return failureCount < 3;
@@ -153,7 +157,8 @@ export default function MetricsPage() {
 
             {isPending ? (
               <MetricsLoadingSkeleton />
-            ) : error instanceof ServiceError && error.data$.name === "logs_disabled" ? (
+            ) : error instanceof ServiceError &&
+              error.data$.name === "logs_disabled" ? (
               <MetricsDisabledState
                 onEnableLogs={handleEnableLogs}
                 isMutating={isMutatingLogs}
@@ -260,10 +265,14 @@ function MetricsDisabledState({
         <Button.LeftIcon>
           <Icon name="test-tube-diagonal" className="size-4" />
         </Button.LeftIcon>
-        <Button.Text>{isMutating ? "Updating Logs" : "Enable Logs"}</Button.Text>
+        <Button.Text>
+          {isMutating ? "Updating Logs" : "Enable Logs"}
+        </Button.Text>
       </Button>
       {mutationError && (
-        <span className="text-sm text-destructive-default">{mutationError}</span>
+        <span className="text-sm text-destructive-default">
+          {mutationError}
+        </span>
       )}
     </div>
   );
