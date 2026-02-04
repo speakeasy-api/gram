@@ -670,7 +670,6 @@ func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUI
 	return result
 }
 
-
 func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	var err error
@@ -999,17 +998,15 @@ func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *typ
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	issuer := oauthConfig.TokenEndpoint
-	if parsed, err := url.Parse(issuer); err == nil {
-		issuer = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
-	} else {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to parse token endpoint URL")
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "invalid toolset ID")
 	}
 
 	token, err := s.oauthRepo.GetUserOAuthToken(ctx, oauth_repo.GetUserOAuthTokenParams{
-		UserID:            authCtx.UserID,
-		OrganizationID:    authCtx.ActiveOrganizationID,
-		OauthServerIssuer: issuer,
+		UserID:         authCtx.UserID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ToolsetID:      toolsetID,
 	})
 
 	if err != nil {
