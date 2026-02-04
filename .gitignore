@@ -10,6 +10,7 @@ junit-report.xml
 !.vscode/extensions.json
 *.code-workspace
 .idea
+/client/sdk/docs
 /server/goa*
 /server/gram
 # Goa generates OpenAPI v2 specs with non-deterministic examples. Nothing consumes them.
