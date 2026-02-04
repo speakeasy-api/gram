@@ -982,7 +982,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 }
 
 func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *types.Toolset) (string, error) {
-	sessionCtx, err := s.sessions.Authenticate(ctx, "", false)
+	sessionCtx, err := s.sessions.AuthenticateWithCookie(ctx)
 	if err != nil {
 		return "", oops.E(oops.CodeUnauthorized, err, "failed to authenticate session for OAuth token lookup")
 	}
