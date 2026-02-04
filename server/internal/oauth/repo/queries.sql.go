@@ -129,23 +129,23 @@ func (q *Queries) DeleteUserOAuthToken(ctx context.Context, id uuid.UUID) error 
 	return err
 }
 
-const deleteUserOAuthTokenByIssuer = `-- name: DeleteUserOAuthTokenByIssuer :exec
+const deleteUserOAuthTokenByToolset = `-- name: DeleteUserOAuthTokenByToolset :exec
 UPDATE user_oauth_tokens SET
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE user_id = $1
   AND organization_id = $2
-  AND oauth_server_issuer = $3
+  AND toolset_id = $3
 `
 
-type DeleteUserOAuthTokenByIssuerParams struct {
-	UserID            string
-	OrganizationID    string
-	OauthServerIssuer string
+type DeleteUserOAuthTokenByToolsetParams struct {
+	UserID         string
+	OrganizationID string
+	ToolsetID      uuid.UUID
 }
 
-func (q *Queries) DeleteUserOAuthTokenByIssuer(ctx context.Context, arg DeleteUserOAuthTokenByIssuerParams) error {
-	_, err := q.db.Exec(ctx, deleteUserOAuthTokenByIssuer, arg.UserID, arg.OrganizationID, arg.OauthServerIssuer)
+func (q *Queries) DeleteUserOAuthTokenByToolset(ctx context.Context, arg DeleteUserOAuthTokenByToolsetParams) error {
+	_, err := q.db.Exec(ctx, deleteUserOAuthTokenByToolset, arg.UserID, arg.OrganizationID, arg.ToolsetID)
 	return err
 }
 
@@ -237,18 +237,18 @@ const getUserOAuthToken = `-- name: GetUserOAuthToken :one
 SELECT id, user_id, organization_id, project_id, client_registration_id, toolset_id, oauth_server_issuer, access_token_encrypted, refresh_token_encrypted, token_type, expires_at, scopes, provider_name, created_at, updated_at, deleted_at, deleted FROM user_oauth_tokens
 WHERE user_id = $1
   AND organization_id = $2
-  AND oauth_server_issuer = $3
+  AND toolset_id = $3
   AND deleted IS FALSE
 `
 
 type GetUserOAuthTokenParams struct {
-	UserID            string
-	OrganizationID    string
-	OauthServerIssuer string
+	UserID         string
+	OrganizationID string
+	ToolsetID      uuid.UUID
 }
 
 func (q *Queries) GetUserOAuthToken(ctx context.Context, arg GetUserOAuthTokenParams) (UserOauthToken, error) {
-	row := q.db.QueryRow(ctx, getUserOAuthToken, arg.UserID, arg.OrganizationID, arg.OauthServerIssuer)
+	row := q.db.QueryRow(ctx, getUserOAuthToken, arg.UserID, arg.OrganizationID, arg.ToolsetID)
 	var i UserOauthToken
 	err := row.Scan(
 		&i.ID,
@@ -643,7 +643,7 @@ INSERT INTO user_oauth_tokens (
     $10,
     $11,
     $12
-) ON CONFLICT (user_id, organization_id, oauth_server_issuer) WHERE deleted IS FALSE DO UPDATE SET
+) ON CONFLICT (user_id, organization_id, toolset_id) WHERE deleted IS FALSE DO UPDATE SET
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
     token_type = EXCLUDED.token_type,
