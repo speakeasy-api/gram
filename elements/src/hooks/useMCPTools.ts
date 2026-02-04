@@ -96,11 +96,6 @@ function transformEnvironmentToHeaders(environment: Record<string, unknown>) {
   }
   return Object.entries(environment).reduce(
     (acc, [key, value]) => {
-      if (key.toLowerCase() === 'authorization') {
-        acc[key] = value as string
-        return acc
-      }
-
       // Normalize key: replace underscores with dashes
       const normalizedKey = key.replace(/_/g, '-')
 

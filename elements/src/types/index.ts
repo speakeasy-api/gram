@@ -405,8 +405,7 @@ export type StaticSessionAuthConfig = {
 }
 
 /**
- * API configuration - can be just the URL, or URL with session auth,
- * URL with static token, or URL with OAuth.
+ * API configuration - can be just the URL, or URL with session auth, or URL with API key auth.
  */
 export type ApiConfig =
   | BaseApiConfig
