@@ -201,7 +201,7 @@ export default function Home() {
                 strokeWidth={1.5}
               />
               <div className="flex flex-col gap-1">
-                <h3 className="font-medium">Host your own tools</h3>
+                <h3 className="font-medium">Connect to existing APIs</h3>
                 <p className="text-sm text-muted-foreground">
                   Create and deploy custom MCP servers from your APIs
                 </p>
@@ -224,7 +224,7 @@ export default function Home() {
                   strokeWidth={1.5}
                 />
                 <div className="flex flex-col gap-1">
-                  <h3 className="font-medium">Deploy code</h3>
+                  <h3 className="font-medium">Build and host custom tools</h3>
                   <p className="text-sm text-muted-foreground">
                     Write and deploy custom functions as MCP tools
                   </p>
