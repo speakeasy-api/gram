@@ -1,6 +1,8 @@
 -- atlas:txmode none
 
--- Drop index "custom_domains_domain_key" from table: "custom_domains"
+-- Create new partial unique index under a temporary name
+CREATE UNIQUE INDEX CONCURRENTLY "custom_domains_domain_key_new" ON "custom_domains" ("domain") WHERE (deleted IS FALSE);
+-- Drop the old non-partial unique index
 DROP INDEX CONCURRENTLY IF EXISTS "custom_domains_domain_key";
--- Create index "custom_domains_domain_key" to table: "custom_domains"
-CREATE UNIQUE INDEX CONCURRENTLY "custom_domains_domain_key" ON "custom_domains" ("domain") WHERE (deleted IS FALSE);
+-- Rename new index to the original name
+ALTER INDEX "custom_domains_domain_key_new" RENAME TO "custom_domains_domain_key";
