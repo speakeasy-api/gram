@@ -40,7 +40,6 @@ func (c *Client) BuildOpenapiRequest(ctx context.Context, v any) (*http.Request,
 // DecodeOpenapiResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -105,40 +104,19 @@ func DecodeOpenapiResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			}
 			return nil, NewOpenapiUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body OpenapiForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("about", "openapi", err)
-				}
-				err = ValidateOpenapiForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("about", "openapi", err)
-				}
-				return nil, NewOpenapiForbidden(&body)
-			case "logs_disabled":
-				var (
-					body OpenapiLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("about", "openapi", err)
-				}
-				err = ValidateOpenapiLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("about", "openapi", err)
-				}
-				return nil, NewOpenapiLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("about", "openapi", resp.StatusCode, string(body))
+			var (
+				body OpenapiForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("about", "openapi", err)
 			}
+			err = ValidateOpenapiForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("about", "openapi", err)
+			}
+			return nil, NewOpenapiForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body OpenapiBadRequestResponseBody

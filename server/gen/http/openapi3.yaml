@@ -57,7 +57,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -150,7 +150,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -244,7 +244,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -336,7 +336,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -443,7 +443,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -549,7 +549,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -647,7 +647,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -773,7 +773,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -872,7 +872,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -986,7 +986,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -1084,7 +1084,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -1198,7 +1198,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -1314,7 +1314,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -1427,7 +1427,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -1538,7 +1538,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -1649,7 +1649,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -1753,7 +1753,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -1843,7 +1843,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -1926,7 +1926,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -2007,7 +2007,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -2090,7 +2090,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -2192,7 +2192,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -2287,7 +2287,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -2390,7 +2390,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -2485,7 +2485,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -2590,7 +2590,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -2693,7 +2693,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -2793,7 +2793,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -2889,7 +2889,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3003,7 +3003,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3107,7 +3107,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3213,7 +3213,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3311,7 +3311,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3416,7 +3416,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3529,7 +3529,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3633,7 +3633,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3720,7 +3720,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3809,7 +3809,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3900,7 +3900,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -3995,7 +3995,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -4090,7 +4090,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -4194,7 +4194,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -4288,7 +4288,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -4396,7 +4396,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -4494,7 +4494,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -4583,7 +4583,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -4678,7 +4678,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -4773,7 +4773,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -4878,7 +4878,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -4991,7 +4991,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -5098,7 +5098,7 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                 "403":
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                     content:
                         application/json:
                             schema:
@@ -5195,7 +5195,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -5283,7 +5283,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -5364,7 +5364,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -5449,7 +5449,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -5530,7 +5530,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -5631,7 +5631,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -5739,7 +5739,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -5843,7 +5843,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -5961,7 +5961,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -6065,7 +6065,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -6163,7 +6163,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -6269,7 +6269,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -6373,7 +6373,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -6483,7 +6483,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -6576,7 +6576,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -6669,7 +6669,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -6763,7 +6763,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -6862,7 +6862,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -6959,7 +6959,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -7055,7 +7055,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -7159,7 +7159,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -7263,7 +7263,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -7376,7 +7376,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -7469,7 +7469,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -7551,7 +7551,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -7640,7 +7640,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -7735,7 +7735,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -7844,7 +7844,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -7947,7 +7947,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -8051,7 +8051,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -8156,7 +8156,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -8260,7 +8260,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -8364,7 +8364,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -8472,7 +8472,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -8584,7 +8584,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -8684,7 +8684,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -8796,7 +8796,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -8903,7 +8903,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -9010,7 +9010,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -9130,7 +9130,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -9242,7 +9242,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -9356,7 +9356,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -9464,7 +9464,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -9565,7 +9565,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -9669,7 +9669,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -9773,7 +9773,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -9881,7 +9881,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -9979,7 +9979,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -10087,7 +10087,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -10201,7 +10201,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -10292,7 +10292,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -10381,7 +10381,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -10470,7 +10470,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -10544,7 +10544,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -10645,7 +10645,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -10743,7 +10743,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:
@@ -10847,7 +10847,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-                    description: 'logs_disabled: logs are not enabled for this organization'
+                    description: 'forbidden: permission denied'
                 "404":
                     content:
                         application/json:

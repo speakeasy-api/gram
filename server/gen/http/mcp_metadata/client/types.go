@@ -131,25 +131,6 @@ type GetMcpMetadataForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetMcpMetadataLogsDisabledResponseBody is the type of the "mcpMetadata"
-// service "getMcpMetadata" endpoint HTTP response body for the "logs_disabled"
-// error.
-type GetMcpMetadataLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // GetMcpMetadataBadRequestResponseBody is the type of the "mcpMetadata"
 // service "getMcpMetadata" endpoint HTTP response body for the "bad_request"
 // error.
@@ -321,25 +302,6 @@ type SetMcpMetadataUnauthorizedResponseBody struct {
 // SetMcpMetadataForbiddenResponseBody is the type of the "mcpMetadata" service
 // "setMcpMetadata" endpoint HTTP response body for the "forbidden" error.
 type SetMcpMetadataForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// SetMcpMetadataLogsDisabledResponseBody is the type of the "mcpMetadata"
-// service "setMcpMetadata" endpoint HTTP response body for the "logs_disabled"
-// error.
-type SetMcpMetadataLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -527,25 +489,6 @@ type ExportMcpMetadataUnauthorizedResponseBody struct {
 // service "exportMcpMetadata" endpoint HTTP response body for the "forbidden"
 // error.
 type ExportMcpMetadataForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ExportMcpMetadataLogsDisabledResponseBody is the type of the "mcpMetadata"
-// service "exportMcpMetadata" endpoint HTTP response body for the
-// "logs_disabled" error.
-type ExportMcpMetadataLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -867,21 +810,6 @@ func NewGetMcpMetadataForbidden(body *GetMcpMetadataForbiddenResponseBody) *goa.
 	return v
 }
 
-// NewGetMcpMetadataLogsDisabled builds a mcpMetadata service getMcpMetadata
-// endpoint logs_disabled error.
-func NewGetMcpMetadataLogsDisabled(body *GetMcpMetadataLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewGetMcpMetadataBadRequest builds a mcpMetadata service getMcpMetadata
 // endpoint bad_request error.
 func NewGetMcpMetadataBadRequest(body *GetMcpMetadataBadRequestResponseBody) *goa.ServiceError {
@@ -1060,21 +988,6 @@ func NewSetMcpMetadataForbidden(body *SetMcpMetadataForbiddenResponseBody) *goa.
 	return v
 }
 
-// NewSetMcpMetadataLogsDisabled builds a mcpMetadata service setMcpMetadata
-// endpoint logs_disabled error.
-func NewSetMcpMetadataLogsDisabled(body *SetMcpMetadataLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewSetMcpMetadataBadRequest builds a mcpMetadata service setMcpMetadata
 // endpoint bad_request error.
 func NewSetMcpMetadataBadRequest(body *SetMcpMetadataBadRequestResponseBody) *goa.ServiceError {
@@ -1238,21 +1151,6 @@ func NewExportMcpMetadataUnauthorized(body *ExportMcpMetadataUnauthorizedRespons
 // NewExportMcpMetadataForbidden builds a mcpMetadata service exportMcpMetadata
 // endpoint forbidden error.
 func NewExportMcpMetadataForbidden(body *ExportMcpMetadataForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewExportMcpMetadataLogsDisabled builds a mcpMetadata service
-// exportMcpMetadata endpoint logs_disabled error.
-func NewExportMcpMetadataLogsDisabled(body *ExportMcpMetadataLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1523,30 +1421,6 @@ func ValidateGetMcpMetadataForbiddenResponseBody(body *GetMcpMetadataForbiddenRe
 	return
 }
 
-// ValidateGetMcpMetadataLogsDisabledResponseBody runs the validations defined
-// on getMcpMetadata_logs_disabled_response_body
-func ValidateGetMcpMetadataLogsDisabledResponseBody(body *GetMcpMetadataLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateGetMcpMetadataBadRequestResponseBody runs the validations defined on
 // getMcpMetadata_bad_request_response_body
 func ValidateGetMcpMetadataBadRequestResponseBody(body *GetMcpMetadataBadRequestResponseBody) (err error) {
@@ -1787,30 +1661,6 @@ func ValidateSetMcpMetadataForbiddenResponseBody(body *SetMcpMetadataForbiddenRe
 	return
 }
 
-// ValidateSetMcpMetadataLogsDisabledResponseBody runs the validations defined
-// on setMcpMetadata_logs_disabled_response_body
-func ValidateSetMcpMetadataLogsDisabledResponseBody(body *SetMcpMetadataLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateSetMcpMetadataBadRequestResponseBody runs the validations defined on
 // setMcpMetadata_bad_request_response_body
 func ValidateSetMcpMetadataBadRequestResponseBody(body *SetMcpMetadataBadRequestResponseBody) (err error) {
@@ -2030,30 +1880,6 @@ func ValidateExportMcpMetadataUnauthorizedResponseBody(body *ExportMcpMetadataUn
 // ValidateExportMcpMetadataForbiddenResponseBody runs the validations defined
 // on exportMcpMetadata_forbidden_response_body
 func ValidateExportMcpMetadataForbiddenResponseBody(body *ExportMcpMetadataForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateExportMcpMetadataLogsDisabledResponseBody runs the validations
-// defined on exportMcpMetadata_logs_disabled_response_body
-func ValidateExportMcpMetadataLogsDisabledResponseBody(body *ExportMcpMetadataLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

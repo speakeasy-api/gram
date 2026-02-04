@@ -67,7 +67,6 @@ func EncodeSearchLogsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 // DecodeSearchLogsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -122,40 +121,19 @@ func DecodeSearchLogsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			return nil, NewSearchLogsUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body SearchLogsForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "searchLogs", err)
-				}
-				err = ValidateSearchLogsForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "searchLogs", err)
-				}
-				return nil, NewSearchLogsForbidden(&body)
-			case "logs_disabled":
-				var (
-					body SearchLogsLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "searchLogs", err)
-				}
-				err = ValidateSearchLogsLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "searchLogs", err)
-				}
-				return nil, NewSearchLogsLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("telemetry", "searchLogs", resp.StatusCode, string(body))
+			var (
+				body SearchLogsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchLogs", err)
 			}
+			err = ValidateSearchLogsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchLogs", err)
+			}
+			return nil, NewSearchLogsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SearchLogsBadRequestResponseBody
@@ -331,7 +309,6 @@ func EncodeSearchToolCallsRequest(encoder func(*http.Request) goahttp.Encoder) f
 // DecodeSearchToolCallsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -386,40 +363,19 @@ func DecodeSearchToolCallsResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			return nil, NewSearchToolCallsUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body SearchToolCallsForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "searchToolCalls", err)
-				}
-				err = ValidateSearchToolCallsForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "searchToolCalls", err)
-				}
-				return nil, NewSearchToolCallsForbidden(&body)
-			case "logs_disabled":
-				var (
-					body SearchToolCallsLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "searchToolCalls", err)
-				}
-				err = ValidateSearchToolCallsLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "searchToolCalls", err)
-				}
-				return nil, NewSearchToolCallsLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("telemetry", "searchToolCalls", resp.StatusCode, string(body))
+			var (
+				body SearchToolCallsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchToolCalls", err)
 			}
+			err = ValidateSearchToolCallsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchToolCalls", err)
+			}
+			return nil, NewSearchToolCallsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SearchToolCallsBadRequestResponseBody
@@ -595,7 +551,6 @@ func EncodeSearchChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(
 // DecodeSearchChatsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -650,40 +605,19 @@ func DecodeSearchChatsResponse(decoder func(*http.Response) goahttp.Decoder, res
 			}
 			return nil, NewSearchChatsUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body SearchChatsForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
-				}
-				err = ValidateSearchChatsForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
-				}
-				return nil, NewSearchChatsForbidden(&body)
-			case "logs_disabled":
-				var (
-					body SearchChatsLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
-				}
-				err = ValidateSearchChatsLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
-				}
-				return nil, NewSearchChatsLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("telemetry", "searchChats", resp.StatusCode, string(body))
+			var (
+				body SearchChatsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "searchChats", err)
 			}
+			err = ValidateSearchChatsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "searchChats", err)
+			}
+			return nil, NewSearchChatsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SearchChatsBadRequestResponseBody
@@ -863,7 +797,6 @@ func EncodeCaptureEventRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeCaptureEventResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -918,40 +851,19 @@ func DecodeCaptureEventResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewCaptureEventUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body CaptureEventForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "captureEvent", err)
-				}
-				err = ValidateCaptureEventForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "captureEvent", err)
-				}
-				return nil, NewCaptureEventForbidden(&body)
-			case "logs_disabled":
-				var (
-					body CaptureEventLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "captureEvent", err)
-				}
-				err = ValidateCaptureEventLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "captureEvent", err)
-				}
-				return nil, NewCaptureEventLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("telemetry", "captureEvent", resp.StatusCode, string(body))
+			var (
+				body CaptureEventForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "captureEvent", err)
 			}
+			err = ValidateCaptureEventForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "captureEvent", err)
+			}
+			return nil, NewCaptureEventForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CaptureEventBadRequestResponseBody
@@ -1128,7 +1040,6 @@ func EncodeGetProjectMetricsSummaryRequest(encoder func(*http.Request) goahttp.E
 // DecodeGetProjectMetricsSummaryResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1183,40 +1094,19 @@ func DecodeGetProjectMetricsSummaryResponse(decoder func(*http.Response) goahttp
 			}
 			return nil, NewGetProjectMetricsSummaryUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body GetProjectMetricsSummaryForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
-				}
-				err = ValidateGetProjectMetricsSummaryForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
-				}
-				return nil, NewGetProjectMetricsSummaryForbidden(&body)
-			case "logs_disabled":
-				var (
-					body GetProjectMetricsSummaryLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
-				}
-				err = ValidateGetProjectMetricsSummaryLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
-				}
-				return nil, NewGetProjectMetricsSummaryLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("telemetry", "getProjectMetricsSummary", resp.StatusCode, string(body))
+			var (
+				body GetProjectMetricsSummaryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectMetricsSummary", err)
 			}
+			err = ValidateGetProjectMetricsSummaryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectMetricsSummary", err)
+			}
+			return nil, NewGetProjectMetricsSummaryForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetProjectMetricsSummaryBadRequestResponseBody

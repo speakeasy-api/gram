@@ -44,7 +44,6 @@ func NewClient(getDeployment, getLatestDeployment, getActiveDeployment, createDe
 // GetDeployment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -68,7 +67,6 @@ func (c *Client) GetDeployment(ctx context.Context, p *GetDeploymentPayload) (re
 // GetLatestDeployment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -92,7 +90,6 @@ func (c *Client) GetLatestDeployment(ctx context.Context, p *GetLatestDeployment
 // GetActiveDeployment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -116,7 +113,6 @@ func (c *Client) GetActiveDeployment(ctx context.Context, p *GetActiveDeployment
 // CreateDeployment may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -139,7 +135,6 @@ func (c *Client) CreateDeployment(ctx context.Context, p *CreateDeploymentPayloa
 // Evolve may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -162,7 +157,6 @@ func (c *Client) Evolve(ctx context.Context, p *EvolvePayload) (res *EvolveResul
 // Redeploy may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -186,7 +180,6 @@ func (c *Client) Redeploy(ctx context.Context, p *RedeployPayload) (res *Redeplo
 // ListDeployments may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -210,7 +203,6 @@ func (c *Client) ListDeployments(ctx context.Context, p *ListDeploymentsPayload)
 // GetDeploymentLogs may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists

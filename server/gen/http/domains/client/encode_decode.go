@@ -59,7 +59,6 @@ func EncodeGetDomainRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // DecodeGetDomainResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -114,40 +113,19 @@ func DecodeGetDomainResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			}
 			return nil, NewGetDomainUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body GetDomainForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("domains", "getDomain", err)
-				}
-				err = ValidateGetDomainForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("domains", "getDomain", err)
-				}
-				return nil, NewGetDomainForbidden(&body)
-			case "logs_disabled":
-				var (
-					body GetDomainLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("domains", "getDomain", err)
-				}
-				err = ValidateGetDomainLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("domains", "getDomain", err)
-				}
-				return nil, NewGetDomainLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("domains", "getDomain", resp.StatusCode, string(body))
+			var (
+				body GetDomainForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "getDomain", err)
 			}
+			err = ValidateGetDomainForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "getDomain", err)
+			}
+			return nil, NewGetDomainForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetDomainBadRequestResponseBody
@@ -319,7 +297,6 @@ func EncodeCreateDomainRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeCreateDomainResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -361,40 +338,19 @@ func DecodeCreateDomainResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewCreateDomainUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body CreateDomainForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("domains", "createDomain", err)
-				}
-				err = ValidateCreateDomainForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("domains", "createDomain", err)
-				}
-				return nil, NewCreateDomainForbidden(&body)
-			case "logs_disabled":
-				var (
-					body CreateDomainLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("domains", "createDomain", err)
-				}
-				err = ValidateCreateDomainLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("domains", "createDomain", err)
-				}
-				return nil, NewCreateDomainLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("domains", "createDomain", resp.StatusCode, string(body))
+			var (
+				body CreateDomainForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "createDomain", err)
 			}
+			err = ValidateCreateDomainForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "createDomain", err)
+			}
+			return nil, NewCreateDomainForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateDomainBadRequestResponseBody
@@ -562,7 +518,6 @@ func EncodeDeleteDomainRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeDeleteDomainResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -604,40 +559,19 @@ func DecodeDeleteDomainResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewDeleteDomainUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body DeleteDomainForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("domains", "deleteDomain", err)
-				}
-				err = ValidateDeleteDomainForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("domains", "deleteDomain", err)
-				}
-				return nil, NewDeleteDomainForbidden(&body)
-			case "logs_disabled":
-				var (
-					body DeleteDomainLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("domains", "deleteDomain", err)
-				}
-				err = ValidateDeleteDomainLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("domains", "deleteDomain", err)
-				}
-				return nil, NewDeleteDomainLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("domains", "deleteDomain", resp.StatusCode, string(body))
+			var (
+				body DeleteDomainForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "deleteDomain", err)
 			}
+			err = ValidateDeleteDomainForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "deleteDomain", err)
+			}
+			return nil, NewDeleteDomainForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body DeleteDomainBadRequestResponseBody

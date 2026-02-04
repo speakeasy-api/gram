@@ -116,24 +116,6 @@ type GetProjectForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetProjectLogsDisabledResponseBody is the type of the "projects" service
-// "getProject" endpoint HTTP response body for the "logs_disabled" error.
-type GetProjectLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // GetProjectBadRequestResponseBody is the type of the "projects" service
 // "getProject" endpoint HTTP response body for the "bad_request" error.
 type GetProjectBadRequestResponseBody struct {
@@ -300,24 +282,6 @@ type CreateProjectUnauthorizedResponseBody struct {
 // CreateProjectForbiddenResponseBody is the type of the "projects" service
 // "createProject" endpoint HTTP response body for the "forbidden" error.
 type CreateProjectForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CreateProjectLogsDisabledResponseBody is the type of the "projects" service
-// "createProject" endpoint HTTP response body for the "logs_disabled" error.
-type CreateProjectLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -515,24 +479,6 @@ type ListProjectsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListProjectsLogsDisabledResponseBody is the type of the "projects" service
-// "listProjects" endpoint HTTP response body for the "logs_disabled" error.
-type ListProjectsLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // ListProjectsBadRequestResponseBody is the type of the "projects" service
 // "listProjects" endpoint HTTP response body for the "bad_request" error.
 type ListProjectsBadRequestResponseBody struct {
@@ -715,24 +661,6 @@ type SetLogoForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetLogoLogsDisabledResponseBody is the type of the "projects" service
-// "setLogo" endpoint HTTP response body for the "logs_disabled" error.
-type SetLogoLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // SetLogoBadRequestResponseBody is the type of the "projects" service
 // "setLogo" endpoint HTTP response body for the "bad_request" error.
 type SetLogoBadRequestResponseBody struct {
@@ -900,25 +828,6 @@ type ListAllowedOriginsUnauthorizedResponseBody struct {
 // service "listAllowedOrigins" endpoint HTTP response body for the "forbidden"
 // error.
 type ListAllowedOriginsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListAllowedOriginsLogsDisabledResponseBody is the type of the "projects"
-// service "listAllowedOrigins" endpoint HTTP response body for the
-// "logs_disabled" error.
-type ListAllowedOriginsLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1121,25 +1030,6 @@ type UpsertAllowedOriginForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpsertAllowedOriginLogsDisabledResponseBody is the type of the "projects"
-// service "upsertAllowedOrigin" endpoint HTTP response body for the
-// "logs_disabled" error.
-type UpsertAllowedOriginLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // UpsertAllowedOriginBadRequestResponseBody is the type of the "projects"
 // service "upsertAllowedOrigin" endpoint HTTP response body for the
 // "bad_request" error.
@@ -1312,24 +1202,6 @@ type DeleteProjectUnauthorizedResponseBody struct {
 // DeleteProjectForbiddenResponseBody is the type of the "projects" service
 // "deleteProject" endpoint HTTP response body for the "forbidden" error.
 type DeleteProjectForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteProjectLogsDisabledResponseBody is the type of the "projects" service
-// "deleteProject" endpoint HTTP response body for the "logs_disabled" error.
-type DeleteProjectLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1608,21 +1480,6 @@ func NewGetProjectForbidden(body *GetProjectForbiddenResponseBody) *goa.ServiceE
 	return v
 }
 
-// NewGetProjectLogsDisabled builds a projects service getProject endpoint
-// logs_disabled error.
-func NewGetProjectLogsDisabled(body *GetProjectLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewGetProjectBadRequest builds a projects service getProject endpoint
 // bad_request error.
 func NewGetProjectBadRequest(body *GetProjectBadRequestResponseBody) *goa.ServiceError {
@@ -1770,21 +1627,6 @@ func NewCreateProjectUnauthorized(body *CreateProjectUnauthorizedResponseBody) *
 // NewCreateProjectForbidden builds a projects service createProject endpoint
 // forbidden error.
 func NewCreateProjectForbidden(body *CreateProjectForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCreateProjectLogsDisabled builds a projects service createProject
-// endpoint logs_disabled error.
-func NewCreateProjectLogsDisabled(body *CreateProjectLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1963,21 +1805,6 @@ func NewListProjectsForbidden(body *ListProjectsForbiddenResponseBody) *goa.Serv
 	return v
 }
 
-// NewListProjectsLogsDisabled builds a projects service listProjects endpoint
-// logs_disabled error.
-func NewListProjectsLogsDisabled(body *ListProjectsLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewListProjectsBadRequest builds a projects service listProjects endpoint
 // bad_request error.
 func NewListProjectsBadRequest(body *ListProjectsBadRequestResponseBody) *goa.ServiceError {
@@ -2125,21 +1952,6 @@ func NewSetLogoUnauthorized(body *SetLogoUnauthorizedResponseBody) *goa.ServiceE
 // NewSetLogoForbidden builds a projects service setLogo endpoint forbidden
 // error.
 func NewSetLogoForbidden(body *SetLogoForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewSetLogoLogsDisabled builds a projects service setLogo endpoint
-// logs_disabled error.
-func NewSetLogoLogsDisabled(body *SetLogoLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2316,21 +2128,6 @@ func NewListAllowedOriginsForbidden(body *ListAllowedOriginsForbiddenResponseBod
 	return v
 }
 
-// NewListAllowedOriginsLogsDisabled builds a projects service
-// listAllowedOrigins endpoint logs_disabled error.
-func NewListAllowedOriginsLogsDisabled(body *ListAllowedOriginsLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewListAllowedOriginsBadRequest builds a projects service listAllowedOrigins
 // endpoint bad_request error.
 func NewListAllowedOriginsBadRequest(body *ListAllowedOriginsBadRequestResponseBody) *goa.ServiceError {
@@ -2490,21 +2287,6 @@ func NewUpsertAllowedOriginForbidden(body *UpsertAllowedOriginForbiddenResponseB
 	return v
 }
 
-// NewUpsertAllowedOriginLogsDisabled builds a projects service
-// upsertAllowedOrigin endpoint logs_disabled error.
-func NewUpsertAllowedOriginLogsDisabled(body *UpsertAllowedOriginLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewUpsertAllowedOriginBadRequest builds a projects service
 // upsertAllowedOrigin endpoint bad_request error.
 func NewUpsertAllowedOriginBadRequest(body *UpsertAllowedOriginBadRequestResponseBody) *goa.ServiceError {
@@ -2643,21 +2425,6 @@ func NewDeleteProjectUnauthorized(body *DeleteProjectUnauthorizedResponseBody) *
 // NewDeleteProjectForbidden builds a projects service deleteProject endpoint
 // forbidden error.
 func NewDeleteProjectForbidden(body *DeleteProjectForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewDeleteProjectLogsDisabled builds a projects service deleteProject
-// endpoint logs_disabled error.
-func NewDeleteProjectLogsDisabled(body *DeleteProjectLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2926,30 +2693,6 @@ func ValidateGetProjectForbiddenResponseBody(body *GetProjectForbiddenResponseBo
 	return
 }
 
-// ValidateGetProjectLogsDisabledResponseBody runs the validations defined on
-// getProject_logs_disabled_response_body
-func ValidateGetProjectLogsDisabledResponseBody(body *GetProjectLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateGetProjectBadRequestResponseBody runs the validations defined on
 // getProject_bad_request_response_body
 func ValidateGetProjectBadRequestResponseBody(body *GetProjectBadRequestResponseBody) (err error) {
@@ -3169,30 +2912,6 @@ func ValidateCreateProjectUnauthorizedResponseBody(body *CreateProjectUnauthoriz
 // ValidateCreateProjectForbiddenResponseBody runs the validations defined on
 // createProject_forbidden_response_body
 func ValidateCreateProjectForbiddenResponseBody(body *CreateProjectForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCreateProjectLogsDisabledResponseBody runs the validations defined
-// on createProject_logs_disabled_response_body
-func ValidateCreateProjectLogsDisabledResponseBody(body *CreateProjectLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3454,30 +3173,6 @@ func ValidateListProjectsForbiddenResponseBody(body *ListProjectsForbiddenRespon
 	return
 }
 
-// ValidateListProjectsLogsDisabledResponseBody runs the validations defined on
-// listProjects_logs_disabled_response_body
-func ValidateListProjectsLogsDisabledResponseBody(body *ListProjectsLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateListProjectsBadRequestResponseBody runs the validations defined on
 // listProjects_bad_request_response_body
 func ValidateListProjectsBadRequestResponseBody(body *ListProjectsBadRequestResponseBody) (err error) {
@@ -3697,30 +3392,6 @@ func ValidateSetLogoUnauthorizedResponseBody(body *SetLogoUnauthorizedResponseBo
 // ValidateSetLogoForbiddenResponseBody runs the validations defined on
 // setLogo_forbidden_response_body
 func ValidateSetLogoForbiddenResponseBody(body *SetLogoForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateSetLogoLogsDisabledResponseBody runs the validations defined on
-// setLogo_logs_disabled_response_body
-func ValidateSetLogoLogsDisabledResponseBody(body *SetLogoLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3982,30 +3653,6 @@ func ValidateListAllowedOriginsForbiddenResponseBody(body *ListAllowedOriginsFor
 	return
 }
 
-// ValidateListAllowedOriginsLogsDisabledResponseBody runs the validations
-// defined on listAllowedOrigins_logs_disabled_response_body
-func ValidateListAllowedOriginsLogsDisabledResponseBody(body *ListAllowedOriginsLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateListAllowedOriginsBadRequestResponseBody runs the validations
 // defined on listAllowedOrigins_bad_request_response_body
 func ValidateListAllowedOriginsBadRequestResponseBody(body *ListAllowedOriginsBadRequestResponseBody) (err error) {
@@ -4246,30 +3893,6 @@ func ValidateUpsertAllowedOriginForbiddenResponseBody(body *UpsertAllowedOriginF
 	return
 }
 
-// ValidateUpsertAllowedOriginLogsDisabledResponseBody runs the validations
-// defined on upsertAllowedOrigin_logs_disabled_response_body
-func ValidateUpsertAllowedOriginLogsDisabledResponseBody(body *UpsertAllowedOriginLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateUpsertAllowedOriginBadRequestResponseBody runs the validations
 // defined on upsertAllowedOrigin_bad_request_response_body
 func ValidateUpsertAllowedOriginBadRequestResponseBody(body *UpsertAllowedOriginBadRequestResponseBody) (err error) {
@@ -4489,30 +4112,6 @@ func ValidateDeleteProjectUnauthorizedResponseBody(body *DeleteProjectUnauthoriz
 // ValidateDeleteProjectForbiddenResponseBody runs the validations defined on
 // deleteProject_forbidden_response_body
 func ValidateDeleteProjectForbiddenResponseBody(body *DeleteProjectForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteProjectLogsDisabledResponseBody runs the validations defined
-// on deleteProject_logs_disabled_response_body
-func ValidateDeleteProjectLogsDisabledResponseBody(body *DeleteProjectLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

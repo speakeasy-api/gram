@@ -35,7 +35,6 @@ func NewClient(getPeriodUsage, getUsageTiers, createCustomerSession, createCheck
 // GetPeriodUsage may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -58,7 +57,6 @@ func (c *Client) GetPeriodUsage(ctx context.Context, p *GetPeriodUsagePayload) (
 // GetUsageTiers may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -82,7 +80,6 @@ func (c *Client) GetUsageTiers(ctx context.Context) (res *UsageTiers, err error)
 // CreateCustomerSession may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -105,7 +102,6 @@ func (c *Client) CreateCustomerSession(ctx context.Context, p *CreateCustomerSes
 // CreateCheckout may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists

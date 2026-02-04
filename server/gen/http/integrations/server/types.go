@@ -61,24 +61,6 @@ type GetForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetLogsDisabledResponseBody is the type of the "integrations" service "get"
-// endpoint HTTP response body for the "logs_disabled" error.
-type GetLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GetBadRequestResponseBody is the type of the "integrations" service "get"
 // endpoint HTTP response body for the "bad_request" error.
 type GetBadRequestResponseBody struct {
@@ -244,24 +226,6 @@ type ListUnauthorizedResponseBody struct {
 // ListForbiddenResponseBody is the type of the "integrations" service "list"
 // endpoint HTTP response body for the "forbidden" error.
 type ListForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListLogsDisabledResponseBody is the type of the "integrations" service
-// "list" endpoint HTTP response body for the "logs_disabled" error.
-type ListLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -515,20 +479,6 @@ func NewGetForbiddenResponseBody(res *goa.ServiceError) *GetForbiddenResponseBod
 	return body
 }
 
-// NewGetLogsDisabledResponseBody builds the HTTP response body from the result
-// of the "get" endpoint of the "integrations" service.
-func NewGetLogsDisabledResponseBody(res *goa.ServiceError) *GetLogsDisabledResponseBody {
-	body := &GetLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewGetBadRequestResponseBody builds the HTTP response body from the result
 // of the "get" endpoint of the "integrations" service.
 func NewGetBadRequestResponseBody(res *goa.ServiceError) *GetBadRequestResponseBody {
@@ -659,20 +609,6 @@ func NewListUnauthorizedResponseBody(res *goa.ServiceError) *ListUnauthorizedRes
 // of the "list" endpoint of the "integrations" service.
 func NewListForbiddenResponseBody(res *goa.ServiceError) *ListForbiddenResponseBody {
 	body := &ListForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "list" endpoint of the "integrations" service.
-func NewListLogsDisabledResponseBody(res *goa.ServiceError) *ListLogsDisabledResponseBody {
-	body := &ListLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

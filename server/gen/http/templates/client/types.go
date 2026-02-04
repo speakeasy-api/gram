@@ -156,25 +156,6 @@ type CreateTemplateForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateTemplateLogsDisabledResponseBody is the type of the "templates"
-// service "createTemplate" endpoint HTTP response body for the "logs_disabled"
-// error.
-type CreateTemplateLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // CreateTemplateBadRequestResponseBody is the type of the "templates" service
 // "createTemplate" endpoint HTTP response body for the "bad_request" error.
 type CreateTemplateBadRequestResponseBody struct {
@@ -344,25 +325,6 @@ type UpdateTemplateUnauthorizedResponseBody struct {
 // UpdateTemplateForbiddenResponseBody is the type of the "templates" service
 // "updateTemplate" endpoint HTTP response body for the "forbidden" error.
 type UpdateTemplateForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpdateTemplateLogsDisabledResponseBody is the type of the "templates"
-// service "updateTemplate" endpoint HTTP response body for the "logs_disabled"
-// error.
-type UpdateTemplateLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -561,24 +523,6 @@ type GetTemplateForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetTemplateLogsDisabledResponseBody is the type of the "templates" service
-// "getTemplate" endpoint HTTP response body for the "logs_disabled" error.
-type GetTemplateLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // GetTemplateBadRequestResponseBody is the type of the "templates" service
 // "getTemplate" endpoint HTTP response body for the "bad_request" error.
 type GetTemplateBadRequestResponseBody struct {
@@ -746,24 +690,6 @@ type ListTemplatesUnauthorizedResponseBody struct {
 // ListTemplatesForbiddenResponseBody is the type of the "templates" service
 // "listTemplates" endpoint HTTP response body for the "forbidden" error.
 type ListTemplatesForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTemplatesLogsDisabledResponseBody is the type of the "templates" service
-// "listTemplates" endpoint HTTP response body for the "logs_disabled" error.
-type ListTemplatesLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -947,25 +873,6 @@ type DeleteTemplateUnauthorizedResponseBody struct {
 // DeleteTemplateForbiddenResponseBody is the type of the "templates" service
 // "deleteTemplate" endpoint HTTP response body for the "forbidden" error.
 type DeleteTemplateForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteTemplateLogsDisabledResponseBody is the type of the "templates"
-// service "deleteTemplate" endpoint HTTP response body for the "logs_disabled"
-// error.
-type DeleteTemplateLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1166,25 +1073,6 @@ type RenderTemplateByIDForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RenderTemplateByIDLogsDisabledResponseBody is the type of the "templates"
-// service "renderTemplateByID" endpoint HTTP response body for the
-// "logs_disabled" error.
-type RenderTemplateByIDLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // RenderTemplateByIDBadRequestResponseBody is the type of the "templates"
 // service "renderTemplateByID" endpoint HTTP response body for the
 // "bad_request" error.
@@ -1358,25 +1246,6 @@ type RenderTemplateUnauthorizedResponseBody struct {
 // RenderTemplateForbiddenResponseBody is the type of the "templates" service
 // "renderTemplate" endpoint HTTP response body for the "forbidden" error.
 type RenderTemplateForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RenderTemplateLogsDisabledResponseBody is the type of the "templates"
-// service "renderTemplate" endpoint HTTP response body for the "logs_disabled"
-// error.
-type RenderTemplateLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1757,21 +1626,6 @@ func NewCreateTemplateForbidden(body *CreateTemplateForbiddenResponseBody) *goa.
 	return v
 }
 
-// NewCreateTemplateLogsDisabled builds a templates service createTemplate
-// endpoint logs_disabled error.
-func NewCreateTemplateLogsDisabled(body *CreateTemplateLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewCreateTemplateBadRequest builds a templates service createTemplate
 // endpoint bad_request error.
 func NewCreateTemplateBadRequest(body *CreateTemplateBadRequestResponseBody) *goa.ServiceError {
@@ -1931,21 +1785,6 @@ func NewUpdateTemplateForbidden(body *UpdateTemplateForbiddenResponseBody) *goa.
 	return v
 }
 
-// NewUpdateTemplateLogsDisabled builds a templates service updateTemplate
-// endpoint logs_disabled error.
-func NewUpdateTemplateLogsDisabled(body *UpdateTemplateLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewUpdateTemplateBadRequest builds a templates service updateTemplate
 // endpoint bad_request error.
 func NewUpdateTemplateBadRequest(body *UpdateTemplateBadRequestResponseBody) *goa.ServiceError {
@@ -2093,21 +1932,6 @@ func NewGetTemplateUnauthorized(body *GetTemplateUnauthorizedResponseBody) *goa.
 // NewGetTemplateForbidden builds a templates service getTemplate endpoint
 // forbidden error.
 func NewGetTemplateForbidden(body *GetTemplateForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetTemplateLogsDisabled builds a templates service getTemplate endpoint
-// logs_disabled error.
-func NewGetTemplateLogsDisabled(body *GetTemplateLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2286,21 +2110,6 @@ func NewListTemplatesForbidden(body *ListTemplatesForbiddenResponseBody) *goa.Se
 	return v
 }
 
-// NewListTemplatesLogsDisabled builds a templates service listTemplates
-// endpoint logs_disabled error.
-func NewListTemplatesLogsDisabled(body *ListTemplatesLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewListTemplatesBadRequest builds a templates service listTemplates endpoint
 // bad_request error.
 func NewListTemplatesBadRequest(body *ListTemplatesBadRequestResponseBody) *goa.ServiceError {
@@ -2439,21 +2248,6 @@ func NewDeleteTemplateUnauthorized(body *DeleteTemplateUnauthorizedResponseBody)
 // NewDeleteTemplateForbidden builds a templates service deleteTemplate
 // endpoint forbidden error.
 func NewDeleteTemplateForbidden(body *DeleteTemplateForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewDeleteTemplateLogsDisabled builds a templates service deleteTemplate
-// endpoint logs_disabled error.
-func NewDeleteTemplateLogsDisabled(body *DeleteTemplateLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2626,21 +2420,6 @@ func NewRenderTemplateByIDForbidden(body *RenderTemplateByIDForbiddenResponseBod
 	return v
 }
 
-// NewRenderTemplateByIDLogsDisabled builds a templates service
-// renderTemplateByID endpoint logs_disabled error.
-func NewRenderTemplateByIDLogsDisabled(body *RenderTemplateByIDLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewRenderTemplateByIDBadRequest builds a templates service
 // renderTemplateByID endpoint bad_request error.
 func NewRenderTemplateByIDBadRequest(body *RenderTemplateByIDBadRequestResponseBody) *goa.ServiceError {
@@ -2789,21 +2568,6 @@ func NewRenderTemplateUnauthorized(body *RenderTemplateUnauthorizedResponseBody)
 // NewRenderTemplateForbidden builds a templates service renderTemplate
 // endpoint forbidden error.
 func NewRenderTemplateForbidden(body *RenderTemplateForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRenderTemplateLogsDisabled builds a templates service renderTemplate
-// endpoint logs_disabled error.
-func NewRenderTemplateLogsDisabled(body *RenderTemplateLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3039,30 +2803,6 @@ func ValidateCreateTemplateUnauthorizedResponseBody(body *CreateTemplateUnauthor
 // ValidateCreateTemplateForbiddenResponseBody runs the validations defined on
 // createTemplate_forbidden_response_body
 func ValidateCreateTemplateForbiddenResponseBody(body *CreateTemplateForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCreateTemplateLogsDisabledResponseBody runs the validations defined
-// on createTemplate_logs_disabled_response_body
-func ValidateCreateTemplateLogsDisabledResponseBody(body *CreateTemplateLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3324,30 +3064,6 @@ func ValidateUpdateTemplateForbiddenResponseBody(body *UpdateTemplateForbiddenRe
 	return
 }
 
-// ValidateUpdateTemplateLogsDisabledResponseBody runs the validations defined
-// on updateTemplate_logs_disabled_response_body
-func ValidateUpdateTemplateLogsDisabledResponseBody(body *UpdateTemplateLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateUpdateTemplateBadRequestResponseBody runs the validations defined on
 // updateTemplate_bad_request_response_body
 func ValidateUpdateTemplateBadRequestResponseBody(body *UpdateTemplateBadRequestResponseBody) (err error) {
@@ -3567,30 +3283,6 @@ func ValidateGetTemplateUnauthorizedResponseBody(body *GetTemplateUnauthorizedRe
 // ValidateGetTemplateForbiddenResponseBody runs the validations defined on
 // getTemplate_forbidden_response_body
 func ValidateGetTemplateForbiddenResponseBody(body *GetTemplateForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetTemplateLogsDisabledResponseBody runs the validations defined on
-// getTemplate_logs_disabled_response_body
-func ValidateGetTemplateLogsDisabledResponseBody(body *GetTemplateLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3852,30 +3544,6 @@ func ValidateListTemplatesForbiddenResponseBody(body *ListTemplatesForbiddenResp
 	return
 }
 
-// ValidateListTemplatesLogsDisabledResponseBody runs the validations defined
-// on listTemplates_logs_disabled_response_body
-func ValidateListTemplatesLogsDisabledResponseBody(body *ListTemplatesLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateListTemplatesBadRequestResponseBody runs the validations defined on
 // listTemplates_bad_request_response_body
 func ValidateListTemplatesBadRequestResponseBody(body *ListTemplatesBadRequestResponseBody) (err error) {
@@ -4095,30 +3763,6 @@ func ValidateDeleteTemplateUnauthorizedResponseBody(body *DeleteTemplateUnauthor
 // ValidateDeleteTemplateForbiddenResponseBody runs the validations defined on
 // deleteTemplate_forbidden_response_body
 func ValidateDeleteTemplateForbiddenResponseBody(body *DeleteTemplateForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDeleteTemplateLogsDisabledResponseBody runs the validations defined
-// on deleteTemplate_logs_disabled_response_body
-func ValidateDeleteTemplateLogsDisabledResponseBody(body *DeleteTemplateLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4380,30 +4024,6 @@ func ValidateRenderTemplateByIDForbiddenResponseBody(body *RenderTemplateByIDFor
 	return
 }
 
-// ValidateRenderTemplateByIDLogsDisabledResponseBody runs the validations
-// defined on renderTemplateByID_logs_disabled_response_body
-func ValidateRenderTemplateByIDLogsDisabledResponseBody(body *RenderTemplateByIDLogsDisabledResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateRenderTemplateByIDBadRequestResponseBody runs the validations
 // defined on renderTemplateByID_bad_request_response_body
 func ValidateRenderTemplateByIDBadRequestResponseBody(body *RenderTemplateByIDBadRequestResponseBody) (err error) {
@@ -4623,30 +4243,6 @@ func ValidateRenderTemplateUnauthorizedResponseBody(body *RenderTemplateUnauthor
 // ValidateRenderTemplateForbiddenResponseBody runs the validations defined on
 // renderTemplate_forbidden_response_body
 func ValidateRenderTemplateForbiddenResponseBody(body *RenderTemplateForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRenderTemplateLogsDisabledResponseBody runs the validations defined
-// on renderTemplate_logs_disabled_response_body
-func ValidateRenderTemplateLogsDisabledResponseBody(body *RenderTemplateLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -101,24 +101,6 @@ type CreateKeyForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateKeyLogsDisabledResponseBody is the type of the "keys" service
-// "createKey" endpoint HTTP response body for the "logs_disabled" error.
-type CreateKeyLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CreateKeyBadRequestResponseBody is the type of the "keys" service
 // "createKey" endpoint HTTP response body for the "bad_request" error.
 type CreateKeyBadRequestResponseBody struct {
@@ -284,24 +266,6 @@ type ListKeysUnauthorizedResponseBody struct {
 // ListKeysForbiddenResponseBody is the type of the "keys" service "listKeys"
 // endpoint HTTP response body for the "forbidden" error.
 type ListKeysForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListKeysLogsDisabledResponseBody is the type of the "keys" service
-// "listKeys" endpoint HTTP response body for the "logs_disabled" error.
-type ListKeysLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -497,24 +461,6 @@ type RevokeKeyForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RevokeKeyLogsDisabledResponseBody is the type of the "keys" service
-// "revokeKey" endpoint HTTP response body for the "logs_disabled" error.
-type RevokeKeyLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // RevokeKeyBadRequestResponseBody is the type of the "keys" service
 // "revokeKey" endpoint HTTP response body for the "bad_request" error.
 type RevokeKeyBadRequestResponseBody struct {
@@ -680,24 +626,6 @@ type VerifyKeyUnauthorizedResponseBody struct {
 // VerifyKeyForbiddenResponseBody is the type of the "keys" service "verifyKey"
 // endpoint HTTP response body for the "forbidden" error.
 type VerifyKeyForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// VerifyKeyLogsDisabledResponseBody is the type of the "keys" service
-// "verifyKey" endpoint HTTP response body for the "logs_disabled" error.
-type VerifyKeyLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1008,20 +936,6 @@ func NewCreateKeyForbiddenResponseBody(res *goa.ServiceError) *CreateKeyForbidde
 	return body
 }
 
-// NewCreateKeyLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "createKey" endpoint of the "keys" service.
-func NewCreateKeyLogsDisabledResponseBody(res *goa.ServiceError) *CreateKeyLogsDisabledResponseBody {
-	body := &CreateKeyLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCreateKeyBadRequestResponseBody builds the HTTP response body from the
 // result of the "createKey" endpoint of the "keys" service.
 func NewCreateKeyBadRequestResponseBody(res *goa.ServiceError) *CreateKeyBadRequestResponseBody {
@@ -1152,20 +1066,6 @@ func NewListKeysUnauthorizedResponseBody(res *goa.ServiceError) *ListKeysUnautho
 // result of the "listKeys" endpoint of the "keys" service.
 func NewListKeysForbiddenResponseBody(res *goa.ServiceError) *ListKeysForbiddenResponseBody {
 	body := &ListKeysForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListKeysLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "listKeys" endpoint of the "keys" service.
-func NewListKeysLogsDisabledResponseBody(res *goa.ServiceError) *ListKeysLogsDisabledResponseBody {
-	body := &ListKeysLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1316,20 +1216,6 @@ func NewRevokeKeyForbiddenResponseBody(res *goa.ServiceError) *RevokeKeyForbidde
 	return body
 }
 
-// NewRevokeKeyLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "revokeKey" endpoint of the "keys" service.
-func NewRevokeKeyLogsDisabledResponseBody(res *goa.ServiceError) *RevokeKeyLogsDisabledResponseBody {
-	body := &RevokeKeyLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewRevokeKeyBadRequestResponseBody builds the HTTP response body from the
 // result of the "revokeKey" endpoint of the "keys" service.
 func NewRevokeKeyBadRequestResponseBody(res *goa.ServiceError) *RevokeKeyBadRequestResponseBody {
@@ -1460,20 +1346,6 @@ func NewVerifyKeyUnauthorizedResponseBody(res *goa.ServiceError) *VerifyKeyUnaut
 // result of the "verifyKey" endpoint of the "keys" service.
 func NewVerifyKeyForbiddenResponseBody(res *goa.ServiceError) *VerifyKeyForbiddenResponseBody {
 	body := &VerifyKeyForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewVerifyKeyLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "verifyKey" endpoint of the "keys" service.
-func NewVerifyKeyLogsDisabledResponseBody(res *goa.ServiceError) *VerifyKeyLogsDisabledResponseBody {
-	body := &VerifyKeyLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

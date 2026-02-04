@@ -129,24 +129,6 @@ type CreateResponseForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateResponseLogsDisabledResponseBody is the type of the "agents" service
-// "createResponse" endpoint HTTP response body for the "logs_disabled" error.
-type CreateResponseLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CreateResponseBadRequestResponseBody is the type of the "agents" service
 // "createResponse" endpoint HTTP response body for the "bad_request" error.
 type CreateResponseBadRequestResponseBody struct {
@@ -329,24 +311,6 @@ type GetResponseForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetResponseLogsDisabledResponseBody is the type of the "agents" service
-// "getResponse" endpoint HTTP response body for the "logs_disabled" error.
-type GetResponseLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GetResponseBadRequestResponseBody is the type of the "agents" service
 // "getResponse" endpoint HTTP response body for the "bad_request" error.
 type GetResponseBadRequestResponseBody struct {
@@ -513,24 +477,6 @@ type DeleteResponseUnauthorizedResponseBody struct {
 // DeleteResponseForbiddenResponseBody is the type of the "agents" service
 // "deleteResponse" endpoint HTTP response body for the "forbidden" error.
 type DeleteResponseForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteResponseLogsDisabledResponseBody is the type of the "agents" service
-// "deleteResponse" endpoint HTTP response body for the "logs_disabled" error.
-type DeleteResponseLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -815,20 +761,6 @@ func NewCreateResponseForbiddenResponseBody(res *goa.ServiceError) *CreateRespon
 	return body
 }
 
-// NewCreateResponseLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "createResponse" endpoint of the "agents" service.
-func NewCreateResponseLogsDisabledResponseBody(res *goa.ServiceError) *CreateResponseLogsDisabledResponseBody {
-	body := &CreateResponseLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCreateResponseBadRequestResponseBody builds the HTTP response body from
 // the result of the "createResponse" endpoint of the "agents" service.
 func NewCreateResponseBadRequestResponseBody(res *goa.ServiceError) *CreateResponseBadRequestResponseBody {
@@ -970,20 +902,6 @@ func NewGetResponseForbiddenResponseBody(res *goa.ServiceError) *GetResponseForb
 	return body
 }
 
-// NewGetResponseLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "getResponse" endpoint of the "agents" service.
-func NewGetResponseLogsDisabledResponseBody(res *goa.ServiceError) *GetResponseLogsDisabledResponseBody {
-	body := &GetResponseLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewGetResponseBadRequestResponseBody builds the HTTP response body from the
 // result of the "getResponse" endpoint of the "agents" service.
 func NewGetResponseBadRequestResponseBody(res *goa.ServiceError) *GetResponseBadRequestResponseBody {
@@ -1114,20 +1032,6 @@ func NewDeleteResponseUnauthorizedResponseBody(res *goa.ServiceError) *DeleteRes
 // the result of the "deleteResponse" endpoint of the "agents" service.
 func NewDeleteResponseForbiddenResponseBody(res *goa.ServiceError) *DeleteResponseForbiddenResponseBody {
 	body := &DeleteResponseForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteResponseLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "deleteResponse" endpoint of the "agents" service.
-func NewDeleteResponseLogsDisabledResponseBody(res *goa.ServiceError) *DeleteResponseLogsDisabledResponseBody {
-	body := &DeleteResponseLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

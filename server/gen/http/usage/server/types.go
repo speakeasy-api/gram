@@ -74,24 +74,6 @@ type GetPeriodUsageForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetPeriodUsageLogsDisabledResponseBody is the type of the "usage" service
-// "getPeriodUsage" endpoint HTTP response body for the "logs_disabled" error.
-type GetPeriodUsageLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GetPeriodUsageBadRequestResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body for the "bad_request" error.
 type GetPeriodUsageBadRequestResponseBody struct {
@@ -259,24 +241,6 @@ type GetUsageTiersUnauthorizedResponseBody struct {
 // GetUsageTiersForbiddenResponseBody is the type of the "usage" service
 // "getUsageTiers" endpoint HTTP response body for the "forbidden" error.
 type GetUsageTiersForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetUsageTiersLogsDisabledResponseBody is the type of the "usage" service
-// "getUsageTiers" endpoint HTTP response body for the "logs_disabled" error.
-type GetUsageTiersLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -476,25 +440,6 @@ type CreateCustomerSessionForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateCustomerSessionLogsDisabledResponseBody is the type of the "usage"
-// service "createCustomerSession" endpoint HTTP response body for the
-// "logs_disabled" error.
-type CreateCustomerSessionLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CreateCustomerSessionBadRequestResponseBody is the type of the "usage"
 // service "createCustomerSession" endpoint HTTP response body for the
 // "bad_request" error.
@@ -666,24 +611,6 @@ type CreateCheckoutUnauthorizedResponseBody struct {
 // CreateCheckoutForbiddenResponseBody is the type of the "usage" service
 // "createCheckout" endpoint HTTP response body for the "forbidden" error.
 type CreateCheckoutForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCheckoutLogsDisabledResponseBody is the type of the "usage" service
-// "createCheckout" endpoint HTTP response body for the "logs_disabled" error.
-type CreateCheckoutLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -925,20 +852,6 @@ func NewGetPeriodUsageForbiddenResponseBody(res *goa.ServiceError) *GetPeriodUsa
 	return body
 }
 
-// NewGetPeriodUsageLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "getPeriodUsage" endpoint of the "usage" service.
-func NewGetPeriodUsageLogsDisabledResponseBody(res *goa.ServiceError) *GetPeriodUsageLogsDisabledResponseBody {
-	body := &GetPeriodUsageLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewGetPeriodUsageBadRequestResponseBody builds the HTTP response body from
 // the result of the "getPeriodUsage" endpoint of the "usage" service.
 func NewGetPeriodUsageBadRequestResponseBody(res *goa.ServiceError) *GetPeriodUsageBadRequestResponseBody {
@@ -1069,20 +982,6 @@ func NewGetUsageTiersUnauthorizedResponseBody(res *goa.ServiceError) *GetUsageTi
 // result of the "getUsageTiers" endpoint of the "usage" service.
 func NewGetUsageTiersForbiddenResponseBody(res *goa.ServiceError) *GetUsageTiersForbiddenResponseBody {
 	body := &GetUsageTiersForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetUsageTiersLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "getUsageTiers" endpoint of the "usage" service.
-func NewGetUsageTiersLogsDisabledResponseBody(res *goa.ServiceError) *GetUsageTiersLogsDisabledResponseBody {
-	body := &GetUsageTiersLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1235,21 +1134,6 @@ func NewCreateCustomerSessionForbiddenResponseBody(res *goa.ServiceError) *Creat
 	return body
 }
 
-// NewCreateCustomerSessionLogsDisabledResponseBody builds the HTTP response
-// body from the result of the "createCustomerSession" endpoint of the "usage"
-// service.
-func NewCreateCustomerSessionLogsDisabledResponseBody(res *goa.ServiceError) *CreateCustomerSessionLogsDisabledResponseBody {
-	body := &CreateCustomerSessionLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCreateCustomerSessionBadRequestResponseBody builds the HTTP response body
 // from the result of the "createCustomerSession" endpoint of the "usage"
 // service.
@@ -1388,20 +1272,6 @@ func NewCreateCheckoutUnauthorizedResponseBody(res *goa.ServiceError) *CreateChe
 // the result of the "createCheckout" endpoint of the "usage" service.
 func NewCreateCheckoutForbiddenResponseBody(res *goa.ServiceError) *CreateCheckoutForbiddenResponseBody {
 	body := &CreateCheckoutForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCheckoutLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "createCheckout" endpoint of the "usage" service.
-func NewCreateCheckoutLogsDisabledResponseBody(res *goa.ServiceError) *CreateCheckoutLogsDisabledResponseBody {
-	body := &CreateCheckoutLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

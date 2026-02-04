@@ -41,7 +41,6 @@ func NewClient(getProject, createProject, listProjects, setLogo, listAllowedOrig
 // GetProject may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -64,7 +63,6 @@ func (c *Client) GetProject(ctx context.Context, p *GetProjectPayload) (res *Get
 // CreateProject may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -87,7 +85,6 @@ func (c *Client) CreateProject(ctx context.Context, p *CreateProjectPayload) (re
 // ListProjects may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -110,7 +107,6 @@ func (c *Client) ListProjects(ctx context.Context, p *ListProjectsPayload) (res 
 // SetLogo may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -134,7 +130,6 @@ func (c *Client) SetLogo(ctx context.Context, p *SetLogoPayload) (res *SetProjec
 // ListAllowedOrigins may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -158,7 +153,6 @@ func (c *Client) ListAllowedOrigins(ctx context.Context, p *ListAllowedOriginsPa
 // UpsertAllowedOrigin may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -181,7 +175,6 @@ func (c *Client) UpsertAllowedOrigin(ctx context.Context, p *UpsertAllowedOrigin
 // DeleteProject may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists

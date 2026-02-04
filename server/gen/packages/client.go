@@ -37,7 +37,6 @@ func NewClient(createPackage, updatePackage, listPackages, listVersions, publish
 // CreatePackage may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -61,7 +60,6 @@ func (c *Client) CreatePackage(ctx context.Context, p *CreatePackagePayload) (re
 //   - "not_modified" (type *NotModified)
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -84,7 +82,6 @@ func (c *Client) UpdatePackage(ctx context.Context, p *UpdatePackagePayload) (re
 // ListPackages may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -107,7 +104,6 @@ func (c *Client) ListPackages(ctx context.Context, p *ListPackagesPayload) (res 
 // ListVersions may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -130,7 +126,6 @@ func (c *Client) ListVersions(ctx context.Context, p *ListVersionsPayload) (res 
 // Publish may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists

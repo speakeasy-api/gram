@@ -101,24 +101,6 @@ type ListChatsForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListChatsLogsDisabledResponseBody is the type of the "chat" service
-// "listChats" endpoint HTTP response body for the "logs_disabled" error.
-type ListChatsLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ListChatsBadRequestResponseBody is the type of the "chat" service
 // "listChats" endpoint HTTP response body for the "bad_request" error.
 type ListChatsBadRequestResponseBody struct {
@@ -284,24 +266,6 @@ type LoadChatUnauthorizedResponseBody struct {
 // LoadChatForbiddenResponseBody is the type of the "chat" service "loadChat"
 // endpoint HTTP response body for the "forbidden" error.
 type LoadChatForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LoadChatLogsDisabledResponseBody is the type of the "chat" service
-// "loadChat" endpoint HTTP response body for the "logs_disabled" error.
-type LoadChatLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -497,24 +461,6 @@ type GenerateTitleForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GenerateTitleLogsDisabledResponseBody is the type of the "chat" service
-// "generateTitle" endpoint HTTP response body for the "logs_disabled" error.
-type GenerateTitleLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GenerateTitleBadRequestResponseBody is the type of the "chat" service
 // "generateTitle" endpoint HTTP response body for the "bad_request" error.
 type GenerateTitleBadRequestResponseBody struct {
@@ -682,24 +628,6 @@ type CreditUsageUnauthorizedResponseBody struct {
 // CreditUsageForbiddenResponseBody is the type of the "chat" service
 // "creditUsage" endpoint HTTP response body for the "forbidden" error.
 type CreditUsageForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreditUsageLogsDisabledResponseBody is the type of the "chat" service
-// "creditUsage" endpoint HTTP response body for the "logs_disabled" error.
-type CreditUsageLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -995,20 +923,6 @@ func NewListChatsForbiddenResponseBody(res *goa.ServiceError) *ListChatsForbidde
 	return body
 }
 
-// NewListChatsLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "listChats" endpoint of the "chat" service.
-func NewListChatsLogsDisabledResponseBody(res *goa.ServiceError) *ListChatsLogsDisabledResponseBody {
-	body := &ListChatsLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewListChatsBadRequestResponseBody builds the HTTP response body from the
 // result of the "listChats" endpoint of the "chat" service.
 func NewListChatsBadRequestResponseBody(res *goa.ServiceError) *ListChatsBadRequestResponseBody {
@@ -1139,20 +1053,6 @@ func NewLoadChatUnauthorizedResponseBody(res *goa.ServiceError) *LoadChatUnautho
 // result of the "loadChat" endpoint of the "chat" service.
 func NewLoadChatForbiddenResponseBody(res *goa.ServiceError) *LoadChatForbiddenResponseBody {
 	body := &LoadChatForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLoadChatLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "loadChat" endpoint of the "chat" service.
-func NewLoadChatLogsDisabledResponseBody(res *goa.ServiceError) *LoadChatLogsDisabledResponseBody {
-	body := &LoadChatLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1303,20 +1203,6 @@ func NewGenerateTitleForbiddenResponseBody(res *goa.ServiceError) *GenerateTitle
 	return body
 }
 
-// NewGenerateTitleLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "generateTitle" endpoint of the "chat" service.
-func NewGenerateTitleLogsDisabledResponseBody(res *goa.ServiceError) *GenerateTitleLogsDisabledResponseBody {
-	body := &GenerateTitleLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewGenerateTitleBadRequestResponseBody builds the HTTP response body from
 // the result of the "generateTitle" endpoint of the "chat" service.
 func NewGenerateTitleBadRequestResponseBody(res *goa.ServiceError) *GenerateTitleBadRequestResponseBody {
@@ -1447,20 +1333,6 @@ func NewCreditUsageUnauthorizedResponseBody(res *goa.ServiceError) *CreditUsageU
 // result of the "creditUsage" endpoint of the "chat" service.
 func NewCreditUsageForbiddenResponseBody(res *goa.ServiceError) *CreditUsageForbiddenResponseBody {
 	body := &CreditUsageForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreditUsageLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "creditUsage" endpoint of the "chat" service.
-func NewCreditUsageLogsDisabledResponseBody(res *goa.ServiceError) *CreditUsageLogsDisabledResponseBody {
-	body := &CreditUsageLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

@@ -48,7 +48,6 @@ func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToo
 // CreateToolset may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -71,7 +70,6 @@ func (c *Client) CreateToolset(ctx context.Context, p *CreateToolsetPayload) (re
 // ListToolsets may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -94,7 +92,6 @@ func (c *Client) ListToolsets(ctx context.Context, p *ListToolsetsPayload) (res 
 // UpdateToolset may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -117,7 +114,6 @@ func (c *Client) UpdateToolset(ctx context.Context, p *UpdateToolsetPayload) (re
 // DeleteToolset may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -136,7 +132,6 @@ func (c *Client) DeleteToolset(ctx context.Context, p *DeleteToolsetPayload) (er
 // GetToolset may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -160,7 +155,6 @@ func (c *Client) GetToolset(ctx context.Context, p *GetToolsetPayload) (res *typ
 // CheckMCPSlugAvailability may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -183,7 +177,6 @@ func (c *Client) CheckMCPSlugAvailability(ctx context.Context, p *CheckMCPSlugAv
 // CloneToolset may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -207,7 +200,6 @@ func (c *Client) CloneToolset(ctx context.Context, p *CloneToolsetPayload) (res 
 // AddExternalOAuthServer may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -231,7 +223,6 @@ func (c *Client) AddExternalOAuthServer(ctx context.Context, p *AddExternalOAuth
 // RemoveOAuthServer may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists
@@ -255,7 +246,6 @@ func (c *Client) RemoveOAuthServer(ctx context.Context, p *RemoveOAuthServerPayl
 // AddOAuthProxyServer may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "logs_disabled" (type *goa.ServiceError): logs are not enabled for this organization
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
 //   - "conflict" (type *goa.ServiceError): resource already exists

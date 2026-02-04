@@ -217,25 +217,6 @@ type GetDeploymentForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetDeploymentLogsDisabledResponseBody is the type of the "deployments"
-// service "getDeployment" endpoint HTTP response body for the "logs_disabled"
-// error.
-type GetDeploymentLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GetDeploymentBadRequestResponseBody is the type of the "deployments" service
 // "getDeployment" endpoint HTTP response body for the "bad_request" error.
 type GetDeploymentBadRequestResponseBody struct {
@@ -406,25 +387,6 @@ type GetLatestDeploymentUnauthorizedResponseBody struct {
 // service "getLatestDeployment" endpoint HTTP response body for the
 // "forbidden" error.
 type GetLatestDeploymentForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetLatestDeploymentLogsDisabledResponseBody is the type of the "deployments"
-// service "getLatestDeployment" endpoint HTTP response body for the
-// "logs_disabled" error.
-type GetLatestDeploymentLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -630,25 +592,6 @@ type GetActiveDeploymentForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetActiveDeploymentLogsDisabledResponseBody is the type of the "deployments"
-// service "getActiveDeployment" endpoint HTTP response body for the
-// "logs_disabled" error.
-type GetActiveDeploymentLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GetActiveDeploymentBadRequestResponseBody is the type of the "deployments"
 // service "getActiveDeployment" endpoint HTTP response body for the
 // "bad_request" error.
@@ -824,25 +767,6 @@ type CreateDeploymentUnauthorizedResponseBody struct {
 // service "createDeployment" endpoint HTTP response body for the "forbidden"
 // error.
 type CreateDeploymentForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateDeploymentLogsDisabledResponseBody is the type of the "deployments"
-// service "createDeployment" endpoint HTTP response body for the
-// "logs_disabled" error.
-type CreateDeploymentLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1045,24 +969,6 @@ type EvolveForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// EvolveLogsDisabledResponseBody is the type of the "deployments" service
-// "evolve" endpoint HTTP response body for the "logs_disabled" error.
-type EvolveLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // EvolveBadRequestResponseBody is the type of the "deployments" service
 // "evolve" endpoint HTTP response body for the "bad_request" error.
 type EvolveBadRequestResponseBody struct {
@@ -1229,24 +1135,6 @@ type RedeployUnauthorizedResponseBody struct {
 // RedeployForbiddenResponseBody is the type of the "deployments" service
 // "redeploy" endpoint HTTP response body for the "forbidden" error.
 type RedeployForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RedeployLogsDisabledResponseBody is the type of the "deployments" service
-// "redeploy" endpoint HTTP response body for the "logs_disabled" error.
-type RedeployLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1446,25 +1334,6 @@ type ListDeploymentsForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListDeploymentsLogsDisabledResponseBody is the type of the "deployments"
-// service "listDeployments" endpoint HTTP response body for the
-// "logs_disabled" error.
-type ListDeploymentsLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ListDeploymentsBadRequestResponseBody is the type of the "deployments"
 // service "listDeployments" endpoint HTTP response body for the "bad_request"
 // error.
@@ -1637,25 +1506,6 @@ type GetDeploymentLogsUnauthorizedResponseBody struct {
 // service "getDeploymentLogs" endpoint HTTP response body for the "forbidden"
 // error.
 type GetDeploymentLogsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetDeploymentLogsLogsDisabledResponseBody is the type of the "deployments"
-// service "getDeploymentLogs" endpoint HTTP response body for the
-// "logs_disabled" error.
-type GetDeploymentLogsLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2205,20 +2055,6 @@ func NewGetDeploymentForbiddenResponseBody(res *goa.ServiceError) *GetDeployment
 	return body
 }
 
-// NewGetDeploymentLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "getDeployment" endpoint of the "deployments" service.
-func NewGetDeploymentLogsDisabledResponseBody(res *goa.ServiceError) *GetDeploymentLogsDisabledResponseBody {
-	body := &GetDeploymentLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewGetDeploymentBadRequestResponseBody builds the HTTP response body from
 // the result of the "getDeployment" endpoint of the "deployments" service.
 func NewGetDeploymentBadRequestResponseBody(res *goa.ServiceError) *GetDeploymentBadRequestResponseBody {
@@ -2351,21 +2187,6 @@ func NewGetLatestDeploymentUnauthorizedResponseBody(res *goa.ServiceError) *GetL
 // service.
 func NewGetLatestDeploymentForbiddenResponseBody(res *goa.ServiceError) *GetLatestDeploymentForbiddenResponseBody {
 	body := &GetLatestDeploymentForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetLatestDeploymentLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "getLatestDeployment" endpoint of the "deployments"
-// service.
-func NewGetLatestDeploymentLogsDisabledResponseBody(res *goa.ServiceError) *GetLatestDeploymentLogsDisabledResponseBody {
-	body := &GetLatestDeploymentLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2526,21 +2347,6 @@ func NewGetActiveDeploymentForbiddenResponseBody(res *goa.ServiceError) *GetActi
 	return body
 }
 
-// NewGetActiveDeploymentLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "getActiveDeployment" endpoint of the "deployments"
-// service.
-func NewGetActiveDeploymentLogsDisabledResponseBody(res *goa.ServiceError) *GetActiveDeploymentLogsDisabledResponseBody {
-	body := &GetActiveDeploymentLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewGetActiveDeploymentBadRequestResponseBody builds the HTTP response body
 // from the result of the "getActiveDeployment" endpoint of the "deployments"
 // service.
@@ -2680,21 +2486,6 @@ func NewCreateDeploymentUnauthorizedResponseBody(res *goa.ServiceError) *CreateD
 // the result of the "createDeployment" endpoint of the "deployments" service.
 func NewCreateDeploymentForbiddenResponseBody(res *goa.ServiceError) *CreateDeploymentForbiddenResponseBody {
 	body := &CreateDeploymentForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateDeploymentLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "createDeployment" endpoint of the "deployments"
-// service.
-func NewCreateDeploymentLogsDisabledResponseBody(res *goa.ServiceError) *CreateDeploymentLogsDisabledResponseBody {
-	body := &CreateDeploymentLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2848,20 +2639,6 @@ func NewEvolveForbiddenResponseBody(res *goa.ServiceError) *EvolveForbiddenRespo
 	return body
 }
 
-// NewEvolveLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "evolve" endpoint of the "deployments" service.
-func NewEvolveLogsDisabledResponseBody(res *goa.ServiceError) *EvolveLogsDisabledResponseBody {
-	body := &EvolveLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewEvolveBadRequestResponseBody builds the HTTP response body from the
 // result of the "evolve" endpoint of the "deployments" service.
 func NewEvolveBadRequestResponseBody(res *goa.ServiceError) *EvolveBadRequestResponseBody {
@@ -2992,20 +2769,6 @@ func NewRedeployUnauthorizedResponseBody(res *goa.ServiceError) *RedeployUnautho
 // result of the "redeploy" endpoint of the "deployments" service.
 func NewRedeployForbiddenResponseBody(res *goa.ServiceError) *RedeployForbiddenResponseBody {
 	body := &RedeployForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRedeployLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "redeploy" endpoint of the "deployments" service.
-func NewRedeployLogsDisabledResponseBody(res *goa.ServiceError) *RedeployLogsDisabledResponseBody {
-	body := &RedeployLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3157,21 +2920,6 @@ func NewListDeploymentsForbiddenResponseBody(res *goa.ServiceError) *ListDeploym
 	return body
 }
 
-// NewListDeploymentsLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "listDeployments" endpoint of the "deployments"
-// service.
-func NewListDeploymentsLogsDisabledResponseBody(res *goa.ServiceError) *ListDeploymentsLogsDisabledResponseBody {
-	body := &ListDeploymentsLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewListDeploymentsBadRequestResponseBody builds the HTTP response body from
 // the result of the "listDeployments" endpoint of the "deployments" service.
 func NewListDeploymentsBadRequestResponseBody(res *goa.ServiceError) *ListDeploymentsBadRequestResponseBody {
@@ -3306,21 +3054,6 @@ func NewGetDeploymentLogsUnauthorizedResponseBody(res *goa.ServiceError) *GetDep
 // the result of the "getDeploymentLogs" endpoint of the "deployments" service.
 func NewGetDeploymentLogsForbiddenResponseBody(res *goa.ServiceError) *GetDeploymentLogsForbiddenResponseBody {
 	body := &GetDeploymentLogsForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetDeploymentLogsLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "getDeploymentLogs" endpoint of the "deployments"
-// service.
-func NewGetDeploymentLogsLogsDisabledResponseBody(res *goa.ServiceError) *GetDeploymentLogsLogsDisabledResponseBody {
-	body := &GetDeploymentLogsLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

@@ -549,24 +549,6 @@ type CreateToolsetForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateToolsetLogsDisabledResponseBody is the type of the "toolsets" service
-// "createToolset" endpoint HTTP response body for the "logs_disabled" error.
-type CreateToolsetLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CreateToolsetBadRequestResponseBody is the type of the "toolsets" service
 // "createToolset" endpoint HTTP response body for the "bad_request" error.
 type CreateToolsetBadRequestResponseBody struct {
@@ -734,24 +716,6 @@ type ListToolsetsUnauthorizedResponseBody struct {
 // ListToolsetsForbiddenResponseBody is the type of the "toolsets" service
 // "listToolsets" endpoint HTTP response body for the "forbidden" error.
 type ListToolsetsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListToolsetsLogsDisabledResponseBody is the type of the "toolsets" service
-// "listToolsets" endpoint HTTP response body for the "logs_disabled" error.
-type ListToolsetsLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -949,24 +913,6 @@ type UpdateToolsetForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateToolsetLogsDisabledResponseBody is the type of the "toolsets" service
-// "updateToolset" endpoint HTTP response body for the "logs_disabled" error.
-type UpdateToolsetLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // UpdateToolsetBadRequestResponseBody is the type of the "toolsets" service
 // "updateToolset" endpoint HTTP response body for the "bad_request" error.
 type UpdateToolsetBadRequestResponseBody struct {
@@ -1134,24 +1080,6 @@ type DeleteToolsetUnauthorizedResponseBody struct {
 // DeleteToolsetForbiddenResponseBody is the type of the "toolsets" service
 // "deleteToolset" endpoint HTTP response body for the "forbidden" error.
 type DeleteToolsetForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteToolsetLogsDisabledResponseBody is the type of the "toolsets" service
-// "deleteToolset" endpoint HTTP response body for the "logs_disabled" error.
-type DeleteToolsetLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1349,24 +1277,6 @@ type GetToolsetForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetToolsetLogsDisabledResponseBody is the type of the "toolsets" service
-// "getToolset" endpoint HTTP response body for the "logs_disabled" error.
-type GetToolsetLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GetToolsetBadRequestResponseBody is the type of the "toolsets" service
 // "getToolset" endpoint HTTP response body for the "bad_request" error.
 type GetToolsetBadRequestResponseBody struct {
@@ -1535,25 +1445,6 @@ type CheckMCPSlugAvailabilityUnauthorizedResponseBody struct {
 // service "checkMCPSlugAvailability" endpoint HTTP response body for the
 // "forbidden" error.
 type CheckMCPSlugAvailabilityForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityLogsDisabledResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "logs_disabled" error.
-type CheckMCPSlugAvailabilityLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1757,24 +1648,6 @@ type CloneToolsetForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CloneToolsetLogsDisabledResponseBody is the type of the "toolsets" service
-// "cloneToolset" endpoint HTTP response body for the "logs_disabled" error.
-type CloneToolsetLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CloneToolsetBadRequestResponseBody is the type of the "toolsets" service
 // "cloneToolset" endpoint HTTP response body for the "bad_request" error.
 type CloneToolsetBadRequestResponseBody struct {
@@ -1944,25 +1817,6 @@ type AddExternalOAuthServerUnauthorizedResponseBody struct {
 // service "addExternalOAuthServer" endpoint HTTP response body for the
 // "forbidden" error.
 type AddExternalOAuthServerForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AddExternalOAuthServerLogsDisabledResponseBody is the type of the "toolsets"
-// service "addExternalOAuthServer" endpoint HTTP response body for the
-// "logs_disabled" error.
-type AddExternalOAuthServerLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2167,25 +2021,6 @@ type RemoveOAuthServerForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveOAuthServerLogsDisabledResponseBody is the type of the "toolsets"
-// service "removeOAuthServer" endpoint HTTP response body for the
-// "logs_disabled" error.
-type RemoveOAuthServerLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // RemoveOAuthServerBadRequestResponseBody is the type of the "toolsets"
 // service "removeOAuthServer" endpoint HTTP response body for the
 // "bad_request" error.
@@ -2358,25 +2193,6 @@ type AddOAuthProxyServerUnauthorizedResponseBody struct {
 // service "addOAuthProxyServer" endpoint HTTP response body for the
 // "forbidden" error.
 type AddOAuthProxyServerForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AddOAuthProxyServerLogsDisabledResponseBody is the type of the "toolsets"
-// service "addOAuthProxyServer" endpoint HTTP response body for the
-// "logs_disabled" error.
-type AddOAuthProxyServerLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4079,20 +3895,6 @@ func NewCreateToolsetForbiddenResponseBody(res *goa.ServiceError) *CreateToolset
 	return body
 }
 
-// NewCreateToolsetLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "createToolset" endpoint of the "toolsets" service.
-func NewCreateToolsetLogsDisabledResponseBody(res *goa.ServiceError) *CreateToolsetLogsDisabledResponseBody {
-	body := &CreateToolsetLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCreateToolsetBadRequestResponseBody builds the HTTP response body from
 // the result of the "createToolset" endpoint of the "toolsets" service.
 func NewCreateToolsetBadRequestResponseBody(res *goa.ServiceError) *CreateToolsetBadRequestResponseBody {
@@ -4223,20 +4025,6 @@ func NewListToolsetsUnauthorizedResponseBody(res *goa.ServiceError) *ListToolset
 // result of the "listToolsets" endpoint of the "toolsets" service.
 func NewListToolsetsForbiddenResponseBody(res *goa.ServiceError) *ListToolsetsForbiddenResponseBody {
 	body := &ListToolsetsForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListToolsetsLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "listToolsets" endpoint of the "toolsets" service.
-func NewListToolsetsLogsDisabledResponseBody(res *goa.ServiceError) *ListToolsetsLogsDisabledResponseBody {
-	body := &ListToolsetsLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4387,20 +4175,6 @@ func NewUpdateToolsetForbiddenResponseBody(res *goa.ServiceError) *UpdateToolset
 	return body
 }
 
-// NewUpdateToolsetLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "updateToolset" endpoint of the "toolsets" service.
-func NewUpdateToolsetLogsDisabledResponseBody(res *goa.ServiceError) *UpdateToolsetLogsDisabledResponseBody {
-	body := &UpdateToolsetLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewUpdateToolsetBadRequestResponseBody builds the HTTP response body from
 // the result of the "updateToolset" endpoint of the "toolsets" service.
 func NewUpdateToolsetBadRequestResponseBody(res *goa.ServiceError) *UpdateToolsetBadRequestResponseBody {
@@ -4531,20 +4305,6 @@ func NewDeleteToolsetUnauthorizedResponseBody(res *goa.ServiceError) *DeleteTool
 // result of the "deleteToolset" endpoint of the "toolsets" service.
 func NewDeleteToolsetForbiddenResponseBody(res *goa.ServiceError) *DeleteToolsetForbiddenResponseBody {
 	body := &DeleteToolsetForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteToolsetLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "deleteToolset" endpoint of the "toolsets" service.
-func NewDeleteToolsetLogsDisabledResponseBody(res *goa.ServiceError) *DeleteToolsetLogsDisabledResponseBody {
-	body := &DeleteToolsetLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4695,20 +4455,6 @@ func NewGetToolsetForbiddenResponseBody(res *goa.ServiceError) *GetToolsetForbid
 	return body
 }
 
-// NewGetToolsetLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "getToolset" endpoint of the "toolsets" service.
-func NewGetToolsetLogsDisabledResponseBody(res *goa.ServiceError) *GetToolsetLogsDisabledResponseBody {
-	body := &GetToolsetLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewGetToolsetBadRequestResponseBody builds the HTTP response body from the
 // result of the "getToolset" endpoint of the "toolsets" service.
 func NewGetToolsetBadRequestResponseBody(res *goa.ServiceError) *GetToolsetBadRequestResponseBody {
@@ -4841,21 +4587,6 @@ func NewCheckMCPSlugAvailabilityUnauthorizedResponseBody(res *goa.ServiceError) 
 // "toolsets" service.
 func NewCheckMCPSlugAvailabilityForbiddenResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityForbiddenResponseBody {
 	body := &CheckMCPSlugAvailabilityForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityLogsDisabledResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityLogsDisabledResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityLogsDisabledResponseBody {
-	body := &CheckMCPSlugAvailabilityLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5014,20 +4745,6 @@ func NewCloneToolsetForbiddenResponseBody(res *goa.ServiceError) *CloneToolsetFo
 	return body
 }
 
-// NewCloneToolsetLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "cloneToolset" endpoint of the "toolsets" service.
-func NewCloneToolsetLogsDisabledResponseBody(res *goa.ServiceError) *CloneToolsetLogsDisabledResponseBody {
-	body := &CloneToolsetLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCloneToolsetBadRequestResponseBody builds the HTTP response body from the
 // result of the "cloneToolset" endpoint of the "toolsets" service.
 func NewCloneToolsetBadRequestResponseBody(res *goa.ServiceError) *CloneToolsetBadRequestResponseBody {
@@ -5160,21 +4877,6 @@ func NewAddExternalOAuthServerUnauthorizedResponseBody(res *goa.ServiceError) *A
 // service.
 func NewAddExternalOAuthServerForbiddenResponseBody(res *goa.ServiceError) *AddExternalOAuthServerForbiddenResponseBody {
 	body := &AddExternalOAuthServerForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAddExternalOAuthServerLogsDisabledResponseBody builds the HTTP response
-// body from the result of the "addExternalOAuthServer" endpoint of the
-// "toolsets" service.
-func NewAddExternalOAuthServerLogsDisabledResponseBody(res *goa.ServiceError) *AddExternalOAuthServerLogsDisabledResponseBody {
-	body := &AddExternalOAuthServerLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5334,21 +5036,6 @@ func NewRemoveOAuthServerForbiddenResponseBody(res *goa.ServiceError) *RemoveOAu
 	return body
 }
 
-// NewRemoveOAuthServerLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "removeOAuthServer" endpoint of the "toolsets"
-// service.
-func NewRemoveOAuthServerLogsDisabledResponseBody(res *goa.ServiceError) *RemoveOAuthServerLogsDisabledResponseBody {
-	body := &RemoveOAuthServerLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewRemoveOAuthServerBadRequestResponseBody builds the HTTP response body
 // from the result of the "removeOAuthServer" endpoint of the "toolsets"
 // service.
@@ -5486,21 +5173,6 @@ func NewAddOAuthProxyServerUnauthorizedResponseBody(res *goa.ServiceError) *AddO
 // service.
 func NewAddOAuthProxyServerForbiddenResponseBody(res *goa.ServiceError) *AddOAuthProxyServerForbiddenResponseBody {
 	body := &AddOAuthProxyServerForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAddOAuthProxyServerLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "addOAuthProxyServer" endpoint of the "toolsets"
-// service.
-func NewAddOAuthProxyServerLogsDisabledResponseBody(res *goa.ServiceError) *AddOAuthProxyServerLogsDisabledResponseBody {
-	body := &AddOAuthProxyServerLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

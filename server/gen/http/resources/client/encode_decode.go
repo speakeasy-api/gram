@@ -72,7 +72,6 @@ func EncodeListResourcesRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // DecodeListResourcesResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -127,40 +126,19 @@ func DecodeListResourcesResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewListResourcesUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body ListResourcesForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("resources", "listResources", err)
-				}
-				err = ValidateListResourcesForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("resources", "listResources", err)
-				}
-				return nil, NewListResourcesForbidden(&body)
-			case "logs_disabled":
-				var (
-					body ListResourcesLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("resources", "listResources", err)
-				}
-				err = ValidateListResourcesLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("resources", "listResources", err)
-				}
-				return nil, NewListResourcesLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("resources", "listResources", resp.StatusCode, string(body))
+			var (
+				body ListResourcesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("resources", "listResources", err)
 			}
+			err = ValidateListResourcesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("resources", "listResources", err)
+			}
+			return nil, NewListResourcesForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListResourcesBadRequestResponseBody

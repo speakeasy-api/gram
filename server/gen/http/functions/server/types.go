@@ -64,25 +64,6 @@ type GetSignedAssetURLForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetSignedAssetURLLogsDisabledResponseBody is the type of the "functions"
-// service "getSignedAssetURL" endpoint HTTP response body for the
-// "logs_disabled" error.
-type GetSignedAssetURLLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GetSignedAssetURLBadRequestResponseBody is the type of the "functions"
 // service "getSignedAssetURL" endpoint HTTP response body for the
 // "bad_request" error.
@@ -260,21 +241,6 @@ func NewGetSignedAssetURLUnauthorizedResponseBody(res *goa.ServiceError) *GetSig
 // the result of the "getSignedAssetURL" endpoint of the "functions" service.
 func NewGetSignedAssetURLForbiddenResponseBody(res *goa.ServiceError) *GetSignedAssetURLForbiddenResponseBody {
 	body := &GetSignedAssetURLForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetSignedAssetURLLogsDisabledResponseBody builds the HTTP response body
-// from the result of the "getSignedAssetURL" endpoint of the "functions"
-// service.
-func NewGetSignedAssetURLLogsDisabledResponseBody(res *goa.ServiceError) *GetSignedAssetURLLogsDisabledResponseBody {
-	body := &GetSignedAssetURLLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

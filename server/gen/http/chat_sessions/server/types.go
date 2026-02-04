@@ -74,24 +74,6 @@ type CreateForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateLogsDisabledResponseBody is the type of the "chatSessions" service
-// "create" endpoint HTTP response body for the "logs_disabled" error.
-type CreateLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CreateBadRequestResponseBody is the type of the "chatSessions" service
 // "create" endpoint HTTP response body for the "bad_request" error.
 type CreateBadRequestResponseBody struct {
@@ -258,24 +240,6 @@ type RevokeUnauthorizedResponseBody struct {
 // RevokeForbiddenResponseBody is the type of the "chatSessions" service
 // "revoke" endpoint HTTP response body for the "forbidden" error.
 type RevokeForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeLogsDisabledResponseBody is the type of the "chatSessions" service
-// "revoke" endpoint HTTP response body for the "logs_disabled" error.
-type RevokeLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -477,20 +441,6 @@ func NewCreateForbiddenResponseBody(res *goa.ServiceError) *CreateForbiddenRespo
 	return body
 }
 
-// NewCreateLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "create" endpoint of the "chatSessions" service.
-func NewCreateLogsDisabledResponseBody(res *goa.ServiceError) *CreateLogsDisabledResponseBody {
-	body := &CreateLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCreateBadRequestResponseBody builds the HTTP response body from the
 // result of the "create" endpoint of the "chatSessions" service.
 func NewCreateBadRequestResponseBody(res *goa.ServiceError) *CreateBadRequestResponseBody {
@@ -621,20 +571,6 @@ func NewRevokeUnauthorizedResponseBody(res *goa.ServiceError) *RevokeUnauthorize
 // of the "revoke" endpoint of the "chatSessions" service.
 func NewRevokeForbiddenResponseBody(res *goa.ServiceError) *RevokeForbiddenResponseBody {
 	body := &RevokeForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "revoke" endpoint of the "chatSessions" service.
-func NewRevokeLogsDisabledResponseBody(res *goa.ServiceError) *RevokeLogsDisabledResponseBody {
-	body := &RevokeLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

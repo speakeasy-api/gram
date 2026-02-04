@@ -74,24 +74,6 @@ type CreateForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateLogsDisabledResponseBody is the type of the "chatSessions" service
-// "create" endpoint HTTP response body for the "logs_disabled" error.
-type CreateLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // CreateBadRequestResponseBody is the type of the "chatSessions" service
 // "create" endpoint HTTP response body for the "bad_request" error.
 type CreateBadRequestResponseBody struct {
@@ -258,24 +240,6 @@ type RevokeUnauthorizedResponseBody struct {
 // RevokeForbiddenResponseBody is the type of the "chatSessions" service
 // "revoke" endpoint HTTP response body for the "forbidden" error.
 type RevokeForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RevokeLogsDisabledResponseBody is the type of the "chatSessions" service
-// "revoke" endpoint HTTP response body for the "logs_disabled" error.
-type RevokeLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -497,21 +461,6 @@ func NewCreateForbidden(body *CreateForbiddenResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewCreateLogsDisabled builds a chatSessions service create endpoint
-// logs_disabled error.
-func NewCreateLogsDisabled(body *CreateLogsDisabledResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewCreateBadRequest builds a chatSessions service create endpoint
 // bad_request error.
 func NewCreateBadRequest(body *CreateBadRequestResponseBody) *goa.ServiceError {
@@ -649,21 +598,6 @@ func NewRevokeUnauthorized(body *RevokeUnauthorizedResponseBody) *goa.ServiceErr
 // NewRevokeForbidden builds a chatSessions service revoke endpoint forbidden
 // error.
 func NewRevokeForbidden(body *RevokeForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRevokeLogsDisabled builds a chatSessions service revoke endpoint
-// logs_disabled error.
-func NewRevokeLogsDisabled(body *RevokeLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -839,30 +773,6 @@ func ValidateCreateUnauthorizedResponseBody(body *CreateUnauthorizedResponseBody
 // ValidateCreateForbiddenResponseBody runs the validations defined on
 // create_forbidden_response_body
 func ValidateCreateForbiddenResponseBody(body *CreateForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCreateLogsDisabledResponseBody runs the validations defined on
-// create_logs_disabled_response_body
-func ValidateCreateLogsDisabledResponseBody(body *CreateLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1103,30 +1013,6 @@ func ValidateRevokeUnauthorizedResponseBody(body *RevokeUnauthorizedResponseBody
 // ValidateRevokeForbiddenResponseBody runs the validations defined on
 // revoke_forbidden_response_body
 func ValidateRevokeForbiddenResponseBody(body *RevokeForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRevokeLogsDisabledResponseBody runs the validations defined on
-// revoke_logs_disabled_response_body
-func ValidateRevokeLogsDisabledResponseBody(body *RevokeLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

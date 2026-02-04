@@ -138,24 +138,6 @@ type CreatePackageForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreatePackageLogsDisabledResponseBody is the type of the "packages" service
-// "createPackage" endpoint HTTP response body for the "logs_disabled" error.
-type CreatePackageLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CreatePackageBadRequestResponseBody is the type of the "packages" service
 // "createPackage" endpoint HTTP response body for the "bad_request" error.
 type CreatePackageBadRequestResponseBody struct {
@@ -323,24 +305,6 @@ type UpdatePackageUnauthorizedResponseBody struct {
 // UpdatePackageForbiddenResponseBody is the type of the "packages" service
 // "updatePackage" endpoint HTTP response body for the "forbidden" error.
 type UpdatePackageForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdatePackageLogsDisabledResponseBody is the type of the "packages" service
-// "updatePackage" endpoint HTTP response body for the "logs_disabled" error.
-type UpdatePackageLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -544,24 +508,6 @@ type ListPackagesForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListPackagesLogsDisabledResponseBody is the type of the "packages" service
-// "listPackages" endpoint HTTP response body for the "logs_disabled" error.
-type ListPackagesLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ListPackagesBadRequestResponseBody is the type of the "packages" service
 // "listPackages" endpoint HTTP response body for the "bad_request" error.
 type ListPackagesBadRequestResponseBody struct {
@@ -744,24 +690,6 @@ type ListVersionsForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListVersionsLogsDisabledResponseBody is the type of the "packages" service
-// "listVersions" endpoint HTTP response body for the "logs_disabled" error.
-type ListVersionsLogsDisabledResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ListVersionsBadRequestResponseBody is the type of the "packages" service
 // "listVersions" endpoint HTTP response body for the "bad_request" error.
 type ListVersionsBadRequestResponseBody struct {
@@ -929,24 +857,6 @@ type PublishUnauthorizedResponseBody struct {
 // PublishForbiddenResponseBody is the type of the "packages" service "publish"
 // endpoint HTTP response body for the "forbidden" error.
 type PublishForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PublishLogsDisabledResponseBody is the type of the "packages" service
-// "publish" endpoint HTTP response body for the "logs_disabled" error.
-type PublishLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1259,20 +1169,6 @@ func NewCreatePackageForbiddenResponseBody(res *goa.ServiceError) *CreatePackage
 	return body
 }
 
-// NewCreatePackageLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "createPackage" endpoint of the "packages" service.
-func NewCreatePackageLogsDisabledResponseBody(res *goa.ServiceError) *CreatePackageLogsDisabledResponseBody {
-	body := &CreatePackageLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCreatePackageBadRequestResponseBody builds the HTTP response body from
 // the result of the "createPackage" endpoint of the "packages" service.
 func NewCreatePackageBadRequestResponseBody(res *goa.ServiceError) *CreatePackageBadRequestResponseBody {
@@ -1403,20 +1299,6 @@ func NewUpdatePackageUnauthorizedResponseBody(res *goa.ServiceError) *UpdatePack
 // result of the "updatePackage" endpoint of the "packages" service.
 func NewUpdatePackageForbiddenResponseBody(res *goa.ServiceError) *UpdatePackageForbiddenResponseBody {
 	body := &UpdatePackageForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdatePackageLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "updatePackage" endpoint of the "packages" service.
-func NewUpdatePackageLogsDisabledResponseBody(res *goa.ServiceError) *UpdatePackageLogsDisabledResponseBody {
-	body := &UpdatePackageLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1576,20 +1458,6 @@ func NewListPackagesForbiddenResponseBody(res *goa.ServiceError) *ListPackagesFo
 	return body
 }
 
-// NewListPackagesLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "listPackages" endpoint of the "packages" service.
-func NewListPackagesLogsDisabledResponseBody(res *goa.ServiceError) *ListPackagesLogsDisabledResponseBody {
-	body := &ListPackagesLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewListPackagesBadRequestResponseBody builds the HTTP response body from the
 // result of the "listPackages" endpoint of the "packages" service.
 func NewListPackagesBadRequestResponseBody(res *goa.ServiceError) *ListPackagesBadRequestResponseBody {
@@ -1730,20 +1598,6 @@ func NewListVersionsForbiddenResponseBody(res *goa.ServiceError) *ListVersionsFo
 	return body
 }
 
-// NewListVersionsLogsDisabledResponseBody builds the HTTP response body from
-// the result of the "listVersions" endpoint of the "packages" service.
-func NewListVersionsLogsDisabledResponseBody(res *goa.ServiceError) *ListVersionsLogsDisabledResponseBody {
-	body := &ListVersionsLogsDisabledResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewListVersionsBadRequestResponseBody builds the HTTP response body from the
 // result of the "listVersions" endpoint of the "packages" service.
 func NewListVersionsBadRequestResponseBody(res *goa.ServiceError) *ListVersionsBadRequestResponseBody {
@@ -1874,20 +1728,6 @@ func NewPublishUnauthorizedResponseBody(res *goa.ServiceError) *PublishUnauthori
 // result of the "publish" endpoint of the "packages" service.
 func NewPublishForbiddenResponseBody(res *goa.ServiceError) *PublishForbiddenResponseBody {
 	body := &PublishForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPublishLogsDisabledResponseBody builds the HTTP response body from the
-// result of the "publish" endpoint of the "packages" service.
-func NewPublishLogsDisabledResponseBody(res *goa.ServiceError) *PublishLogsDisabledResponseBody {
-	body := &PublishLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

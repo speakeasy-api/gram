@@ -67,7 +67,6 @@ func EncodeCreateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 // DecodeCreateResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -122,40 +121,19 @@ func DecodeCreateResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			}
 			return nil, NewCreateUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body CreateForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("chatSessions", "create", err)
-				}
-				err = ValidateCreateForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("chatSessions", "create", err)
-				}
-				return nil, NewCreateForbidden(&body)
-			case "logs_disabled":
-				var (
-					body CreateLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("chatSessions", "create", err)
-				}
-				err = ValidateCreateLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("chatSessions", "create", err)
-				}
-				return nil, NewCreateLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("chatSessions", "create", resp.StatusCode, string(body))
+			var (
+				body CreateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chatSessions", "create", err)
 			}
+			err = ValidateCreateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chatSessions", "create", err)
+			}
+			return nil, NewCreateForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateBadRequestResponseBody
@@ -330,7 +308,6 @@ func EncodeRevokeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 // DecodeRevokeResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -372,40 +349,19 @@ func DecodeRevokeResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			}
 			return nil, NewRevokeUnauthorized(&body)
 		case http.StatusForbidden:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "forbidden":
-				var (
-					body RevokeForbiddenResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("chatSessions", "revoke", err)
-				}
-				err = ValidateRevokeForbiddenResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("chatSessions", "revoke", err)
-				}
-				return nil, NewRevokeForbidden(&body)
-			case "logs_disabled":
-				var (
-					body RevokeLogsDisabledResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("chatSessions", "revoke", err)
-				}
-				err = ValidateRevokeLogsDisabledResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("chatSessions", "revoke", err)
-				}
-				return nil, NewRevokeLogsDisabled(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("chatSessions", "revoke", resp.StatusCode, string(body))
+			var (
+				body RevokeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chatSessions", "revoke", err)
 			}
+			err = ValidateRevokeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chatSessions", "revoke", err)
+			}
+			return nil, NewRevokeForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body RevokeBadRequestResponseBody
