@@ -65,7 +65,8 @@ export default function Home() {
     useListToolsets();
   const externalMcps = deploymentResult?.deployment?.externalMcps ?? [];
   const deployment = deploymentResult?.deployment;
-  const isFunctionsEnabled = telemetry.isFeatureEnabled("gram-functions") ?? false;
+  const isFunctionsEnabled =
+    telemetry.isFeatureEnabled("gram-functions") ?? false;
 
   const featuredServers = useMemo(() => {
     if (!data?.pages) return [];
