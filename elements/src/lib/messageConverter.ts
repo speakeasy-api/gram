@@ -146,16 +146,14 @@ function buildAssistantContentParts(
     return []
   }
 
-  if (typeof msg.content === 'string' || !msg.content) {
-    return [
-      {
-        type: 'text',
-        text: msg.content ?? '',
-      },
-    ]
-  }
-
   const parts: ThreadAssistantMessagePart[] = []
+
+  if (typeof msg.content === 'string' || !msg.content) {
+    parts.push({
+      type: 'text',
+      text: msg.content ?? '',
+    })
+  }
 
   const toolCallsJSON = (msg as any).tool_calls as FIXME<
     string | undefined,
@@ -331,6 +329,11 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
   const uiMessages: { parentId: string | null; message: UIMessage }[] = []
   let prevId: string | null = null
 
+  // Track tool call IDs across messages to deduplicate. The server accumulates
+  // all tool calls from a turn into each message, so without this, every
+  // assistant message in a multi-step tool use flow would show the full count.
+  const seenToolCallIds = new Set<string>()
+
   for (const msg of messages) {
     switch (msg.role) {
       case 'developer':
@@ -361,6 +364,7 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
         break
       }
       case 'user': {
+        seenToolCallIds.clear()
         uiMessages.push({
           parentId: prevId,
           message: {
@@ -382,7 +386,8 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
             role: 'assistant',
             parts: convertGramMessagePartsToUIMessageParts(
               msg,
-              toolCallResults
+              toolCallResults,
+              seenToolCallIds
             ),
           } satisfies UIMessage,
         }
@@ -403,7 +408,8 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
 
 export function convertGramMessagePartsToUIMessageParts(
   msg: UserMessage | AssistantMessage,
-  toolResults: Map<string, ToolResponseMessage>
+  toolResults: Map<string, ToolResponseMessage>,
+  seenToolCallIds?: Set<string>
 ): UIMessage['parts'] {
   const uiparts: UIMessage['parts'] = []
 
@@ -480,6 +486,12 @@ export function convertGramMessagePartsToUIMessageParts(
     }
 
     for (const tc of toolCalls) {
+      // The server accumulates all tool calls from a turn into each message's
+      // tool_calls field. Deduplicate across messages so each tool call only
+      // appears in the first message that references it.
+      if (seenToolCallIds?.has(tc.id)) continue
+      seenToolCallIds?.add(tc.id)
+
       const content = toolResults.get(tc.id)?.content
       uiparts.push({
         type: 'dynamic-tool',
