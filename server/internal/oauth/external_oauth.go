@@ -193,7 +193,7 @@ func AttachExternalOAuth(mux goahttp.Muxer, service *ExternalOAuthService) {
 		oops.ErrHandle(service.logger, service.withAuth(service.handleExternalDisconnect)).ServeHTTP(w, r)
 	})
 
-	// Check OAuth connection status for a toolset (query params: toolset_id, issuer)
+	// Check OAuth connection status for a toolset (query params: toolset_id)
 	o11y.AttachHandler(mux, "GET", "/oauth-external/status", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.withAuth(service.handleExternalStatus)).ServeHTTP(w, r)
 	})
@@ -566,13 +566,8 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 
 	// Parse query parameters - issuer is required for status check
 	toolsetIDStr := r.URL.Query().Get("toolset_id")
-	issuer := r.URL.Query().Get("issuer")
-
 	if toolsetIDStr == "" {
 		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").Log(ctx, s.logger)
-	}
-	if issuer == "" {
-		return oops.E(oops.CodeBadRequest, nil, "issuer is required").Log(ctx, s.logger)
 	}
 
 	toolsetID, err := uuid.Parse(toolsetIDStr)
