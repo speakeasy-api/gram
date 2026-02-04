@@ -519,7 +519,8 @@ CREATE TABLE IF NOT EXISTS custom_domains (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_domain_key
-ON custom_domains (domain);
+ON custom_domains (domain)
+WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_key
 ON custom_domains (organization_id)
