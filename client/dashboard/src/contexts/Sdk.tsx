@@ -24,10 +24,13 @@ const createQueryClient = () =>
         throwOnError: true,
         retry: (failureCount, error: Error) => {
           // Don't retry on 4xx errors
-          if (error && typeof error === "object" && "statusCode" in error) {
-            const statusCode = (error as unknown as { statusCode: number })
-              .statusCode;
-            if (statusCode >= 400 && statusCode < 500) {
+          if (error && typeof error === "object") {
+            let status = (error as unknown as { status: unknown }).status;
+            if (typeof status !== "number") {
+              status = (error as unknown as { statusCode: unknown }).statusCode;
+            }
+
+            if (typeof status === "number" && status >= 400 && status < 500) {
               return false;
             }
           }
