@@ -125,7 +125,7 @@ export function useExternalMcpOAuthStatus(
 
       return parseResult.data;
     },
-    enabled: options?.enabled ?? !!toolsetId,
+    enabled: options?.enabled && !!toolsetId,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   });
