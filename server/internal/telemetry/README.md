@@ -11,7 +11,6 @@ Unlike PostgreSQL queries in other packages, ClickHouse queries are **not auto-g
 ### Query Files
 
 - **`queries.sql.go`**: Query implementations using squirrel query builder
-- **`builder.go`**: Helper functions for ClickHouse-specific query patterns
 - **`pagination.go`**: Cursor pagination helpers
 
 ### Adding a New Query
@@ -19,20 +18,11 @@ Unlike PostgreSQL queries in other packages, ClickHouse queries are **not auto-g
 **Implement in `queries.sql.go`** using squirrel:
 
 1. Create a params struct for the query inputs
-2. Use `chSelect()` or `chInsert()` to build the query
-3. Use helper functions from `builder.go` for optional filters
+2. Use `sq.Select(...)` to build queries (the `sq` var is pre-configured for ClickHouse `?` placeholders)
+3. Add optional filters with explicit `if` statements for clarity
 4. Use helper functions from `pagination.go` for cursor pagination
 
-### Helper Functions
-
-**builder.go** provides ClickHouse-specific helpers:
-- `chSelect(columns...)` - Creates a SELECT builder with ClickHouse placeholder format
-- `chInsert(table)` - Creates an INSERT builder
-- `OptionalEq(sb, column, value)` - Adds WHERE only if value is non-empty
-- `OptionalHas(sb, column, values)` - Adds array membership check
-- `OptionalPosition(sb, column, value)` - Adds substring search
-- `OptionalUUIDEq(sb, column, value)` - Adds UUID equality with `toUUIDOrNull()`
-- `OptionalAttrEq(sb, attrExpr, value)` - Adds JSON attribute equality
+### Pagination Helpers
 
 **pagination.go** provides cursor pagination:
 - `withPagination(sb, cursor, sortOrder)` - WHERE-based cursor for simple queries
@@ -52,12 +42,14 @@ type ListItemsParams struct {
 }
 
 func (q *Queries) ListItems(ctx context.Context, arg ListItemsParams) ([]Item, error) {
-    sb := chSelect("id", "name", "created_at").
+    sb := sq.Select("id", "name", "created_at").
         From("items").
         Where("project_id = ?", arg.ProjectID)
 
-    // Optional filters - no duplicate parameters needed!
-    sb = OptionalEq(sb, "deployment_id", arg.DeploymentID)
+    // Optional filters - explicit conditionals for clarity
+    if arg.DeploymentID != "" {
+        sb = sb.Where(squirrel.Eq{"deployment_id": arg.DeploymentID})
+    }
 
     // Pagination
     sb = withPagination(sb, arg.Cursor, arg.SortOrder)
@@ -103,14 +95,20 @@ sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.ProjectID, "ch
 
 ### Optional Filters
 
-Use helpers from `builder.go` instead of duplicating parameters:
+Use explicit `if` statements for optional filters:
 
 ```go
 // Old pattern (raw SQL): (? = '' or deployment_id = ?) - required passing value twice
 // New pattern (squirrel): conditional WHERE clause
-sb = OptionalEq(sb, "deployment_id", arg.DeploymentID)  // only adds WHERE if non-empty
-sb = OptionalHas(sb, "gram_urn", arg.GramURNs)          // array membership check
-sb = OptionalPosition(sb, "gram_urn", arg.SearchTerm)   // substring search
+if arg.DeploymentID != "" {
+    sb = sb.Where(squirrel.Eq{"deployment_id": arg.DeploymentID})
+}
+if len(arg.GramURNs) > 0 {
+    sb = sb.Where("has(?, gram_urn)", arg.GramURNs)  // array membership check
+}
+if arg.SearchTerm != "" {
+    sb = sb.Where("position(gram_urn, ?) > 0", arg.SearchTerm)  // substring search
+}
 ```
 
 ## Testing

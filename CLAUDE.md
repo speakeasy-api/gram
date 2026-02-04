@@ -168,7 +168,6 @@ The `server/internal/telemetry` package uses ClickHouse for high-performance ana
 ### File Structure
 
 - **`queries.sql.go`**: Query implementations using squirrel
-- **`builder.go`**: Helper functions for ClickHouse-specific query patterns (`chSelect`, `OptionalEq`, etc.)
 - **`pagination.go`**: Cursor pagination helpers (`withPagination`, `withOrdering`, etc.)
 - **`README.md`**: Detailed documentation and patterns specific to ClickHouse
 
@@ -177,7 +176,7 @@ The `server/internal/telemetry` package uses ClickHouse for high-performance ana
 When asked to add a new ClickHouse query to the telemetry package:
 
 1. **Create a params struct** for query inputs
-2. **Build the query using squirrel** with helper functions:
+2. **Build the query using squirrel** (the `sq` var in queries.sql.go is pre-configured for ClickHouse):
 
    ```go
    type GetMetricsParams struct {
@@ -187,12 +186,14 @@ When asked to add a new ClickHouse query to the telemetry package:
    }
 
    func (q *Queries) GetMetrics(ctx context.Context, arg GetMetricsParams) ([]Metric, error) {
-       sb := chSelect("id", "value", "timestamp").
+       sb := sq.Select("id", "value", "timestamp").
            From("metrics").
            Where("project_id = ?", arg.ProjectID)
 
-       // Optional filters - no duplicate parameters needed
-       sb = OptionalEq(sb, "deployment_id", arg.DeploymentID)
+       // Optional filters - explicit conditionals for clarity
+       if arg.DeploymentID != "" {
+           sb = sb.Where(squirrel.Eq{"deployment_id": arg.DeploymentID})
+       }
 
        sb = sb.Limit(uint64(arg.Limit))
 
@@ -206,11 +207,7 @@ When asked to add a new ClickHouse query to the telemetry package:
    }
    ```
 
-3. **Use helper functions** from `builder.go` and `pagination.go`:
-   - `chSelect(columns...)` / `chInsert(table)` - ClickHouse placeholder format
-   - `OptionalEq(sb, column, value)` - conditional WHERE if non-empty
-   - `OptionalHas(sb, column, values)` - array membership check
-   - `OptionalPosition(sb, column, value)` - substring search
+3. **Use pagination helpers** from `pagination.go`:
    - `withPagination(sb, cursor, sortOrder)` - cursor pagination
    - `withOrdering(sb, sortOrder, primaryCol, secondaryCol)` - ORDER BY
 

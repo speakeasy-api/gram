@@ -5,7 +5,11 @@ import (
 	"fmt"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/Masterminds/squirrel"
 )
+
+// sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
+var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
 // InsertTelemetryLogParams contains the parameters for inserting a telemetry log.
 type InsertTelemetryLogParams struct {
@@ -36,7 +40,7 @@ type InsertTelemetryLogParams struct {
 func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLogParams) error {
 	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
 
-	query, args, err := chInsert("telemetry_logs").
+	query, args, err := sq.Insert("telemetry_logs").
 		Columns(
 			"id",
 			"time_unix_nano",
@@ -110,7 +114,7 @@ type ListTelemetryLogsParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsParams) ([]TelemetryLog, error) {
-	sb := chSelect(
+	sb := sq.Select(
 		"id",
 		"time_unix_nano",
 		"observed_time_unix_nano",
@@ -133,17 +137,37 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
-	// Apply optional filters - no more duplicate parameters!
-	sb = OptionalHas(sb, "gram_urn", arg.GramURNs)
-	sb = OptionalEq(sb, "trace_id", arg.TraceID)
-	sb = OptionalUUIDEq(sb, "gram_deployment_id", arg.GramDeploymentID)
-	sb = OptionalUUIDEq(sb, "gram_function_id", arg.GramFunctionID)
-	sb = OptionalEq(sb, "severity_text", arg.SeverityText)
-	sb = OptionalAttrEqInt32(sb, "toInt32OrZero(toString(attributes.`http.response.status_code`))", arg.HTTPResponseStatusCode)
-	sb = OptionalAttrEq(sb, "toString(attributes.`http.route`)", arg.HTTPRoute)
-	sb = OptionalAttrEq(sb, "toString(attributes.`http.request.method`)", arg.HTTPRequestMethod)
-	sb = OptionalEq(sb, "service_name", arg.ServiceName)
-	sb = OptionalEq(sb, "gram_chat_id", arg.GramChatID)
+	// Optional filters
+	if len(arg.GramURNs) > 0 {
+		sb = sb.Where("has(?, gram_urn)", arg.GramURNs)
+	}
+	if arg.TraceID != "" {
+		sb = sb.Where(squirrel.Eq{"trace_id": arg.TraceID})
+	}
+	if arg.GramDeploymentID != "" {
+		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+	}
+	if arg.GramFunctionID != "" {
+		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
+	}
+	if arg.SeverityText != "" {
+		sb = sb.Where(squirrel.Eq{"severity_text": arg.SeverityText})
+	}
+	if arg.HTTPResponseStatusCode != 0 {
+		sb = sb.Where("toInt32OrZero(toString(attributes.`http.response.status_code`)) = ?", arg.HTTPResponseStatusCode)
+	}
+	if arg.HTTPRoute != "" {
+		sb = sb.Where("toString(attributes.`http.route`) = ?", arg.HTTPRoute)
+	}
+	if arg.HTTPRequestMethod != "" {
+		sb = sb.Where("toString(attributes.`http.request.method`) = ?", arg.HTTPRequestMethod)
+	}
+	if arg.ServiceName != "" {
+		sb = sb.Where(squirrel.Eq{"service_name": arg.ServiceName})
+	}
+	if arg.GramChatID != "" {
+		sb = sb.Where(squirrel.Eq{"gram_chat_id": arg.GramChatID})
+	}
 
 	sb = withPagination(sb, arg.Cursor, arg.SortOrder)
 
@@ -200,7 +224,7 @@ type ListTracesParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]TraceSummary, error) {
-	sb := chSelect(
+	sb := sq.Select(
 		"trace_id",
 		"min(time_unix_nano) as start_time_unix_nano",
 		"count(*) as log_count",
@@ -214,10 +238,16 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		Where("trace_id IS NOT NULL").
 		Where("trace_id != ''")
 
-	// Apply optional filters
-	sb = OptionalUUIDEq(sb, "gram_deployment_id", arg.GramDeploymentID)
-	sb = OptionalUUIDEq(sb, "gram_function_id", arg.GramFunctionID)
-	sb = OptionalPosition(sb, "telemetry_logs.gram_urn", arg.GramURN)
+	// Optional filters
+	if arg.GramDeploymentID != "" {
+		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+	}
+	if arg.GramFunctionID != "" {
+		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
+	}
+	if arg.GramURN != "" {
+		sb = sb.Where("position(telemetry_logs.gram_urn, ?) > 0", arg.GramURN)
+	}
 
 	sb = sb.GroupBy("trace_id")
 
@@ -269,7 +299,7 @@ type GetMetricsSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryParams) (*MetricsSummaryRow, error) {
-	sb := chSelect(
+	sb := sq.Select(
 		// Cardinality (exclude empty strings)
 		"uniqExactIf(toString(attributes.`gen_ai.conversation.id`), toString(attributes.`gen_ai.conversation.id`) != '') AS total_chats",
 		"uniqExactIf(toString(attributes.`gen_ai.response.model`), toString(attributes.`gen_ai.response.model`) != '') AS distinct_models",
@@ -377,7 +407,7 @@ type ListChatsParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSummary, error) {
-	sb := chSelect(
+	sb := sq.Select(
 		"gram_chat_id",
 		"min(time_unix_nano) as start_time_unix_nano",
 		"max(time_unix_nano) as end_time_unix_nano",
@@ -403,9 +433,13 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		Where("gram_chat_id IS NOT NULL").
 		Where("gram_chat_id != ''")
 
-	// Apply optional filters
-	sb = OptionalUUIDEq(sb, "gram_deployment_id", arg.GramDeploymentID)
-	sb = OptionalPosition(sb, "telemetry_logs.gram_urn", arg.GramURN)
+	// Optional filters
+	if arg.GramDeploymentID != "" {
+		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+	}
+	if arg.GramURN != "" {
+		sb = sb.Where("position(telemetry_logs.gram_urn, ?) > 0", arg.GramURN)
+	}
 
 	sb = sb.GroupBy("gram_chat_id")
 

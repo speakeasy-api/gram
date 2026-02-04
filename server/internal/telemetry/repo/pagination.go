@@ -1,13 +1,13 @@
 package repo
 
 import (
-	sq "github.com/Masterminds/squirrel"
+	"github.com/Masterminds/squirrel"
 )
 
 // withPagination adds cursor-based WHERE conditions for simple (non-aggregated) queries.
 // Uses composite tuple comparison: (time_unix_nano, id) > or < (cursor_time, cursor_id).
 // This replaces the complex IF() conditional cursor logic from raw SQL.
-func withPagination(sb sq.SelectBuilder, cursor, sortOrder string) sq.SelectBuilder {
+func withPagination(sb squirrel.SelectBuilder, cursor, sortOrder string) squirrel.SelectBuilder {
 	if cursor == "" {
 		return sb
 	}
@@ -32,7 +32,7 @@ func withPagination(sb sq.SelectBuilder, cursor, sortOrder string) sq.SelectBuil
 //   - projectID: required for scoping the subquery to the correct project
 //   - groupColumn: the column used in GROUP BY (e.g., "trace_id", "gram_chat_id")
 //   - timeExpr: the time expression to compare (e.g., "min(time_unix_nano)")
-func withHavingPagination(sb sq.SelectBuilder, cursor, sortOrder, projectID, groupColumn, timeExpr string) sq.SelectBuilder {
+func withHavingPagination(sb squirrel.SelectBuilder, cursor, sortOrder, projectID, groupColumn, timeExpr string) squirrel.SelectBuilder {
 	if cursor == "" {
 		return sb
 	}
@@ -48,7 +48,7 @@ func withHavingPagination(sb sq.SelectBuilder, cursor, sortOrder, projectID, gro
 // withHavingTuplePagination adds cursor-based HAVING conditions with tuple comparison for tie-breaking.
 // Used for queries like ListChats where multiple records might have the same start time.
 // The tuple comparison includes both the time expression and the group column for stable ordering.
-func withHavingTuplePagination(sb sq.SelectBuilder, cursor, sortOrder, projectID, groupColumn, timeExpr string) sq.SelectBuilder {
+func withHavingTuplePagination(sb squirrel.SelectBuilder, cursor, sortOrder, projectID, groupColumn, timeExpr string) squirrel.SelectBuilder {
 	if cursor == "" {
 		return sb
 	}
@@ -63,7 +63,7 @@ func withHavingTuplePagination(sb sq.SelectBuilder, cursor, sortOrder, projectID
 
 // withOrdering adds ORDER BY clauses based on sort direction.
 // Supports an optional secondary column for tie-breaking.
-func withOrdering(sb sq.SelectBuilder, sortOrder, primaryCol, secondaryCol string) sq.SelectBuilder {
+func withOrdering(sb squirrel.SelectBuilder, sortOrder, primaryCol, secondaryCol string) squirrel.SelectBuilder {
 	if sortOrder == "asc" {
 		sb = sb.OrderBy(primaryCol + " ASC")
 		if secondaryCol != "" {
