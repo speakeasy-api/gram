@@ -1,3 +1,7 @@
+# Fixed project name so all git worktrees share the same infra containers
+# instead of each worktree creating its own set and causing port conflicts.
+name: gram
+
 services:
   gram-db:
     image: pgvector/pgvector:pg17
@@ -54,7 +58,7 @@ services:
 
   oteltui:
     image: ymtdzzz/otel-tui@sha256:67010920b012ee998888cf39a794f32e97ca4b01cd02681f25e8f47c261e305b
-    container_name: otel-tui
+
     stdin_open: true
     tty: true
     ports:
