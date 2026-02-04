@@ -11,6 +11,7 @@ import (
 func DeclareErrorResponses() {
 	Error(string(oops.CodeUnauthorized), func() { Description(oops.CodeUnauthorized.UserMessage()) })
 	Error(string(oops.CodeForbidden), func() { Description(oops.CodeForbidden.UserMessage()) })
+	Error(string(oops.CodeLogsDisabled), func() { Description(oops.CodeLogsDisabled.UserMessage()) })
 	Error(string(oops.CodeBadRequest), func() { Description(oops.CodeBadRequest.UserMessage()) })
 	Error(string(oops.CodeNotFound), func() { Description(oops.CodeNotFound.UserMessage()) })
 	Error(string(oops.CodeConflict), func() { Description(oops.CodeConflict.UserMessage()) })
@@ -34,6 +35,9 @@ func DeclareErrorResponses() {
 			ContentType("application/json")
 		})
 		Response(string(oops.CodeForbidden), StatusForbidden, func() {
+			ContentType("application/json")
+		})
+		Response(string(oops.CodeLogsDisabled), StatusForbidden, func() {
 			ContentType("application/json")
 		})
 		Response(string(oops.CodeBadRequest), StatusBadRequest, func() {
