@@ -75,7 +75,7 @@ export const getExternalMcpOAuthStatusQueryKey = (
 
 /**
  * Shared hook for querying OAuth status from the /oauth-external/status endpoint.
- * Used by both external MCP OAuth (2.1) and legacy external OAuth server paths.
+ * Used by external MCP OAuth (2.1).
  */
 export function useExternalMcpOAuthStatus(
   toolsetId: string | undefined,
@@ -334,176 +334,11 @@ function ExternalMcpOAuthConnection({
   );
 }
 
-/**
- * OAuth connection status component for external OAuth servers (legacy path)
- */
-function OAuthConnection({
-  toolsetId,
-  toolset,
-}: {
-  toolsetId: string;
-  toolset: Toolset;
-}) {
-  const queryClient = useQueryClient();
-  const apiUrl = getServerURL();
-  const project = useProject();
-
-  // Extract OAuth metadata from toolset
-  const oauthMetadata = toolset.externalOauthServer?.metadata as
-    | {
-        issuer?: string;
-      }
-    | undefined;
-  const issuer = oauthMetadata?.issuer;
-  const slug = toolset.externalOauthServer?.slug;
-
-  // Query OAuth status using the shared hook
-  const { data: oauthStatus, isLoading: statusLoading } =
-    useExternalMcpOAuthStatus(toolsetId, {
-      slug,
-      enabled: !!issuer,
-    });
-
-  // Disconnect mutation
-  const disconnectMutation = useMutation({
-    mutationFn: async () => {
-      if (!issuer) throw new Error("No issuer configured");
-
-      const params = new URLSearchParams({
-        toolset_id: toolsetId,
-      });
-
-      const response = await fetch(
-        `${apiUrl}/oauth-external/disconnect?${params.toString()}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-          headers: {
-            "Gram-Project": project.slug,
-          },
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to disconnect");
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["oauthExternalStatus", toolsetId, slug ?? ""],
-      });
-      toast.success("Disconnected from OAuth provider");
-    },
-    onError: () => {
-      toast.error("Failed to disconnect");
-    },
-  });
-
-  // Handle connect click
-  const handleConnect = () => {
-    if (!issuer) return;
-
-    const params = new URLSearchParams({
-      toolset_id: toolsetId,
-      redirect_uri: window.location.href.split("?")[0],
-    });
-
-    const authUrl = `${apiUrl}/oauth-external/authorize?${params.toString()}`;
-
-    // Open in popup
-    const popup = window.open(
-      authUrl,
-      "oauth_popup",
-      "width=600,height=700,scrollbars=yes",
-    );
-
-    if (!popup) {
-      // Fallback to redirect
-      window.location.href = authUrl;
-      return;
-    }
-
-    // Poll for popup close and refresh status
-    const pollTimer = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(pollTimer);
-        queryClient.invalidateQueries({
-          queryKey: ["oauthExternalStatus", toolsetId, slug ?? ""],
-        });
-      }
-    }, 500);
-  };
-
-  if (!issuer) return null;
-
-  const isConnected = oauthStatus?.status === "authenticated";
-  const providerName =
-    oauthStatus?.provider_name ||
-    toolset.externalOauthServer?.slug ||
-    "OAuth Provider";
-
-  return (
-    <div className="border rounded-md p-3 bg-muted/30">
-      <Stack gap={2}>
-        <Stack
-          direction="horizontal"
-          align="center"
-          className="justify-between"
-        >
-          <Type variant="small" className="font-medium">
-            External OAuth
-          </Type>
-          {statusLoading ? (
-            <Loader2 className="size-4 animate-spin text-muted-foreground" />
-          ) : isConnected ? (
-            <Badge variant="success">
-              <CheckCircle className="size-3 mr-1" />
-              Connected
-            </Badge>
-          ) : (
-            <Badge variant="warning">Not Connected</Badge>
-          )}
-        </Stack>
-
-        <Type variant="small" className="text-muted-foreground">
-          {providerName}
-        </Type>
-
-        {isConnected ? (
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full"
-            onClick={() => disconnectMutation.mutate()}
-            disabled={disconnectMutation.isPending}
-          >
-            <LogOut className="size-3 mr-2" />
-            Disconnect
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant="default"
-            className="w-full"
-            onClick={handleConnect}
-          >
-            <ExternalLink className="size-3 mr-2" />
-            Connect
-          </Button>
-        )}
-      </Stack>
-    </div>
-  );
-}
-
 export function PlaygroundAuth({
   toolset,
   onUserProvidedHeadersChange,
 }: PlaygroundAuthProps) {
   const routes = useRoutes();
-
-  // Check if toolset has external OAuth configured (legacy path)
-  const hasExternalOAuth = !!toolset.externalOauthServer?.metadata;
 
   // Check if toolset has external MCP tools that require OAuth (MCP protocol discovery)
   const mcpOAuthConfig = useMemo(
@@ -561,8 +396,8 @@ export function PlaygroundAuth({
     }
   }, [userProvidedValues, onUserProvidedHeadersChange, mcpMetadata]);
 
-  // Show "no auth required" only if there are no env vars AND no OAuth of any kind
-  if (envVars.length === 0 && !hasExternalOAuth && !hasExternalMcpOAuth) {
+  // Show "no auth required" only if there are no env vars AND no MCP OAuth
+  if (envVars.length === 0 && !hasExternalMcpOAuth) {
     return (
       <div className="text-center py-4">
         <Type variant="small" className="text-muted-foreground">
@@ -580,11 +415,6 @@ export function PlaygroundAuth({
           toolsetSlug={toolset.slug}
           mcpOAuthConfig={mcpOAuthConfig}
         />
-      )}
-
-      {/* External OAuth Connection UI (legacy path) */}
-      {hasExternalOAuth && !hasExternalMcpOAuth && (
-        <OAuthConnection toolsetId={toolset.id} toolset={toolset} />
       )}
 
       {/* Environment Variables */}
