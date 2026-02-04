@@ -111,6 +111,7 @@ type hostedPageData struct {
 	SiteURL           string
 	LogoAssetURL      string
 	DocsURL           string
+	DocsText          string
 	Instructions      string
 	IsPublic          bool
 }
@@ -212,6 +213,11 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		externalDocURL = conv.ToPGText(*payload.ExternalDocumentationURL)
 	}
 
+	var externalDocText pgtype.Text
+	if payload.ExternalDocumentationText != nil {
+		externalDocText = conv.ToPGText(*payload.ExternalDocumentationText)
+	}
+
 	var instructions pgtype.Text
 	if payload.Instructions != nil {
 		instructions = conv.ToPGText(*payload.Instructions)
@@ -235,7 +241,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		ToolsetID:                 toolset.ID,
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  externalDocURL,
-		ExternalDocumentationText: conv.ToPGText(""), // FIXME after db migration
+		ExternalDocumentationText: externalDocText,
 		LogoID:                    logoID,
 		Instructions:              instructions,
 		DefaultEnvironmentID:      defaultEnvironmentID,
@@ -510,16 +516,17 @@ func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 	}
 
 	metadata := &types.McpMetadata{
-		ID:                       record.ID.String(),
-		ToolsetID:                record.ToolsetID.String(),
-		CreatedAt:                record.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                record.UpdatedAt.Time.Format(time.RFC3339),
-		ExternalDocumentationURL: conv.FromPGText[string](record.ExternalDocumentationUrl),
-		LogoAssetID:              conv.FromNullableUUID(record.LogoID),
-		Instructions:             conv.FromPGText[string](record.Instructions),
-		DefaultEnvironmentID:     conv.FromNullableUUID(record.DefaultEnvironmentID),
-		InstallationOverrideURL:  conv.FromPGText[string](record.InstallationOverrideUrl),
-		EnvironmentConfigs:       environmentConfigs,
+		ID:                        record.ID.String(),
+		ToolsetID:                 record.ToolsetID.String(),
+		CreatedAt:                 record.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                 record.UpdatedAt.Time.Format(time.RFC3339),
+		ExternalDocumentationURL:  conv.FromPGText[string](record.ExternalDocumentationUrl),
+		ExternalDocumentationText: conv.FromPGText[string](record.ExternalDocumentationText),
+		LogoAssetID:               conv.FromNullableUUID(record.LogoID),
+		Instructions:              conv.FromPGText[string](record.Instructions),
+		DefaultEnvironmentID:      conv.FromNullableUUID(record.DefaultEnvironmentID),
+		InstallationOverrideURL:   conv.FromPGText[string](record.InstallationOverrideUrl),
+		EnvironmentConfigs:        environmentConfigs,
 	}
 	return metadata, nil
 }
@@ -639,6 +646,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	logoAssetURL := s.siteURL.String() + "/external/sticker-logo.png"
 
 	var docsURL string
+	var docsText string
 	var instructions string
 	headerDisplayNames := make(map[string]string)
 	variableProvidedBy := make(map[string]string)
@@ -664,6 +672,9 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
+		}
+		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationText); docs != nil {
+			docsText = strings.TrimSpace(*docs)
 		}
 		if inst := conv.FromPGText[string](metadataRecord.Instructions); inst != nil {
 			instructions = strings.TrimSpace(*inst)
@@ -757,6 +768,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		SiteURL:           s.siteURL.String(),
 		LogoAssetURL:      logoAssetURL,
 		DocsURL:           docsURL,
+		DocsText:          docsText,
 		Instructions:      instructions,
 		IsPublic:          toolset.McpIsPublic,
 	}
