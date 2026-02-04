@@ -7,6 +7,7 @@ type Code string
 const (
 	CodeUnauthorized       Code = "unauthorized"
 	CodeForbidden          Code = "forbidden"
+	CodeLogsDisabled       Code = "logs_disabled"
 	CodeBadRequest         Code = "bad_request"
 	CodeNotFound           Code = "not_found"
 	CodeConflict           Code = "conflict"
@@ -21,6 +22,7 @@ const (
 var StatusCodes = map[Code]int{
 	CodeUnauthorized:       http.StatusUnauthorized,
 	CodeForbidden:          http.StatusForbidden,
+	CodeLogsDisabled:       http.StatusForbidden,
 	CodeBadRequest:         http.StatusBadRequest,
 	CodeNotFound:           http.StatusNotFound,
 	CodeConflict:           http.StatusConflict,
@@ -38,6 +40,8 @@ func (c Code) UserMessage() string {
 		return "unauthorized access"
 	case CodeForbidden:
 		return "permission denied"
+	case CodeLogsDisabled:
+		return "logs are not enabled for this organization"
 	case CodeBadRequest:
 		return "request is invalid"
 	case CodeNotFound:

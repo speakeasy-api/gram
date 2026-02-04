@@ -7,14 +7,19 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import { isLogsDisabledError } from "@/lib/telemetry-errors";
+import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { getServerURL } from "@/lib/utils";
 import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary";
-import { useGramContext, useListToolsets } from "@gram/client/react-query";
+import { FeatureName } from "@gram/client/models/components";
+import {
+  useFeaturesSetMutation,
+  useGramContext,
+  useListToolsets,
+} from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Icon, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { Button, Icon, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -28,7 +33,7 @@ export default function MetricsPage() {
 
   const client = useGramContext();
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, error, refetch } = useQuery({
     queryKey: [
       "@gram/client",
       "telemetry",
@@ -52,6 +57,40 @@ export default function MetricsPage() {
       return failureCount < 3;
     },
   });
+
+  const [logsMutationError, setLogsMutationError] = useState<string | null>(
+    null,
+  );
+  const { mutateAsync: setLogsFeature, status: logsMutationStatus } =
+    useFeaturesSetMutation({
+      onSuccess: () => {
+        setLogsMutationError(null);
+        refetch();
+      },
+      onError: (err) => {
+        const message =
+          err instanceof Error ? err.message : "Failed to update logs";
+        setLogsMutationError(message);
+      },
+    });
+
+  const isMutatingLogs = logsMutationStatus === "pending";
+
+  const handleEnableLogs = async () => {
+    setLogsMutationError(null);
+    try {
+      await setLogsFeature({
+        request: {
+          setProductFeatureRequestBody: {
+            featureName: FeatureName.Logs,
+            enabled: true,
+          },
+        },
+      });
+    } catch {
+      // error state handled in onError callback
+    }
+  };
 
   const metricsElementsConfig = useMemo<ElementsConfig>(
     () => ({
@@ -114,12 +153,20 @@ export default function MetricsPage() {
 
             {isPending ? (
               <MetricsLoadingSkeleton />
-            ) : isLogsDisabledError(error) ? (
-              <MetricsDisabledState />
+            ) : error instanceof ServiceError && error.data$.name === "logs_disabled" ? (
+              <MetricsDisabledState
+                onEnableLogs={handleEnableLogs}
+                isMutating={isMutatingLogs}
+                mutationError={logsMutationError}
+              />
             ) : error ? (
               <MetricsError error={error} />
             ) : !isEnabled ? (
-              <MetricsDisabledState />
+              <MetricsDisabledState
+                onEnableLogs={handleEnableLogs}
+                isMutating={isMutatingLogs}
+                mutationError={logsMutationError}
+              />
             ) : metrics ? (
               <>
                 <MetricsCards metrics={metrics} />
@@ -186,7 +233,15 @@ function MetricsError({ error }: { error: Error }) {
   );
 }
 
-function MetricsDisabledState() {
+function MetricsDisabledState({
+  onEnableLogs,
+  isMutating,
+  mutationError,
+}: {
+  onEnableLogs: () => void;
+  isMutating: boolean;
+  mutationError: string | null;
+}) {
   return (
     <div className="flex flex-col items-center gap-3 py-12">
       <Icon
@@ -196,6 +251,20 @@ function MetricsDisabledState() {
       <span className="text-muted-foreground">
         Logs are disabled for your organization.
       </span>
+      <Button
+        onClick={onEnableLogs}
+        disabled={isMutating}
+        size="sm"
+        variant="secondary"
+      >
+        <Button.LeftIcon>
+          <Icon name="test-tube-diagonal" className="size-4" />
+        </Button.LeftIcon>
+        <Button.Text>{isMutating ? "Updating Logs" : "Enable Logs"}</Button.Text>
+      </Button>
+      {mutationError && (
+        <span className="text-sm text-destructive-default">{mutationError}</span>
+      )}
     </div>
   );
 }

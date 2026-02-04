@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import { isLogsDisabledError } from "@/lib/telemetry-errors";
+import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { getServerURL } from "@/lib/utils";
 import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
@@ -214,47 +214,42 @@ export default function LogsPage() {
                 className="overflow-y-auto flex-1"
                 onScroll={handleScroll}
               >
-                {error ? (
-                  isLogsDisabledError(error) ? (
-                    <div className="py-12 text-center text-muted-foreground">
-                      <div className="flex flex-col items-center gap-3">
-                        <span>Logs are disabled for your organization.</span>
-                        <Button
-                          onClick={() => handleSetLogs(true)}
-                          disabled={isMutatingLogs}
-                          size="sm"
-                          variant="secondary"
-                        >
-                          <Button.LeftIcon>
-                            <Icon
-                              name="test-tube-diagonal"
-                              className="size-4"
-                            />
-                          </Button.LeftIcon>
-                          <Button.Text>
-                            {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
-                          </Button.Text>
-                        </Button>
-                        {logsMutationError && (
-                          <span className="text-sm text-destructive-default">
-                            {logsMutationError}
-                          </span>
-                        )}
-                      </div>
+                {error instanceof ServiceError && error.data$.name === "logs_disabled" ? (
+                  <div className="py-12 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-3">
+                      <span>Logs are disabled for your organization.</span>
+                      <Button
+                        onClick={() => handleSetLogs(true)}
+                        disabled={isMutatingLogs}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        <Button.LeftIcon>
+                          <Icon name="test-tube-diagonal" className="size-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>
+                          {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
+                        </Button.Text>
+                      </Button>
+                      {logsMutationError && (
+                        <span className="text-sm text-destructive-default">
+                          {logsMutationError}
+                        </span>
+                      )}
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2 py-12">
-                      <XIcon className="size-6 stroke-destructive-default" />
-                      <span className="text-destructive-default font-medium">
-                        Error loading traces
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {error instanceof Error
-                          ? error.message
-                          : "An unexpected error occurred"}
-                      </span>
-                    </div>
-                  )
+                  </div>
+                ) : error ? (
+                  <div className="flex flex-col items-center gap-2 py-12">
+                    <XIcon className="size-6 stroke-destructive-default" />
+                    <span className="text-destructive-default font-medium">
+                      Error loading traces
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {error instanceof Error
+                        ? error.message
+                        : "An unexpected error occurred"}
+                    </span>
+                  </div>
                 ) : isLoading ? (
                   <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
                     <Icon
