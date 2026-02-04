@@ -18,6 +18,8 @@ type McpMetadata struct {
 	LogoAssetID *string
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string
+	// A blob of text for the button on the MCP server page
+	ExternalDocumentationText *string
 	// Server instructions returned in the MCP initialize response
 	Instructions *string
 	// The default environment to load variables from
