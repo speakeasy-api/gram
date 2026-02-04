@@ -117,6 +117,7 @@ export function PlaygroundLogsPanel({
         }),
       ),
     refetchInterval: 5000,
+    throwOnError: false,
   });
 
   const logs = data?.logs || [];
