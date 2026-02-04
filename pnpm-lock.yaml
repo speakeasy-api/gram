@@ -16,7 +16,7 @@ catalogs:
       specifier: ^1.2.0
       version: 1.2.11
     '@modelcontextprotocol/sdk':
-      specifier: 1.25.1
+      specifier: ^1.20.1
       version: 1.25.1
     '@tanstack/react-query':
       specifier: 5.90.10
