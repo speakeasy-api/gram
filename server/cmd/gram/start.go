@@ -594,12 +594,14 @@ func newStartCommand() *cli.Command {
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 			authAuth := auth.New(logger, db, sessionManager)
 
-			about.Attach(mux, about.NewService(logger, tracerProvider))
-			agentsapi.Attach(mux, agentsapi.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient, authAuth, temporalClient, c.String("temporal-namespace")))
-			teamsDevMode := localEnvPath != ""
+			teamsDevMode := c.String("environment") == "local"
 			if teamsDevMode {
 				logger.WarnContext(ctx, "SECURITY: DevMode is enabled, invite email verification is disabled")
 			}
+			loopsClient := loops.NewClient(logger, c.String("loops-api-key"))
+
+			about.Attach(mux, about.NewService(logger, tracerProvider))
+			agentsapi.Attach(mux, agentsapi.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient, authAuth, temporalClient, c.String("temporal-namespace")))
 			auth.Attach(mux, auth.NewService(logger, db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
 				GramServerURL:          c.String("server-url"),
@@ -608,7 +610,6 @@ func newStartCommand() *cli.Command {
 				DevMode:                teamsDevMode,
 			}))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
-			loopsClient := loops.NewClient(logger, c.String("loops-api-key"))
 			teams.Attach(mux, teams.NewService(logger, db, sessionManager, loopsClient, teams.Config{
 				SiteURL:              c.String("site-url"),
 				DevMode:              teamsDevMode,

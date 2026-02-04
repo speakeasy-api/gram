@@ -8,8 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"time"
 
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
@@ -47,7 +47,7 @@ func NewClient(logger *slog.Logger, apiKey string) *Client {
 	enabled := apiKey != "" && apiKey != "unset"
 	return &Client{
 		logger:     logger.With(attr.SlogComponent("loops")),
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: retryablehttp.NewClient().StandardClient(),
 		apiKey:     apiKey,
 		enabled:    enabled,
 	}
@@ -86,9 +86,7 @@ type transactionalResponse struct {
 // If the client is disabled, this is a no-op and returns nil.
 func (c *Client) SendTransactionalEmail(ctx context.Context, input SendTransactionalEmailInput) error {
 	if !c.enabled {
-		c.logger.DebugContext(ctx, "loops client disabled, skipping transactional email",
-			attr.SlogTeamInviteEmail(input.Email),
-		)
+		c.logger.DebugContext(ctx, "loops client disabled, skipping transactional email")
 		return nil
 	}
 

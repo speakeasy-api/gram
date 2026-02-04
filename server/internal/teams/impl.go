@@ -285,7 +285,6 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 
 	if err := s.sendInviteEmail(ctx, payload.Email, token, firstName(invitedByName), userInfo.Email, orgName(userInfo, payload.OrganizationID)); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").Log(ctx, s.logger,
-			attr.SlogTeamInviteEmail(payload.Email),
 			attr.SlogTeamInviteID(invite.ID.String()),
 		)
 	}
@@ -296,7 +295,6 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 
 	s.logger.InfoContext(ctx, "team invite created",
 		attr.SlogOrganizationID(payload.OrganizationID),
-		attr.SlogTeamInviteEmail(payload.Email),
 		attr.SlogTeamInviteID(invite.ID.String()),
 	)
 
@@ -425,7 +423,6 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 
 	s.logger.InfoContext(ctx, "team invite resent",
 		attr.SlogOrganizationID(invite.OrganizationID),
-		attr.SlogTeamInviteEmail(invite.Email),
 		attr.SlogTeamInviteID(invite.ID.String()),
 	)
 

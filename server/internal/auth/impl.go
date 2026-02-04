@@ -650,8 +650,7 @@ func (s *Service) processInviteToken(ctx context.Context, token, userID, userEma
 			return "", fmt.Errorf("invite was sent to a different email address")
 		}
 		s.logger.WarnContext(ctx, "dev mode: skipping invite email match check",
-			attr.SlogTeamInviteEmail(invite.Email),
-			attr.SlogUserEmail(userEmail),
+			attr.SlogTeamInviteID(invite.ID.String()),
 		)
 	}
 

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -317,7 +318,7 @@ func (s *Manager) AddUserToOrg(ctx context.Context, workspaceSlugs []string, ema
 		return nil
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := retryablehttp.NewClient().StandardClient()
 
 	for _, slug := range workspaceSlugs {
 		reqURL := fmt.Sprintf("%s/v1/workspace/%s/team/email/%s", s.speakeasyServerAddress, url.PathEscape(slug), url.PathEscape(email))
@@ -352,7 +353,7 @@ func (s *Manager) RemoveUserFromOrg(ctx context.Context, workspaceSlugs []string
 		return nil
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := retryablehttp.NewClient().StandardClient()
 
 	for _, slug := range workspaceSlugs {
 		reqURL := fmt.Sprintf("%s/v1/workspace/%s/team/%s", s.speakeasyServerAddress, url.PathEscape(slug), url.PathEscape(userID))
