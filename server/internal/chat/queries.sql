@@ -73,59 +73,62 @@ VALUES (
 );
 
 -- name: ListAllChats :many
-SELECT 
+SELECT
     c.*,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
             0
         )
-    )::integer as num_messages 
+    )::integer as num_messages
     , (
         COALESCE(
             (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
             0
         )
     )::integer as total_tokens
-FROM chats c 
-WHERE c.project_id = @project_id;
+FROM chats c
+WHERE c.project_id = @project_id
+ORDER BY c.updated_at DESC;
 
 -- name: ListChatsForExternalUser :many
-SELECT 
+SELECT
     c.*,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
             0
         )
-    )::integer as num_messages 
+    )::integer as num_messages
     , (
         COALESCE(
             (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
             0
         )
     )::integer as total_tokens
-FROM chats c 
-WHERE c.project_id = @project_id AND c.external_user_id = @external_user_id;
+FROM chats c
+WHERE c.project_id = @project_id AND c.external_user_id = @external_user_id
+ORDER BY c.updated_at DESC;
 
 
 -- name: ListChatsForUser :many
-SELECT 
+SELECT
     c.*,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
             0
         )
-    )::integer as num_messages 
+    )::integer as num_messages
     , (
         COALESCE(
             (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
             0
         )
     )::integer as total_tokens
-FROM chats c 
-WHERE c.project_id = @project_id AND c.user_id = @user_id;
+FROM chats c
+WHERE c.project_id = @project_id AND c.user_id = @user_id
+ORDER BY c.updated_at DESC;
 
 -- name: GetChat :one
 SELECT * FROM chats WHERE id = @id;

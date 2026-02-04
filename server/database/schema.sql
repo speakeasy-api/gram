@@ -1279,7 +1279,7 @@ WHERE deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS user_oauth_tokens (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-  -- Scoping: per user, per org, per OAuth server (RFC recommendation)
+  -- Scoping: per user, per org, per toolset
   user_id TEXT NOT NULL,
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
@@ -1287,7 +1287,6 @@ CREATE TABLE IF NOT EXISTS user_oauth_tokens (
   toolset_id uuid NOT NULL,  -- FK to toolsets
 
   -- OAuth 2.1 server issuer URL (from AS metadata, e.g., "https://accounts.google.com")
-  -- This allows token reuse across MCP servers sharing the same OAuth provider
   oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
 
   -- Token data (encrypted at rest via application layer)
@@ -1315,7 +1314,7 @@ CREATE TABLE IF NOT EXISTS user_oauth_tokens (
 
 -- Unique constraint: one token per user per org per OAuth issuer
 CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
-ON user_oauth_tokens (user_id, organization_id, oauth_server_issuer)
+ON user_oauth_tokens (user_id, organization_id, toolset_id)
 WHERE deleted IS FALSE;
 
 -- Team invites for organization member management
