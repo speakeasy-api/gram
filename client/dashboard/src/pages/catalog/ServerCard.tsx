@@ -1,23 +1,18 @@
+import {
+  ExternalMCPIllustration,
+  MCPPatternIllustration,
+} from "@/components/sources/SourceCardIllustrations";
+import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
-import { Button, Stack } from "@speakeasy-api/moonshine";
-import {
-  Key,
-  Loader2,
-  Lock,
-  Minus,
-  Plus,
-  Server as ServerIcon,
-  Shield,
-  Wrench,
-} from "lucide-react";
+import { Button } from "@speakeasy-api/moonshine";
+import { Loader2, Minus, Plus } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import type { Server } from "./hooks";
 import { parseServerMetadata } from "./hooks/serverMetadata";
-import { Sparkline, SparklinePlaceholder } from "./Sparkline";
 
 interface ServerCardProps {
   server: Server;
@@ -29,95 +24,14 @@ interface ServerCardProps {
 }
 
 /**
- * Icon component for auth type display.
- */
-function AuthIcon({ authType }: { authType: string }) {
-  switch (authType) {
-    case "none":
-      return <Lock className="w-3 h-3" />;
-    case "apikey":
-      return <Key className="w-3 h-3" />;
-    case "oauth":
-      return <Shield className="w-3 h-3" />;
-    default:
-      return <Key className="w-3 h-3" />;
-  }
-}
-
-/**
- * Badge showing auth type with icon.
- */
-function AuthBadge({
-  authType,
-  authTypeDisplay,
-}: {
-  authType: string;
-  authTypeDisplay: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs",
-        authType === "none"
-          ? "bg-success/10 text-success"
-          : "bg-muted text-muted-foreground",
-      )}
-    >
-      <AuthIcon authType={authType} />
-      <span>{authTypeDisplay}</span>
-    </span>
-  );
-}
-
-/**
- * Badge showing tool count.
- */
-function ToolCountBadge({ count }: { count: number }) {
-  return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground">
-      <Wrench className="w-3 h-3" />
-      <span>
-        {count} {count === 1 ? "tool" : "tools"}
-      </span>
-    </span>
-  );
-}
-
-/**
- * Official badge with gold/amber accent.
- */
-function OfficialBadge() {
-  return (
-    <Badge
-      variant="outline"
-      className="border-warning/50 bg-warning/10 text-warning"
-    >
-      Official
-    </Badge>
-  );
-}
-
-/**
- * Read-only safety badge.
- */
-function SafetyBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-success/10 text-success">
-      <Shield className="w-3 h-3" />
-      <span>Read-only</span>
-    </span>
-  );
-}
-
-/**
- * Enhanced server card with rich metadata display.
+ * Server card matching the MCPCard design pattern.
  *
  * Features:
+ * - Pattern illustration header with logo overlay
  * - Tool count badge
- * - Auth type badge with icon
- * - Sparkline showing usage trend
- * - Official badge (gold/amber)
- * - Hover effects for interactivity
+ * - Official badge
+ * - Monthly users count
+ * - Add/Remove actions
  */
 export function ServerCard({
   server,
@@ -135,98 +49,104 @@ export function ServerCard({
   );
   const isAdded = !!existingMcp;
 
+  // Generate a slug from the registry specifier for pattern generation
+  const slug = server.registrySpecifier.replace(/[/@]/g, "-");
+
+  // Get tool names for the badge tooltip
+  const toolNames = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools = (server.tools ?? []) as any[];
+    return tools.map((t) => t.name || "Unknown tool");
+  }, [server.tools]);
+
   return (
     <Link to={detailHref}>
       <div
         className={cn(
-          "group flex flex-col gap-3 rounded-xl border bg-card p-5",
-          "hover:border-primary/50 hover:shadow-md transition-all h-full",
-          isAdded && "border-success/30 bg-success/5",
+          "group bg-card text-card-foreground flex flex-col rounded-xl border overflow-hidden",
+          "hover:border-foreground/20 hover:shadow-md transition-all cursor-pointer h-full",
+          isAdded && "border-success/50 ring-1 ring-success/20",
         )}
       >
-        {/* Header row: Icon + Title + Official badge */}
-        <Stack direction="horizontal" gap={3}>
-          <div
-            className={cn(
-              "w-12 h-12 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-              "bg-primary/10 group-hover:bg-primary/15",
-            )}
-          >
-            {server.iconUrl ? (
-              <img
-                src={server.iconUrl}
-                alt={displayName}
-                className="w-8 h-8 rounded"
-              />
-            ) : (
-              <ServerIcon className="w-6 h-6 text-muted-foreground" />
-            )}
-          </div>
-          <Stack gap={1} className="min-w-0 flex-1">
-            <Stack
-              direction="horizontal"
-              gap={2}
-              align="center"
-              className="flex-wrap"
-            >
+        {/* Illustration header */}
+        <div className="h-32 w-full overflow-hidden border-b relative">
+          {server.iconUrl ? (
+            <ExternalMCPIllustration
+              slug={slug}
+              logoUrl={server.iconUrl}
+              name={displayName}
+            />
+          ) : (
+            <MCPPatternIllustration
+              toolsetSlug={slug}
+              className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
+            />
+          )}
+          {/* Official badge overlay */}
+          {metadata.isOfficial && (
+            <div className="absolute top-2 right-2">
+              <Badge
+                variant="outline"
+                className="border-warning/50 bg-warning/10 text-warning backdrop-blur-sm"
+              >
+                Official
+              </Badge>
+            </div>
+          )}
+          {/* Added indicator overlay */}
+          {isAdded && (
+            <div className="absolute top-2 left-2">
+              <Badge
+                variant="outline"
+                className="border-success/50 bg-success/10 text-success backdrop-blur-sm"
+              >
+                Added
+              </Badge>
+            </div>
+          )}
+        </div>
+
+        {/* Content area */}
+        <div className="p-4 flex flex-col flex-1">
+          {/* Header row with name and tool badge */}
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="min-w-0 flex-1">
               <Type
                 variant="subheading"
-                className="group-hover:text-primary transition-colors truncate"
+                as="div"
+                className="truncate text-md group-hover:text-primary transition-colors"
+                title={displayName}
               >
                 {displayName}
               </Type>
-              {metadata.isOfficial && <OfficialBadge />}
-              {isAdded && (
-                <Badge
-                  variant="outline"
-                  className="border-success/50 text-success"
-                >
-                  Added
+              <Type small muted className="truncate">
+                v{server.version}
+              </Type>
+            </div>
+            <ToolCollectionBadge toolNames={toolNames} />
+          </div>
+
+          {/* Description */}
+          <Type small muted className="line-clamp-2 mb-3">
+            {server.description}
+          </Type>
+
+          {/* Footer row with stats and action */}
+          <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+            {/* Usage stats */}
+            <div className="flex items-center gap-2">
+              {metadata.visitorsMonth > 0 ? (
+                <Type small muted>
+                  {metadata.visitorsMonth.toLocaleString()} monthly users
+                </Type>
+              ) : (
+                <Badge variant="outline" className="text-xs">
+                  New
                 </Badge>
               )}
-            </Stack>
-            <Type small muted className="truncate">
-              {server.registrySpecifier} • v{server.version}
-            </Type>
-          </Stack>
-        </Stack>
+            </div>
 
-        {/* Description */}
-        <Type small muted className="line-clamp-2">
-          {server.description}
-        </Type>
-
-        {/* Metadata badges row */}
-        <Stack direction="horizontal" gap={2} className="flex-wrap">
-          <ToolCountBadge count={metadata.toolCount} />
-          <AuthBadge
-            authType={metadata.authType}
-            authTypeDisplay={metadata.authTypeDisplay}
-          />
-          {metadata.isReadOnly && metadata.toolCount > 0 && <SafetyBadge />}
-        </Stack>
-
-        {/* Footer: Usage stats + Action button */}
-        <div className="mt-auto pt-2">
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack direction="horizontal" gap={2} align="center">
-              {metadata.visitorsMonth > 0 ? (
-                <>
-                  <Sparkline
-                    data={metadata.weeklyData}
-                    height={14}
-                    barWidth={3}
-                    gap={1}
-                  />
-                  <Type small muted>
-                    {metadata.visitorsMonth.toLocaleString()} monthly
-                  </Type>
-                </>
-              ) : (
-                <SparklinePlaceholder />
-              )}
-            </Stack>
-
+            {/* Action button */}
             {isAdded ? (
               <Button
                 variant="secondary"
@@ -267,7 +187,7 @@ export function ServerCard({
                 <Button.Text>Add</Button.Text>
               </Button>
             )}
-          </Stack>
+          </div>
         </div>
       </div>
     </Link>
