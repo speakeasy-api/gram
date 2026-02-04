@@ -233,7 +233,7 @@ export default function Home() {
               <div className="mt-auto flex justify-end">
                 <routes.sources.addFunction.Link className="no-underline">
                   <Button size="sm">
-                    <Button.Text>Get started</Button.Text>
+                    <Button.Text>Deploy code</Button.Text>
                   </Button>
                 </routes.sources.addFunction.Link>
               </div>
