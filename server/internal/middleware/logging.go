@@ -82,11 +82,11 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			if requestContext.Referer != "" {
 				attrs = append(attrs, attr.SlogHTTPRequestHeaderReferer(requestContext.Referer))
 			}
-			if requestContext.RefererHost != "" {
-				attrs = append(attrs, attr.SlogHTTPReferrerHost(requestContext.RefererHost))
-			}
 			if requestContext.UserAgent != "" {
 				attrs = append(attrs, attr.SlogHTTPRequestHeaderUserAgent(requestContext.UserAgent))
+			}
+			if requestContext.RefererHost != "" {
+				attrs = append(attrs, attr.SlogHTTPReferrerHost(requestContext.RefererHost))
 			}
 
 			logger.InfoContext(ctx, "request", attrs...)
