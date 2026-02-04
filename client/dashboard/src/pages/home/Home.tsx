@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useUser } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { DeploymentExternalMCP } from "@gram/client/models/components";
@@ -55,6 +56,7 @@ const FEATURED_SERVER_SPECIFIERS = [
 export default function Home() {
   const routes = useRoutes();
   const user = useUser();
+  const telemetry = useTelemetry();
   const { data, isLoading } = useInfiniteListMCPCatalog();
   const { data: deploymentResult, isLoading: isDeploymentLoading } =
     useLatestDeployment();
@@ -62,6 +64,7 @@ export default function Home() {
     useListToolsets();
   const externalMcps = deploymentResult?.deployment?.externalMcps ?? [];
   const deployment = deploymentResult?.deployment;
+  const isFunctionsEnabled = telemetry.isFeatureEnabled("gram-functions") ?? false;
 
   const featuredServers = useMemo(() => {
     if (!data?.pages) return [];
@@ -204,14 +207,13 @@ export default function Home() {
               </div>
             </div>
             <div className="mt-auto flex justify-end gap-2">
-              <a
-                href="https://app.getgram.ai/speakeasy-team/sagar/sources/add-function"
-                className="no-underline"
-              >
-                <Button size="sm">
-                  <Button.Text>Deploy code</Button.Text>
-                </Button>
-              </a>
+              {isFunctionsEnabled && (
+                <routes.sources.addFunction.Link className="no-underline">
+                  <Button size="sm">
+                    <Button.Text>Deploy code</Button.Text>
+                  </Button>
+                </routes.sources.addFunction.Link>
+              )}
               <routes.sources.addOpenAPI.Link className="no-underline">
                 <Button size="sm">
                   <Button.Text>Upload OpenAPI</Button.Text>
