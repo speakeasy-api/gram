@@ -19,6 +19,8 @@ const (
 	ContainerNetworkIDKey             = attribute.Key("container.network.id")
 	FilePathKey                       = semconv.FilePathKey
 	HostNameKey                       = semconv.HostNameKey
+	HTTPRefererHostKey                = attribute.Key("http.request.referer_host")
+	HTTPRequestHeaderRefererKey       = attribute.Key("http.request.header.referer")
 	HTTPRequestHeaderContentTypeKey   = attribute.Key("http.request.header.content_type")
 	HTTPRequestHeaderUserAgentKey     = attribute.Key("http.request.header.user_agent")
 	HTTPRequestMethodKey              = semconv.HTTPRequestMethodKey
@@ -255,6 +257,16 @@ func SlogFilePath(v string) slog.Attr      { return slog.String(string(FilePathK
 
 func HostName(v string) attribute.KeyValue { return HostNameKey.String(v) }
 func SlogHostName(v string) slog.Attr      { return slog.String(string(HostNameKey), v) }
+
+func HTTPReferrerHost(v string) attribute.KeyValue { return HTTPRefererHostKey.String(v) }
+func SlogHTTPReferrerHost(v string) slog.Attr      { return slog.String(string(HTTPRefererHostKey), v) }
+
+func HTTPRequestHeaderReferer(v string) attribute.KeyValue {
+	return HTTPRequestHeaderRefererKey.String(v)
+}
+func SlogHTTPRequestHeaderReferer(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderRefererKey), v)
+}
 
 func HTTPRequestHeaderContentType(v string) attribute.KeyValue {
 	return HTTPRequestHeaderContentTypeKey.String(v)

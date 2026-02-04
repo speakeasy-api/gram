@@ -22,9 +22,12 @@ type AuthContext struct {
 }
 
 type RequestContext struct {
-	ReqURL string
-	Host   string
-	Method string
+	ReqURL      string
+	Host        string
+	Method      string
+	Referer     string
+	RefererHost string
+	UserAgent   string
 }
 
 const (
