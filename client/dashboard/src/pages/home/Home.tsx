@@ -13,6 +13,7 @@ import {
   ArrowRight,
   BlocksIcon,
   CheckCircle,
+  Code,
   Database,
   Globe,
   MessageCircleIcon,
@@ -140,7 +141,7 @@ export default function Home() {
         />
 
         <h2 className="text-lg font-semibold mb-4">Quick actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
             <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
             <div className="flex flex-row items-start gap-2">
@@ -219,6 +220,31 @@ export default function Home() {
                   <Button.Text>Upload OpenAPI</Button.Text>
                 </Button>
               </routes.sources.addOpenAPI.Link>
+            </div>
+          </div>
+          <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
+            <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
+            <div className="flex flex-row items-start gap-2">
+              <Code
+                className="h-[18px] w-[18px] mt-0.5 shrink-0"
+                strokeWidth={1.5}
+              />
+              <div className="flex flex-col gap-1">
+                <h3 className="font-medium">Deploy code</h3>
+                <p className="text-sm text-muted-foreground">
+                  Write and deploy custom functions as MCP tools
+                </p>
+              </div>
+            </div>
+            <div className="mt-auto flex justify-end">
+              <a
+                href="https://app.getgram.ai/speakeasy-team/sagar/sources/add-function"
+                className="no-underline"
+              >
+                <Button size="sm">
+                  <Button.Text>Get started</Button.Text>
+                </Button>
+              </a>
             </div>
           </div>
         </div>
