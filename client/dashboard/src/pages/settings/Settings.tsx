@@ -25,6 +25,7 @@ import {
   invalidateListAPIKeys,
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
+import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
@@ -36,6 +37,7 @@ import {
   Globe,
   Loader2,
   ShieldAlert,
+  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -57,12 +59,19 @@ export default function Settings() {
   const [isCnameCopied, setIsCnameCopied] = useState(false);
   const [isTxtCopied, setIsTxtCopied] = useState(false);
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
+  const [isDeleteDomainDialogOpen, setIsDeleteDomainDialogOpen] =
+    useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
   const CNAME_VALUE = getCustomDomainCNAME();
 
-  // Dynamic values based on domain input
-  const subdomain = domainInput.trim() || "sub.yourdomain.com";
+  // Domain validation regex (same as used in the backend)
+  const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$/i;
+
+  // Only show real values once a valid domain is entered
+  const validDomain =
+    domainInput.trim() && domainRegex.test(domainInput.trim());
+  const subdomain = validDomain ? domainInput.trim() : "sub.yourdomain.com";
   const txtName = `_gram.${subdomain}`;
   const txtValue = `gram-domain-verify=${subdomain},${organization.id}`;
 
@@ -79,9 +88,6 @@ export default function Settings() {
       setDomainInput(domain.domain);
     }
   }, [domain?.domain, domainInput]);
-
-  // Domain validation regex (same as used in the backend)
-  const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$/i;
 
   const validateDomain = (domain: string): string => {
     if (!domain.trim()) {
@@ -136,6 +142,16 @@ export default function Settings() {
     },
     onError: (error) => {
       setDomainError(error.message || "Failed to register domain");
+    },
+  });
+
+  const deleteDomainMutation = useDeleteDomainMutation({
+    onSuccess: async () => {
+      setIsDeleteDomainDialogOpen(false);
+      setDomainInput("");
+      queryClient.removeQueries({
+        queryKey: ["@gram/client", "domains", "getDomain"],
+      });
     },
   });
 
@@ -454,112 +470,137 @@ export default function Settings() {
           </Dialog.Content>
         </Dialog>
 
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-          className="mt-8"
-        >
-          <Heading variant="h4">Custom Domains</Heading>
-          {session.gramAccountType === "free" && (
-            <Type className="text-muted-foreground">
-              Contact gram support to get access to custom domains for your
-              account.
-            </Type>
-          )}
-          {!domainIsLoading && !domain?.verified && (
-            <Button
-              onClick={() => {
-                if (session.gramAccountType === "free") {
-                  setIsCustomDomainModalOpen(true);
-                } else {
-                  setIsAddDomainDialogOpen(true);
-                }
-              }}
-              disabled={domain?.isUpdating}
-            >
-              {domain?.domain ? "Verify Domain" : "Add Domain"}
-            </Button>
-          )}
-        </Stack>
-        <Table
-          data={domain?.domain ? [domain] : []}
-          rowKey={(row) => row.id}
-          className="min-h-fit"
-          noResultsMessage={
-            <Stack
-              gap={2}
-              className="h-full p-4 bg-background"
-              align="center"
-              justify="center"
-            >
-              <Type variant="body">No custom domains yet</Type>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  if (session.gramAccountType === "free") {
-                    setIsCustomDomainModalOpen(true);
-                  } else {
-                    setIsAddDomainDialogOpen(true);
-                  }
-                }}
-                disabled={domain?.isUpdating}
-              >
-                <Button.LeftIcon>
-                  <Icon name="globe" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Domain</Button.Text>
-              </Button>
-            </Stack>
-          }
-          columns={[
-            {
-              key: "domain",
-              header: "Domain",
-              width: "1fr",
-              render: (row) => <Type variant="body">{row.domain}</Type>,
-            },
-            {
-              key: "createdAt",
-              header: "Date Linked",
-              width: "1fr",
-              render: (row) => (
-                <Type variant="body">
-                  <HumanizeDateTime date={row.createdAt} />
-                </Type>
-              ),
-            },
-            {
-              key: "verified",
-              header: "Verified",
-              width: "120px",
-              render: (row) => (
-                <span className="flex justify-center items-center">
-                  {row.isUpdating ? (
-                    <SimpleTooltip tooltip="Your domain is being verified. Please refresh the page in a minute or two.">
-                      <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+        <Heading variant="h4" className="mt-8">
+          Custom Domain
+        </Heading>
+        {domain?.domain ? (
+          <div className="rounded-lg border border-border bg-card p-4">
+            <Stack direction="horizontal" justify="space-between" align="start">
+              <Stack gap={1}>
+                <Stack direction="horizontal" align="center" gap={2}>
+                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <Type variant="body" className="font-mono font-medium">
+                    {domain.domain}
+                  </Type>
+                  {domain.isUpdating ? (
+                    <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
                     </SimpleTooltip>
-                  ) : row.verified ? (
-                    <Check
-                      className={cn("w-5 h-5 stroke-3", "text-green-500")}
-                    />
+                  ) : domain.verified ? (
+                    <SimpleTooltip tooltip="Domain verified and active">
+                      <Check className="w-4 h-4 stroke-3 text-green-500" />
+                    </SimpleTooltip>
                   ) : (
-                    <SimpleTooltip tooltip="Domain verification failed, please ensure your DNS records have been setup correctly">
-                      <X className="w-5 h-5 stroke-3 text-red-500" />
+                    <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
+                      <X className="w-4 h-4 stroke-3 text-red-500" />
                     </SimpleTooltip>
                   )}
-                </span>
-              ),
-            },
-          ]}
-        />
+                </Stack>
+                <Type
+                  variant="body"
+                  className="text-muted-foreground text-sm ml-6"
+                >
+                  Linked <HumanizeDateTime date={domain.createdAt} />
+                </Type>
+              </Stack>
+              <Stack direction="horizontal" gap={2}>
+                {!domain.verified && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAddDomainDialogOpen(true)}
+                    disabled={domain.isUpdating}
+                  >
+                    Reverify
+                  </Button>
+                )}
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => setIsDeleteDomainDialogOpen(true)}
+                  className="hover:text-destructive"
+                  disabled={deleteDomainMutation.isPending}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </Stack>
+            </Stack>
+          </div>
+        ) : (
+          !domainIsLoading && (
+            <div className="rounded-lg border border-dashed border-border p-6">
+              <Stack gap={2} align="center" justify="center">
+                <Type variant="body" className="text-muted-foreground">
+                  No custom domain configured
+                </Type>
+                <Type variant="body" className="text-muted-foreground text-sm">
+                  You can connect one custom domain per organization for your
+                  MCP servers.
+                </Type>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="mt-2"
+                  onClick={() => {
+                    if (session.gramAccountType === "free") {
+                      setIsCustomDomainModalOpen(true);
+                    } else {
+                      setIsAddDomainDialogOpen(true);
+                    }
+                  }}
+                >
+                  <Button.LeftIcon>
+                    <Globe className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Add Domain</Button.Text>
+                </Button>
+              </Stack>
+            </div>
+          )
+        )}
+
+        <Dialog
+          open={isDeleteDomainDialogOpen}
+          onOpenChange={setIsDeleteDomainDialogOpen}
+        >
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Remove Custom Domain</Dialog.Title>
+            </Dialog.Header>
+            <div className="space-y-4 py-4">
+              <Type variant="body">
+                Are you sure you want to remove{" "}
+                <span className="italic font-bold">{domain?.domain}</span>? This
+                will delete the associated ingress and TLS certificate.
+              </Type>
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsDeleteDomainDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive-primary"
+                  onClick={() =>
+                    deleteDomainMutation.mutate({
+                      security: { sessionHeaderGramSession: "" },
+                    })
+                  }
+                  disabled={deleteDomainMutation.isPending}
+                >
+                  {deleteDomainMutation.isPending ? "Removing..." : "Remove"}
+                </Button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog>
 
         <Dialog
           open={isAddDomainDialogOpen}
           onOpenChange={setIsAddDomainDialogOpen}
         >
-          <Dialog.Content>
+          <Dialog.Content className="max-w-lg">
             <Dialog.Header>
               <Dialog.Title>Connect a Custom Domain</Dialog.Title>
             </Dialog.Header>
@@ -602,8 +643,8 @@ export default function Settings() {
                 </Type>
                 <Type variant="body" className="text-muted-foreground mb-2">
                   Create a CNAME record for{" "}
-                  <span className="font-mono">{subdomain}</span> pointing to the
-                  following:
+                  <span className="font-mono break-all">{subdomain}</span>{" "}
+                  pointing to the following:
                 </Type>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
                   <code className="flex-1 break-all">{CNAME_VALUE}</code>
@@ -630,8 +671,8 @@ export default function Settings() {
                 </Type>
                 <Type variant="body" className="text-muted-foreground mb-2">
                   Create a TXT record at{" "}
-                  <span className="font-mono">{txtName}</span> with the
-                  following value:
+                  <span className="font-mono break-all">{txtName}</span> with
+                  the following value:
                 </Type>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
                   <code className="flex-1 break-all">{txtValue}</code>

@@ -36,6 +36,23 @@ func (c *CustomDomainRegistrationClient) GetID(orgID string, domain string) stri
 	return fmt.Sprintf("v1:custom-domain-registration:%s:%s", orgID, domain)
 }
 
+func (c *CustomDomainRegistrationClient) GetDeletionID(orgID string, domain string) string {
+	return fmt.Sprintf("v1:custom-domain-deletion:%s:%s", orgID, domain)
+}
+
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error) {
+	id := c.GetDeletionID(orgID, domain)
+	return c.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    id,
+		TaskQueue:             string(TaskQueueMain),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowRunTimeout:    5 * time.Minute,
+	}, CustomDomainDeletionWorkflow, CustomDomainRegistrationParams{
+		OrgID:  orgID,
+		Domain: domain,
+	})
+}
+
 func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error) {
 	id := c.GetID(orgID, domain)
 	return c.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
@@ -84,6 +101,29 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 	if err != nil {
 		logger.Error("failed to create custom domain ingress", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
 		return fmt.Errorf("failed to create custom domain ingress: %w", err)
+	}
+
+	return nil
+}
+
+func CustomDomainDeletionWorkflow(ctx workflow.Context, params CustomDomainRegistrationParams) error {
+	logger := workflow.GetLogger(ctx)
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 60 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 3,
+		},
+	})
+
+	var a *Activities
+	err := workflow.ExecuteActivity(
+		ctx,
+		a.CustomDomainIngress,
+		activities.CustomDomainIngressArgs{OrgID: params.OrgID, Domain: params.Domain, Action: activities.CustomDomainIngressActionDelete},
+	).Get(ctx, nil)
+	if err != nil {
+		logger.Error("failed to delete custom domain ingress", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
+		return fmt.Errorf("failed to delete custom domain ingress: %w", err)
 	}
 
 	return nil

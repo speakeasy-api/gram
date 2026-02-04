@@ -36,6 +36,7 @@ type Service struct {
 type TemporalClient interface {
 	GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
 	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error)
+	ExecuteCustomDomainDeletion(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -112,7 +113,31 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 	return nil
 }
 
-func (s *Service) DeleteDomain(context.Context, *gen.DeleteDomainPayload) (err error) {
-	// TODO: To start domain de-registration will be kicked off on-demand
+func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) (err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	domain, err := s.repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
+	}
+
+	if domain.Activated {
+		if _, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to start custom domain deletion workflow").Log(ctx, s.logger)
+		}
+	}
+
+	if err := s.repo.DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain").Log(ctx, s.logger)
+	}
+
+	s.logger.InfoContext(ctx, "custom domain deleted",
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogURLDomain(domain.Domain),
+	)
+
 	return nil
 }
