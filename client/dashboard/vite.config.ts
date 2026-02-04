@@ -14,26 +14,25 @@ if (process.env["GRAM_SSL_KEY_FILE"] && process.env["GRAM_SSL_CERT_FILE"]) {
   cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
 }
 
-// These env vars are only needed for local development (dev server proxy)
-// Production builds don't need them - the proxy is not used and __GRAM_SERVER_URL__ can be empty
-const serverUrl = process.env["GRAM_SERVER_URL"];
-const siteUrl = process.env["GRAM_SITE_URL"];
-
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
 
-  if (!siteUrl) {
-    throw new Error("GRAM_SITE_URL env var must be set");
+  const siteUrl = process.env["GRAM_SITE_URL"];
+  if (isDev && !siteUrl) {
+    throw new Error("GRAM_SITE_URL must be set in development");
   }
 
-  if (isDev && !serverUrl) {
-    throw new Error("GRAM_SERVER_URL must be set for local development");
+  const serverUrl = process.env["GRAM_SERVER_URL"];
+  if (!serverUrl) {
+    throw new Error("GRAM_SERVER_URL must be set");
   }
 
   return {
     define: {
-      __GRAM_SERVER_URL__: JSON.stringify(siteUrl),
+      __GRAM_SERVER_URL__: isDev
+        ? JSON.stringify(siteUrl) // Use siteUrl in dev to match the origin
+        : JSON.stringify(serverUrl),
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
     },
     build: {
@@ -83,15 +82,13 @@ export default defineConfig(({ command }) => {
       // Setting these up to side-step cors issues experienced during
       // development. Specifically, the Vercel AI SDK does not forward cookies
       // (Eg: gram_session) to the server.
-      proxy: serverUrl
-        ? {
-            "/rpc": serverUrl,
-            "/chat": serverUrl,
-            "/mcp": serverUrl,
-            "/oauth": serverUrl,
-            "/.well-known": serverUrl,
-          }
-        : undefined,
+      proxy: {
+        "/rpc": serverUrl,
+        "/chat": serverUrl,
+        "/mcp": serverUrl,
+        "/oauth": serverUrl,
+        "/.well-known": serverUrl,
+      },
     },
     plugins: [react(), tailwindcss()],
     resolve: {
