@@ -53,35 +53,49 @@ export function getExternalMcpOAuthConfig(
   return undefined;
 }
 
-const ExternalOAuthStatusResponseSchema = z.object({
+const ExternalMcpOAuthStatusResponseSchema = z.object({
   status: z.enum(["authenticated", "needs_auth", "disconnected"]),
   provider_name: z.string().optional(),
   expires_at: z.string().optional(),
 });
 
+export type ExternalOAuthStatusResponse = z.infer<
+  typeof ExternalMcpOAuthStatusResponseSchema
+>;
+
+export const getExternalMcpOAuthStatusQueryKey = (
+  toolsetId: string | undefined,
+  slug?: string,
+) => {
+  const result = ["oauthExternalStatus"];
+  if (toolsetId) result.push(toolsetId);
+  if (slug) result.push(slug);
+  return result;
+};
+
 /**
- * Hook to check the OAuth status for an external MCP server.
- * Returns the authentication status which can be used to gate UI rendering.
+ * Shared hook for querying OAuth status from the /oauth-external/status endpoint.
+ * Used by both external MCP OAuth (2.1) and legacy external OAuth server paths.
  */
 export function useExternalMcpOAuthStatus(
   toolsetId: string | undefined,
-  mcpOAuthConfig: ExternalMCPToolDefinition | undefined,
+  options?: {
+    slug?: string; // For query key uniqueness
+    enabled?: boolean;
+  },
 ) {
   const project = useProject();
   const apiUrl = getServerURL();
 
-  const issuer = mcpOAuthConfig?.oauthAuthorizationEndpoint
-    ? new URL(mcpOAuthConfig.oauthAuthorizationEndpoint).origin
-    : undefined;
+  const queryKey = getExternalMcpOAuthStatusQueryKey(toolsetId, options?.slug);
 
   return useQuery({
-    queryKey: ["mcpOauthStatus", toolsetId ?? "", mcpOAuthConfig?.slug ?? ""],
-    queryFn: async () => {
-      if (!issuer || !toolsetId) return { status: "needs_auth" as const };
+    queryKey: queryKey,
+    queryFn: async (): Promise<ExternalOAuthStatusResponse> => {
+      if (!toolsetId) return { status: "needs_auth" };
 
       const params = new URLSearchParams({
         toolset_id: toolsetId,
-        issuer: issuer,
       });
 
       const response = await fetch(
@@ -96,12 +110,12 @@ export function useExternalMcpOAuthStatus(
 
       if (!response.ok) {
         if (response.status === 404) {
-          return { status: "needs_auth" as const };
+          return { status: "needs_auth" };
         }
         throw new Error("Failed to get OAuth status");
       }
 
-      const parseResult = ExternalOAuthStatusResponseSchema.safeParse(
+      const parseResult = ExternalMcpOAuthStatusResponseSchema.safeParse(
         await response.json(),
       );
 
@@ -111,7 +125,7 @@ export function useExternalMcpOAuthStatus(
 
       return parseResult.data;
     },
-    enabled: !!issuer && !!toolsetId && !!mcpOAuthConfig,
+    enabled: options?.enabled ?? !!toolsetId,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   });
@@ -170,11 +184,6 @@ function ExternalMcpOAuthConnection({
   const queryClient = useQueryClient();
   const apiUrl = getServerURL();
 
-  // Use the authorization endpoint as the issuer for querying status
-  const issuer = mcpOAuthConfig.oauthAuthorizationEndpoint
-    ? new URL(mcpOAuthConfig.oauthAuthorizationEndpoint).origin
-    : undefined;
-
   // Query OAuth status using the shared hook
   const {
     data: oauthStatus,
@@ -185,14 +194,11 @@ function ExternalMcpOAuthConnection({
   // Disconnect mutation
   const disconnectMutation = useMutation({
     mutationFn: async () => {
-      if (!issuer)
-        throw new Error("Cannot disconnect because no issuer is configured");
       if (!toolset)
         throw new Error("Cannot disconnect because toolset is not loaded");
 
       const params = new URLSearchParams({
         toolset_id: toolset.id,
-        issuer: issuer,
       });
 
       const response = await fetch(
@@ -212,10 +218,10 @@ function ExternalMcpOAuthConnection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["mcpOauthStatus", toolset?.id ?? "", mcpOAuthConfig.slug],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["playground.oauthToken"],
+        queryKey: getExternalMcpOAuthStatusQueryKey(
+          toolset?.id,
+          mcpOAuthConfig.slug,
+        ),
       });
       toast.success(
         `Disconnected from ${mcpOAuthConfig.name || mcpOAuthConfig.slug}`,
@@ -264,11 +270,6 @@ function ExternalMcpOAuthConnection({
         // Small delay to ensure server has processed the callback
         setTimeout(() => {
           refetchStatus();
-          // Also invalidate the token query so GramElementsProvider
-          // re-renders with the new OAuth access token
-          queryClient.invalidateQueries({
-            queryKey: ["playground.oauthToken"],
-          });
         }, 300);
       }
     }, 500);
@@ -354,44 +355,14 @@ function OAuthConnection({
       }
     | undefined;
   const issuer = oauthMetadata?.issuer;
+  const slug = toolset.externalOauthServer?.slug;
 
-  // Query OAuth status
-  const { data: oauthStatus, isLoading: statusLoading } = useQuery({
-    queryKey: ["oauthStatus", toolsetId, issuer],
-    queryFn: async () => {
-      if (!issuer) return null;
-
-      const params = new URLSearchParams({
-        toolset_id: toolsetId,
-        issuer: issuer,
-      });
-
-      const response = await fetch(
-        `${apiUrl}/oauth-external/status?${params.toString()}`,
-        {
-          headers: {
-            "Gram-Project": project.slug,
-          },
-        },
-      );
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return { status: "needs_auth" as const };
-        }
-        throw new Error("Failed to get OAuth status");
-      }
-
-      return response.json() as Promise<{
-        status: "authenticated" | "needs_auth" | "disconnected";
-        provider_name?: string;
-        expires_at?: string;
-      }>;
-    },
-    enabled: !!issuer,
-    staleTime: 30 * 1000,
-    refetchOnWindowFocus: true,
-  });
+  // Query OAuth status using the shared hook
+  const { data: oauthStatus, isLoading: statusLoading } =
+    useExternalMcpOAuthStatus(toolsetId, {
+      slug,
+      enabled: !!issuer,
+    });
 
   // Disconnect mutation
   const disconnectMutation = useMutation({
@@ -400,13 +371,13 @@ function OAuthConnection({
 
       const params = new URLSearchParams({
         toolset_id: toolsetId,
-        issuer: issuer,
       });
 
       const response = await fetch(
         `${apiUrl}/oauth-external/disconnect?${params.toString()}`,
         {
           method: "DELETE",
+          credentials: "include",
           headers: {
             "Gram-Project": project.slug,
           },
@@ -419,7 +390,7 @@ function OAuthConnection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["oauthStatus", toolsetId, issuer],
+        queryKey: ["oauthExternalStatus", toolsetId, slug ?? ""],
       });
       toast.success("Disconnected from OAuth provider");
     },
@@ -434,7 +405,6 @@ function OAuthConnection({
 
     const params = new URLSearchParams({
       toolset_id: toolsetId,
-      issuer: issuer,
       redirect_uri: window.location.href.split("?")[0],
     });
 
@@ -458,7 +428,7 @@ function OAuthConnection({
       if (popup.closed) {
         clearInterval(pollTimer);
         queryClient.invalidateQueries({
-          queryKey: ["oauthStatus", toolsetId, issuer],
+          queryKey: ["oauthExternalStatus", toolsetId, slug ?? ""],
         });
       }
     }, 500);
