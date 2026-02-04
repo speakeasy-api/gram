@@ -236,6 +236,10 @@ function ExternalMcpOAuthConnection({
   const handleConnect = () => {
     if (!mcpOAuthConfig.oauthAuthorizationEndpoint) return;
 
+    if (window.location.origin !== apiUrl) {
+      throw new Error("redirect origin mismatch");
+    }
+
     const params = new URLSearchParams({
       toolset_id: toolset?.id ?? "",
       external_mcp_slug: mcpOAuthConfig.slug,

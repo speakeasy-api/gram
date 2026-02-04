@@ -99,7 +99,6 @@ export function PlaygroundElements({
       toolset?.tools ? getExternalMcpOAuthConfig(toolset.tools) : undefined,
     [toolset?.tools],
   );
-  console.log({ mcpOAuthConfig });
 
   const { data: oauthStatus, isLoading: oauthStatusLoading } =
     useExternalMcpOAuthStatus(toolset?.id, mcpOAuthConfig);
