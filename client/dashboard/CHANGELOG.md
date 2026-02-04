@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.27.4
+
+### Patch Changes
+
+- a7cb2d9: reinstate deployments access in Sources page UI and make relevant deployment accessible from a source card
+- Updated dependencies [63bb328]
+  - @gram-ai/elements@1.25.1
+
 ## 0.27.3
 
 ### Patch Changes
