@@ -124,7 +124,7 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
 	}
 
-	if domain.Activated {
+	if domain.Activated && domain.IngressName.Valid && domain.CertSecretName.Valid {
 		run, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.IngressName.String, domain.CertSecretName.String)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start custom domain deletion workflow").Log(ctx, s.logger)
