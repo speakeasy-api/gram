@@ -111,6 +111,7 @@ type hostedPageData struct {
 	SiteURL           string
 	LogoAssetURL      string
 	DocsURL           string
+	DocsText          string
 	Instructions      string
 	IsPublic          bool
 }
@@ -645,6 +646,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	logoAssetURL := s.siteURL.String() + "/external/sticker-logo.png"
 
 	var docsURL string
+	var docsText string
 	var instructions string
 	headerDisplayNames := make(map[string]string)
 	variableProvidedBy := make(map[string]string)
@@ -670,6 +672,9 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
+		}
+		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationText); docs != nil {
+			docsText = strings.TrimSpace(*docs)
 		}
 		if inst := conv.FromPGText[string](metadataRecord.Instructions); inst != nil {
 			instructions = strings.TrimSpace(*inst)
@@ -763,6 +768,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		SiteURL:           s.siteURL.String(),
 		LogoAssetURL:      logoAssetURL,
 		DocsURL:           docsURL,
+		DocsText:          docsText,
 		Instructions:      instructions,
 		IsPublic:          toolset.McpIsPublic,
 	}
