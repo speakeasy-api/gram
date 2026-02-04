@@ -67,6 +67,7 @@ func EncodeGetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Re
 // DecodeGetResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -121,19 +122,40 @@ func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody
 			}
 			return nil, NewGetUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("integrations", "get", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body GetForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("integrations", "get", err)
+				}
+				err = ValidateGetForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("integrations", "get", err)
+				}
+				return nil, NewGetForbidden(&body)
+			case "logs_disabled":
+				var (
+					body GetLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("integrations", "get", err)
+				}
+				err = ValidateGetLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("integrations", "get", err)
+				}
+				return nil, NewGetLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("integrations", "get", resp.StatusCode, string(body))
 			}
-			err = ValidateGetForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("integrations", "get", err)
-			}
-			return nil, NewGetForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetBadRequestResponseBody
@@ -306,6 +328,7 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 // DecodeListResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -360,19 +383,40 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 			}
 			return nil, NewListUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ListForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("integrations", "list", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body ListForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("integrations", "list", err)
+				}
+				err = ValidateListForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("integrations", "list", err)
+				}
+				return nil, NewListForbidden(&body)
+			case "logs_disabled":
+				var (
+					body ListLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("integrations", "list", err)
+				}
+				err = ValidateListLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("integrations", "list", err)
+				}
+				return nil, NewListLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("integrations", "list", resp.StatusCode, string(body))
 			}
-			err = ValidateListForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("integrations", "list", err)
-			}
-			return nil, NewListForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListBadRequestResponseBody

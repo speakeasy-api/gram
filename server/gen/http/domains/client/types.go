@@ -76,6 +76,24 @@ type GetDomainForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetDomainLogsDisabledResponseBody is the type of the "domains" service
+// "getDomain" endpoint HTTP response body for the "logs_disabled" error.
+type GetDomainLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetDomainBadRequestResponseBody is the type of the "domains" service
 // "getDomain" endpoint HTTP response body for the "bad_request" error.
 type GetDomainBadRequestResponseBody struct {
@@ -241,6 +259,24 @@ type CreateDomainUnauthorizedResponseBody struct {
 // CreateDomainForbiddenResponseBody is the type of the "domains" service
 // "createDomain" endpoint HTTP response body for the "forbidden" error.
 type CreateDomainForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDomainLogsDisabledResponseBody is the type of the "domains" service
+// "createDomain" endpoint HTTP response body for the "logs_disabled" error.
+type CreateDomainLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -423,6 +459,24 @@ type DeleteDomainUnauthorizedResponseBody struct {
 // DeleteDomainForbiddenResponseBody is the type of the "domains" service
 // "deleteDomain" endpoint HTTP response body for the "forbidden" error.
 type DeleteDomainForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteDomainLogsDisabledResponseBody is the type of the "domains" service
+// "deleteDomain" endpoint HTTP response body for the "logs_disabled" error.
+type DeleteDomainLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -640,6 +694,21 @@ func NewGetDomainForbidden(body *GetDomainForbiddenResponseBody) *goa.ServiceErr
 	return v
 }
 
+// NewGetDomainLogsDisabled builds a domains service getDomain endpoint
+// logs_disabled error.
+func NewGetDomainLogsDisabled(body *GetDomainLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetDomainBadRequest builds a domains service getDomain endpoint
 // bad_request error.
 func NewGetDomainBadRequest(body *GetDomainBadRequestResponseBody) *goa.ServiceError {
@@ -790,6 +859,21 @@ func NewCreateDomainForbidden(body *CreateDomainForbiddenResponseBody) *goa.Serv
 	return v
 }
 
+// NewCreateDomainLogsDisabled builds a domains service createDomain endpoint
+// logs_disabled error.
+func NewCreateDomainLogsDisabled(body *CreateDomainLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCreateDomainBadRequest builds a domains service createDomain endpoint
 // bad_request error.
 func NewCreateDomainBadRequest(body *CreateDomainBadRequestResponseBody) *goa.ServiceError {
@@ -928,6 +1012,21 @@ func NewDeleteDomainUnauthorized(body *DeleteDomainUnauthorizedResponseBody) *go
 // NewDeleteDomainForbidden builds a domains service deleteDomain endpoint
 // forbidden error.
 func NewDeleteDomainForbidden(body *DeleteDomainForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteDomainLogsDisabled builds a domains service deleteDomain endpoint
+// logs_disabled error.
+func NewDeleteDomainLogsDisabled(body *DeleteDomainLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1123,6 +1222,30 @@ func ValidateGetDomainUnauthorizedResponseBody(body *GetDomainUnauthorizedRespon
 // ValidateGetDomainForbiddenResponseBody runs the validations defined on
 // getDomain_forbidden_response_body
 func ValidateGetDomainForbiddenResponseBody(body *GetDomainForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDomainLogsDisabledResponseBody runs the validations defined on
+// getDomain_logs_disabled_response_body
+func ValidateGetDomainLogsDisabledResponseBody(body *GetDomainLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1384,6 +1507,30 @@ func ValidateCreateDomainForbiddenResponseBody(body *CreateDomainForbiddenRespon
 	return
 }
 
+// ValidateCreateDomainLogsDisabledResponseBody runs the validations defined on
+// createDomain_logs_disabled_response_body
+func ValidateCreateDomainLogsDisabledResponseBody(body *CreateDomainLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCreateDomainBadRequestResponseBody runs the validations defined on
 // createDomain_bad_request_response_body
 func ValidateCreateDomainBadRequestResponseBody(body *CreateDomainBadRequestResponseBody) (err error) {
@@ -1603,6 +1750,30 @@ func ValidateDeleteDomainUnauthorizedResponseBody(body *DeleteDomainUnauthorized
 // ValidateDeleteDomainForbiddenResponseBody runs the validations defined on
 // deleteDomain_forbidden_response_body
 func ValidateDeleteDomainForbiddenResponseBody(body *DeleteDomainForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteDomainLogsDisabledResponseBody runs the validations defined on
+// deleteDomain_logs_disabled_response_body
+func ValidateDeleteDomainLogsDisabledResponseBody(body *DeleteDomainLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

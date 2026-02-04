@@ -58,6 +58,25 @@ type ListCatalogForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListCatalogLogsDisabledResponseBody is the type of the "mcpRegistries"
+// service "listCatalog" endpoint HTTP response body for the "logs_disabled"
+// error.
+type ListCatalogLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListCatalogBadRequestResponseBody is the type of the "mcpRegistries" service
 // "listCatalog" endpoint HTTP response body for the "bad_request" error.
 type ListCatalogBadRequestResponseBody struct {
@@ -278,6 +297,20 @@ func NewListCatalogUnauthorizedResponseBody(res *goa.ServiceError) *ListCatalogU
 // result of the "listCatalog" endpoint of the "mcpRegistries" service.
 func NewListCatalogForbiddenResponseBody(res *goa.ServiceError) *ListCatalogForbiddenResponseBody {
 	body := &ListCatalogForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCatalogLogsDisabledResponseBody builds the HTTP response body from
+// the result of the "listCatalog" endpoint of the "mcpRegistries" service.
+func NewListCatalogLogsDisabledResponseBody(res *goa.ServiceError) *ListCatalogLogsDisabledResponseBody {
+	body := &ListCatalogLogsDisabledResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

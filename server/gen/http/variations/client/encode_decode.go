@@ -68,6 +68,7 @@ func EncodeUpsertGlobalRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeUpsertGlobalResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -122,19 +123,40 @@ func DecodeUpsertGlobalResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewUpsertGlobalUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body UpsertGlobalForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("variations", "upsertGlobal", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body UpsertGlobalForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("variations", "upsertGlobal", err)
+				}
+				err = ValidateUpsertGlobalForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("variations", "upsertGlobal", err)
+				}
+				return nil, NewUpsertGlobalForbidden(&body)
+			case "logs_disabled":
+				var (
+					body UpsertGlobalLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("variations", "upsertGlobal", err)
+				}
+				err = ValidateUpsertGlobalLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("variations", "upsertGlobal", err)
+				}
+				return nil, NewUpsertGlobalLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("variations", "upsertGlobal", resp.StatusCode, string(body))
 			}
-			err = ValidateUpsertGlobalForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("variations", "upsertGlobal", err)
-			}
-			return nil, NewUpsertGlobalForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UpsertGlobalBadRequestResponseBody
@@ -309,6 +331,7 @@ func EncodeDeleteGlobalRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeDeleteGlobalResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -363,19 +386,40 @@ func DecodeDeleteGlobalResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewDeleteGlobalUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body DeleteGlobalForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("variations", "deleteGlobal", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body DeleteGlobalForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("variations", "deleteGlobal", err)
+				}
+				err = ValidateDeleteGlobalForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("variations", "deleteGlobal", err)
+				}
+				return nil, NewDeleteGlobalForbidden(&body)
+			case "logs_disabled":
+				var (
+					body DeleteGlobalLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("variations", "deleteGlobal", err)
+				}
+				err = ValidateDeleteGlobalLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("variations", "deleteGlobal", err)
+				}
+				return nil, NewDeleteGlobalLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("variations", "deleteGlobal", resp.StatusCode, string(body))
 			}
-			err = ValidateDeleteGlobalForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("variations", "deleteGlobal", err)
-			}
-			return nil, NewDeleteGlobalForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body DeleteGlobalBadRequestResponseBody
@@ -547,6 +591,7 @@ func EncodeListGlobalRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 // DecodeListGlobalResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -601,19 +646,40 @@ func DecodeListGlobalResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			return nil, NewListGlobalUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ListGlobalForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("variations", "listGlobal", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body ListGlobalForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("variations", "listGlobal", err)
+				}
+				err = ValidateListGlobalForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("variations", "listGlobal", err)
+				}
+				return nil, NewListGlobalForbidden(&body)
+			case "logs_disabled":
+				var (
+					body ListGlobalLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("variations", "listGlobal", err)
+				}
+				err = ValidateListGlobalLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("variations", "listGlobal", err)
+				}
+				return nil, NewListGlobalLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("variations", "listGlobal", resp.StatusCode, string(body))
 			}
-			err = ValidateListGlobalForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("variations", "listGlobal", err)
-			}
-			return nil, NewListGlobalForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListGlobalBadRequestResponseBody

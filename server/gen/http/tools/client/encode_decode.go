@@ -75,6 +75,7 @@ func EncodeListToolsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // DecodeListToolsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -129,19 +130,40 @@ func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			}
 			return nil, NewListToolsUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ListToolsForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body ListToolsForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+				}
+				err = ValidateListToolsForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("tools", "listTools", err)
+				}
+				return nil, NewListToolsForbidden(&body)
+			case "logs_disabled":
+				var (
+					body ListToolsLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("tools", "listTools", err)
+				}
+				err = ValidateListToolsLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("tools", "listTools", err)
+				}
+				return nil, NewListToolsLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("tools", "listTools", resp.StatusCode, string(body))
 			}
-			err = ValidateListToolsForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("tools", "listTools", err)
-			}
-			return nil, NewListToolsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListToolsBadRequestResponseBody

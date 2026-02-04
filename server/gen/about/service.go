@@ -58,6 +58,11 @@ func MakeForbidden(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "forbidden", false, false, false)
 }
 
+// MakeLogsDisabled builds a goa.ServiceError from an error.
+func MakeLogsDisabled(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "logs_disabled", false, false, false)
+}
+
 // MakeBadRequest builds a goa.ServiceError from an error.
 func MakeBadRequest(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "bad_request", false, false, false)

@@ -64,6 +64,7 @@ func EncodeGetSignedAssetURLRequest(encoder func(*http.Request) goahttp.Encoder)
 // DecodeGetSignedAssetURLResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -118,19 +119,40 @@ func DecodeGetSignedAssetURLResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			return nil, NewGetSignedAssetURLUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetSignedAssetURLForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("functions", "getSignedAssetURL", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body GetSignedAssetURLForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("functions", "getSignedAssetURL", err)
+				}
+				err = ValidateGetSignedAssetURLForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("functions", "getSignedAssetURL", err)
+				}
+				return nil, NewGetSignedAssetURLForbidden(&body)
+			case "logs_disabled":
+				var (
+					body GetSignedAssetURLLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("functions", "getSignedAssetURL", err)
+				}
+				err = ValidateGetSignedAssetURLLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("functions", "getSignedAssetURL", err)
+				}
+				return nil, NewGetSignedAssetURLLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("functions", "getSignedAssetURL", resp.StatusCode, string(body))
 			}
-			err = ValidateGetSignedAssetURLForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("functions", "getSignedAssetURL", err)
-			}
-			return nil, NewGetSignedAssetURLForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetSignedAssetURLBadRequestResponseBody

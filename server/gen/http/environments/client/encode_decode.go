@@ -64,6 +64,7 @@ func EncodeCreateEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 // DecodeCreateEnvironmentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -118,19 +119,40 @@ func DecodeCreateEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			return nil, NewCreateEnvironmentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CreateEnvironmentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body CreateEnvironmentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+				}
+				err = ValidateCreateEnvironmentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+				}
+				return nil, NewCreateEnvironmentForbidden(&body)
+			case "logs_disabled":
+				var (
+					body CreateEnvironmentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "createEnvironment", err)
+				}
+				err = ValidateCreateEnvironmentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
+				}
+				return nil, NewCreateEnvironmentLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "createEnvironment", resp.StatusCode, string(body))
 			}
-			err = ValidateCreateEnvironmentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("environments", "createEnvironment", err)
-			}
-			return nil, NewCreateEnvironmentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateEnvironmentBadRequestResponseBody
@@ -298,6 +320,7 @@ func EncodeListEnvironmentsRequest(encoder func(*http.Request) goahttp.Encoder) 
 // DecodeListEnvironmentsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -352,19 +375,40 @@ func DecodeListEnvironmentsResponse(decoder func(*http.Response) goahttp.Decoder
 			}
 			return nil, NewListEnvironmentsUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ListEnvironmentsForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body ListEnvironmentsForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+				}
+				err = ValidateListEnvironmentsForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+				}
+				return nil, NewListEnvironmentsForbidden(&body)
+			case "logs_disabled":
+				var (
+					body ListEnvironmentsLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "listEnvironments", err)
+				}
+				err = ValidateListEnvironmentsLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
+				}
+				return nil, NewListEnvironmentsLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "listEnvironments", resp.StatusCode, string(body))
 			}
-			err = ValidateListEnvironmentsForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("environments", "listEnvironments", err)
-			}
-			return nil, NewListEnvironmentsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListEnvironmentsBadRequestResponseBody
@@ -539,6 +583,7 @@ func EncodeUpdateEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 // DecodeUpdateEnvironmentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -593,19 +638,40 @@ func DecodeUpdateEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			return nil, NewUpdateEnvironmentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body UpdateEnvironmentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body UpdateEnvironmentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+				}
+				err = ValidateUpdateEnvironmentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+				}
+				return nil, NewUpdateEnvironmentForbidden(&body)
+			case "logs_disabled":
+				var (
+					body UpdateEnvironmentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "updateEnvironment", err)
+				}
+				err = ValidateUpdateEnvironmentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
+				}
+				return nil, NewUpdateEnvironmentLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "updateEnvironment", resp.StatusCode, string(body))
 			}
-			err = ValidateUpdateEnvironmentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("environments", "updateEnvironment", err)
-			}
-			return nil, NewUpdateEnvironmentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UpdateEnvironmentBadRequestResponseBody
@@ -776,6 +842,7 @@ func EncodeDeleteEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder)
 // DecodeDeleteEnvironmentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -817,19 +884,40 @@ func DecodeDeleteEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			return nil, NewDeleteEnvironmentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body DeleteEnvironmentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body DeleteEnvironmentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+				}
+				err = ValidateDeleteEnvironmentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+				}
+				return nil, NewDeleteEnvironmentForbidden(&body)
+			case "logs_disabled":
+				var (
+					body DeleteEnvironmentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteEnvironment", err)
+				}
+				err = ValidateDeleteEnvironmentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
+				}
+				return nil, NewDeleteEnvironmentLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "deleteEnvironment", resp.StatusCode, string(body))
 			}
-			err = ValidateDeleteEnvironmentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("environments", "deleteEnvironment", err)
-			}
-			return nil, NewDeleteEnvironmentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body DeleteEnvironmentBadRequestResponseBody
@@ -1002,6 +1090,7 @@ func EncodeSetSourceEnvironmentLinkRequest(encoder func(*http.Request) goahttp.E
 // DecodeSetSourceEnvironmentLinkResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1056,19 +1145,40 @@ func DecodeSetSourceEnvironmentLinkResponse(decoder func(*http.Response) goahttp
 			}
 			return nil, NewSetSourceEnvironmentLinkUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body SetSourceEnvironmentLinkForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body SetSourceEnvironmentLinkForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+				}
+				err = ValidateSetSourceEnvironmentLinkForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+				}
+				return nil, NewSetSourceEnvironmentLinkForbidden(&body)
+			case "logs_disabled":
+				var (
+					body SetSourceEnvironmentLinkLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "setSourceEnvironmentLink", err)
+				}
+				err = ValidateSetSourceEnvironmentLinkLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
+				}
+				return nil, NewSetSourceEnvironmentLinkLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "setSourceEnvironmentLink", resp.StatusCode, string(body))
 			}
-			err = ValidateSetSourceEnvironmentLinkForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("environments", "setSourceEnvironmentLink", err)
-			}
-			return nil, NewSetSourceEnvironmentLinkForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SetSourceEnvironmentLinkBadRequestResponseBody
@@ -1242,6 +1352,7 @@ func EncodeDeleteSourceEnvironmentLinkRequest(encoder func(*http.Request) goahtt
 // DecodeDeleteSourceEnvironmentLinkResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1283,19 +1394,40 @@ func DecodeDeleteSourceEnvironmentLinkResponse(decoder func(*http.Response) goah
 			}
 			return nil, NewDeleteSourceEnvironmentLinkUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body DeleteSourceEnvironmentLinkForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body DeleteSourceEnvironmentLinkForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+				}
+				err = ValidateDeleteSourceEnvironmentLinkForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+				}
+				return nil, NewDeleteSourceEnvironmentLinkForbidden(&body)
+			case "logs_disabled":
+				var (
+					body DeleteSourceEnvironmentLinkLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteSourceEnvironmentLink", err)
+				}
+				err = ValidateDeleteSourceEnvironmentLinkLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
+				}
+				return nil, NewDeleteSourceEnvironmentLinkLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "deleteSourceEnvironmentLink", resp.StatusCode, string(body))
 			}
-			err = ValidateDeleteSourceEnvironmentLinkForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("environments", "deleteSourceEnvironmentLink", err)
-			}
-			return nil, NewDeleteSourceEnvironmentLinkForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body DeleteSourceEnvironmentLinkBadRequestResponseBody
@@ -1468,6 +1600,7 @@ func EncodeGetSourceEnvironmentRequest(encoder func(*http.Request) goahttp.Encod
 // DecodeGetSourceEnvironmentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1522,19 +1655,40 @@ func DecodeGetSourceEnvironmentResponse(decoder func(*http.Response) goahttp.Dec
 			}
 			return nil, NewGetSourceEnvironmentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetSourceEnvironmentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body GetSourceEnvironmentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+				}
+				err = ValidateGetSourceEnvironmentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+				}
+				return nil, NewGetSourceEnvironmentForbidden(&body)
+			case "logs_disabled":
+				var (
+					body GetSourceEnvironmentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "getSourceEnvironment", err)
+				}
+				err = ValidateGetSourceEnvironmentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
+				}
+				return nil, NewGetSourceEnvironmentLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "getSourceEnvironment", resp.StatusCode, string(body))
 			}
-			err = ValidateGetSourceEnvironmentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("environments", "getSourceEnvironment", err)
-			}
-			return nil, NewGetSourceEnvironmentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetSourceEnvironmentBadRequestResponseBody
@@ -1707,6 +1861,7 @@ func EncodeSetToolsetEnvironmentLinkRequest(encoder func(*http.Request) goahttp.
 // DecodeSetToolsetEnvironmentLinkResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1761,19 +1916,40 @@ func DecodeSetToolsetEnvironmentLinkResponse(decoder func(*http.Response) goahtt
 			}
 			return nil, NewSetToolsetEnvironmentLinkUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body SetToolsetEnvironmentLinkForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body SetToolsetEnvironmentLinkForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+				}
+				err = ValidateSetToolsetEnvironmentLinkForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+				}
+				return nil, NewSetToolsetEnvironmentLinkForbidden(&body)
+			case "logs_disabled":
+				var (
+					body SetToolsetEnvironmentLinkLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "setToolsetEnvironmentLink", err)
+				}
+				err = ValidateSetToolsetEnvironmentLinkLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
+				}
+				return nil, NewSetToolsetEnvironmentLinkLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "setToolsetEnvironmentLink", resp.StatusCode, string(body))
 			}
-			err = ValidateSetToolsetEnvironmentLinkForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("environments", "setToolsetEnvironmentLink", err)
-			}
-			return nil, NewSetToolsetEnvironmentLinkForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SetToolsetEnvironmentLinkBadRequestResponseBody
@@ -1946,6 +2122,7 @@ func EncodeDeleteToolsetEnvironmentLinkRequest(encoder func(*http.Request) goaht
 // DecodeDeleteToolsetEnvironmentLinkResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1987,19 +2164,40 @@ func DecodeDeleteToolsetEnvironmentLinkResponse(decoder func(*http.Response) goa
 			}
 			return nil, NewDeleteToolsetEnvironmentLinkUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body DeleteToolsetEnvironmentLinkForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body DeleteToolsetEnvironmentLinkForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+				}
+				err = ValidateDeleteToolsetEnvironmentLinkForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+				}
+				return nil, NewDeleteToolsetEnvironmentLinkForbidden(&body)
+			case "logs_disabled":
+				var (
+					body DeleteToolsetEnvironmentLinkLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "deleteToolsetEnvironmentLink", err)
+				}
+				err = ValidateDeleteToolsetEnvironmentLinkLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
+				}
+				return nil, NewDeleteToolsetEnvironmentLinkLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "deleteToolsetEnvironmentLink", resp.StatusCode, string(body))
 			}
-			err = ValidateDeleteToolsetEnvironmentLinkForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("environments", "deleteToolsetEnvironmentLink", err)
-			}
-			return nil, NewDeleteToolsetEnvironmentLinkForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body DeleteToolsetEnvironmentLinkBadRequestResponseBody
@@ -2171,6 +2369,7 @@ func EncodeGetToolsetEnvironmentRequest(encoder func(*http.Request) goahttp.Enco
 // DecodeGetToolsetEnvironmentResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -2225,19 +2424,40 @@ func DecodeGetToolsetEnvironmentResponse(decoder func(*http.Response) goahttp.De
 			}
 			return nil, NewGetToolsetEnvironmentUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetToolsetEnvironmentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body GetToolsetEnvironmentForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+				}
+				err = ValidateGetToolsetEnvironmentForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+				}
+				return nil, NewGetToolsetEnvironmentForbidden(&body)
+			case "logs_disabled":
+				var (
+					body GetToolsetEnvironmentLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "getToolsetEnvironment", err)
+				}
+				err = ValidateGetToolsetEnvironmentLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
+				}
+				return nil, NewGetToolsetEnvironmentLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "getToolsetEnvironment", resp.StatusCode, string(body))
 			}
-			err = ValidateGetToolsetEnvironmentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("environments", "getToolsetEnvironment", err)
-			}
-			return nil, NewGetToolsetEnvironmentForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetToolsetEnvironmentBadRequestResponseBody

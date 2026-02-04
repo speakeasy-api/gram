@@ -68,6 +68,7 @@ func EncodeCreateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // DecodeCreateToolsetResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -122,19 +123,40 @@ func DecodeCreateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewCreateToolsetUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CreateToolsetForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body CreateToolsetForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+				}
+				err = ValidateCreateToolsetForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+				}
+				return nil, NewCreateToolsetForbidden(&body)
+			case "logs_disabled":
+				var (
+					body CreateToolsetLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "createToolset", err)
+				}
+				err = ValidateCreateToolsetLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
+				}
+				return nil, NewCreateToolsetLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "createToolset", resp.StatusCode, string(body))
 			}
-			err = ValidateCreateToolsetForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "createToolset", err)
-			}
-			return nil, NewCreateToolsetForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateToolsetBadRequestResponseBody
@@ -306,6 +328,7 @@ func EncodeListToolsetsRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeListToolsetsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -360,19 +383,40 @@ func DecodeListToolsetsResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewListToolsetsUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ListToolsetsForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body ListToolsetsForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+				}
+				err = ValidateListToolsetsForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+				}
+				return nil, NewListToolsetsForbidden(&body)
+			case "logs_disabled":
+				var (
+					body ListToolsetsLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "listToolsets", err)
+				}
+				err = ValidateListToolsetsLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
+				}
+				return nil, NewListToolsetsLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "listToolsets", resp.StatusCode, string(body))
 			}
-			err = ValidateListToolsetsForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "listToolsets", err)
-			}
-			return nil, NewListToolsetsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ListToolsetsBadRequestResponseBody
@@ -551,6 +595,7 @@ func EncodeUpdateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // DecodeUpdateToolsetResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -605,19 +650,40 @@ func DecodeUpdateToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewUpdateToolsetUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body UpdateToolsetForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body UpdateToolsetForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+				}
+				err = ValidateUpdateToolsetForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+				}
+				return nil, NewUpdateToolsetForbidden(&body)
+			case "logs_disabled":
+				var (
+					body UpdateToolsetLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateToolset", err)
+				}
+				err = ValidateUpdateToolsetLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
+				}
+				return nil, NewUpdateToolsetLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "updateToolset", resp.StatusCode, string(body))
 			}
-			err = ValidateUpdateToolsetForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "updateToolset", err)
-			}
-			return nil, NewUpdateToolsetForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UpdateToolsetBadRequestResponseBody
@@ -792,6 +858,7 @@ func EncodeDeleteToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 // DecodeDeleteToolsetResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -833,19 +900,40 @@ func DecodeDeleteToolsetResponse(decoder func(*http.Response) goahttp.Decoder, r
 			}
 			return nil, NewDeleteToolsetUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body DeleteToolsetForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body DeleteToolsetForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+				}
+				err = ValidateDeleteToolsetForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+				}
+				return nil, NewDeleteToolsetForbidden(&body)
+			case "logs_disabled":
+				var (
+					body DeleteToolsetLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "deleteToolset", err)
+				}
+				err = ValidateDeleteToolsetLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
+				}
+				return nil, NewDeleteToolsetLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "deleteToolset", resp.StatusCode, string(body))
 			}
-			err = ValidateDeleteToolsetForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "deleteToolset", err)
-			}
-			return nil, NewDeleteToolsetForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body DeleteToolsetBadRequestResponseBody
@@ -1020,6 +1108,7 @@ func EncodeGetToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 // DecodeGetToolsetResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1074,19 +1163,40 @@ func DecodeGetToolsetResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			return nil, NewGetToolsetUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetToolsetForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body GetToolsetForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+				}
+				err = ValidateGetToolsetForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+				}
+				return nil, NewGetToolsetForbidden(&body)
+			case "logs_disabled":
+				var (
+					body GetToolsetLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "getToolset", err)
+				}
+				err = ValidateGetToolsetLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
+				}
+				return nil, NewGetToolsetLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "getToolset", resp.StatusCode, string(body))
 			}
-			err = ValidateGetToolsetForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "getToolset", err)
-			}
-			return nil, NewGetToolsetForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetToolsetBadRequestResponseBody
@@ -1262,6 +1372,7 @@ func EncodeCheckMCPSlugAvailabilityRequest(encoder func(*http.Request) goahttp.E
 // DecodeCheckMCPSlugAvailabilityResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1311,19 +1422,40 @@ func DecodeCheckMCPSlugAvailabilityResponse(decoder func(*http.Response) goahttp
 			}
 			return nil, NewCheckMCPSlugAvailabilityUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CheckMCPSlugAvailabilityForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body CheckMCPSlugAvailabilityForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+				}
+				err = ValidateCheckMCPSlugAvailabilityForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+				}
+				return nil, NewCheckMCPSlugAvailabilityForbidden(&body)
+			case "logs_disabled":
+				var (
+					body CheckMCPSlugAvailabilityLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
+				}
+				err = ValidateCheckMCPSlugAvailabilityLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
+				}
+				return nil, NewCheckMCPSlugAvailabilityLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "checkMCPSlugAvailability", resp.StatusCode, string(body))
 			}
-			err = ValidateCheckMCPSlugAvailabilityForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			return nil, NewCheckMCPSlugAvailabilityForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CheckMCPSlugAvailabilityBadRequestResponseBody
@@ -1498,6 +1630,7 @@ func EncodeCloneToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func
 // DecodeCloneToolsetResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1552,19 +1685,40 @@ func DecodeCloneToolsetResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			return nil, NewCloneToolsetUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CloneToolsetForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body CloneToolsetForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+				}
+				err = ValidateCloneToolsetForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+				}
+				return nil, NewCloneToolsetForbidden(&body)
+			case "logs_disabled":
+				var (
+					body CloneToolsetLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+				}
+				err = ValidateCloneToolsetLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+				}
+				return nil, NewCloneToolsetLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "cloneToolset", resp.StatusCode, string(body))
 			}
-			err = ValidateCloneToolsetForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
-			}
-			return nil, NewCloneToolsetForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CloneToolsetBadRequestResponseBody
@@ -1744,6 +1898,7 @@ func EncodeAddExternalOAuthServerRequest(encoder func(*http.Request) goahttp.Enc
 // DecodeAddExternalOAuthServerResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1798,19 +1953,40 @@ func DecodeAddExternalOAuthServerResponse(decoder func(*http.Response) goahttp.D
 			}
 			return nil, NewAddExternalOAuthServerUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body AddExternalOAuthServerForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body AddExternalOAuthServerForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+				}
+				err = ValidateAddExternalOAuthServerForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+				}
+				return nil, NewAddExternalOAuthServerForbidden(&body)
+			case "logs_disabled":
+				var (
+					body AddExternalOAuthServerLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+				}
+				err = ValidateAddExternalOAuthServerLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+				}
+				return nil, NewAddExternalOAuthServerLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "addExternalOAuthServer", resp.StatusCode, string(body))
 			}
-			err = ValidateAddExternalOAuthServerForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
-			}
-			return nil, NewAddExternalOAuthServerForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body AddExternalOAuthServerBadRequestResponseBody
@@ -1985,6 +2161,7 @@ func EncodeRemoveOAuthServerRequest(encoder func(*http.Request) goahttp.Encoder)
 // DecodeRemoveOAuthServerResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -2039,19 +2216,40 @@ func DecodeRemoveOAuthServerResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			return nil, NewRemoveOAuthServerUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body RemoveOAuthServerForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body RemoveOAuthServerForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+				}
+				err = ValidateRemoveOAuthServerForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+				}
+				return nil, NewRemoveOAuthServerForbidden(&body)
+			case "logs_disabled":
+				var (
+					body RemoveOAuthServerLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+				}
+				err = ValidateRemoveOAuthServerLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+				}
+				return nil, NewRemoveOAuthServerLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "removeOAuthServer", resp.StatusCode, string(body))
 			}
-			err = ValidateRemoveOAuthServerForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
-			}
-			return nil, NewRemoveOAuthServerForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body RemoveOAuthServerBadRequestResponseBody
@@ -2231,6 +2429,7 @@ func EncodeAddOAuthProxyServerRequest(encoder func(*http.Request) goahttp.Encode
 // DecodeAddOAuthProxyServerResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -2285,19 +2484,40 @@ func DecodeAddOAuthProxyServerResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			return nil, NewAddOAuthProxyServerUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body AddOAuthProxyServerForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "addOAuthProxyServer", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body AddOAuthProxyServerForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "addOAuthProxyServer", err)
+				}
+				err = ValidateAddOAuthProxyServerForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "addOAuthProxyServer", err)
+				}
+				return nil, NewAddOAuthProxyServerForbidden(&body)
+			case "logs_disabled":
+				var (
+					body AddOAuthProxyServerLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "addOAuthProxyServer", err)
+				}
+				err = ValidateAddOAuthProxyServerLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "addOAuthProxyServer", err)
+				}
+				return nil, NewAddOAuthProxyServerLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "addOAuthProxyServer", resp.StatusCode, string(body))
 			}
-			err = ValidateAddOAuthProxyServerForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "addOAuthProxyServer", err)
-			}
-			return nil, NewAddOAuthProxyServerForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body AddOAuthProxyServerBadRequestResponseBody

@@ -67,6 +67,7 @@ func EncodeGetMcpMetadataRequest(encoder func(*http.Request) goahttp.Encoder) fu
 // DecodeGetMcpMetadataResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -121,19 +122,40 @@ func DecodeGetMcpMetadataResponse(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewGetMcpMetadataUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetMcpMetadataForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpMetadata", "getMcpMetadata", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body GetMcpMetadataForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpMetadata", "getMcpMetadata", err)
+				}
+				err = ValidateGetMcpMetadataForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpMetadata", "getMcpMetadata", err)
+				}
+				return nil, NewGetMcpMetadataForbidden(&body)
+			case "logs_disabled":
+				var (
+					body GetMcpMetadataLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpMetadata", "getMcpMetadata", err)
+				}
+				err = ValidateGetMcpMetadataLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpMetadata", "getMcpMetadata", err)
+				}
+				return nil, NewGetMcpMetadataLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpMetadata", "getMcpMetadata", resp.StatusCode, string(body))
 			}
-			err = ValidateGetMcpMetadataForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpMetadata", "getMcpMetadata", err)
-			}
-			return nil, NewGetMcpMetadataForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetMcpMetadataBadRequestResponseBody
@@ -309,6 +331,7 @@ func EncodeSetMcpMetadataRequest(encoder func(*http.Request) goahttp.Encoder) fu
 // DecodeSetMcpMetadataResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -363,19 +386,40 @@ func DecodeSetMcpMetadataResponse(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewSetMcpMetadataUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body SetMcpMetadataForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpMetadata", "setMcpMetadata", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body SetMcpMetadataForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpMetadata", "setMcpMetadata", err)
+				}
+				err = ValidateSetMcpMetadataForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpMetadata", "setMcpMetadata", err)
+				}
+				return nil, NewSetMcpMetadataForbidden(&body)
+			case "logs_disabled":
+				var (
+					body SetMcpMetadataLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpMetadata", "setMcpMetadata", err)
+				}
+				err = ValidateSetMcpMetadataLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpMetadata", "setMcpMetadata", err)
+				}
+				return nil, NewSetMcpMetadataLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpMetadata", "setMcpMetadata", resp.StatusCode, string(body))
 			}
-			err = ValidateSetMcpMetadataForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpMetadata", "setMcpMetadata", err)
-			}
-			return nil, NewSetMcpMetadataForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SetMcpMetadataBadRequestResponseBody
@@ -551,6 +595,7 @@ func EncodeExportMcpMetadataRequest(encoder func(*http.Request) goahttp.Encoder)
 // DecodeExportMcpMetadataResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -605,19 +650,40 @@ func DecodeExportMcpMetadataResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			return nil, NewExportMcpMetadataUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body ExportMcpMetadataForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body ExportMcpMetadataForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+				}
+				err = ValidateExportMcpMetadataForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+				}
+				return nil, NewExportMcpMetadataForbidden(&body)
+			case "logs_disabled":
+				var (
+					body ExportMcpMetadataLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpMetadata", "exportMcpMetadata", err)
+				}
+				err = ValidateExportMcpMetadataLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
+				}
+				return nil, NewExportMcpMetadataLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpMetadata", "exportMcpMetadata", resp.StatusCode, string(body))
 			}
-			err = ValidateExportMcpMetadataForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("mcpMetadata", "exportMcpMetadata", err)
-			}
-			return nil, NewExportMcpMetadataForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body ExportMcpMetadataBadRequestResponseBody

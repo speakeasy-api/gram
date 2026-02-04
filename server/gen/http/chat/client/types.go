@@ -101,6 +101,24 @@ type ListChatsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListChatsLogsDisabledResponseBody is the type of the "chat" service
+// "listChats" endpoint HTTP response body for the "logs_disabled" error.
+type ListChatsLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListChatsBadRequestResponseBody is the type of the "chat" service
 // "listChats" endpoint HTTP response body for the "bad_request" error.
 type ListChatsBadRequestResponseBody struct {
@@ -266,6 +284,24 @@ type LoadChatUnauthorizedResponseBody struct {
 // LoadChatForbiddenResponseBody is the type of the "chat" service "loadChat"
 // endpoint HTTP response body for the "forbidden" error.
 type LoadChatForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// LoadChatLogsDisabledResponseBody is the type of the "chat" service
+// "loadChat" endpoint HTTP response body for the "logs_disabled" error.
+type LoadChatLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -461,6 +497,24 @@ type GenerateTitleForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GenerateTitleLogsDisabledResponseBody is the type of the "chat" service
+// "generateTitle" endpoint HTTP response body for the "logs_disabled" error.
+type GenerateTitleLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GenerateTitleBadRequestResponseBody is the type of the "chat" service
 // "generateTitle" endpoint HTTP response body for the "bad_request" error.
 type GenerateTitleBadRequestResponseBody struct {
@@ -628,6 +682,24 @@ type CreditUsageUnauthorizedResponseBody struct {
 // CreditUsageForbiddenResponseBody is the type of the "chat" service
 // "creditUsage" endpoint HTTP response body for the "forbidden" error.
 type CreditUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreditUsageLogsDisabledResponseBody is the type of the "chat" service
+// "creditUsage" endpoint HTTP response body for the "logs_disabled" error.
+type CreditUsageLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -885,6 +957,21 @@ func NewListChatsForbidden(body *ListChatsForbiddenResponseBody) *goa.ServiceErr
 	return v
 }
 
+// NewListChatsLogsDisabled builds a chat service listChats endpoint
+// logs_disabled error.
+func NewListChatsLogsDisabled(body *ListChatsLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListChatsBadRequest builds a chat service listChats endpoint bad_request
 // error.
 func NewListChatsBadRequest(body *ListChatsBadRequestResponseBody) *goa.ServiceError {
@@ -1056,6 +1143,21 @@ func NewLoadChatForbidden(body *LoadChatForbiddenResponseBody) *goa.ServiceError
 	return v
 }
 
+// NewLoadChatLogsDisabled builds a chat service loadChat endpoint
+// logs_disabled error.
+func NewLoadChatLogsDisabled(body *LoadChatLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewLoadChatBadRequest builds a chat service loadChat endpoint bad_request
 // error.
 func NewLoadChatBadRequest(body *LoadChatBadRequestResponseBody) *goa.ServiceError {
@@ -1201,6 +1303,21 @@ func NewGenerateTitleUnauthorized(body *GenerateTitleUnauthorizedResponseBody) *
 // NewGenerateTitleForbidden builds a chat service generateTitle endpoint
 // forbidden error.
 func NewGenerateTitleForbidden(body *GenerateTitleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateTitleLogsDisabled builds a chat service generateTitle endpoint
+// logs_disabled error.
+func NewGenerateTitleLogsDisabled(body *GenerateTitleLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1362,6 +1479,21 @@ func NewCreditUsageUnauthorized(body *CreditUsageUnauthorizedResponseBody) *goa.
 // NewCreditUsageForbidden builds a chat service creditUsage endpoint forbidden
 // error.
 func NewCreditUsageForbidden(body *CreditUsageForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreditUsageLogsDisabled builds a chat service creditUsage endpoint
+// logs_disabled error.
+func NewCreditUsageLogsDisabled(body *CreditUsageLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1595,6 +1727,30 @@ func ValidateListChatsUnauthorizedResponseBody(body *ListChatsUnauthorizedRespon
 // ValidateListChatsForbiddenResponseBody runs the validations defined on
 // listChats_forbidden_response_body
 func ValidateListChatsForbiddenResponseBody(body *ListChatsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChatsLogsDisabledResponseBody runs the validations defined on
+// listChats_logs_disabled_response_body
+func ValidateListChatsLogsDisabledResponseBody(body *ListChatsLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1856,6 +2012,30 @@ func ValidateLoadChatForbiddenResponseBody(body *LoadChatForbiddenResponseBody) 
 	return
 }
 
+// ValidateLoadChatLogsDisabledResponseBody runs the validations defined on
+// loadChat_logs_disabled_response_body
+func ValidateLoadChatLogsDisabledResponseBody(body *LoadChatLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateLoadChatBadRequestResponseBody runs the validations defined on
 // loadChat_bad_request_response_body
 func ValidateLoadChatBadRequestResponseBody(body *LoadChatBadRequestResponseBody) (err error) {
@@ -2096,6 +2276,30 @@ func ValidateGenerateTitleForbiddenResponseBody(body *GenerateTitleForbiddenResp
 	return
 }
 
+// ValidateGenerateTitleLogsDisabledResponseBody runs the validations defined
+// on generateTitle_logs_disabled_response_body
+func ValidateGenerateTitleLogsDisabledResponseBody(body *GenerateTitleLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGenerateTitleBadRequestResponseBody runs the validations defined on
 // generateTitle_bad_request_response_body
 func ValidateGenerateTitleBadRequestResponseBody(body *GenerateTitleBadRequestResponseBody) (err error) {
@@ -2315,6 +2519,30 @@ func ValidateCreditUsageUnauthorizedResponseBody(body *CreditUsageUnauthorizedRe
 // ValidateCreditUsageForbiddenResponseBody runs the validations defined on
 // creditUsage_forbidden_response_body
 func ValidateCreditUsageForbiddenResponseBody(body *CreditUsageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreditUsageLogsDisabledResponseBody runs the validations defined on
+// creditUsage_logs_disabled_response_body
+func ValidateCreditUsageLogsDisabledResponseBody(body *CreditUsageLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

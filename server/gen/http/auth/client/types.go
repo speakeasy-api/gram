@@ -71,6 +71,24 @@ type CallbackForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CallbackLogsDisabledResponseBody is the type of the "auth" service
+// "callback" endpoint HTTP response body for the "logs_disabled" error.
+type CallbackLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CallbackBadRequestResponseBody is the type of the "auth" service "callback"
 // endpoint HTTP response body for the "bad_request" error.
 type CallbackBadRequestResponseBody struct {
@@ -251,6 +269,24 @@ type LoginForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// LoginLogsDisabledResponseBody is the type of the "auth" service "login"
+// endpoint HTTP response body for the "logs_disabled" error.
+type LoginLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // LoginBadRequestResponseBody is the type of the "auth" service "login"
 // endpoint HTTP response body for the "bad_request" error.
 type LoginBadRequestResponseBody struct {
@@ -416,6 +452,24 @@ type SwitchScopesUnauthorizedResponseBody struct {
 // SwitchScopesForbiddenResponseBody is the type of the "auth" service
 // "switchScopes" endpoint HTTP response body for the "forbidden" error.
 type SwitchScopesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SwitchScopesLogsDisabledResponseBody is the type of the "auth" service
+// "switchScopes" endpoint HTTP response body for the "logs_disabled" error.
+type SwitchScopesLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -612,6 +666,24 @@ type LogoutForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// LogoutLogsDisabledResponseBody is the type of the "auth" service "logout"
+// endpoint HTTP response body for the "logs_disabled" error.
+type LogoutLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // LogoutBadRequestResponseBody is the type of the "auth" service "logout"
 // endpoint HTTP response body for the "bad_request" error.
 type LogoutBadRequestResponseBody struct {
@@ -792,6 +864,24 @@ type RegisterForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RegisterLogsDisabledResponseBody is the type of the "auth" service
+// "register" endpoint HTTP response body for the "logs_disabled" error.
+type RegisterLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RegisterBadRequestResponseBody is the type of the "auth" service "register"
 // endpoint HTTP response body for the "bad_request" error.
 type RegisterBadRequestResponseBody struct {
@@ -957,6 +1047,24 @@ type InfoUnauthorizedResponseBody struct {
 // InfoForbiddenResponseBody is the type of the "auth" service "info" endpoint
 // HTTP response body for the "forbidden" error.
 type InfoForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InfoLogsDisabledResponseBody is the type of the "auth" service "info"
+// endpoint HTTP response body for the "logs_disabled" error.
+type InfoLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1186,6 +1294,21 @@ func NewCallbackForbidden(body *CallbackForbiddenResponseBody) *goa.ServiceError
 	return v
 }
 
+// NewCallbackLogsDisabled builds a auth service callback endpoint
+// logs_disabled error.
+func NewCallbackLogsDisabled(body *CallbackLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCallbackBadRequest builds a auth service callback endpoint bad_request
 // error.
 func NewCallbackBadRequest(body *CallbackBadRequestResponseBody) *goa.ServiceError {
@@ -1328,6 +1451,21 @@ func NewLoginUnauthorized(body *LoginUnauthorizedResponseBody) *goa.ServiceError
 
 // NewLoginForbidden builds a auth service login endpoint forbidden error.
 func NewLoginForbidden(body *LoginForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewLoginLogsDisabled builds a auth service login endpoint logs_disabled
+// error.
+func NewLoginLogsDisabled(body *LoginLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1483,6 +1621,21 @@ func NewSwitchScopesUnauthorized(body *SwitchScopesUnauthorizedResponseBody) *go
 // NewSwitchScopesForbidden builds a auth service switchScopes endpoint
 // forbidden error.
 func NewSwitchScopesForbidden(body *SwitchScopesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSwitchScopesLogsDisabled builds a auth service switchScopes endpoint
+// logs_disabled error.
+func NewSwitchScopesLogsDisabled(body *SwitchScopesLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1653,6 +1806,21 @@ func NewLogoutForbidden(body *LogoutForbiddenResponseBody) *goa.ServiceError {
 	return v
 }
 
+// NewLogoutLogsDisabled builds a auth service logout endpoint logs_disabled
+// error.
+func NewLogoutLogsDisabled(body *LogoutLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewLogoutBadRequest builds a auth service logout endpoint bad_request error.
 func NewLogoutBadRequest(body *LogoutBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
@@ -1785,6 +1953,21 @@ func NewRegisterUnauthorized(body *RegisterUnauthorizedResponseBody) *goa.Servic
 
 // NewRegisterForbidden builds a auth service register endpoint forbidden error.
 func NewRegisterForbidden(body *RegisterForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterLogsDisabled builds a auth service register endpoint
+// logs_disabled error.
+func NewRegisterLogsDisabled(body *RegisterLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1969,6 +2152,20 @@ func NewInfoForbidden(body *InfoForbiddenResponseBody) *goa.ServiceError {
 	return v
 }
 
+// NewInfoLogsDisabled builds a auth service info endpoint logs_disabled error.
+func NewInfoLogsDisabled(body *InfoLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewInfoBadRequest builds a auth service info endpoint bad_request error.
 func NewInfoBadRequest(body *InfoBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
@@ -2140,6 +2337,30 @@ func ValidateCallbackUnauthorizedResponseBody(body *CallbackUnauthorizedResponse
 // ValidateCallbackForbiddenResponseBody runs the validations defined on
 // callback_forbidden_response_body
 func ValidateCallbackForbiddenResponseBody(body *CallbackForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCallbackLogsDisabledResponseBody runs the validations defined on
+// callback_logs_disabled_response_body
+func ValidateCallbackLogsDisabledResponseBody(body *CallbackLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2401,6 +2622,30 @@ func ValidateLoginForbiddenResponseBody(body *LoginForbiddenResponseBody) (err e
 	return
 }
 
+// ValidateLoginLogsDisabledResponseBody runs the validations defined on
+// login_logs_disabled_response_body
+func ValidateLoginLogsDisabledResponseBody(body *LoginLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateLoginBadRequestResponseBody runs the validations defined on
 // login_bad_request_response_body
 func ValidateLoginBadRequestResponseBody(body *LoginBadRequestResponseBody) (err error) {
@@ -2620,6 +2865,30 @@ func ValidateSwitchScopesUnauthorizedResponseBody(body *SwitchScopesUnauthorized
 // ValidateSwitchScopesForbiddenResponseBody runs the validations defined on
 // switchScopes_forbidden_response_body
 func ValidateSwitchScopesForbiddenResponseBody(body *SwitchScopesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSwitchScopesLogsDisabledResponseBody runs the validations defined on
+// switchScopes_logs_disabled_response_body
+func ValidateSwitchScopesLogsDisabledResponseBody(body *SwitchScopesLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2881,6 +3150,30 @@ func ValidateLogoutForbiddenResponseBody(body *LogoutForbiddenResponseBody) (err
 	return
 }
 
+// ValidateLogoutLogsDisabledResponseBody runs the validations defined on
+// logout_logs_disabled_response_body
+func ValidateLogoutLogsDisabledResponseBody(body *LogoutLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateLogoutBadRequestResponseBody runs the validations defined on
 // logout_bad_request_response_body
 func ValidateLogoutBadRequestResponseBody(body *LogoutBadRequestResponseBody) (err error) {
@@ -3121,6 +3414,30 @@ func ValidateRegisterForbiddenResponseBody(body *RegisterForbiddenResponseBody) 
 	return
 }
 
+// ValidateRegisterLogsDisabledResponseBody runs the validations defined on
+// register_logs_disabled_response_body
+func ValidateRegisterLogsDisabledResponseBody(body *RegisterLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRegisterBadRequestResponseBody runs the validations defined on
 // register_bad_request_response_body
 func ValidateRegisterBadRequestResponseBody(body *RegisterBadRequestResponseBody) (err error) {
@@ -3340,6 +3657,30 @@ func ValidateInfoUnauthorizedResponseBody(body *InfoUnauthorizedResponseBody) (e
 // ValidateInfoForbiddenResponseBody runs the validations defined on
 // info_forbidden_response_body
 func ValidateInfoForbiddenResponseBody(body *InfoForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInfoLogsDisabledResponseBody runs the validations defined on
+// info_logs_disabled_response_body
+func ValidateInfoLogsDisabledResponseBody(body *InfoLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

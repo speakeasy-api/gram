@@ -221,6 +221,25 @@ type CreateEnvironmentForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateEnvironmentLogsDisabledResponseBody is the type of the "environments"
+// service "createEnvironment" endpoint HTTP response body for the
+// "logs_disabled" error.
+type CreateEnvironmentLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CreateEnvironmentBadRequestResponseBody is the type of the "environments"
 // service "createEnvironment" endpoint HTTP response body for the
 // "bad_request" error.
@@ -396,6 +415,25 @@ type ListEnvironmentsUnauthorizedResponseBody struct {
 // service "listEnvironments" endpoint HTTP response body for the "forbidden"
 // error.
 type ListEnvironmentsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListEnvironmentsLogsDisabledResponseBody is the type of the "environments"
+// service "listEnvironments" endpoint HTTP response body for the
+// "logs_disabled" error.
+type ListEnvironmentsLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -601,6 +639,25 @@ type UpdateEnvironmentForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdateEnvironmentLogsDisabledResponseBody is the type of the "environments"
+// service "updateEnvironment" endpoint HTTP response body for the
+// "logs_disabled" error.
+type UpdateEnvironmentLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UpdateEnvironmentBadRequestResponseBody is the type of the "environments"
 // service "updateEnvironment" endpoint HTTP response body for the
 // "bad_request" error.
@@ -776,6 +833,25 @@ type DeleteEnvironmentUnauthorizedResponseBody struct {
 // service "deleteEnvironment" endpoint HTTP response body for the "forbidden"
 // error.
 type DeleteEnvironmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteEnvironmentLogsDisabledResponseBody is the type of the "environments"
+// service "deleteEnvironment" endpoint HTTP response body for the
+// "logs_disabled" error.
+type DeleteEnvironmentLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -981,6 +1057,25 @@ type SetSourceEnvironmentLinkForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SetSourceEnvironmentLinkLogsDisabledResponseBody is the type of the
+// "environments" service "setSourceEnvironmentLink" endpoint HTTP response
+// body for the "logs_disabled" error.
+type SetSourceEnvironmentLinkLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SetSourceEnvironmentLinkBadRequestResponseBody is the type of the
 // "environments" service "setSourceEnvironmentLink" endpoint HTTP response
 // body for the "bad_request" error.
@@ -1156,6 +1251,25 @@ type DeleteSourceEnvironmentLinkUnauthorizedResponseBody struct {
 // "environments" service "deleteSourceEnvironmentLink" endpoint HTTP response
 // body for the "forbidden" error.
 type DeleteSourceEnvironmentLinkForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteSourceEnvironmentLinkLogsDisabledResponseBody is the type of the
+// "environments" service "deleteSourceEnvironmentLink" endpoint HTTP response
+// body for the "logs_disabled" error.
+type DeleteSourceEnvironmentLinkLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1361,6 +1475,25 @@ type GetSourceEnvironmentForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetSourceEnvironmentLogsDisabledResponseBody is the type of the
+// "environments" service "getSourceEnvironment" endpoint HTTP response body
+// for the "logs_disabled" error.
+type GetSourceEnvironmentLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetSourceEnvironmentBadRequestResponseBody is the type of the "environments"
 // service "getSourceEnvironment" endpoint HTTP response body for the
 // "bad_request" error.
@@ -1536,6 +1669,25 @@ type SetToolsetEnvironmentLinkUnauthorizedResponseBody struct {
 // "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
 // body for the "forbidden" error.
 type SetToolsetEnvironmentLinkForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetToolsetEnvironmentLinkLogsDisabledResponseBody is the type of the
+// "environments" service "setToolsetEnvironmentLink" endpoint HTTP response
+// body for the "logs_disabled" error.
+type SetToolsetEnvironmentLinkLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1741,6 +1893,25 @@ type DeleteToolsetEnvironmentLinkForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DeleteToolsetEnvironmentLinkLogsDisabledResponseBody is the type of the
+// "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
+// body for the "logs_disabled" error.
+type DeleteToolsetEnvironmentLinkLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeleteToolsetEnvironmentLinkBadRequestResponseBody is the type of the
 // "environments" service "deleteToolsetEnvironmentLink" endpoint HTTP response
 // body for the "bad_request" error.
@@ -1916,6 +2087,25 @@ type GetToolsetEnvironmentUnauthorizedResponseBody struct {
 // service "getToolsetEnvironment" endpoint HTTP response body for the
 // "forbidden" error.
 type GetToolsetEnvironmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolsetEnvironmentLogsDisabledResponseBody is the type of the
+// "environments" service "getToolsetEnvironment" endpoint HTTP response body
+// for the "logs_disabled" error.
+type GetToolsetEnvironmentLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2260,6 +2450,21 @@ func NewCreateEnvironmentForbidden(body *CreateEnvironmentForbiddenResponseBody)
 	return v
 }
 
+// NewCreateEnvironmentLogsDisabled builds a environments service
+// createEnvironment endpoint logs_disabled error.
+func NewCreateEnvironmentLogsDisabled(body *CreateEnvironmentLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCreateEnvironmentBadRequest builds a environments service
 // createEnvironment endpoint bad_request error.
 func NewCreateEnvironmentBadRequest(body *CreateEnvironmentBadRequestResponseBody) *goa.ServiceError {
@@ -2414,6 +2619,21 @@ func NewListEnvironmentsUnauthorized(body *ListEnvironmentsUnauthorizedResponseB
 // NewListEnvironmentsForbidden builds a environments service listEnvironments
 // endpoint forbidden error.
 func NewListEnvironmentsForbidden(body *ListEnvironmentsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListEnvironmentsLogsDisabled builds a environments service
+// listEnvironments endpoint logs_disabled error.
+func NewListEnvironmentsLogsDisabled(body *ListEnvironmentsLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2601,6 +2821,21 @@ func NewUpdateEnvironmentForbidden(body *UpdateEnvironmentForbiddenResponseBody)
 	return v
 }
 
+// NewUpdateEnvironmentLogsDisabled builds a environments service
+// updateEnvironment endpoint logs_disabled error.
+func NewUpdateEnvironmentLogsDisabled(body *UpdateEnvironmentLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdateEnvironmentBadRequest builds a environments service
 // updateEnvironment endpoint bad_request error.
 func NewUpdateEnvironmentBadRequest(body *UpdateEnvironmentBadRequestResponseBody) *goa.ServiceError {
@@ -2739,6 +2974,21 @@ func NewDeleteEnvironmentUnauthorized(body *DeleteEnvironmentUnauthorizedRespons
 // NewDeleteEnvironmentForbidden builds a environments service
 // deleteEnvironment endpoint forbidden error.
 func NewDeleteEnvironmentForbidden(body *DeleteEnvironmentForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteEnvironmentLogsDisabled builds a environments service
+// deleteEnvironment endpoint logs_disabled error.
+func NewDeleteEnvironmentLogsDisabled(body *DeleteEnvironmentLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2914,6 +3164,21 @@ func NewSetSourceEnvironmentLinkForbidden(body *SetSourceEnvironmentLinkForbidde
 	return v
 }
 
+// NewSetSourceEnvironmentLinkLogsDisabled builds a environments service
+// setSourceEnvironmentLink endpoint logs_disabled error.
+func NewSetSourceEnvironmentLinkLogsDisabled(body *SetSourceEnvironmentLinkLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewSetSourceEnvironmentLinkBadRequest builds a environments service
 // setSourceEnvironmentLink endpoint bad_request error.
 func NewSetSourceEnvironmentLinkBadRequest(body *SetSourceEnvironmentLinkBadRequestResponseBody) *goa.ServiceError {
@@ -3052,6 +3317,21 @@ func NewDeleteSourceEnvironmentLinkUnauthorized(body *DeleteSourceEnvironmentLin
 // NewDeleteSourceEnvironmentLinkForbidden builds a environments service
 // deleteSourceEnvironmentLink endpoint forbidden error.
 func NewDeleteSourceEnvironmentLinkForbidden(body *DeleteSourceEnvironmentLinkForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteSourceEnvironmentLinkLogsDisabled builds a environments service
+// deleteSourceEnvironmentLink endpoint logs_disabled error.
+func NewDeleteSourceEnvironmentLinkLogsDisabled(body *DeleteSourceEnvironmentLinkLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3239,6 +3519,21 @@ func NewGetSourceEnvironmentForbidden(body *GetSourceEnvironmentForbiddenRespons
 	return v
 }
 
+// NewGetSourceEnvironmentLogsDisabled builds a environments service
+// getSourceEnvironment endpoint logs_disabled error.
+func NewGetSourceEnvironmentLogsDisabled(body *GetSourceEnvironmentLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetSourceEnvironmentBadRequest builds a environments service
 // getSourceEnvironment endpoint bad_request error.
 func NewGetSourceEnvironmentBadRequest(body *GetSourceEnvironmentBadRequestResponseBody) *goa.ServiceError {
@@ -3402,6 +3697,21 @@ func NewSetToolsetEnvironmentLinkForbidden(body *SetToolsetEnvironmentLinkForbid
 	return v
 }
 
+// NewSetToolsetEnvironmentLinkLogsDisabled builds a environments service
+// setToolsetEnvironmentLink endpoint logs_disabled error.
+func NewSetToolsetEnvironmentLinkLogsDisabled(body *SetToolsetEnvironmentLinkLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewSetToolsetEnvironmentLinkBadRequest builds a environments service
 // setToolsetEnvironmentLink endpoint bad_request error.
 func NewSetToolsetEnvironmentLinkBadRequest(body *SetToolsetEnvironmentLinkBadRequestResponseBody) *goa.ServiceError {
@@ -3540,6 +3850,21 @@ func NewDeleteToolsetEnvironmentLinkUnauthorized(body *DeleteToolsetEnvironmentL
 // NewDeleteToolsetEnvironmentLinkForbidden builds a environments service
 // deleteToolsetEnvironmentLink endpoint forbidden error.
 func NewDeleteToolsetEnvironmentLinkForbidden(body *DeleteToolsetEnvironmentLinkForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteToolsetEnvironmentLinkLogsDisabled builds a environments service
+// deleteToolsetEnvironmentLink endpoint logs_disabled error.
+func NewDeleteToolsetEnvironmentLinkLogsDisabled(body *DeleteToolsetEnvironmentLinkLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3715,6 +4040,21 @@ func NewGetToolsetEnvironmentUnauthorized(body *GetToolsetEnvironmentUnauthorize
 // NewGetToolsetEnvironmentForbidden builds a environments service
 // getToolsetEnvironment endpoint forbidden error.
 func NewGetToolsetEnvironmentForbidden(body *GetToolsetEnvironmentForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolsetEnvironmentLogsDisabled builds a environments service
+// getToolsetEnvironment endpoint logs_disabled error.
+func NewGetToolsetEnvironmentLogsDisabled(body *GetToolsetEnvironmentLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4168,6 +4508,30 @@ func ValidateCreateEnvironmentForbiddenResponseBody(body *CreateEnvironmentForbi
 	return
 }
 
+// ValidateCreateEnvironmentLogsDisabledResponseBody runs the validations
+// defined on createEnvironment_logs_disabled_response_body
+func ValidateCreateEnvironmentLogsDisabledResponseBody(body *CreateEnvironmentLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCreateEnvironmentBadRequestResponseBody runs the validations defined
 // on createEnvironment_bad_request_response_body
 func ValidateCreateEnvironmentBadRequestResponseBody(body *CreateEnvironmentBadRequestResponseBody) (err error) {
@@ -4387,6 +4751,30 @@ func ValidateListEnvironmentsUnauthorizedResponseBody(body *ListEnvironmentsUnau
 // ValidateListEnvironmentsForbiddenResponseBody runs the validations defined
 // on listEnvironments_forbidden_response_body
 func ValidateListEnvironmentsForbiddenResponseBody(body *ListEnvironmentsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListEnvironmentsLogsDisabledResponseBody runs the validations
+// defined on listEnvironments_logs_disabled_response_body
+func ValidateListEnvironmentsLogsDisabledResponseBody(body *ListEnvironmentsLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4648,6 +5036,30 @@ func ValidateUpdateEnvironmentForbiddenResponseBody(body *UpdateEnvironmentForbi
 	return
 }
 
+// ValidateUpdateEnvironmentLogsDisabledResponseBody runs the validations
+// defined on updateEnvironment_logs_disabled_response_body
+func ValidateUpdateEnvironmentLogsDisabledResponseBody(body *UpdateEnvironmentLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUpdateEnvironmentBadRequestResponseBody runs the validations defined
 // on updateEnvironment_bad_request_response_body
 func ValidateUpdateEnvironmentBadRequestResponseBody(body *UpdateEnvironmentBadRequestResponseBody) (err error) {
@@ -4867,6 +5279,30 @@ func ValidateDeleteEnvironmentUnauthorizedResponseBody(body *DeleteEnvironmentUn
 // ValidateDeleteEnvironmentForbiddenResponseBody runs the validations defined
 // on deleteEnvironment_forbidden_response_body
 func ValidateDeleteEnvironmentForbiddenResponseBody(body *DeleteEnvironmentForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteEnvironmentLogsDisabledResponseBody runs the validations
+// defined on deleteEnvironment_logs_disabled_response_body
+func ValidateDeleteEnvironmentLogsDisabledResponseBody(body *DeleteEnvironmentLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5128,6 +5564,30 @@ func ValidateSetSourceEnvironmentLinkForbiddenResponseBody(body *SetSourceEnviro
 	return
 }
 
+// ValidateSetSourceEnvironmentLinkLogsDisabledResponseBody runs the
+// validations defined on setSourceEnvironmentLink_logs_disabled_response_body
+func ValidateSetSourceEnvironmentLinkLogsDisabledResponseBody(body *SetSourceEnvironmentLinkLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSetSourceEnvironmentLinkBadRequestResponseBody runs the validations
 // defined on setSourceEnvironmentLink_bad_request_response_body
 func ValidateSetSourceEnvironmentLinkBadRequestResponseBody(body *SetSourceEnvironmentLinkBadRequestResponseBody) (err error) {
@@ -5349,6 +5809,31 @@ func ValidateDeleteSourceEnvironmentLinkUnauthorizedResponseBody(body *DeleteSou
 // ValidateDeleteSourceEnvironmentLinkForbiddenResponseBody runs the
 // validations defined on deleteSourceEnvironmentLink_forbidden_response_body
 func ValidateDeleteSourceEnvironmentLinkForbiddenResponseBody(body *DeleteSourceEnvironmentLinkForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteSourceEnvironmentLinkLogsDisabledResponseBody runs the
+// validations defined on
+// deleteSourceEnvironmentLink_logs_disabled_response_body
+func ValidateDeleteSourceEnvironmentLinkLogsDisabledResponseBody(body *DeleteSourceEnvironmentLinkLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5613,6 +6098,30 @@ func ValidateGetSourceEnvironmentForbiddenResponseBody(body *GetSourceEnvironmen
 	return
 }
 
+// ValidateGetSourceEnvironmentLogsDisabledResponseBody runs the validations
+// defined on getSourceEnvironment_logs_disabled_response_body
+func ValidateGetSourceEnvironmentLogsDisabledResponseBody(body *GetSourceEnvironmentLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetSourceEnvironmentBadRequestResponseBody runs the validations
 // defined on getSourceEnvironment_bad_request_response_body
 func ValidateGetSourceEnvironmentBadRequestResponseBody(body *GetSourceEnvironmentBadRequestResponseBody) (err error) {
@@ -5832,6 +6341,30 @@ func ValidateSetToolsetEnvironmentLinkUnauthorizedResponseBody(body *SetToolsetE
 // ValidateSetToolsetEnvironmentLinkForbiddenResponseBody runs the validations
 // defined on setToolsetEnvironmentLink_forbidden_response_body
 func ValidateSetToolsetEnvironmentLinkForbiddenResponseBody(body *SetToolsetEnvironmentLinkForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetToolsetEnvironmentLinkLogsDisabledResponseBody runs the
+// validations defined on setToolsetEnvironmentLink_logs_disabled_response_body
+func ValidateSetToolsetEnvironmentLinkLogsDisabledResponseBody(body *SetToolsetEnvironmentLinkLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6096,6 +6629,31 @@ func ValidateDeleteToolsetEnvironmentLinkForbiddenResponseBody(body *DeleteTools
 	return
 }
 
+// ValidateDeleteToolsetEnvironmentLinkLogsDisabledResponseBody runs the
+// validations defined on
+// deleteToolsetEnvironmentLink_logs_disabled_response_body
+func ValidateDeleteToolsetEnvironmentLinkLogsDisabledResponseBody(body *DeleteToolsetEnvironmentLinkLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDeleteToolsetEnvironmentLinkBadRequestResponseBody runs the
 // validations defined on deleteToolsetEnvironmentLink_bad_request_response_body
 func ValidateDeleteToolsetEnvironmentLinkBadRequestResponseBody(body *DeleteToolsetEnvironmentLinkBadRequestResponseBody) (err error) {
@@ -6318,6 +6876,30 @@ func ValidateGetToolsetEnvironmentUnauthorizedResponseBody(body *GetToolsetEnvir
 // ValidateGetToolsetEnvironmentForbiddenResponseBody runs the validations
 // defined on getToolsetEnvironment_forbidden_response_body
 func ValidateGetToolsetEnvironmentForbiddenResponseBody(body *GetToolsetEnvironmentForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolsetEnvironmentLogsDisabledResponseBody runs the validations
+// defined on getToolsetEnvironment_logs_disabled_response_body
+func ValidateGetToolsetEnvironmentLogsDisabledResponseBody(body *GetToolsetEnvironmentLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

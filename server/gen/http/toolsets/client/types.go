@@ -549,6 +549,24 @@ type CreateToolsetForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateToolsetLogsDisabledResponseBody is the type of the "toolsets" service
+// "createToolset" endpoint HTTP response body for the "logs_disabled" error.
+type CreateToolsetLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CreateToolsetBadRequestResponseBody is the type of the "toolsets" service
 // "createToolset" endpoint HTTP response body for the "bad_request" error.
 type CreateToolsetBadRequestResponseBody struct {
@@ -716,6 +734,24 @@ type ListToolsetsUnauthorizedResponseBody struct {
 // ListToolsetsForbiddenResponseBody is the type of the "toolsets" service
 // "listToolsets" endpoint HTTP response body for the "forbidden" error.
 type ListToolsetsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolsetsLogsDisabledResponseBody is the type of the "toolsets" service
+// "listToolsets" endpoint HTTP response body for the "logs_disabled" error.
+type ListToolsetsLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -913,6 +949,24 @@ type UpdateToolsetForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdateToolsetLogsDisabledResponseBody is the type of the "toolsets" service
+// "updateToolset" endpoint HTTP response body for the "logs_disabled" error.
+type UpdateToolsetLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UpdateToolsetBadRequestResponseBody is the type of the "toolsets" service
 // "updateToolset" endpoint HTTP response body for the "bad_request" error.
 type UpdateToolsetBadRequestResponseBody struct {
@@ -1080,6 +1134,24 @@ type DeleteToolsetUnauthorizedResponseBody struct {
 // DeleteToolsetForbiddenResponseBody is the type of the "toolsets" service
 // "deleteToolset" endpoint HTTP response body for the "forbidden" error.
 type DeleteToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteToolsetLogsDisabledResponseBody is the type of the "toolsets" service
+// "deleteToolset" endpoint HTTP response body for the "logs_disabled" error.
+type DeleteToolsetLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1277,6 +1349,24 @@ type GetToolsetForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetToolsetLogsDisabledResponseBody is the type of the "toolsets" service
+// "getToolset" endpoint HTTP response body for the "logs_disabled" error.
+type GetToolsetLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetToolsetBadRequestResponseBody is the type of the "toolsets" service
 // "getToolset" endpoint HTTP response body for the "bad_request" error.
 type GetToolsetBadRequestResponseBody struct {
@@ -1445,6 +1535,25 @@ type CheckMCPSlugAvailabilityUnauthorizedResponseBody struct {
 // service "checkMCPSlugAvailability" endpoint HTTP response body for the
 // "forbidden" error.
 type CheckMCPSlugAvailabilityForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckMCPSlugAvailabilityLogsDisabledResponseBody is the type of the
+// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
+// for the "logs_disabled" error.
+type CheckMCPSlugAvailabilityLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1648,6 +1757,24 @@ type CloneToolsetForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CloneToolsetLogsDisabledResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "logs_disabled" error.
+type CloneToolsetLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CloneToolsetBadRequestResponseBody is the type of the "toolsets" service
 // "cloneToolset" endpoint HTTP response body for the "bad_request" error.
 type CloneToolsetBadRequestResponseBody struct {
@@ -1817,6 +1944,25 @@ type AddExternalOAuthServerUnauthorizedResponseBody struct {
 // service "addExternalOAuthServer" endpoint HTTP response body for the
 // "forbidden" error.
 type AddExternalOAuthServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AddExternalOAuthServerLogsDisabledResponseBody is the type of the "toolsets"
+// service "addExternalOAuthServer" endpoint HTTP response body for the
+// "logs_disabled" error.
+type AddExternalOAuthServerLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2021,6 +2167,25 @@ type RemoveOAuthServerForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RemoveOAuthServerLogsDisabledResponseBody is the type of the "toolsets"
+// service "removeOAuthServer" endpoint HTTP response body for the
+// "logs_disabled" error.
+type RemoveOAuthServerLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RemoveOAuthServerBadRequestResponseBody is the type of the "toolsets"
 // service "removeOAuthServer" endpoint HTTP response body for the
 // "bad_request" error.
@@ -2193,6 +2358,25 @@ type AddOAuthProxyServerUnauthorizedResponseBody struct {
 // service "addOAuthProxyServer" endpoint HTTP response body for the
 // "forbidden" error.
 type AddOAuthProxyServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AddOAuthProxyServerLogsDisabledResponseBody is the type of the "toolsets"
+// service "addOAuthProxyServer" endpoint HTTP response body for the
+// "logs_disabled" error.
+type AddOAuthProxyServerLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3157,6 +3341,21 @@ func NewCreateToolsetForbidden(body *CreateToolsetForbiddenResponseBody) *goa.Se
 	return v
 }
 
+// NewCreateToolsetLogsDisabled builds a toolsets service createToolset
+// endpoint logs_disabled error.
+func NewCreateToolsetLogsDisabled(body *CreateToolsetLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCreateToolsetBadRequest builds a toolsets service createToolset endpoint
 // bad_request error.
 func NewCreateToolsetBadRequest(body *CreateToolsetBadRequestResponseBody) *goa.ServiceError {
@@ -3311,6 +3510,21 @@ func NewListToolsetsUnauthorized(body *ListToolsetsUnauthorizedResponseBody) *go
 // NewListToolsetsForbidden builds a toolsets service listToolsets endpoint
 // forbidden error.
 func NewListToolsetsForbidden(body *ListToolsetsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolsetsLogsDisabled builds a toolsets service listToolsets endpoint
+// logs_disabled error.
+func NewListToolsetsLogsDisabled(body *ListToolsetsLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3583,6 +3797,21 @@ func NewUpdateToolsetForbidden(body *UpdateToolsetForbiddenResponseBody) *goa.Se
 	return v
 }
 
+// NewUpdateToolsetLogsDisabled builds a toolsets service updateToolset
+// endpoint logs_disabled error.
+func NewUpdateToolsetLogsDisabled(body *UpdateToolsetLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdateToolsetBadRequest builds a toolsets service updateToolset endpoint
 // bad_request error.
 func NewUpdateToolsetBadRequest(body *UpdateToolsetBadRequestResponseBody) *goa.ServiceError {
@@ -3721,6 +3950,21 @@ func NewDeleteToolsetUnauthorized(body *DeleteToolsetUnauthorizedResponseBody) *
 // NewDeleteToolsetForbidden builds a toolsets service deleteToolset endpoint
 // forbidden error.
 func NewDeleteToolsetForbidden(body *DeleteToolsetForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteToolsetLogsDisabled builds a toolsets service deleteToolset
+// endpoint logs_disabled error.
+func NewDeleteToolsetLogsDisabled(body *DeleteToolsetLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3993,6 +4237,21 @@ func NewGetToolsetForbidden(body *GetToolsetForbiddenResponseBody) *goa.ServiceE
 	return v
 }
 
+// NewGetToolsetLogsDisabled builds a toolsets service getToolset endpoint
+// logs_disabled error.
+func NewGetToolsetLogsDisabled(body *GetToolsetLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetToolsetBadRequest builds a toolsets service getToolset endpoint
 // bad_request error.
 func NewGetToolsetBadRequest(body *GetToolsetBadRequestResponseBody) *goa.ServiceError {
@@ -4131,6 +4390,21 @@ func NewCheckMCPSlugAvailabilityUnauthorized(body *CheckMCPSlugAvailabilityUnaut
 // NewCheckMCPSlugAvailabilityForbidden builds a toolsets service
 // checkMCPSlugAvailability endpoint forbidden error.
 func NewCheckMCPSlugAvailabilityForbidden(body *CheckMCPSlugAvailabilityForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckMCPSlugAvailabilityLogsDisabled builds a toolsets service
+// checkMCPSlugAvailability endpoint logs_disabled error.
+func NewCheckMCPSlugAvailabilityLogsDisabled(body *CheckMCPSlugAvailabilityLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4403,6 +4677,21 @@ func NewCloneToolsetForbidden(body *CloneToolsetForbiddenResponseBody) *goa.Serv
 	return v
 }
 
+// NewCloneToolsetLogsDisabled builds a toolsets service cloneToolset endpoint
+// logs_disabled error.
+func NewCloneToolsetLogsDisabled(body *CloneToolsetLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCloneToolsetBadRequest builds a toolsets service cloneToolset endpoint
 // bad_request error.
 func NewCloneToolsetBadRequest(body *CloneToolsetBadRequestResponseBody) *goa.ServiceError {
@@ -4651,6 +4940,21 @@ func NewAddExternalOAuthServerUnauthorized(body *AddExternalOAuthServerUnauthori
 // NewAddExternalOAuthServerForbidden builds a toolsets service
 // addExternalOAuthServer endpoint forbidden error.
 func NewAddExternalOAuthServerForbidden(body *AddExternalOAuthServerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAddExternalOAuthServerLogsDisabled builds a toolsets service
+// addExternalOAuthServer endpoint logs_disabled error.
+func NewAddExternalOAuthServerLogsDisabled(body *AddExternalOAuthServerLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4923,6 +5227,21 @@ func NewRemoveOAuthServerForbidden(body *RemoveOAuthServerForbiddenResponseBody)
 	return v
 }
 
+// NewRemoveOAuthServerLogsDisabled builds a toolsets service removeOAuthServer
+// endpoint logs_disabled error.
+func NewRemoveOAuthServerLogsDisabled(body *RemoveOAuthServerLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewRemoveOAuthServerBadRequest builds a toolsets service removeOAuthServer
 // endpoint bad_request error.
 func NewRemoveOAuthServerBadRequest(body *RemoveOAuthServerBadRequestResponseBody) *goa.ServiceError {
@@ -5171,6 +5490,21 @@ func NewAddOAuthProxyServerUnauthorized(body *AddOAuthProxyServerUnauthorizedRes
 // NewAddOAuthProxyServerForbidden builds a toolsets service
 // addOAuthProxyServer endpoint forbidden error.
 func NewAddOAuthProxyServerForbidden(body *AddOAuthProxyServerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAddOAuthProxyServerLogsDisabled builds a toolsets service
+// addOAuthProxyServer endpoint logs_disabled error.
+func NewAddOAuthProxyServerLogsDisabled(body *AddOAuthProxyServerLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6403,6 +6737,30 @@ func ValidateCreateToolsetForbiddenResponseBody(body *CreateToolsetForbiddenResp
 	return
 }
 
+// ValidateCreateToolsetLogsDisabledResponseBody runs the validations defined
+// on createToolset_logs_disabled_response_body
+func ValidateCreateToolsetLogsDisabledResponseBody(body *CreateToolsetLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCreateToolsetBadRequestResponseBody runs the validations defined on
 // createToolset_bad_request_response_body
 func ValidateCreateToolsetBadRequestResponseBody(body *CreateToolsetBadRequestResponseBody) (err error) {
@@ -6622,6 +6980,30 @@ func ValidateListToolsetsUnauthorizedResponseBody(body *ListToolsetsUnauthorized
 // ValidateListToolsetsForbiddenResponseBody runs the validations defined on
 // listToolsets_forbidden_response_body
 func ValidateListToolsetsForbiddenResponseBody(body *ListToolsetsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolsetsLogsDisabledResponseBody runs the validations defined on
+// listToolsets_logs_disabled_response_body
+func ValidateListToolsetsLogsDisabledResponseBody(body *ListToolsetsLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6883,6 +7265,30 @@ func ValidateUpdateToolsetForbiddenResponseBody(body *UpdateToolsetForbiddenResp
 	return
 }
 
+// ValidateUpdateToolsetLogsDisabledResponseBody runs the validations defined
+// on updateToolset_logs_disabled_response_body
+func ValidateUpdateToolsetLogsDisabledResponseBody(body *UpdateToolsetLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUpdateToolsetBadRequestResponseBody runs the validations defined on
 // updateToolset_bad_request_response_body
 func ValidateUpdateToolsetBadRequestResponseBody(body *UpdateToolsetBadRequestResponseBody) (err error) {
@@ -7102,6 +7508,30 @@ func ValidateDeleteToolsetUnauthorizedResponseBody(body *DeleteToolsetUnauthoriz
 // ValidateDeleteToolsetForbiddenResponseBody runs the validations defined on
 // deleteToolset_forbidden_response_body
 func ValidateDeleteToolsetForbiddenResponseBody(body *DeleteToolsetForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteToolsetLogsDisabledResponseBody runs the validations defined
+// on deleteToolset_logs_disabled_response_body
+func ValidateDeleteToolsetLogsDisabledResponseBody(body *DeleteToolsetLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7363,6 +7793,30 @@ func ValidateGetToolsetForbiddenResponseBody(body *GetToolsetForbiddenResponseBo
 	return
 }
 
+// ValidateGetToolsetLogsDisabledResponseBody runs the validations defined on
+// getToolset_logs_disabled_response_body
+func ValidateGetToolsetLogsDisabledResponseBody(body *GetToolsetLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetToolsetBadRequestResponseBody runs the validations defined on
 // getToolset_bad_request_response_body
 func ValidateGetToolsetBadRequestResponseBody(body *GetToolsetBadRequestResponseBody) (err error) {
@@ -7582,6 +8036,30 @@ func ValidateCheckMCPSlugAvailabilityUnauthorizedResponseBody(body *CheckMCPSlug
 // ValidateCheckMCPSlugAvailabilityForbiddenResponseBody runs the validations
 // defined on checkMCPSlugAvailability_forbidden_response_body
 func ValidateCheckMCPSlugAvailabilityForbiddenResponseBody(body *CheckMCPSlugAvailabilityForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckMCPSlugAvailabilityLogsDisabledResponseBody runs the
+// validations defined on checkMCPSlugAvailability_logs_disabled_response_body
+func ValidateCheckMCPSlugAvailabilityLogsDisabledResponseBody(body *CheckMCPSlugAvailabilityLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7845,6 +8323,30 @@ func ValidateCloneToolsetForbiddenResponseBody(body *CloneToolsetForbiddenRespon
 	return
 }
 
+// ValidateCloneToolsetLogsDisabledResponseBody runs the validations defined on
+// cloneToolset_logs_disabled_response_body
+func ValidateCloneToolsetLogsDisabledResponseBody(body *CloneToolsetLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCloneToolsetBadRequestResponseBody runs the validations defined on
 // cloneToolset_bad_request_response_body
 func ValidateCloneToolsetBadRequestResponseBody(body *CloneToolsetBadRequestResponseBody) (err error) {
@@ -8064,6 +8566,30 @@ func ValidateAddExternalOAuthServerUnauthorizedResponseBody(body *AddExternalOAu
 // ValidateAddExternalOAuthServerForbiddenResponseBody runs the validations
 // defined on addExternalOAuthServer_forbidden_response_body
 func ValidateAddExternalOAuthServerForbiddenResponseBody(body *AddExternalOAuthServerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAddExternalOAuthServerLogsDisabledResponseBody runs the validations
+// defined on addExternalOAuthServer_logs_disabled_response_body
+func ValidateAddExternalOAuthServerLogsDisabledResponseBody(body *AddExternalOAuthServerLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8326,6 +8852,30 @@ func ValidateRemoveOAuthServerForbiddenResponseBody(body *RemoveOAuthServerForbi
 	return
 }
 
+// ValidateRemoveOAuthServerLogsDisabledResponseBody runs the validations
+// defined on removeOAuthServer_logs_disabled_response_body
+func ValidateRemoveOAuthServerLogsDisabledResponseBody(body *RemoveOAuthServerLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRemoveOAuthServerBadRequestResponseBody runs the validations defined
 // on removeOAuthServer_bad_request_response_body
 func ValidateRemoveOAuthServerBadRequestResponseBody(body *RemoveOAuthServerBadRequestResponseBody) (err error) {
@@ -8545,6 +9095,30 @@ func ValidateAddOAuthProxyServerUnauthorizedResponseBody(body *AddOAuthProxyServ
 // ValidateAddOAuthProxyServerForbiddenResponseBody runs the validations
 // defined on addOAuthProxyServer_forbidden_response_body
 func ValidateAddOAuthProxyServerForbiddenResponseBody(body *AddOAuthProxyServerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAddOAuthProxyServerLogsDisabledResponseBody runs the validations
+// defined on addOAuthProxyServer_logs_disabled_response_body
+func ValidateAddOAuthProxyServerLogsDisabledResponseBody(body *AddOAuthProxyServerLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

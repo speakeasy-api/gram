@@ -218,6 +218,25 @@ type GetDeploymentForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetDeploymentLogsDisabledResponseBody is the type of the "deployments"
+// service "getDeployment" endpoint HTTP response body for the "logs_disabled"
+// error.
+type GetDeploymentLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetDeploymentBadRequestResponseBody is the type of the "deployments" service
 // "getDeployment" endpoint HTTP response body for the "bad_request" error.
 type GetDeploymentBadRequestResponseBody struct {
@@ -388,6 +407,25 @@ type GetLatestDeploymentUnauthorizedResponseBody struct {
 // service "getLatestDeployment" endpoint HTTP response body for the
 // "forbidden" error.
 type GetLatestDeploymentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetLatestDeploymentLogsDisabledResponseBody is the type of the "deployments"
+// service "getLatestDeployment" endpoint HTTP response body for the
+// "logs_disabled" error.
+type GetLatestDeploymentLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -593,6 +631,25 @@ type GetActiveDeploymentForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetActiveDeploymentLogsDisabledResponseBody is the type of the "deployments"
+// service "getActiveDeployment" endpoint HTTP response body for the
+// "logs_disabled" error.
+type GetActiveDeploymentLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetActiveDeploymentBadRequestResponseBody is the type of the "deployments"
 // service "getActiveDeployment" endpoint HTTP response body for the
 // "bad_request" error.
@@ -768,6 +825,25 @@ type CreateDeploymentUnauthorizedResponseBody struct {
 // service "createDeployment" endpoint HTTP response body for the "forbidden"
 // error.
 type CreateDeploymentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeploymentLogsDisabledResponseBody is the type of the "deployments"
+// service "createDeployment" endpoint HTTP response body for the
+// "logs_disabled" error.
+type CreateDeploymentLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -970,6 +1046,24 @@ type EvolveForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// EvolveLogsDisabledResponseBody is the type of the "deployments" service
+// "evolve" endpoint HTTP response body for the "logs_disabled" error.
+type EvolveLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // EvolveBadRequestResponseBody is the type of the "deployments" service
 // "evolve" endpoint HTTP response body for the "bad_request" error.
 type EvolveBadRequestResponseBody struct {
@@ -1136,6 +1230,24 @@ type RedeployUnauthorizedResponseBody struct {
 // RedeployForbiddenResponseBody is the type of the "deployments" service
 // "redeploy" endpoint HTTP response body for the "forbidden" error.
 type RedeployForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RedeployLogsDisabledResponseBody is the type of the "deployments" service
+// "redeploy" endpoint HTTP response body for the "logs_disabled" error.
+type RedeployLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1335,6 +1447,25 @@ type ListDeploymentsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListDeploymentsLogsDisabledResponseBody is the type of the "deployments"
+// service "listDeployments" endpoint HTTP response body for the
+// "logs_disabled" error.
+type ListDeploymentsLogsDisabledResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListDeploymentsBadRequestResponseBody is the type of the "deployments"
 // service "listDeployments" endpoint HTTP response body for the "bad_request"
 // error.
@@ -1507,6 +1638,25 @@ type GetDeploymentLogsUnauthorizedResponseBody struct {
 // service "getDeploymentLogs" endpoint HTTP response body for the "forbidden"
 // error.
 type GetDeploymentLogsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentLogsLogsDisabledResponseBody is the type of the "deployments"
+// service "getDeploymentLogs" endpoint HTTP response body for the
+// "logs_disabled" error.
+type GetDeploymentLogsLogsDisabledResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2095,6 +2245,21 @@ func NewGetDeploymentForbidden(body *GetDeploymentForbiddenResponseBody) *goa.Se
 	return v
 }
 
+// NewGetDeploymentLogsDisabled builds a deployments service getDeployment
+// endpoint logs_disabled error.
+func NewGetDeploymentLogsDisabled(body *GetDeploymentLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetDeploymentBadRequest builds a deployments service getDeployment
 // endpoint bad_request error.
 func NewGetDeploymentBadRequest(body *GetDeploymentBadRequestResponseBody) *goa.ServiceError {
@@ -2244,6 +2409,21 @@ func NewGetLatestDeploymentUnauthorized(body *GetLatestDeploymentUnauthorizedRes
 // NewGetLatestDeploymentForbidden builds a deployments service
 // getLatestDeployment endpoint forbidden error.
 func NewGetLatestDeploymentForbidden(body *GetLatestDeploymentForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetLatestDeploymentLogsDisabled builds a deployments service
+// getLatestDeployment endpoint logs_disabled error.
+func NewGetLatestDeploymentLogsDisabled(body *GetLatestDeploymentLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2417,6 +2597,21 @@ func NewGetActiveDeploymentForbidden(body *GetActiveDeploymentForbiddenResponseB
 	return v
 }
 
+// NewGetActiveDeploymentLogsDisabled builds a deployments service
+// getActiveDeployment endpoint logs_disabled error.
+func NewGetActiveDeploymentLogsDisabled(body *GetActiveDeploymentLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetActiveDeploymentBadRequest builds a deployments service
 // getActiveDeployment endpoint bad_request error.
 func NewGetActiveDeploymentBadRequest(body *GetActiveDeploymentBadRequestResponseBody) *goa.ServiceError {
@@ -2566,6 +2761,21 @@ func NewCreateDeploymentUnauthorized(body *CreateDeploymentUnauthorizedResponseB
 // NewCreateDeploymentForbidden builds a deployments service createDeployment
 // endpoint forbidden error.
 func NewCreateDeploymentForbidden(body *CreateDeploymentForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeploymentLogsDisabled builds a deployments service
+// createDeployment endpoint logs_disabled error.
+func NewCreateDeploymentLogsDisabled(body *CreateDeploymentLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2739,6 +2949,21 @@ func NewEvolveForbidden(body *EvolveForbiddenResponseBody) *goa.ServiceError {
 	return v
 }
 
+// NewEvolveLogsDisabled builds a deployments service evolve endpoint
+// logs_disabled error.
+func NewEvolveLogsDisabled(body *EvolveLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewEvolveBadRequest builds a deployments service evolve endpoint bad_request
 // error.
 func NewEvolveBadRequest(body *EvolveBadRequestResponseBody) *goa.ServiceError {
@@ -2887,6 +3112,21 @@ func NewRedeployUnauthorized(body *RedeployUnauthorizedResponseBody) *goa.Servic
 // NewRedeployForbidden builds a deployments service redeploy endpoint
 // forbidden error.
 func NewRedeployForbidden(body *RedeployForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRedeployLogsDisabled builds a deployments service redeploy endpoint
+// logs_disabled error.
+func NewRedeployLogsDisabled(body *RedeployLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3067,6 +3307,21 @@ func NewListDeploymentsForbidden(body *ListDeploymentsForbiddenResponseBody) *go
 	return v
 }
 
+// NewListDeploymentsLogsDisabled builds a deployments service listDeployments
+// endpoint logs_disabled error.
+func NewListDeploymentsLogsDisabled(body *ListDeploymentsLogsDisabledResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListDeploymentsBadRequest builds a deployments service listDeployments
 // endpoint bad_request error.
 func NewListDeploymentsBadRequest(body *ListDeploymentsBadRequestResponseBody) *goa.ServiceError {
@@ -3224,6 +3479,21 @@ func NewGetDeploymentLogsUnauthorized(body *GetDeploymentLogsUnauthorizedRespons
 // NewGetDeploymentLogsForbidden builds a deployments service getDeploymentLogs
 // endpoint forbidden error.
 func NewGetDeploymentLogsForbidden(body *GetDeploymentLogsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentLogsLogsDisabled builds a deployments service
+// getDeploymentLogs endpoint logs_disabled error.
+func NewGetDeploymentLogsLogsDisabled(body *GetDeploymentLogsLogsDisabledResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3560,6 +3830,30 @@ func ValidateGetDeploymentForbiddenResponseBody(body *GetDeploymentForbiddenResp
 	return
 }
 
+// ValidateGetDeploymentLogsDisabledResponseBody runs the validations defined
+// on getDeployment_logs_disabled_response_body
+func ValidateGetDeploymentLogsDisabledResponseBody(body *GetDeploymentLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetDeploymentBadRequestResponseBody runs the validations defined on
 // getDeployment_bad_request_response_body
 func ValidateGetDeploymentBadRequestResponseBody(body *GetDeploymentBadRequestResponseBody) (err error) {
@@ -3779,6 +4073,30 @@ func ValidateGetLatestDeploymentUnauthorizedResponseBody(body *GetLatestDeployme
 // ValidateGetLatestDeploymentForbiddenResponseBody runs the validations
 // defined on getLatestDeployment_forbidden_response_body
 func ValidateGetLatestDeploymentForbiddenResponseBody(body *GetLatestDeploymentForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetLatestDeploymentLogsDisabledResponseBody runs the validations
+// defined on getLatestDeployment_logs_disabled_response_body
+func ValidateGetLatestDeploymentLogsDisabledResponseBody(body *GetLatestDeploymentLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4040,6 +4358,30 @@ func ValidateGetActiveDeploymentForbiddenResponseBody(body *GetActiveDeploymentF
 	return
 }
 
+// ValidateGetActiveDeploymentLogsDisabledResponseBody runs the validations
+// defined on getActiveDeployment_logs_disabled_response_body
+func ValidateGetActiveDeploymentLogsDisabledResponseBody(body *GetActiveDeploymentLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetActiveDeploymentBadRequestResponseBody runs the validations
 // defined on getActiveDeployment_bad_request_response_body
 func ValidateGetActiveDeploymentBadRequestResponseBody(body *GetActiveDeploymentBadRequestResponseBody) (err error) {
@@ -4259,6 +4601,30 @@ func ValidateCreateDeploymentUnauthorizedResponseBody(body *CreateDeploymentUnau
 // ValidateCreateDeploymentForbiddenResponseBody runs the validations defined
 // on createDeployment_forbidden_response_body
 func ValidateCreateDeploymentForbiddenResponseBody(body *CreateDeploymentForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeploymentLogsDisabledResponseBody runs the validations
+// defined on createDeployment_logs_disabled_response_body
+func ValidateCreateDeploymentLogsDisabledResponseBody(body *CreateDeploymentLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4520,6 +4886,30 @@ func ValidateEvolveForbiddenResponseBody(body *EvolveForbiddenResponseBody) (err
 	return
 }
 
+// ValidateEvolveLogsDisabledResponseBody runs the validations defined on
+// evolve_logs_disabled_response_body
+func ValidateEvolveLogsDisabledResponseBody(body *EvolveLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateEvolveBadRequestResponseBody runs the validations defined on
 // evolve_bad_request_response_body
 func ValidateEvolveBadRequestResponseBody(body *EvolveBadRequestResponseBody) (err error) {
@@ -4739,6 +5129,30 @@ func ValidateRedeployUnauthorizedResponseBody(body *RedeployUnauthorizedResponse
 // ValidateRedeployForbiddenResponseBody runs the validations defined on
 // redeploy_forbidden_response_body
 func ValidateRedeployForbiddenResponseBody(body *RedeployForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRedeployLogsDisabledResponseBody runs the validations defined on
+// redeploy_logs_disabled_response_body
+func ValidateRedeployLogsDisabledResponseBody(body *RedeployLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5000,6 +5414,30 @@ func ValidateListDeploymentsForbiddenResponseBody(body *ListDeploymentsForbidden
 	return
 }
 
+// ValidateListDeploymentsLogsDisabledResponseBody runs the validations defined
+// on listDeployments_logs_disabled_response_body
+func ValidateListDeploymentsLogsDisabledResponseBody(body *ListDeploymentsLogsDisabledResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListDeploymentsBadRequestResponseBody runs the validations defined
 // on listDeployments_bad_request_response_body
 func ValidateListDeploymentsBadRequestResponseBody(body *ListDeploymentsBadRequestResponseBody) (err error) {
@@ -5219,6 +5657,30 @@ func ValidateGetDeploymentLogsUnauthorizedResponseBody(body *GetDeploymentLogsUn
 // ValidateGetDeploymentLogsForbiddenResponseBody runs the validations defined
 // on getDeploymentLogs_forbidden_response_body
 func ValidateGetDeploymentLogsForbiddenResponseBody(body *GetDeploymentLogsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentLogsLogsDisabledResponseBody runs the validations
+// defined on getDeploymentLogs_logs_disabled_response_body
+func ValidateGetDeploymentLogsLogsDisabledResponseBody(body *GetDeploymentLogsLogsDisabledResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

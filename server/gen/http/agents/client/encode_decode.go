@@ -63,6 +63,7 @@ func EncodeCreateResponseRequest(encoder func(*http.Request) goahttp.Encoder) fu
 // DecodeCreateResponseResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -117,19 +118,40 @@ func DecodeCreateResponseResponse(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewCreateResponseUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body CreateResponseForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "createResponse", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body CreateResponseForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "createResponse", err)
+				}
+				err = ValidateCreateResponseForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "createResponse", err)
+				}
+				return nil, NewCreateResponseForbidden(&body)
+			case "logs_disabled":
+				var (
+					body CreateResponseLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "createResponse", err)
+				}
+				err = ValidateCreateResponseLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "createResponse", err)
+				}
+				return nil, NewCreateResponseLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "createResponse", resp.StatusCode, string(body))
 			}
-			err = ValidateCreateResponseForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "createResponse", err)
-			}
-			return nil, NewCreateResponseForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateResponseBadRequestResponseBody
@@ -300,6 +322,7 @@ func EncodeGetResponseRequest(encoder func(*http.Request) goahttp.Encoder) func(
 // DecodeGetResponseResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -354,19 +377,40 @@ func DecodeGetResponseResponse(decoder func(*http.Response) goahttp.Decoder, res
 			}
 			return nil, NewGetResponseUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body GetResponseForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "getResponse", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body GetResponseForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "getResponse", err)
+				}
+				err = ValidateGetResponseForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "getResponse", err)
+				}
+				return nil, NewGetResponseForbidden(&body)
+			case "logs_disabled":
+				var (
+					body GetResponseLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "getResponse", err)
+				}
+				err = ValidateGetResponseLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "getResponse", err)
+				}
+				return nil, NewGetResponseLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "getResponse", resp.StatusCode, string(body))
 			}
-			err = ValidateGetResponseForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "getResponse", err)
-			}
-			return nil, NewGetResponseForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body GetResponseBadRequestResponseBody
@@ -537,6 +581,7 @@ func EncodeDeleteResponseRequest(encoder func(*http.Request) goahttp.Encoder) fu
 // DecodeDeleteResponseResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "logs_disabled" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -578,19 +623,40 @@ func DecodeDeleteResponseResponse(decoder func(*http.Response) goahttp.Decoder, 
 			}
 			return nil, NewDeleteResponseUnauthorized(&body)
 		case http.StatusForbidden:
-			var (
-				body DeleteResponseForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "forbidden":
+				var (
+					body DeleteResponseForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+				}
+				err = ValidateDeleteResponseForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+				}
+				return nil, NewDeleteResponseForbidden(&body)
+			case "logs_disabled":
+				var (
+					body DeleteResponseLogsDisabledResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "deleteResponse", err)
+				}
+				err = ValidateDeleteResponseLogsDisabledResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
+				}
+				return nil, NewDeleteResponseLogsDisabled(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "deleteResponse", resp.StatusCode, string(body))
 			}
-			err = ValidateDeleteResponseForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "deleteResponse", err)
-			}
-			return nil, NewDeleteResponseForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body DeleteResponseBadRequestResponseBody
