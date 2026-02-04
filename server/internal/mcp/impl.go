@@ -516,7 +516,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
-		// Public MCP without OAuth - allow sessionToken fallback
 		token := authToken
 		if token == "" {
 			token = chatSessionJwt
