@@ -226,7 +226,7 @@ export default function Home() {
                 <div className="flex flex-col gap-1">
                   <h3 className="font-medium">Build and host custom tools</h3>
                   <p className="text-sm text-muted-foreground">
-                    Write and deploy custom functions as MCP tools
+                    Write and deploy custom functions as MCP servers
                   </p>
                 </div>
               </div>
