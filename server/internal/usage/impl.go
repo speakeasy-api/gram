@@ -106,31 +106,34 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		return oops.E(oops.CodeUnexpected, err, "failed to validate and parse webhook event").Log(ctx, s.logger)
 	}
 
+	logger := s.logger.With(attr.SlogEvent(webhookPayload.Type))
+
 	if !slices.Contains(acceptedEvents, webhookPayload.Type) {
-		s.logger.InfoContext(ctx, "skipping unsupported webhook event", attr.SlogEvent(webhookPayload.Type))
+		logger.InfoContext(ctx, "skipping unsupported webhook event")
 		return nil
 	}
 
 	if webhookPayload.Data.Customer == nil || webhookPayload.Data.Customer.ExternalID == "" {
-		return oops.E(oops.CodeUnexpected, errors.New("missing customer external id in webhook payload"), "missing customer external id in webhook payload").Log(ctx, s.logger)
+		logger.WarnContext(ctx, "skipping webhook: missing customer external id in webhook payload")
+		return nil
 	}
 
 	existingOrgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, webhookPayload.Data.Customer.ExternalID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
 	}
 
 	previousAccountType := existingOrgMetadata.GramAccountType
 
 	// we must invalidate the customer tier cache since customer tier may have changed witha subscription update
 	if err := s.billingRepo.InvalidateBillingCustomerCaches(ctx, webhookPayload.Data.Customer.ExternalID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").Log(ctx, logger)
 	}
 
 	// we force a refresh of the state of the organization since customer tier may have changed witha subscription update
 	refreshedOrg, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").Log(ctx, logger)
 	}
 	updatedAccountType := refreshedOrg.GramAccountType
 
@@ -142,19 +145,19 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 			ID:              refreshedOrg.ID,
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to set account type").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to set account type").Log(ctx, logger)
 		}
 	}
 
 	if previousAccountType != updatedAccountType {
 		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, nil); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").Log(ctx, logger)
 		}
 	}
 
 	// we force a refresh of the period usage since usage may have changed with a subscription update
 	if _, err = s.billingRepo.GetPeriodUsage(ctx, webhookPayload.Data.Customer.ExternalID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, logger)
 	}
 
 	if err = s.posthogClient.CaptureEvent(ctx, "gram_subscription_changed", webhookPayload.Data.Customer.ExternalID, map[string]any{
@@ -167,7 +170,7 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		"event":        webhookPayload.Type,
 		"email":        webhookPayload.Data.Customer.Email,
 	}); err != nil {
-		s.logger.ErrorContext(ctx, "failed to capture posthog event", attr.SlogError(err))
+		logger.ErrorContext(ctx, "failed to capture posthog event", attr.SlogError(err))
 	}
 
 	return nil
