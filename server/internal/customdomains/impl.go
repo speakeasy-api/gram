@@ -125,8 +125,12 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 	}
 
 	if domain.Activated {
-		if _, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.IngressName.String, domain.CertSecretName.String); err != nil {
+		run, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.IngressName.String, domain.CertSecretName.String)
+		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start custom domain deletion workflow").Log(ctx, s.logger)
+		}
+		if err := run.Get(ctx, nil); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "custom domain deletion workflow failed").Log(ctx, s.logger)
 		}
 	}
 

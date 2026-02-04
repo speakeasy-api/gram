@@ -26,6 +26,7 @@ import {
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
+import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
@@ -149,9 +150,7 @@ export default function Settings() {
     onSuccess: async () => {
       setIsDeleteDomainDialogOpen(false);
       setDomainInput("");
-      queryClient.removeQueries({
-        queryKey: ["@gram/client", "domains", "getDomain"],
-      });
+      await invalidateAllGetDomain(queryClient);
     },
   });
 
