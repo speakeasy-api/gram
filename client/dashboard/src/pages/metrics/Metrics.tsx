@@ -12,7 +12,7 @@ import { getServerURL } from "@/lib/utils";
 import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary";
-import { FeatureName } from "@gram/client/models/components";
+import { FeatureName, Metrics } from "@gram/client/models/components";
 import {
   useFeaturesSetMutation,
   useGramContext,
@@ -49,17 +49,6 @@ export default function MetricsPage() {
       );
     },
     throwOnError: false,
-    retry: (failureCount, error) => {
-      // Don't retry on 404 errors (logs disabled)
-      if (
-        error instanceof Error &&
-        "statusCode" in error &&
-        error.statusCode === 404
-      ) {
-        return false;
-      }
-      return failureCount < 3;
-    },
   });
 
   const [logsMutationError, setLogsMutationError] = useState<string | null>(
@@ -80,20 +69,16 @@ export default function MetricsPage() {
 
   const isMutatingLogs = logsMutationStatus === "pending";
 
-  const handleEnableLogs = async () => {
+  const handleEnableLogs = () => {
     setLogsMutationError(null);
-    try {
-      await setLogsFeature({
-        request: {
-          setProductFeatureRequestBody: {
-            featureName: FeatureName.Logs,
-            enabled: true,
-          },
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.Logs,
+          enabled: true,
         },
-      });
-    } catch {
-      // error state handled in onError callback
-    }
+      },
+    });
   };
 
   const metricsElementsConfig = useMemo<ElementsConfig>(
@@ -155,28 +140,15 @@ export default function MetricsPage() {
               </p>
             </div>
 
-            {isPending ? (
-              <MetricsLoadingSkeleton />
-            ) : error instanceof ServiceError && error.statusCode === 404 ? (
-              <MetricsDisabledState
-                onEnableLogs={handleEnableLogs}
-                isMutating={isMutatingLogs}
-                mutationError={logsMutationError}
-              />
-            ) : error ? (
-              <MetricsError error={error} />
-            ) : !isEnabled ? (
-              <MetricsDisabledState
-                onEnableLogs={handleEnableLogs}
-                isMutating={isMutatingLogs}
-                mutationError={logsMutationError}
-              />
-            ) : metrics ? (
-              <>
-                <MetricsCards metrics={metrics} />
-                <MetricsCharts metrics={metrics} />
-              </>
-            ) : null}
+            <MetricsContent
+              isPending={isPending}
+              error={error}
+              isEnabled={isEnabled}
+              metrics={metrics}
+              isMutatingLogs={isMutatingLogs}
+              logsMutationError={logsMutationError}
+              onEnableLogs={handleEnableLogs}
+            />
           </div>
 
           {/* Chat Panel */}
@@ -189,6 +161,63 @@ export default function MetricsPage() {
       </Page.Body>
     </Page>
   );
+}
+
+function MetricsContent({
+  isPending,
+  error,
+  isEnabled,
+  metrics,
+  isMutatingLogs,
+  logsMutationError,
+  onEnableLogs,
+}: {
+  isPending: boolean;
+  error: Error | null;
+  isEnabled: boolean;
+  metrics: Metrics | undefined;
+  isMutatingLogs: boolean;
+  logsMutationError: string | null;
+  onEnableLogs: () => void;
+}) {
+  if (isPending) {
+    return <MetricsLoadingSkeleton />;
+  }
+
+  if (error instanceof ServiceError && error.statusCode === 404) {
+    return (
+      <MetricsDisabledState
+        onEnableLogs={onEnableLogs}
+        isMutating={isMutatingLogs}
+        mutationError={logsMutationError}
+      />
+    );
+  }
+
+  if (error) {
+    return <MetricsError error={error} />;
+  }
+
+  if (!isEnabled) {
+    return (
+      <MetricsDisabledState
+        onEnableLogs={onEnableLogs}
+        isMutating={isMutatingLogs}
+        mutationError={logsMutationError}
+      />
+    );
+  }
+
+  if (metrics) {
+    return (
+      <>
+        <MetricsCards metrics={metrics} />
+        <MetricsCharts metrics={metrics} />
+      </>
+    );
+  }
+
+  return null;
 }
 
 function MetricsLoadingSkeleton() {
