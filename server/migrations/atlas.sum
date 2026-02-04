@@ -1,4 +1,4 @@
-h1:fR7N/ubPA/5ZjpWOJKokGq1Wd0kBYn5IZmgYFTaYm6M=
+h1:dnDez0WvdOxlwCFLqhKCbXn5TGcEVRSpLRirfAJ62jk=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -100,3 +100,4 @@ h1:fR7N/ubPA/5ZjpWOJKokGq1Wd0kBYn5IZmgYFTaYm6M=
 20260202212612_chat_message_seq.sql h1:A4W0ScDOEj6ykCD5hXZ6d37PNWUiTjR0QRpJXeX+TIg=
 20260202230735_add-mcp-metadata-title-text.sql h1:yXUfvgiVMTA6lOT1TLC4nCHhjQXAyBe7O2KypnNnEkA=
 20260203225638_index-user-tokens-by-toolset-id.sql h1:q/sTybbrDaFLntwK2HxCtCIfmvLm++N7XLOlVW05DWE=
+20260204150828_custom-domains-partial-unique-index.sql h1:j3eY5veG2El3Jg+KsAYokVejj06LL9BcHwKs5ue36Vk=
