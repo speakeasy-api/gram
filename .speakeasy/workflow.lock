@@ -14,7 +14,7 @@ targets:
         sourceRevisionDigest: sha256:8e08b59576cd0b1e2097e41289f6571948780ebe977b5cccb5df87ebf7a0da37
         sourceBlobDigest: sha256:fb7c038f76d7a9d685d678b118e0cf6794d66557fde2d55b20550c50163e358f
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:94c8b4a76e363f3ffcb581ee3bbcb7900151303415a40b876ecd5ee462fa00d0
+        codeSamplesRevisionDigest: sha256:3ab04c77102176074cec86c11ff1a1c7cf165362053537bc53b6508830ad00b0
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned
