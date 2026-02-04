@@ -32,10 +32,9 @@ func TestSearchLogs_LogsDisabled(t *testing.T) {
 		Sort:  "desc",
 	})
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Empty(t, result.Logs, "should return no logs when feature is disabled")
-	require.False(t, result.Enabled, "Enabled should be false when logs feature is disabled")
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "logs are not enabled")
 }
 
 func TestSearchLogs_Empty(t *testing.T) {
@@ -622,10 +621,9 @@ func TestSearchToolCalls_LogsDisabled(t *testing.T) {
 		Sort:  "desc",
 	})
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Empty(t, result.ToolCalls, "should return no tool calls when feature is disabled")
-	require.False(t, result.Enabled, "Enabled should be false when logs feature is disabled")
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "logs are not enabled")
 }
 
 func TestSearchToolCalls_Empty(t *testing.T) {

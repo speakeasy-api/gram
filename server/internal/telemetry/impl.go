@@ -100,7 +100,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}
 
 	if !params.enabled {
-		return &telem_gen.SearchLogsResult{Logs: []*telem_gen.TelemetryLogRecord{}, Enabled: false, NextCursor: nil}, nil
+		return nil, oops.E(oops.CodeForbidden, nil, logsDisabledMsg)
 	}
 
 	// Extract SearchLogs-specific filter fields
@@ -181,7 +181,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	if !params.enabled {
-		return &telem_gen.SearchToolCallsResult{ToolCalls: []*telem_gen.ToolCallSummary{}, Enabled: false, NextCursor: nil}, nil
+		return nil, oops.E(oops.CodeForbidden, nil, logsDisabledMsg)
 	}
 
 	// Extract SearchToolCalls-specific filter fields

@@ -7,6 +7,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { isLogsDisabledError } from "@/lib/telemetry-errors";
 import { getServerURL } from "@/lib/utils";
 import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
@@ -41,6 +42,14 @@ export default function MetricsPage() {
           getProjectMetricsSummaryPayload: { from, to },
         }),
       );
+    },
+    throwOnError: false,
+    retry: (failureCount, error) => {
+      // Don't retry on 403 errors (e.g., logs disabled)
+      if (error instanceof Error && "statusCode" in error && error.statusCode === 403) {
+        return false;
+      }
+      return failureCount < 3;
     },
   });
 
@@ -105,6 +114,8 @@ export default function MetricsPage() {
 
             {isPending ? (
               <MetricsLoadingSkeleton />
+            ) : isLogsDisabledError(error) ? (
+              <MetricsDisabledState />
             ) : error ? (
               <MetricsError error={error} />
             ) : !isEnabled ? (
@@ -183,7 +194,7 @@ function MetricsDisabledState() {
         className="size-8 text-muted-foreground"
       />
       <span className="text-muted-foreground">
-        Metrics are disabled for your organization.
+        Logs are disabled for your organization.
       </span>
     </div>
   );

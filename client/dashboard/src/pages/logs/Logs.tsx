@@ -2,6 +2,7 @@ import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { isLogsDisabledError } from "@/lib/telemetry-errors";
 import { getServerURL } from "@/lib/utils";
 import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
@@ -89,6 +90,14 @@ export default function LogsPage() {
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    throwOnError: false,
+    retry: (failureCount, error) => {
+      // Don't retry on 403 errors (e.g., logs disabled)
+      if (error instanceof Error && "statusCode" in error && error.statusCode === 403) {
+        return false;
+      }
+      return failureCount < 3;
+    },
   });
 
   // Flatten all pages into a single array of traces
@@ -206,17 +215,46 @@ export default function LogsPage() {
                 onScroll={handleScroll}
               >
                 {error ? (
-                  <div className="flex flex-col items-center gap-2 py-12">
-                    <XIcon className="size-6 stroke-destructive-default" />
-                    <span className="text-destructive-default font-medium">
-                      Error loading traces
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {error instanceof Error
-                        ? error.message
-                        : "An unexpected error occurred"}
-                    </span>
-                  </div>
+                  isLogsDisabledError(error) ? (
+                    <div className="py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center gap-3">
+                        <span>Logs are disabled for your organization.</span>
+                        <Button
+                          onClick={() => handleSetLogs(true)}
+                          disabled={isMutatingLogs}
+                          size="sm"
+                          variant="secondary"
+                        >
+                          <Button.LeftIcon>
+                            <Icon
+                              name="test-tube-diagonal"
+                              className="size-4"
+                            />
+                          </Button.LeftIcon>
+                          <Button.Text>
+                            {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
+                          </Button.Text>
+                        </Button>
+                        {logsMutationError && (
+                          <span className="text-sm text-destructive-default">
+                            {logsMutationError}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 py-12">
+                      <XIcon className="size-6 stroke-destructive-default" />
+                      <span className="text-destructive-default font-medium">
+                        Error loading traces
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {error instanceof Error
+                          ? error.message
+                          : "An unexpected error occurred"}
+                      </span>
+                    </div>
+                  )
                 ) : isLoading ? (
                   <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
                     <Icon
