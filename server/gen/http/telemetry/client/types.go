@@ -72,6 +72,19 @@ type GetProjectMetricsSummaryRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 }
 
+// GetUserMetricsSummaryRequestBody is the type of the "telemetry" service
+// "getUserMetricsSummary" endpoint HTTP request body.
+type GetUserMetricsSummaryRequestBody struct {
+	// Start time in ISO 8601 format
+	From string `form:"from" json:"from" xml:"from"`
+	// End time in ISO 8601 format
+	To string `form:"to" json:"to" xml:"to"`
+	// User ID to get metrics for (mutually exclusive with external_user_id)
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// External user ID to get metrics for (mutually exclusive with user_id)
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+}
+
 // SearchLogsResponseBody is the type of the "telemetry" service "searchLogs"
 // endpoint HTTP response body.
 type SearchLogsResponseBody struct {
@@ -116,6 +129,15 @@ type CaptureEventResponseBody struct {
 // "getProjectMetricsSummary" endpoint HTTP response body.
 type GetProjectMetricsSummaryResponseBody struct {
 	// Aggregated metrics
+	Metrics *MetricsResponseBody `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
+	// Whether telemetry is enabled for the organization
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
+// GetUserMetricsSummaryResponseBody is the type of the "telemetry" service
+// "getUserMetricsSummary" endpoint HTTP response body.
+type GetUserMetricsSummaryResponseBody struct {
+	// Aggregated metrics for the user
 	Metrics *MetricsResponseBody `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
 	// Whether telemetry is enabled for the organization
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -1041,6 +1063,196 @@ type GetProjectMetricsSummaryGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetUserMetricsSummaryUnauthorizedResponseBody is the type of the "telemetry"
+// service "getUserMetricsSummary" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetUserMetricsSummaryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUserMetricsSummaryForbiddenResponseBody is the type of the "telemetry"
+// service "getUserMetricsSummary" endpoint HTTP response body for the
+// "forbidden" error.
+type GetUserMetricsSummaryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUserMetricsSummaryBadRequestResponseBody is the type of the "telemetry"
+// service "getUserMetricsSummary" endpoint HTTP response body for the
+// "bad_request" error.
+type GetUserMetricsSummaryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUserMetricsSummaryNotFoundResponseBody is the type of the "telemetry"
+// service "getUserMetricsSummary" endpoint HTTP response body for the
+// "not_found" error.
+type GetUserMetricsSummaryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUserMetricsSummaryConflictResponseBody is the type of the "telemetry"
+// service "getUserMetricsSummary" endpoint HTTP response body for the
+// "conflict" error.
+type GetUserMetricsSummaryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUserMetricsSummaryUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getUserMetricsSummary" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetUserMetricsSummaryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUserMetricsSummaryInvalidResponseBody is the type of the "telemetry"
+// service "getUserMetricsSummary" endpoint HTTP response body for the
+// "invalid" error.
+type GetUserMetricsSummaryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUserMetricsSummaryInvariantViolationResponseBody is the type of the
+// "telemetry" service "getUserMetricsSummary" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetUserMetricsSummaryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUserMetricsSummaryUnexpectedResponseBody is the type of the "telemetry"
+// service "getUserMetricsSummary" endpoint HTTP response body for the
+// "unexpected" error.
+type GetUserMetricsSummaryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUserMetricsSummaryGatewayErrorResponseBody is the type of the "telemetry"
+// service "getUserMetricsSummary" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetUserMetricsSummaryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SearchLogsFilterRequestBody is used to define fields on request body types.
 type SearchLogsFilterRequestBody struct {
 	// Trace ID filter (32 hex characters)
@@ -1059,6 +1271,10 @@ type SearchLogsFilterRequestBody struct {
 	GramUrns []string `form:"gram_urns,omitempty" json:"gram_urns,omitempty" xml:"gram_urns,omitempty"`
 	// Chat ID filter
 	GramChatID *string `form:"gram_chat_id,omitempty" json:"gram_chat_id,omitempty" xml:"gram_chat_id,omitempty"`
+	// User ID filter
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// External user ID filter
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -1143,6 +1359,10 @@ type SearchChatsFilterRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+	// User ID filter
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// External user ID filter
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 }
 
 // ChatSummaryResponseBody is used to define fields on response body types.
@@ -1177,6 +1397,10 @@ type ChatSummaryResponseBody struct {
 
 // MetricsResponseBody is used to define fields on response body types.
 type MetricsResponseBody struct {
+	// Earliest activity timestamp in Unix nanoseconds
+	FirstSeenUnixNano *int64 `form:"first_seen_unix_nano,omitempty" json:"first_seen_unix_nano,omitempty" xml:"first_seen_unix_nano,omitempty"`
+	// Latest activity timestamp in Unix nanoseconds
+	LastSeenUnixNano *int64 `form:"last_seen_unix_nano,omitempty" json:"last_seen_unix_nano,omitempty" xml:"last_seen_unix_nano,omitempty"`
 	// Sum of input tokens used
 	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
 	// Sum of output tokens used
@@ -1336,6 +1560,18 @@ func NewGetProjectMetricsSummaryRequestBody(p *telemetry.GetProjectMetricsSummar
 	body := &GetProjectMetricsSummaryRequestBody{
 		From: p.From,
 		To:   p.To,
+	}
+	return body
+}
+
+// NewGetUserMetricsSummaryRequestBody builds the HTTP request body from the
+// payload of the "getUserMetricsSummary" endpoint of the "telemetry" service.
+func NewGetUserMetricsSummaryRequestBody(p *telemetry.GetUserMetricsSummaryPayload) *GetUserMetricsSummaryRequestBody {
+	body := &GetUserMetricsSummaryRequestBody{
+		From:           p.From,
+		To:             p.To,
+		UserID:         p.UserID,
+		ExternalUserID: p.ExternalUserID,
 	}
 	return body
 }
@@ -2168,6 +2404,167 @@ func NewGetProjectMetricsSummaryGatewayError(body *GetProjectMetricsSummaryGatew
 	return v
 }
 
+// NewGetUserMetricsSummaryResultOK builds a "telemetry" service
+// "getUserMetricsSummary" endpoint result from a HTTP "OK" response.
+func NewGetUserMetricsSummaryResultOK(body *GetUserMetricsSummaryResponseBody) *telemetry.GetUserMetricsSummaryResult {
+	v := &telemetry.GetUserMetricsSummaryResult{
+		Enabled: *body.Enabled,
+	}
+	v.Metrics = unmarshalMetricsResponseBodyToTelemetryMetrics(body.Metrics)
+
+	return v
+}
+
+// NewGetUserMetricsSummaryUnauthorized builds a telemetry service
+// getUserMetricsSummary endpoint unauthorized error.
+func NewGetUserMetricsSummaryUnauthorized(body *GetUserMetricsSummaryUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUserMetricsSummaryForbidden builds a telemetry service
+// getUserMetricsSummary endpoint forbidden error.
+func NewGetUserMetricsSummaryForbidden(body *GetUserMetricsSummaryForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUserMetricsSummaryBadRequest builds a telemetry service
+// getUserMetricsSummary endpoint bad_request error.
+func NewGetUserMetricsSummaryBadRequest(body *GetUserMetricsSummaryBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUserMetricsSummaryNotFound builds a telemetry service
+// getUserMetricsSummary endpoint not_found error.
+func NewGetUserMetricsSummaryNotFound(body *GetUserMetricsSummaryNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUserMetricsSummaryConflict builds a telemetry service
+// getUserMetricsSummary endpoint conflict error.
+func NewGetUserMetricsSummaryConflict(body *GetUserMetricsSummaryConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUserMetricsSummaryUnsupportedMedia builds a telemetry service
+// getUserMetricsSummary endpoint unsupported_media error.
+func NewGetUserMetricsSummaryUnsupportedMedia(body *GetUserMetricsSummaryUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUserMetricsSummaryInvalid builds a telemetry service
+// getUserMetricsSummary endpoint invalid error.
+func NewGetUserMetricsSummaryInvalid(body *GetUserMetricsSummaryInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUserMetricsSummaryInvariantViolation builds a telemetry service
+// getUserMetricsSummary endpoint invariant_violation error.
+func NewGetUserMetricsSummaryInvariantViolation(body *GetUserMetricsSummaryInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUserMetricsSummaryUnexpected builds a telemetry service
+// getUserMetricsSummary endpoint unexpected error.
+func NewGetUserMetricsSummaryUnexpected(body *GetUserMetricsSummaryUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUserMetricsSummaryGatewayError builds a telemetry service
+// getUserMetricsSummary endpoint gateway_error error.
+func NewGetUserMetricsSummaryGatewayError(body *GetUserMetricsSummaryGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateSearchLogsResponseBody runs the validations defined on
 // SearchLogsResponseBody
 func ValidateSearchLogsResponseBody(body *SearchLogsResponseBody) (err error) {
@@ -2237,6 +2634,23 @@ func ValidateCaptureEventResponseBody(body *CaptureEventResponseBody) (err error
 // ValidateGetProjectMetricsSummaryResponseBody runs the validations defined on
 // GetProjectMetricsSummaryResponseBody
 func ValidateGetProjectMetricsSummaryResponseBody(body *GetProjectMetricsSummaryResponseBody) (err error) {
+	if body.Metrics == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("metrics", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.Metrics != nil {
+		if err2 := ValidateMetricsResponseBody(body.Metrics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateGetUserMetricsSummaryResponseBody runs the validations defined on
+// GetUserMetricsSummaryResponseBody
+func ValidateGetUserMetricsSummaryResponseBody(body *GetUserMetricsSummaryResponseBody) (err error) {
 	if body.Metrics == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("metrics", "body"))
 	}
@@ -3453,6 +3867,247 @@ func ValidateGetProjectMetricsSummaryGatewayErrorResponseBody(body *GetProjectMe
 	return
 }
 
+// ValidateGetUserMetricsSummaryUnauthorizedResponseBody runs the validations
+// defined on getUserMetricsSummary_unauthorized_response_body
+func ValidateGetUserMetricsSummaryUnauthorizedResponseBody(body *GetUserMetricsSummaryUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUserMetricsSummaryForbiddenResponseBody runs the validations
+// defined on getUserMetricsSummary_forbidden_response_body
+func ValidateGetUserMetricsSummaryForbiddenResponseBody(body *GetUserMetricsSummaryForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUserMetricsSummaryBadRequestResponseBody runs the validations
+// defined on getUserMetricsSummary_bad_request_response_body
+func ValidateGetUserMetricsSummaryBadRequestResponseBody(body *GetUserMetricsSummaryBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUserMetricsSummaryNotFoundResponseBody runs the validations
+// defined on getUserMetricsSummary_not_found_response_body
+func ValidateGetUserMetricsSummaryNotFoundResponseBody(body *GetUserMetricsSummaryNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUserMetricsSummaryConflictResponseBody runs the validations
+// defined on getUserMetricsSummary_conflict_response_body
+func ValidateGetUserMetricsSummaryConflictResponseBody(body *GetUserMetricsSummaryConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUserMetricsSummaryUnsupportedMediaResponseBody runs the
+// validations defined on getUserMetricsSummary_unsupported_media_response_body
+func ValidateGetUserMetricsSummaryUnsupportedMediaResponseBody(body *GetUserMetricsSummaryUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUserMetricsSummaryInvalidResponseBody runs the validations
+// defined on getUserMetricsSummary_invalid_response_body
+func ValidateGetUserMetricsSummaryInvalidResponseBody(body *GetUserMetricsSummaryInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUserMetricsSummaryInvariantViolationResponseBody runs the
+// validations defined on
+// getUserMetricsSummary_invariant_violation_response_body
+func ValidateGetUserMetricsSummaryInvariantViolationResponseBody(body *GetUserMetricsSummaryInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUserMetricsSummaryUnexpectedResponseBody runs the validations
+// defined on getUserMetricsSummary_unexpected_response_body
+func ValidateGetUserMetricsSummaryUnexpectedResponseBody(body *GetUserMetricsSummaryUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUserMetricsSummaryGatewayErrorResponseBody runs the validations
+// defined on getUserMetricsSummary_gateway_error_response_body
+func ValidateGetUserMetricsSummaryGatewayErrorResponseBody(body *GetUserMetricsSummaryGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSearchLogsFilterRequestBody runs the validations defined on
 // SearchLogsFilterRequestBody
 func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err error) {
@@ -3629,6 +4284,12 @@ func ValidateChatSummaryResponseBody(body *ChatSummaryResponseBody) (err error) 
 // ValidateMetricsResponseBody runs the validations defined on
 // MetricsResponseBody
 func ValidateMetricsResponseBody(body *MetricsResponseBody) (err error) {
+	if body.FirstSeenUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("first_seen_unix_nano", "body"))
+	}
+	if body.LastSeenUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen_unix_nano", "body"))
+	}
 	if body.TotalInputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_input_tokens", "body"))
 	}

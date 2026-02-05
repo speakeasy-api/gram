@@ -24,7 +24,7 @@ func BuildSearchLogsPayload(telemetrySearchLogsBody string, telemetrySearchLogsA
 	{
 		err = json.Unmarshal([]byte(telemetrySearchLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_chat_id\": \"abc123\",\n         \"gram_urn\": \"abc123\",\n         \"gram_urns\": [\n            \"abc123\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"abc123\",\n         \"http_status_code\": 1,\n         \"service_name\": \"abc123\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"11111111111111111111111111111111\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_chat_id\": \"abc123\",\n         \"gram_urn\": \"abc123\",\n         \"gram_urns\": [\n            \"abc123\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"abc123\",\n         \"http_status_code\": 1,\n         \"service_name\": \"abc123\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"11111111111111111111111111111111\",\n         \"user_id\": \"abc123\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -136,7 +136,7 @@ func BuildSearchChatsPayload(telemetrySearchChatsBody string, telemetrySearchCha
 	{
 		err = json.Unmarshal([]byte(telemetrySearchChatsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"gram_urn\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"gram_urn\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_id\": \"abc123\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -285,6 +285,53 @@ func BuildGetProjectMetricsSummaryPayload(telemetryGetProjectMetricsSummaryBody 
 	v := &telemetry.GetProjectMetricsSummaryPayload{
 		From: body.From,
 		To:   body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetUserMetricsSummaryPayload builds the payload for the telemetry
+// getUserMetricsSummary endpoint from CLI flags.
+func BuildGetUserMetricsSummaryPayload(telemetryGetUserMetricsSummaryBody string, telemetryGetUserMetricsSummaryApikeyToken string, telemetryGetUserMetricsSummarySessionToken string, telemetryGetUserMetricsSummaryProjectSlugInput string) (*telemetry.GetUserMetricsSummaryPayload, error) {
+	var err error
+	var body GetUserMetricsSummaryRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetUserMetricsSummaryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetUserMetricsSummaryApikeyToken != "" {
+			apikeyToken = &telemetryGetUserMetricsSummaryApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetUserMetricsSummarySessionToken != "" {
+			sessionToken = &telemetryGetUserMetricsSummarySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetUserMetricsSummaryProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetUserMetricsSummaryProjectSlugInput
+		}
+	}
+	v := &telemetry.GetUserMetricsSummaryPayload{
+		From:           body.From,
+		To:             body.To,
+		UserID:         body.UserID,
+		ExternalUserID: body.ExternalUserID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
