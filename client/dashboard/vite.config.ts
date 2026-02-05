@@ -88,6 +88,7 @@ export default defineConfig(({ command }) => {
             "/chat": serverUrl,
             "/mcp": serverUrl,
             "/oauth": serverUrl,
+            "/oauth-external": serverUrl,
             "/.well-known": serverUrl,
           }
         : undefined,
