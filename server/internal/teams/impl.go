@@ -224,6 +224,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 	}
 
 	// Normalize email to lowercase to ensure case-insensitive uniqueness at the DB level.
+	// Note: RFC 5321 allows case-sensitive local parts, but this is extremely rare in practice.
 	email := strings.ToLower(strings.TrimSpace(payload.Email))
 
 	tx, err := s.db.Begin(ctx)
