@@ -22,6 +22,8 @@ type SetMcpMetadataRequestBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// A blob of text for the button on the MCP server page
+	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// The default environment to load variables from
@@ -57,6 +59,8 @@ type SetMcpMetadataResponseBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// A blob of text for the button on the MCP server page
+	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// The default environment to load variables from
@@ -666,6 +670,8 @@ type McpMetadataResponseBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// A blob of text for the button on the MCP server page
+	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// The default environment to load variables from
@@ -740,12 +746,13 @@ type McpExportAuthHeaderResponseBody struct {
 // of the "setMcpMetadata" endpoint of the "mcpMetadata" service.
 func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpMetadataRequestBody {
 	body := &SetMcpMetadataRequestBody{
-		ToolsetSlug:              string(p.ToolsetSlug),
-		LogoAssetID:              p.LogoAssetID,
-		ExternalDocumentationURL: p.ExternalDocumentationURL,
-		Instructions:             p.Instructions,
-		DefaultEnvironmentID:     p.DefaultEnvironmentID,
-		InstallationOverrideURL:  p.InstallationOverrideURL,
+		ToolsetSlug:               string(p.ToolsetSlug),
+		LogoAssetID:               p.LogoAssetID,
+		ExternalDocumentationURL:  p.ExternalDocumentationURL,
+		ExternalDocumentationText: p.ExternalDocumentationText,
+		Instructions:              p.Instructions,
+		DefaultEnvironmentID:      p.DefaultEnvironmentID,
+		InstallationOverrideURL:   p.InstallationOverrideURL,
 	}
 	if p.EnvironmentConfigs != nil {
 		body.EnvironmentConfigs = make([]*McpEnvironmentConfigInputRequestBody, len(p.EnvironmentConfigs))
@@ -934,15 +941,16 @@ func NewGetMcpMetadataGatewayError(body *GetMcpMetadataGatewayErrorResponseBody)
 // "setMcpMetadata" endpoint result from a HTTP "OK" response.
 func NewSetMcpMetadataMcpMetadataOK(body *SetMcpMetadataResponseBody) *types.McpMetadata {
 	v := &types.McpMetadata{
-		ID:                       *body.ID,
-		ToolsetID:                *body.ToolsetID,
-		LogoAssetID:              body.LogoAssetID,
-		ExternalDocumentationURL: body.ExternalDocumentationURL,
-		Instructions:             body.Instructions,
-		DefaultEnvironmentID:     body.DefaultEnvironmentID,
-		InstallationOverrideURL:  body.InstallationOverrideURL,
-		CreatedAt:                *body.CreatedAt,
-		UpdatedAt:                *body.UpdatedAt,
+		ID:                        *body.ID,
+		ToolsetID:                 *body.ToolsetID,
+		LogoAssetID:               body.LogoAssetID,
+		ExternalDocumentationURL:  body.ExternalDocumentationURL,
+		ExternalDocumentationText: body.ExternalDocumentationText,
+		Instructions:              body.Instructions,
+		DefaultEnvironmentID:      body.DefaultEnvironmentID,
+		InstallationOverrideURL:   body.InstallationOverrideURL,
+		CreatedAt:                 *body.CreatedAt,
+		UpdatedAt:                 *body.UpdatedAt,
 	}
 	if body.EnvironmentConfigs != nil {
 		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfig, len(body.EnvironmentConfigs))

@@ -112,6 +112,9 @@ ORDER BY created_at ASC;
 INSERT INTO user_oauth_tokens (
     user_id,
     organization_id,
+    project_id,
+    client_registration_id,
+    toolset_id,
     oauth_server_issuer,
     access_token_encrypted,
     refresh_token_encrypted,
@@ -122,6 +125,9 @@ INSERT INTO user_oauth_tokens (
 ) VALUES (
     @user_id,
     @organization_id,
+    @project_id,
+    @client_registration_id,
+    @toolset_id,
     @oauth_server_issuer,
     @access_token_encrypted,
     @refresh_token_encrypted,
@@ -129,7 +135,7 @@ INSERT INTO user_oauth_tokens (
     @expires_at,
     @scopes,
     @provider_name
-) ON CONFLICT (user_id, organization_id, oauth_server_issuer) WHERE deleted IS FALSE DO UPDATE SET
+) ON CONFLICT (user_id, organization_id, toolset_id) WHERE deleted IS FALSE DO UPDATE SET
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
     token_type = EXCLUDED.token_type,
@@ -143,7 +149,7 @@ RETURNING *;
 SELECT * FROM user_oauth_tokens
 WHERE user_id = @user_id
   AND organization_id = @organization_id
-  AND oauth_server_issuer = @oauth_server_issuer
+  AND toolset_id = @toolset_id
   AND deleted IS FALSE;
 
 -- name: GetUserOAuthTokenByID :one
@@ -163,13 +169,13 @@ UPDATE user_oauth_tokens SET
     updated_at = clock_timestamp()
 WHERE id = @id;
 
--- name: DeleteUserOAuthTokenByIssuer :exec
+-- name: DeleteUserOAuthTokenByToolset :exec
 UPDATE user_oauth_tokens SET
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE user_id = @user_id
   AND organization_id = @organization_id
-  AND oauth_server_issuer = @oauth_server_issuer;
+  AND toolset_id = @toolset_id;
 
 -- External OAuth Client Registrations Queries
 -- Stores client credentials from Dynamic Client Registration (DCR)
@@ -178,6 +184,7 @@ WHERE user_id = @user_id
 -- name: UpsertExternalOAuthClientRegistration :one
 INSERT INTO external_oauth_client_registrations (
     organization_id,
+    project_id,
     oauth_server_issuer,
     client_id,
     client_secret_encrypted,
@@ -185,6 +192,7 @@ INSERT INTO external_oauth_client_registrations (
     client_secret_expires_at
 ) VALUES (
     @organization_id,
+    @project_id,
     @oauth_server_issuer,
     @client_id,
     @client_secret_encrypted,

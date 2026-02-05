@@ -112,6 +112,8 @@ type mcpInputs struct {
 	sessionID        string
 	chatID           string
 	mode             ToolMode
+	userID           string
+	externalUserID   string
 }
 
 func NewService(
@@ -558,6 +560,12 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Load header display names for remapping
 	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
 
+	// Extract user IDs for telemetry
+	var userID, externalUserID string
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		userID = authCtx.UserID
+		externalUserID = authCtx.ExternalUserID
+	}
 	mcpInputs := &mcpInputs{
 		projectID:        toolset.ProjectID,
 		toolset:          toolset.Slug,
@@ -568,6 +576,8 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		sessionID:        sessionID,
 		chatID:           r.Header.Get("Gram-Chat-ID"),
 		mode:             resolveToolMode(r, *toolset),
+		userID:           userID,
+		externalUserID:   externalUserID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -628,6 +638,7 @@ func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUI
 
 	return result
 }
+
 
 func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -719,6 +730,8 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		sessionID:        sessionID,
 		chatID:           r.Header.Get("Gram-Chat-ID"),
 		mode:             resolveToolMode(r, toolset),
+		userID:           authCtx.UserID,
+		externalUserID:   authCtx.ExternalUserID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)

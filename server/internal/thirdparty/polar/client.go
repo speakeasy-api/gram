@@ -175,6 +175,11 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 }
 
 func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {
+	// For now, don't bill customers on "Gram" usage. Gram source means it is internal to the platform and not customer usage.
+	if event.Source == billing.ModelUsageSourceGram {
+		return
+	}
+
 	ctx, span := p.tracer.Start(ctx, "polar_client.track_model_usage")
 	defer span.End()
 

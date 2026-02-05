@@ -1,5 +1,11 @@
 # server
 
+## 0.22.2
+
+### Patch Changes
+
+- 26ddbdd: Adds backend support for generating chat resolutions
+
 ## 0.22.1
 
 ### Patch Changes

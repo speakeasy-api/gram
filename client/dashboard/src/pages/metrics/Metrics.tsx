@@ -7,13 +7,19 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { getServerURL } from "@/lib/utils";
 import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary";
-import { useGramContext, useListToolsets } from "@gram/client/react-query";
+import { FeatureName, Metrics } from "@gram/client/models/components";
+import {
+  useFeaturesSetMutation,
+  useGramContext,
+  useListToolsets,
+} from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Icon, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { Button, Icon, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -27,7 +33,7 @@ export default function MetricsPage() {
 
   const client = useGramContext();
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, error, refetch } = useQuery({
     queryKey: [
       "@gram/client",
       "telemetry",
@@ -42,7 +48,38 @@ export default function MetricsPage() {
         }),
       );
     },
+    throwOnError: false,
   });
+
+  const [logsMutationError, setLogsMutationError] = useState<string | null>(
+    null,
+  );
+  const { mutateAsync: setLogsFeature, status: logsMutationStatus } =
+    useFeaturesSetMutation({
+      onSuccess: () => {
+        setLogsMutationError(null);
+        refetch();
+      },
+      onError: (err) => {
+        const message =
+          err instanceof Error ? err.message : "Failed to update logs";
+        setLogsMutationError(message);
+      },
+    });
+
+  const isMutatingLogs = logsMutationStatus === "pending";
+
+  const handleEnableLogs = () => {
+    setLogsMutationError(null);
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.Logs,
+          enabled: true,
+        },
+      },
+    });
+  };
 
   const metricsElementsConfig = useMemo<ElementsConfig>(
     () => ({
@@ -103,18 +140,15 @@ export default function MetricsPage() {
               </p>
             </div>
 
-            {isPending ? (
-              <MetricsLoadingSkeleton />
-            ) : error ? (
-              <MetricsError error={error} />
-            ) : !isEnabled ? (
-              <MetricsDisabledState />
-            ) : metrics ? (
-              <>
-                <MetricsCards metrics={metrics} />
-                <MetricsCharts metrics={metrics} />
-              </>
-            ) : null}
+            <MetricsContent
+              isPending={isPending}
+              error={error}
+              isEnabled={isEnabled}
+              metrics={metrics}
+              isMutatingLogs={isMutatingLogs}
+              logsMutationError={logsMutationError}
+              onEnableLogs={handleEnableLogs}
+            />
           </div>
 
           {/* Chat Panel */}
@@ -127,6 +161,63 @@ export default function MetricsPage() {
       </Page.Body>
     </Page>
   );
+}
+
+function MetricsContent({
+  isPending,
+  error,
+  isEnabled,
+  metrics,
+  isMutatingLogs,
+  logsMutationError,
+  onEnableLogs,
+}: {
+  isPending: boolean;
+  error: Error | null;
+  isEnabled: boolean;
+  metrics: Metrics | undefined;
+  isMutatingLogs: boolean;
+  logsMutationError: string | null;
+  onEnableLogs: () => void;
+}) {
+  if (isPending) {
+    return <MetricsLoadingSkeleton />;
+  }
+
+  if (error instanceof ServiceError && error.statusCode === 404) {
+    return (
+      <MetricsDisabledState
+        onEnableLogs={onEnableLogs}
+        isMutating={isMutatingLogs}
+        mutationError={logsMutationError}
+      />
+    );
+  }
+
+  if (error) {
+    return <MetricsError error={error} />;
+  }
+
+  if (!isEnabled) {
+    return (
+      <MetricsDisabledState
+        onEnableLogs={onEnableLogs}
+        isMutating={isMutatingLogs}
+        mutationError={logsMutationError}
+      />
+    );
+  }
+
+  if (metrics) {
+    return (
+      <>
+        <MetricsCards metrics={metrics} />
+        <MetricsCharts metrics={metrics} />
+      </>
+    );
+  }
+
+  return null;
 }
 
 function MetricsLoadingSkeleton() {
@@ -175,7 +266,15 @@ function MetricsError({ error }: { error: Error }) {
   );
 }
 
-function MetricsDisabledState() {
+function MetricsDisabledState({
+  onEnableLogs,
+  isMutating,
+  mutationError,
+}: {
+  onEnableLogs: () => void;
+  isMutating: boolean;
+  mutationError: string | null;
+}) {
   return (
     <div className="flex flex-col items-center gap-3 py-12">
       <Icon
@@ -183,8 +282,26 @@ function MetricsDisabledState() {
         className="size-8 text-muted-foreground"
       />
       <span className="text-muted-foreground">
-        Metrics are disabled for your organization.
+        Logs are disabled for your organization.
       </span>
+      <Button
+        onClick={onEnableLogs}
+        disabled={isMutating}
+        size="sm"
+        variant="secondary"
+      >
+        <Button.LeftIcon>
+          <Icon name="test-tube-diagonal" className="size-4" />
+        </Button.LeftIcon>
+        <Button.Text>
+          {isMutating ? "Updating Logs" : "Enable Logs"}
+        </Button.Text>
+      </Button>
+      {mutationError && (
+        <span className="text-sm text-destructive-default">
+          {mutationError}
+        </span>
+      )}
     </div>
   );
 }

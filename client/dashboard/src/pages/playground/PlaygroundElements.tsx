@@ -6,11 +6,11 @@ import {
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
-import { useRoutes } from "@/routes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
-import { getServerURL } from "@/lib/utils";
 import type { Toolset } from "@/lib/toolTypes";
+import { getServerURL } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import {
   Chat,
   ChatHistory,
@@ -183,7 +183,7 @@ export function PlaygroundElements({
             </PopoverTrigger>
             <PopoverContent
               align="start"
-              className="w-72 p-0 max-h-96 overflow-hidden"
+              className="w-72 p-0 max-h-96 overflow-y-scroll"
             >
               <ChatHistory className="h-full max-h-96 overflow-y-auto" />
             </PopoverContent>
@@ -221,7 +221,7 @@ function AuthWarningBanner({
         {missingCount === 1 ? "variable" : "variables"} not configured.{" "}
         <routes.mcp.details.Link
           params={[toolsetSlug]}
-          hash="auth"
+          hash="authentication"
           className="underline hover:text-foreground font-medium"
         >
           Configure now

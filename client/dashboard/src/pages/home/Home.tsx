@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useUser } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { DeploymentExternalMCP } from "@gram/client/models/components";
@@ -12,6 +13,7 @@ import {
   ArrowRight,
   BlocksIcon,
   CheckCircle,
+  Code,
   Database,
   Globe,
   MessageCircleIcon,
@@ -55,6 +57,7 @@ const FEATURED_SERVER_SPECIFIERS = [
 export default function Home() {
   const routes = useRoutes();
   const user = useUser();
+  const telemetry = useTelemetry();
   const { data, isLoading } = useInfiniteListMCPCatalog();
   const { data: deploymentResult, isLoading: isDeploymentLoading } =
     useLatestDeployment();
@@ -62,6 +65,8 @@ export default function Home() {
     useListToolsets();
   const externalMcps = deploymentResult?.deployment?.externalMcps ?? [];
   const deployment = deploymentResult?.deployment;
+  const isFunctionsEnabled =
+    telemetry.isFeatureEnabled("gram-functions") ?? false;
 
   const featuredServers = useMemo(() => {
     if (!data?.pages) return [];
@@ -137,7 +142,7 @@ export default function Home() {
         />
 
         <h2 className="text-lg font-semibold mb-4">Quick actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
             <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
             <div className="flex flex-row items-start gap-2">
@@ -197,7 +202,7 @@ export default function Home() {
                 strokeWidth={1.5}
               />
               <div className="flex flex-col gap-1">
-                <h3 className="font-medium">Host your own tools</h3>
+                <h3 className="font-medium">Connect to existing APIs</h3>
                 <p className="text-sm text-muted-foreground">
                   Create and deploy custom MCP servers from your APIs
                 </p>
@@ -211,6 +216,30 @@ export default function Home() {
               </routes.sources.addOpenAPI.Link>
             </div>
           </div>
+          {isFunctionsEnabled && (
+            <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
+              <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
+              <div className="flex flex-row items-start gap-2">
+                <Code
+                  className="h-[18px] w-[18px] mt-0.5 shrink-0"
+                  strokeWidth={1.5}
+                />
+                <div className="flex flex-col gap-1">
+                  <h3 className="font-medium">Build and host custom tools</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Write and deploy custom functions as MCP servers
+                  </p>
+                </div>
+              </div>
+              <div className="mt-auto flex justify-end">
+                <routes.sources.addFunction.Link className="no-underline">
+                  <Button size="sm">
+                    <Button.Text>Deploy code</Button.Text>
+                  </Button>
+                </routes.sources.addFunction.Link>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Featured Servers Section */}

@@ -342,6 +342,12 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "external-mcp-oauth-redirect-domains",
+			Usage:    "Comma separated list of allowed redirect domains for external MCP OAuth flows. Useful when using ngrok, tailscale, or some other custom host for local development.",
+			EnvVars:  []string{"GRAM_EXTERNAL_MCP_OAUTH_REDIRECT_DOMAINS"},
+			Required: false,
+		},
 	}
 
 	flags = append(flags, clickHouseFlags...)
@@ -488,7 +494,7 @@ func newStartCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, billingTracker, posthogClient)
+				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, billingTracker)
 			}
 
 			{
@@ -518,6 +524,31 @@ func newStartCommand() *cli.Command {
 			serverURL, err := url.Parse(c.String("server-url"))
 			if err != nil {
 				return fmt.Errorf("failed to parse server url: %w", err)
+			}
+
+			externalMcpOAuthConfig := oauth.ExternalOAuthServiceConfig{
+				ServerURL:            serverURL,
+				AllowedRedirectHosts: []string{},
+			}
+
+			redirectDomains := c.String("external-mcp-oauth-redirect-domains")
+			if redirectDomains == "" {
+				// Default: allow server's own hostname
+				externalMcpOAuthConfig.AllowedRedirectHosts = []string{serverURL.Hostname()}
+			} else {
+				for _, host := range strings.Split(redirectDomains, ",") {
+					host = strings.TrimSpace(host)
+					if host == "" {
+						continue // skip empty entries from trailing commas
+					}
+					externalMcpOAuthConfig.AllowedRedirectHosts = append(
+						externalMcpOAuthConfig.AllowedRedirectHosts,
+						host,
+					)
+				}
+				if len(externalMcpOAuthConfig.AllowedRedirectHosts) == 0 {
+					return errors.New("no valid hosts in external-mcp-oauth-redirect-domains")
+				}
 			}
 
 			siteURL, err := url.Parse(c.String("site-url"))
@@ -628,13 +659,15 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
 			resources.Attach(mux, resources.NewService(logger, db, sessionManager))
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
+			externalOAuthService := oauth.NewExternalOAuthService(logger, db, cache.NewRedisCacheAdapter(redisClient), authAuth, encryptionClient, externalMcpOAuthConfig)
+			oauth.AttachExternalOAuth(mux, externalOAuthService)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, billingTracker, telemSvc, productFeatures, serverURL))
 			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, telemSvc, productFeatures, ragService, temporalClient), mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{Temporal: temporalClient}, &background.TemporalChatTitleGenerator{Temporal: temporalClient}, posthogClient, telemSvc, assetStorage))
+			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{Temporal: temporalClient}, &background.TemporalChatTitleGenerator{Temporal: temporalClient}, &background.TemporalDelayedChatResolutionAnalyzer{Temporal: temporalClient}, posthogClient, telemSvc, assetStorage))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 					GramServerURL:      c.String("server-url"),

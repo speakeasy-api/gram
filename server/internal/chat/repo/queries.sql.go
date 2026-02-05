@@ -47,6 +47,15 @@ type CreateChatMessageParams struct {
 	Source           pgtype.Text
 }
 
+const deleteChatResolutions = `-- name: DeleteChatResolutions :exec
+DELETE FROM chat_resolutions WHERE chat_id = $1
+`
+
+func (q *Queries) DeleteChatResolutions(ctx context.Context, chatID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteChatResolutions, chatID)
+	return err
+}
+
 const getChat = `-- name: GetChat :one
 SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
 `
@@ -86,23 +95,140 @@ func (q *Queries) GetFirstUserChatMessage(ctx context.Context, chatID uuid.UUID)
 	return content, err
 }
 
+const getToolCallMessages = `-- name: GetToolCallMessages :many
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, created_at FROM chat_messages
+WHERE chat_id = $1
+  AND role = 'tool'
+ORDER BY created_at ASC
+`
+
+func (q *Queries) GetToolCallMessages(ctx context.Context, chatID uuid.UUID) ([]ChatMessage, error) {
+	rows, err := q.db.Query(ctx, getToolCallMessages, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatMessage
+	for rows.Next() {
+		var i ChatMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertChatResolution = `-- name: InsertChatResolution :one
+INSERT INTO chat_resolutions (
+    project_id,
+    chat_id,
+    user_goal,
+    resolution,
+    resolution_notes,
+    score
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+) RETURNING id
+`
+
+type InsertChatResolutionParams struct {
+	ProjectID       uuid.UUID
+	ChatID          uuid.UUID
+	UserGoal        string
+	Resolution      string
+	ResolutionNotes string
+	Score           int32
+}
+
+func (q *Queries) InsertChatResolution(ctx context.Context, arg InsertChatResolutionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertChatResolution,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.UserGoal,
+		arg.Resolution,
+		arg.ResolutionNotes,
+		arg.Score,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertChatResolutionMessage = `-- name: InsertChatResolutionMessage :exec
+INSERT INTO chat_resolution_messages (
+    chat_resolution_id,
+    message_id
+) VALUES (
+    $1,
+    $2
+)
+`
+
+type InsertChatResolutionMessageParams struct {
+	ChatResolutionID uuid.UUID
+	MessageID        uuid.UUID
+}
+
+func (q *Queries) InsertChatResolutionMessage(ctx context.Context, arg InsertChatResolutionMessageParams) error {
+	_, err := q.db.Exec(ctx, insertChatResolutionMessage, arg.ChatResolutionID, arg.MessageID)
+	return err
+}
+
 const listAllChats = `-- name: ListAllChats :many
-SELECT 
+SELECT
     c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
             0
         )
-    )::integer as num_messages 
+    )::integer as num_messages
     , (
         COALESCE(
             (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
             0
         )
     )::integer as total_tokens
-FROM chats c 
+FROM chats c
 WHERE c.project_id = $1
+ORDER BY c.updated_at DESC
 `
 
 type ListAllChatsRow struct {
@@ -212,23 +338,59 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 	return items, nil
 }
 
+const listChatResolutions = `-- name: ListChatResolutions :many
+SELECT id, project_id, chat_id, user_goal, resolution, resolution_notes, score, created_at FROM chat_resolutions
+WHERE chat_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]ChatResolution, error) {
+	rows, err := q.db.Query(ctx, listChatResolutions, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatResolution
+	for rows.Next() {
+		var i ChatResolution
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ChatID,
+			&i.UserGoal,
+			&i.Resolution,
+			&i.ResolutionNotes,
+			&i.Score,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatsForExternalUser = `-- name: ListChatsForExternalUser :many
-SELECT 
+SELECT
     c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
             0
         )
-    )::integer as num_messages 
+    )::integer as num_messages
     , (
         COALESCE(
             (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
             0
         )
     )::integer as total_tokens
-FROM chats c 
+FROM chats c
 WHERE c.project_id = $1 AND c.external_user_id = $2
+ORDER BY c.updated_at DESC
 `
 
 type ListChatsForExternalUserParams struct {
@@ -285,22 +447,23 @@ func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsFor
 }
 
 const listChatsForUser = `-- name: ListChatsForUser :many
-SELECT 
+SELECT
     c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
             0
         )
-    )::integer as num_messages 
+    )::integer as num_messages
     , (
         COALESCE(
             (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
             0
         )
     )::integer as total_tokens
-FROM chats c 
+FROM chats c
 WHERE c.project_id = $1 AND c.user_id = $2
+ORDER BY c.updated_at DESC
 `
 
 type ListChatsForUserParams struct {
@@ -367,6 +530,24 @@ type UpdateChatTitleParams struct {
 
 func (q *Queries) UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error {
 	_, err := q.db.Exec(ctx, updateChatTitle, arg.Title, arg.ID)
+	return err
+}
+
+const updateToolCallOutcome = `-- name: UpdateToolCallOutcome :exec
+UPDATE chat_messages
+SET tool_outcome = $1,
+    tool_outcome_notes = $2
+WHERE id = $3
+`
+
+type UpdateToolCallOutcomeParams struct {
+	ToolOutcome      pgtype.Text
+	ToolOutcomeNotes pgtype.Text
+	ID               uuid.UUID
+}
+
+func (q *Queries) UpdateToolCallOutcome(ctx context.Context, arg UpdateToolCallOutcomeParams) error {
+	_, err := q.db.Exec(ctx, updateToolCallOutcome, arg.ToolOutcome, arg.ToolOutcomeNotes, arg.ID)
 	return err
 }
 

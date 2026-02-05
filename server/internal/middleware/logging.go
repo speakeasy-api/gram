@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -55,16 +56,41 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 
 			start := time.Now()
 
-			logger.InfoContext(ctx, "request", attr.SlogHTTPRequestMethod(r.Method), attr.SlogURLOriginal(r.URL.String()))
+			referrer := r.Referer()
+			referrerHost := ""
+			if u, err := url.Parse(referrer); err == nil {
+				referrerHost = u.Host
+			}
+
 			requestContext := &contextvalues.RequestContext{
-				ReqURL: r.URL.String(),
-				Host:   r.Host,
-				Method: r.Method,
+				ReqURL:      r.URL.String(),
+				Host:        r.Host,
+				Method:      r.Method,
+				Referer:     conv.TruncateString(referrer, 400),
+				RefererHost: conv.TruncateString(referrerHost, 400),
+				UserAgent:   conv.TruncateString(r.UserAgent(), 400),
 			}
 			ctx = contextvalues.SetRequestContext(ctx, requestContext)
 
 			rw := newResponseWriter(w)
 			r = r.WithContext(ctx)
+			attrs := []any{
+				attr.SlogHTTPRequestMethod(r.Method),
+				attr.SlogURLOriginal(r.URL.String()),
+				attr.SlogHostName(r.Host),
+			}
+			if requestContext.Referer != "" {
+				attrs = append(attrs, attr.SlogHTTPRequestHeaderReferer(requestContext.Referer))
+			}
+			if requestContext.UserAgent != "" {
+				attrs = append(attrs, attr.SlogHTTPRequestHeaderUserAgent(requestContext.UserAgent))
+			}
+			if requestContext.RefererHost != "" {
+				attrs = append(attrs, attr.SlogHTTPReferrerHost(requestContext.RefererHost))
+			}
+
+			logger.InfoContext(ctx, "request", attrs...)
+
 			next.ServeHTTP(rw, r)
 
 			code := rw.statusCode
@@ -72,13 +98,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				code = 499
 			}
 
-			attrs := []any{
-				attr.SlogHTTPRequestMethod(r.Method),
-				attr.SlogURLOriginal(r.URL.String()),
-				attr.SlogHTTPResponseStatusCode(code),
-				attr.SlogHTTPServerRequestDuration(time.Since(start).Seconds()),
-				attr.SlogHostName(r.Host),
-			}
+			attrs = append(attrs, attr.SlogHTTPResponseStatusCode(code), attr.SlogHTTPServerRequestDuration(time.Since(start).Seconds()))
 
 			if code != rw.statusCode {
 				attrs = append(attrs, attr.SlogHTTPResponseOriginalStatusCode(rw.statusCode))

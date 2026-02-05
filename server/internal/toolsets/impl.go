@@ -46,8 +46,8 @@ import (
 )
 
 var allowedEnabledServers = map[string]int{
-	"free": 5,
-	"pro":  20,
+	"free": 1,
+	"pro":  5,
 }
 
 type Service struct {

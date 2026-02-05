@@ -1,0 +1,117 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  --font-diatype:
+    "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+
+  --color-base-white: hsl(0 0% 100%);
+  --color-base-black: hsl(0 0% 0%);
+  --color-neutral-100: hsl(0, 0%, 98%);
+  --color-neutral-700: hsl(0, 0%, 33%);
+  --color-feedback-green-100: hsl(102, 35%, 93%);
+  --color-feedback-green-300: hsl(99, 30%, 73%);
+  --color-feedback-green-700: hsl(105, 24%, 27%);
+
+  --text-default: var(--color-neutral-700);
+  --text-default-success: var(--color-feedback-green-700);
+  --bg-surface-primary-default: var(--color-base-white);
+  --bg-success-softest: var(--color-feedback-green-100);
+  --border-success-softest: var(--color-feedback-green-300);
+  --fill-neutral-highlight: var(--color-base-black);
+
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  font-family: var(--font-diatype);
+  font-weight: 300;
+  color: var(--text-default);
+  background: var(--bg-surface-primary-default);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 100vh;
+  padding: 2rem;
+  position: relative;
+}
+
+.success-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+}
+
+.gram-logo {
+  width: 80px;
+  height: auto;
+  margin-bottom: 0.5rem;
+}
+
+.success-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+}
+
+.success-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--bg-success-softest);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--border-success-softest);
+}
+
+.success-icon svg {
+  width: 48px;
+  height: 48px;
+}
+
+.success-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.success-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 300;
+  color: var(--fill-neutral-highlight);
+}
+
+.success-description {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-default);
+  line-height: 1.6;
+}
+
+.speakeasy-footer {
+  position: absolute;
+  bottom: 4rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.speakeasy-logo {
+  color: var(--fill-neutral-highlight);
+}
