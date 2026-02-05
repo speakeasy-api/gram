@@ -241,5 +241,9 @@ func (a *Activities) AnalyzeSegment(ctx context.Context, input resolution_activi
 }
 
 func (a *Activities) GetUserFeedbackForChat(ctx context.Context, input resolution_activities.GetUserFeedbackForChatArgs) (*resolution_activities.GetUserFeedbackForChatResult, error) {
-	return a.getUserFeedbackForChat.Do(ctx, input)
+	result, err := a.getUserFeedbackForChat.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("get user feedback for chat: %w", err)
+	}
+	return result, nil
 }
