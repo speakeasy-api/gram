@@ -729,15 +729,16 @@ func marshalTypesMcpMetadataToMcpMetadataResponseBody(v *types.McpMetadata) *Mcp
 		return nil
 	}
 	res := &McpMetadataResponseBody{
-		ID:                       v.ID,
-		ToolsetID:                v.ToolsetID,
-		LogoAssetID:              v.LogoAssetID,
-		ExternalDocumentationURL: v.ExternalDocumentationURL,
-		Instructions:             v.Instructions,
-		DefaultEnvironmentID:     v.DefaultEnvironmentID,
-		InstallationOverrideURL:  v.InstallationOverrideURL,
-		CreatedAt:                v.CreatedAt,
-		UpdatedAt:                v.UpdatedAt,
+		ID:                        v.ID,
+		ToolsetID:                 v.ToolsetID,
+		LogoAssetID:               v.LogoAssetID,
+		ExternalDocumentationURL:  v.ExternalDocumentationURL,
+		ExternalDocumentationText: v.ExternalDocumentationText,
+		Instructions:              v.Instructions,
+		DefaultEnvironmentID:      v.DefaultEnvironmentID,
+		InstallationOverrideURL:   v.InstallationOverrideURL,
+		CreatedAt:                 v.CreatedAt,
+		UpdatedAt:                 v.UpdatedAt,
 	}
 	if v.EnvironmentConfigs != nil {
 		res.EnvironmentConfigs = make([]*McpEnvironmentConfigResponseBody, len(v.EnvironmentConfigs))

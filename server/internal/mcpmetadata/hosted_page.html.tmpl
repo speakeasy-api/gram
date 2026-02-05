@@ -959,7 +959,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                View Docs
+                {{- if .DocsText }}{{ .DocsText }}{{- else }}View Docs{{- end }}
               </a>
               {{- end }}
               <button class="external-docs header-action" id="share-button">

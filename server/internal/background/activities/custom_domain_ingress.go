@@ -36,12 +36,28 @@ func NewCustomDomainIngress(logger *slog.Logger, db *pgxpool.Pool, k8sClient *k8
 }
 
 type CustomDomainIngressArgs struct {
-	OrgID  string
-	Domain string
-	Action CustomDomainIngressAction
+	OrgID          string
+	Domain         string
+	Action         CustomDomainIngressAction
+	IngressName    string // Used for delete action to avoid DB lookup
+	CertSecretName string // Used for delete action to avoid DB lookup
 }
 
 func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressArgs) error {
+	// Delete action uses pre-supplied ingress details to avoid reading a soft-deleted record.
+	if args.Action == CustomDomainIngressActionDelete {
+		if args.IngressName == "" || args.CertSecretName == "" {
+			return oops.E(oops.CodeUnexpected, errors.New("ingress name or cert secret name is empty"), "ingress name or cert secret name is empty").Log(ctx, c.logger)
+		}
+
+		err := c.k8s.DeleteIngress(ctx, args.IngressName, args.CertSecretName)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain ingress").Log(ctx, c.logger)
+		}
+
+		return nil
+	}
+
 	customDomain, err := c.domains.GetCustomDomainByDomain(ctx, args.Domain)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to get custom domain").Log(ctx, c.logger)
@@ -87,19 +103,6 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 		}
 
 		return nil
-	}
-
-	if args.Action == CustomDomainIngressActionDelete {
-		ingressName := conv.FromPGText[string](customDomain.IngressName)
-		secretName := conv.FromPGText[string](customDomain.CertSecretName)
-		if ingressName == nil || secretName == nil {
-			return oops.E(oops.CodeUnexpected, errors.New("ingress name or secret name is nil"), "ingress name or secret name is nil").Log(ctx, c.logger)
-		}
-
-		err := c.k8s.DeleteIngress(ctx, *ingressName, *secretName)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain ingress").Log(ctx, c.logger)
-		}
 	}
 
 	return nil
