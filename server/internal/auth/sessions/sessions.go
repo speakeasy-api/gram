@@ -136,6 +136,10 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	return ctx, nil
 }
 
+func (s *Manager) AuthenticateWithCookie(ctx context.Context) (context.Context, error) {
+	return s.Authenticate(ctx, "", false)
+}
+
 func (s *Manager) Billing() billing.Repository {
 	return s.billingRepo
 }
