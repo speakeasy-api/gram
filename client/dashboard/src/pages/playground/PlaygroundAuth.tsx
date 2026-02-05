@@ -18,7 +18,7 @@ import {
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   environmentHasValue,
@@ -185,6 +185,16 @@ function ExternalMcpOAuthConnection({
   const project = useProject();
   const queryClient = useQueryClient();
   const apiUrl = getServerURL();
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clean up poll timer on unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+      }
+    };
+  }, []);
 
   // Query OAuth status using the shared hook
   const {
@@ -272,9 +282,12 @@ function ExternalMcpOAuthConnection({
     }
 
     // Poll for popup close and refresh status
-    const pollTimer = setInterval(() => {
+    pollTimerRef.current = setInterval(() => {
       if (popup.closed) {
-        clearInterval(pollTimer);
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
         // Small delay to ensure server has processed the callback
         setTimeout(() => {
           refetchStatus();
