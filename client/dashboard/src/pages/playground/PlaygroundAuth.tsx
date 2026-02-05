@@ -251,7 +251,8 @@ function ExternalMcpOAuthConnection({
     if (!mcpOAuthConfig.oauthAuthorizationEndpoint) return;
 
     if (window.location.origin !== apiUrl) {
-      throw new Error("redirect origin mismatch");
+      toast.error("OAuth configuration error: redirect origin mismatch");
+      return;
     }
 
     const params = new URLSearchParams({
