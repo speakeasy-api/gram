@@ -684,9 +684,7 @@ func (s *Service) processInviteToken(ctx context.Context, token, userID, userEma
 	// Update session to point at the invited org.
 	session.ActiveOrganizationID = invite.OrganizationID
 	if err := s.sessions.UpdateSession(ctx, *session); err != nil {
-		s.logger.ErrorContext(ctx, "failed to update session after invite accept",
-			attr.SlogError(err),
-		)
+		return "", fmt.Errorf("updating session after invite accept: %w", err)
 	}
 
 	s.logger.InfoContext(ctx, "team invite accepted via oauth callback",
