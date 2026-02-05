@@ -610,6 +610,35 @@ func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserPara
 	return items, nil
 }
 
+const listUserFeedbackMessageIDs = `-- name: ListUserFeedbackMessageIDs :many
+SELECT user_feedback_message_id
+FROM chat_resolutions
+WHERE chat_id = $1
+  AND user_feedback IS NOT NULL
+  AND user_feedback_message_id IS NOT NULL
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListUserFeedbackMessageIDs(ctx context.Context, chatID uuid.UUID) ([]uuid.NullUUID, error) {
+	rows, err := q.db.Query(ctx, listUserFeedbackMessageIDs, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.NullUUID
+	for rows.Next() {
+		var user_feedback_message_id uuid.NullUUID
+		if err := rows.Scan(&user_feedback_message_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_feedback_message_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateChatTitle = `-- name: UpdateChatTitle :exec
 UPDATE chats SET title = $1, updated_at = NOW() WHERE id = $2
 `

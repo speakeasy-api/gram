@@ -27,33 +27,47 @@ type GetUserFeedbackMessageIDArgs struct {
 }
 
 type GetUserFeedbackMessageIDResult struct {
-	MessageID uuid.UUID
+	MessageIDs  []uuid.UUID
 	HasFeedback bool
 }
 
 func (g *GetUserFeedbackMessageID) Do(ctx context.Context, args GetUserFeedbackMessageIDArgs) (*GetUserFeedbackMessageIDResult, error) {
-	messageID, err := g.repo.GetUserFeedbackMessageID(ctx, args.ChatID)
+	nullableMessageIDs, err := g.repo.ListUserFeedbackMessageIDs(ctx, args.ChatID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// No user feedback exists
 			return &GetUserFeedbackMessageIDResult{
-				MessageID:   uuid.UUID{},
+				MessageIDs:  []uuid.UUID{},
 				HasFeedback: false,
 			}, nil
 		}
-		return nil, fmt.Errorf("failed to get user feedback message ID: %w", err)
+		return nil, fmt.Errorf("failed to list user feedback message IDs: %w", err)
 	}
 
-	if !messageID.Valid {
-		// User feedback exists but has no message ID (shouldn't happen but handle it)
+	if len(nullableMessageIDs) == 0 {
 		return &GetUserFeedbackMessageIDResult{
-			MessageID:   uuid.UUID{},
+			MessageIDs:  []uuid.UUID{},
+			HasFeedback: false,
+		}, nil
+	}
+
+	// Convert NullUUID to UUID, filtering out invalid entries
+	messageIDs := make([]uuid.UUID, 0, len(nullableMessageIDs))
+	for _, nullableID := range nullableMessageIDs {
+		if nullableID.Valid {
+			messageIDs = append(messageIDs, nullableID.UUID)
+		}
+	}
+
+	if len(messageIDs) == 0 {
+		return &GetUserFeedbackMessageIDResult{
+			MessageIDs:  []uuid.UUID{},
 			HasFeedback: false,
 		}, nil
 	}
 
 	return &GetUserFeedbackMessageIDResult{
-		MessageID:   messageID.UUID,
+		MessageIDs:  messageIDs,
 		HasFeedback: true,
 	}, nil
 }

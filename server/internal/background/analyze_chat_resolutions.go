@@ -75,17 +75,16 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 	}
 
 	// Phase 1: Segment the chat into logical breakpoints
-	// Start from user feedback message if it exists
+	// Pass feedback message IDs as hints for segmentation
 	var segmentOutput activities.SegmentChatOutput
 	err = workflow.ExecuteActivity(
 		ctx,
 		a.SegmentChat,
 		activities.SegmentChatArgs{
-			ChatID:             params.ChatID,
-			ProjectID:          params.ProjectID,
-			OrgID:              params.OrgID,
-			StartFromMessageID: feedbackResult.MessageID,
-			HasStartMessage:    feedbackResult.HasFeedback,
+			ChatID:                 params.ChatID,
+			ProjectID:              params.ProjectID,
+			OrgID:                  params.OrgID,
+			MessageIDsWithFeedback: feedbackResult.MessageIDs,
 		},
 	).Get(ctx, &segmentOutput)
 	if err != nil {
@@ -93,12 +92,18 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 	}
 
 	// Delete existing resolutions, preserving user feedback
+	// If there are multiple feedback messages, use the last one
+	var lastFeedbackMessageID uuid.UUID
+	if len(feedbackResult.MessageIDs) > 0 {
+		lastFeedbackMessageID = feedbackResult.MessageIDs[len(feedbackResult.MessageIDs)-1]
+	}
+
 	err = workflow.ExecuteActivity(
 		ctx,
 		a.DeleteChatResolutionsAfterFeedback,
 		activities.DeleteChatResolutionsAfterFeedbackArgs{
 			ChatID:                params.ChatID,
-			UserFeedbackMessageID: feedbackResult.MessageID,
+			UserFeedbackMessageID: lastFeedbackMessageID,
 			HasUserFeedback:       feedbackResult.HasFeedback,
 		},
 	).Get(ctx, nil)

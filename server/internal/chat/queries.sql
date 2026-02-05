@@ -211,6 +211,14 @@ WHERE chat_id = @chat_id
 ORDER BY created_at DESC
 LIMIT 1;
 
+-- name: ListUserFeedbackMessageIDs :many
+SELECT user_feedback_message_id
+FROM chat_resolutions
+WHERE chat_id = @chat_id
+  AND user_feedback IS NOT NULL
+  AND user_feedback_message_id IS NOT NULL
+ORDER BY created_at ASC;
+
 -- name: DeleteChatResolutionsAfterMessage :exec
 DELETE FROM chat_resolutions
 WHERE id IN (

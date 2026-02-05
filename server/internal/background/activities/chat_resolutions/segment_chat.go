@@ -33,11 +33,10 @@ func NewSegmentChat(logger *slog.Logger, db *pgxpool.Pool, chatClient *openroute
 }
 
 type SegmentChatArgs struct {
-	ChatID                uuid.UUID
-	ProjectID             uuid.UUID
-	OrgID                 string
-	StartFromMessageID    uuid.UUID // If set, only segment messages after this ID
-	HasStartMessage       bool      // Whether StartFromMessageID is valid
+	ChatID                 uuid.UUID
+	ProjectID              uuid.UUID
+	OrgID                  string
+	MessageIDsWithFeedback []uuid.UUID // If set, only segment messages after these IDs. These are the messages that have explicit user feedback and thus represent segments
 }
 
 type ChatSegment struct {
@@ -65,43 +64,33 @@ func (s *SegmentChat) Do(ctx context.Context, args SegmentChatArgs) (*SegmentCha
 		}, nil
 	}
 
-	// If we have a start message ID, find the index and only segment from there
-	startIndex := 0
-	if args.HasStartMessage {
+	// If very few messages, return single segment
+	if len(messages) <= 3 {
+		return &SegmentChatOutput{
+			Segments: []ChatSegment{{StartIndex: 0, EndIndex: len(messages) - 1}},
+		}, nil
+	}
+
+	// Map feedback message IDs to their indices
+	var feedbackIndices []int
+	if len(args.MessageIDsWithFeedback) > 0 {
+		messageIndexMap := make(map[uuid.UUID]int)
 		for i, msg := range messages {
-			if msg.ID == args.StartFromMessageID {
-				startIndex = i + 1 // Start from the message AFTER the feedback message
-				break
+			messageIndexMap[msg.ID] = i
+		}
+
+		for _, feedbackMessageID := range args.MessageIDsWithFeedback {
+			if idx, exists := messageIndexMap[feedbackMessageID]; exists {
+				feedbackIndices = append(feedbackIndices, idx)
 			}
 		}
-		// If we're starting from after the last message, return empty segments
-		if startIndex >= len(messages) {
-			return &SegmentChatOutput{
-				Segments: []ChatSegment{},
-			}, nil
-		}
-	}
-
-	// Get the subset of messages to segment
-	messagesToSegment := messages[startIndex:]
-
-	// If no messages or very few messages, return single segment
-	if len(messagesToSegment) == 0 {
-		return &SegmentChatOutput{
-			Segments: []ChatSegment{},
-		}, nil
-	}
-	if len(messagesToSegment) <= 3 {
-		return &SegmentChatOutput{
-			Segments: []ChatSegment{{StartIndex: startIndex, EndIndex: len(messages) - 1}},
-		}, nil
 	}
 
 	// Format messages for segmentation
-	conversationText := s.formatMessages(messagesToSegment)
+	conversationText := s.formatMessages(messages)
 
-	// Call cheap model to identify breakpoints
-	segments, err := s.segmentWithLLM(ctx, args.OrgID, args.ProjectID, conversationText, len(messagesToSegment))
+	// Call cheap model to identify breakpoints, passing feedback indices as hints
+	segments, err := s.segmentWithLLM(ctx, args.OrgID, args.ProjectID, conversationText, len(messages), feedbackIndices)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to segment chat with LLM, using single segment",
 			attr.SlogError(err),
@@ -109,14 +98,8 @@ func (s *SegmentChat) Do(ctx context.Context, args SegmentChatArgs) (*SegmentCha
 		)
 		// Fallback to single segment
 		return &SegmentChatOutput{
-			Segments: []ChatSegment{{StartIndex: startIndex, EndIndex: len(messages) - 1}},
+			Segments: []ChatSegment{{StartIndex: 0, EndIndex: len(messages) - 1}},
 		}, nil
-	}
-
-	// Adjust segment indices to account for the offset
-	for i := range segments {
-		segments[i].StartIndex += startIndex
-		segments[i].EndIndex += startIndex
 	}
 
 	// Validate segments
@@ -131,7 +114,7 @@ func (s *SegmentChat) formatMessages(messages []repo.ChatMessage) string {
 	return formatChatMessages(messages)
 }
 
-func (s *SegmentChat) segmentWithLLM(ctx context.Context, orgID string, projectID uuid.UUID, conversationText string, numMessages int) ([]ChatSegment, error) {
+func (s *SegmentChat) segmentWithLLM(ctx context.Context, orgID string, projectID uuid.UUID, conversationText string, numMessages int, feedbackIndices []int) ([]ChatSegment, error) {
 	systemPrompt := `Analyze this conversation and identify natural breakpoints where distinct user goals/tasks begin and end.
 
 Each segment should represent one cohesive user goal or query. Look for:
@@ -145,6 +128,12 @@ Pay special attention to time gaps shown in the messages. Large time gaps (e.g. 
 Prefer more segments over fewer. A single segment might be just two messages: one question and one answer.
 
 Return segments as an array of start/end message indices.`
+
+	// Build feedback context if we have feedback message indices
+	feedbackContext := ""
+	if len(feedbackIndices) > 0 {
+		feedbackContext = fmt.Sprintf("\n\nIMPORTANT: The user has provided explicit feedback at message indices %v. These messages very likely represent the end of distinct segments, so you should strongly consider creating segment boundaries at or near these indices.", feedbackIndices)
+	}
 
 	userPrompt := fmt.Sprintf(`%s
 
@@ -160,7 +149,7 @@ Identify the segments in this conversation. Return a JSON array:
   }
 ]
 
-There are %d messages total (indices 0-%d).`, conversationText, numMessages, numMessages-1)
+There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, numMessages-1, feedbackContext)
 
 	analysisCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
