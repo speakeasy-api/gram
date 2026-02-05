@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -45,6 +47,52 @@ const (
 )
 
 const gramWaitlistTypeForm = "https://speakeasyapi.typeform.com/to/h6WJdwWr"
+
+// InviteTokenPayload is the structure encoded in invite tokens.
+// It contains both the random token for security and the workspace slug
+// needed to add the invitee to Speakeasy when they accept.
+type InviteTokenPayload struct {
+	Token         string `json:"t"` // Random token for uniqueness/security
+	WorkspaceSlug string `json:"w"` // Workspace slug for Speakeasy API
+}
+
+// GenerateInviteToken creates a secure token that encodes the workspace slug.
+// The token is base64-encoded JSON containing both a random component and
+// the workspace slug, so invite acceptance doesn't depend on cache state.
+func GenerateInviteToken(workspaceSlug string) (string, error) {
+	randomBytes := make([]byte, 24)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("generating random token: %w", err)
+	}
+
+	payload := InviteTokenPayload{
+		Token:         hex.EncodeToString(randomBytes),
+		WorkspaceSlug: workspaceSlug,
+	}
+
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshalling token payload: %w", err)
+	}
+
+	return base64.URLEncoding.EncodeToString(jsonBytes), nil
+}
+
+// DecodeInviteToken extracts the workspace slug from an invite token.
+// Returns empty string if the token is in the old format (plain hex).
+func DecodeInviteToken(token string) string {
+	jsonBytes, err := base64.URLEncoding.DecodeString(token)
+	if err != nil {
+		return "" // Old format token or invalid
+	}
+
+	var payload InviteTokenPayload
+	if err := json.Unmarshal(jsonBytes, &payload); err != nil {
+		return "" // Old format token or invalid
+	}
+
+	return payload.WorkspaceSlug
+}
 
 type AuthConfigurations struct {
 	SpeakeasyServerAddress string
@@ -107,7 +155,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
 		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
-			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
+			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, url.QueryEscape(err.Error())),
 			SessionToken:  "",
 			SessionCookie: "",
 		}, nil
@@ -660,30 +708,26 @@ func (s *Service) processInviteToken(ctx context.Context, token, userID, userEma
 		return "", fmt.Errorf("getting organization slug: %w", err)
 	}
 
-	// Get the inviter's workspace slugs to add the new user to. Speakeasy
-	// doesn't have an API to add a user directly to an org—only to a workspace.
-	// Adding a user to any workspace within the org grants them org access.
-	var workspaceSlug string
-	if invite.InvitedByUserID.Valid {
-		// Try to get the inviter's cached user info to find their workspace slugs.
-		inviterInfo, _, err := s.sessions.GetUserInfo(ctx, invite.InvitedByUserID.String, "")
-		if err == nil {
-			for _, org := range inviterInfo.Organizations {
-				if org.ID == invite.OrganizationID && len(org.UserWorkspaceSlugs) > 0 {
-					workspaceSlug = org.UserWorkspaceSlugs[0]
-					break
+	// Decode the workspace slug from the invite token. The token contains
+	// both a random component and the workspace slug, so we don't need to
+	// rely on the inviter's cached user info.
+	workspaceSlug := DecodeInviteToken(invite.Token)
+	if workspaceSlug == "" {
+		// Fall back to trying the inviter's cached user info for old-format tokens.
+		if invite.InvitedByUserID.Valid {
+			inviterInfo, _, err := s.sessions.GetUserInfo(ctx, invite.InvitedByUserID.String, "")
+			if err == nil {
+				for _, org := range inviterInfo.Organizations {
+					if org.ID == invite.OrganizationID && len(org.UserWorkspaceSlugs) > 0 {
+						workspaceSlug = org.UserWorkspaceSlugs[0]
+						break
+					}
 				}
 			}
-		} else {
-			s.logger.WarnContext(ctx, "failed to get inviter's user info for workspace lookup",
-				attr.SlogError(err),
-				attr.SlogUserID(invite.InvitedByUserID.String),
-			)
 		}
-	}
-
-	if workspaceSlug == "" {
-		return "", fmt.Errorf("could not determine workspace slug for invite acceptance")
+		if workspaceSlug == "" {
+			return "", fmt.Errorf("could not determine workspace slug for invite acceptance")
+		}
 	}
 
 	// Add user to one of the org's workspaces via Speakeasy API.

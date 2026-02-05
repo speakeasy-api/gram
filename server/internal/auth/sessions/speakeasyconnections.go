@@ -318,7 +318,9 @@ func (s *Manager) AddUserToOrg(ctx context.Context, workspaceSlugs []string, ema
 		return nil
 	}
 
-	client := retryablehttp.NewClient().StandardClient()
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient.Timeout = 30 * time.Second
+	client := retryClient.StandardClient()
 
 	for _, slug := range workspaceSlugs {
 		reqURL := fmt.Sprintf("%s/v1/workspace/%s/team/email/%s", s.speakeasyServerAddress, url.PathEscape(slug), url.PathEscape(email))
@@ -353,7 +355,9 @@ func (s *Manager) RemoveUserFromOrg(ctx context.Context, workspaceSlugs []string
 		return nil
 	}
 
-	client := retryablehttp.NewClient().StandardClient()
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient.Timeout = 30 * time.Second
+	client := retryClient.StandardClient()
 
 	for _, slug := range workspaceSlugs {
 		reqURL := fmt.Sprintf("%s/v1/workspace/%s/team/%s", s.speakeasyServerAddress, url.PathEscape(slug), url.PathEscape(userID))

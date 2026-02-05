@@ -2,8 +2,6 @@ package teams
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -156,15 +154,6 @@ func maskEmail(email string) string {
 	return string(localPart[0]) + "***@" + string(domain[0]) + "***." + tld
 }
 
-// generateToken creates a secure random token for invites
-func generateToken() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("generating random token: %w", err)
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
 // hasOrgAccess checks if the current user has access to the organization
 func (s *Service) hasOrgAccess(ctx context.Context, organizationID string) (*sessions.CachedUserInfo, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -258,7 +247,22 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		}
 	}
 
-	token, err := generateToken()
+	// Get the inviter's workspace slug for this org to include in the token.
+	// This allows invite acceptance to work without depending on cache state.
+	var workspaceSlug string
+	for _, org := range userInfo.Organizations {
+		if org.ID == payload.OrganizationID && len(org.UserWorkspaceSlugs) > 0 {
+			workspaceSlug = org.UserWorkspaceSlugs[0]
+			break
+		}
+	}
+	if workspaceSlug == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "no workspace access to invite members").Log(ctx, s.logger,
+			attr.SlogOrganizationID(payload.OrganizationID),
+		)
+	}
+
+	token, err := auth.GenerateInviteToken(workspaceSlug)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate invite token").Log(ctx, s.logger)
 	}
@@ -407,8 +411,22 @@ func (s *Service) ResendInvite(ctx context.Context, payload *gen.ResendInvitePay
 		return nil, oops.E(oops.CodeInvalid, nil, "please wait at least 5 minutes before resending an invite")
 	}
 
+	// Get the resender's workspace slug for this org to include in the new token.
+	var workspaceSlug string
+	for _, org := range userInfo.Organizations {
+		if org.ID == invite.OrganizationID && len(org.UserWorkspaceSlugs) > 0 {
+			workspaceSlug = org.UserWorkspaceSlugs[0]
+			break
+		}
+	}
+	if workspaceSlug == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "no workspace access to resend invite").Log(ctx, s.logger,
+			attr.SlogOrganizationID(invite.OrganizationID),
+		)
+	}
+
 	// Rotate the token on resend so the old link is invalidated.
-	newToken, err := generateToken()
+	newToken, err := auth.GenerateInviteToken(workspaceSlug)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate new invite token").Log(ctx, s.logger)
 	}
@@ -505,17 +523,24 @@ func (s *Service) RemoveMember(ctx context.Context, payload *gen.RemoveMemberPay
 		return oops.C(oops.CodeNotFound)
 	}
 
-	// Look up the authoritative org slug from the database rather than relying
-	// on the caller's cached workspace slugs which may be empty or stale.
-	orgSlug, err := s.repo.GetOrganizationSlug(ctx, payload.OrganizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to resolve organization slug").Log(ctx, s.logger,
+	// Get the caller's workspace slugs for this org to remove the user from.
+	// Speakeasy doesn't have an API to remove a user from an org directly—only
+	// from workspaces. Removing from any workspace removes org access.
+	var workspaceSlugs []string
+	for _, org := range userInfo.Organizations {
+		if org.ID == payload.OrganizationID {
+			workspaceSlugs = org.UserWorkspaceSlugs
+			break
+		}
+	}
+	if len(workspaceSlugs) == 0 {
+		return oops.E(oops.CodeInvalid, nil, "no workspace access to remove member from").Log(ctx, s.logger,
 			attr.SlogOrganizationID(payload.OrganizationID),
 		)
 	}
 
 	// Remove user from org workspaces via Speakeasy API.
-	if err := s.sessions.RemoveUserFromOrg(ctx, []string{orgSlug}, payload.UserID); err != nil {
+	if err := s.sessions.RemoveUserFromOrg(ctx, workspaceSlugs, payload.UserID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to remove member from org via speakeasy").Log(ctx, s.logger)
 	}
 
