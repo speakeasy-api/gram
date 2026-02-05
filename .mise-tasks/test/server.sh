@@ -5,8 +5,6 @@
 
 set -e
 
-runner="${GO_TEST_RUNNER:-go}"
-
 # Generate unique ID for this test run (allows parallel execution)
 # Use uuidgen which is available on both Linux and macOS
 TEST_RUN_ID="${TEST_RUN_ID:-$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -d'-' -f1)}"
@@ -213,11 +211,7 @@ if [ "$has_package" = false ]; then
   args=("./..." "${args[@]}")
 fi
 
-if [ "$runner" = "gotestsum" ]; then
-  gotestsum --junitfile junit-report.xml --format-hide-empty-pkg -- "${args[@]}"
-else
-  go test "${args[@]}"
-fi
+gotestsum --junitfile junit-report.xml --format-hide-empty-pkg -- "${args[@]}"
 test_exit_code=$?
 
 exit "$test_exit_code"

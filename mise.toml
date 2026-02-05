@@ -105,7 +105,6 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 ## Local development settings ##
 ################################
-GO_TEST_RUNNER = "gotestsum"
 GRAM_LOG_PRETTY = 1
 ## DO NOT SET THIS VARIABLE WHEN DEPLOYING TO PRODUCTION.
 GRAM_UNSAFE_LOCAL_ENV_PATH = "{{config_root}}/.local.env.json"
