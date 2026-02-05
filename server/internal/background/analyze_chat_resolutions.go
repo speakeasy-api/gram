@@ -62,12 +62,13 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 	var a *Activities
 
 	// Phase 0: Get user feedback message ID if it exists
-	var feedbackResult activities.GetUserFeedbackMessageIDResult
+	var feedbackResult activities.GetUserFeedbackForChatResult
 	err := workflow.ExecuteActivity(
 		ctx,
-		a.GetUserFeedbackMessageID,
-		activities.GetUserFeedbackMessageIDArgs{
-			ChatID: params.ChatID,
+		a.GetUserFeedbackForChat,
+		activities.GetUserFeedbackForChatArgs{
+			ProjectID: params.ProjectID,
+			ChatID:    params.ChatID,
 		},
 	).Get(ctx, &feedbackResult)
 	if err != nil {
@@ -81,30 +82,21 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 		ctx,
 		a.SegmentChat,
 		activities.SegmentChatArgs{
-			ChatID:                 params.ChatID,
-			ProjectID:              params.ProjectID,
-			OrgID:                  params.OrgID,
-			MessageIDsWithFeedback: feedbackResult.MessageIDs,
+			ChatID:       params.ChatID,
+			ProjectID:    params.ProjectID,
+			OrgID:        params.OrgID,
+			UserFeedback: feedbackResult.UserFeedback,
 		},
 	).Get(ctx, &segmentOutput)
 	if err != nil {
 		return fmt.Errorf("failed to segment chat: %w", err)
 	}
 
-	// Delete existing resolutions, preserving user feedback
-	// If there are multiple feedback messages, use the last one
-	var lastFeedbackMessageID uuid.UUID
-	if len(feedbackResult.MessageIDs) > 0 {
-		lastFeedbackMessageID = feedbackResult.MessageIDs[len(feedbackResult.MessageIDs)-1]
-	}
-
 	err = workflow.ExecuteActivity(
 		ctx,
-		a.DeleteChatResolutionsAfterFeedback,
-		activities.DeleteChatResolutionsAfterFeedbackArgs{
-			ChatID:                params.ChatID,
-			UserFeedbackMessageID: lastFeedbackMessageID,
-			HasUserFeedback:       feedbackResult.HasFeedback,
+		a.DeleteChatResolutions,
+		activities.DeleteChatResolutionsArgs{
+			ChatID: params.ChatID,
 		},
 	).Get(ctx, nil)
 	if err != nil {
@@ -117,11 +109,12 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 			ctx,
 			a.AnalyzeSegment,
 			activities.AnalyzeSegmentArgs{
-				ChatID:     params.ChatID,
-				ProjectID:  params.ProjectID,
-				OrgID:      params.OrgID,
-				StartIndex: segment.StartIndex,
-				EndIndex:   segment.EndIndex,
+				ChatID:       params.ChatID,
+				ProjectID:    params.ProjectID,
+				OrgID:        params.OrgID,
+				StartIndex:   segment.StartIndex,
+				EndIndex:     segment.EndIndex,
+				UserFeedback: feedbackResult.UserFeedback,
 			},
 		).Get(ctx, nil)
 		if err != nil {

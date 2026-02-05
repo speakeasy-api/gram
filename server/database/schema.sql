@@ -822,7 +822,7 @@ CREATE TABLE IF NOT EXISTS chat_resolutions (
 
   CONSTRAINT chat_resolutions_pkey PRIMARY KEY (id),
   CONSTRAINT chat_resolutions_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
-  CONSTRAINT chat_resolutions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT chat_resolutions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS chat_user_feedback (

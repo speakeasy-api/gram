@@ -172,18 +172,14 @@ INSERT INTO chat_resolutions (
     user_goal,
     resolution,
     resolution_notes,
-    score,
-    user_feedback,
-    user_feedback_message_id
+    score
 ) VALUES (
     @project_id,
     @chat_id,
     @user_goal,
     @resolution,
     @resolution_notes,
-    @score,
-    @user_feedback,
-    @user_feedback_message_id
+    @score
 ) RETURNING id;
 
 -- name: InsertChatResolutionMessage :exec
@@ -203,21 +199,11 @@ SELECT * FROM chat_resolutions
 WHERE chat_id = @chat_id
 ORDER BY created_at DESC;
 
--- name: GetUserFeedbackMessageID :one
-SELECT user_feedback_message_id
-FROM chat_resolutions
+-- name: ListUserFeedbackForChat :many
+SELECT *
+FROM chat_user_feedback
 WHERE chat_id = @chat_id
-  AND user_feedback IS NOT NULL
-ORDER BY created_at DESC
-LIMIT 1;
-
--- name: ListUserFeedbackMessageIDs :many
-SELECT user_feedback_message_id
-FROM chat_resolutions
-WHERE chat_id = @chat_id
-  AND user_feedback IS NOT NULL
-  AND user_feedback_message_id IS NOT NULL
-ORDER BY created_at ASC;
+ORDER BY created_at DESC;
 
 -- name: DeleteChatResolutionsAfterMessage :exec
 DELETE FROM chat_resolutions
@@ -233,22 +219,23 @@ WHERE id IN (
   );
 
 -- name: InsertUserFeedback :one
-INSERT INTO chat_resolutions (
+INSERT INTO chat_user_feedback (
     project_id,
     chat_id,
-    user_goal,
-    resolution,
-    resolution_notes,
-    score,
-    user_feedback,
-    user_feedback_message_id
+    message_id,
+    user_resolution,
+    user_resolution_notes,
+    chat_resolution_id
 ) VALUES (
     @project_id,
     @chat_id,
-    '', -- Will be filled by agent analysis
-    @user_feedback,
-    '', -- Will be filled by agent analysis
-    0,  -- Will be filled by agent analysis
-    @user_feedback,
-    @user_feedback_message_id
+    @message_id,
+    @user_resolution,
+    @user_resolution_notes,
+    @chat_resolution_id
 ) RETURNING id;
+
+-- name: AddUserFeedbackChatResolution :exec
+UPDATE chat_user_feedback
+SET chat_resolution_id = @chat_resolution_id
+WHERE id = @id;

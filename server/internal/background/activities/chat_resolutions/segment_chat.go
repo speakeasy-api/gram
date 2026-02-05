@@ -33,10 +33,10 @@ func NewSegmentChat(logger *slog.Logger, db *pgxpool.Pool, chatClient *openroute
 }
 
 type SegmentChatArgs struct {
-	ChatID                 uuid.UUID
-	ProjectID              uuid.UUID
-	OrgID                  string
-	MessageIDsWithFeedback []uuid.UUID // If set, only segment messages after these IDs. These are the messages that have explicit user feedback and thus represent segments
+	ChatID       uuid.UUID
+	ProjectID    uuid.UUID
+	OrgID        string
+	UserFeedback []UserFeedback // Will be used to inform segmentation
 }
 
 type ChatSegment struct {
@@ -71,19 +71,9 @@ func (s *SegmentChat) Do(ctx context.Context, args SegmentChatArgs) (*SegmentCha
 		}, nil
 	}
 
-	// Map feedback message IDs to their indices
-	var feedbackIndices []int
-	if len(args.MessageIDsWithFeedback) > 0 {
-		messageIndexMap := make(map[uuid.UUID]int)
-		for i, msg := range messages {
-			messageIndexMap[msg.ID] = i
-		}
-
-		for _, feedbackMessageID := range args.MessageIDsWithFeedback {
-			if idx, exists := messageIndexMap[feedbackMessageID]; exists {
-				feedbackIndices = append(feedbackIndices, idx)
-			}
-		}
+	feedbackIndices := make([]int, 0, len(args.UserFeedback))
+	for _, fb := range args.UserFeedback {
+		feedbackIndices = append(feedbackIndices, fb.MessageIndex)
 	}
 
 	// Format messages for segmentation

@@ -703,10 +703,12 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 
 	// Insert user feedback
 	_, err = s.repo.InsertUserFeedback(ctx, repo.InsertUserFeedbackParams{
-		ProjectID:             *authCtx.ProjectID,
-		ChatID:                chatID,
-		UserFeedback:          payload.Feedback,
-		UserFeedbackMessageID: lastMessageID,
+		ProjectID:           *authCtx.ProjectID,
+		ChatID:              chatID,
+		MessageID:           lastMessageID.UUID,
+		UserResolution:      payload.Feedback,
+		UserResolutionNotes: conv.ToPGTextEmpty(""),
+		ChatResolutionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to store feedback").Log(ctx, s.logger)

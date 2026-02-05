@@ -58,7 +58,7 @@ type Activities struct {
 	segmentChat                   *resolution_activities.SegmentChat
 	deleteChatResolutions         *resolution_activities.DeleteChatResolutions
 	analyzeSegment                *resolution_activities.AnalyzeSegment
-	getUserFeedbackMessageID      *resolution_activities.GetUserFeedbackMessageID
+	getUserFeedbackForChat        *resolution_activities.GetUserFeedbackForChat
 }
 
 func NewActivities(
@@ -114,7 +114,7 @@ func NewActivities(
 		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, openrouterChatClient),
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
 		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, openrouterChatClient),
-		getUserFeedbackMessageID:      resolution_activities.NewGetUserFeedbackMessageID(db),
+		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 	}
 }
 
@@ -240,17 +240,6 @@ func (a *Activities) AnalyzeSegment(ctx context.Context, input resolution_activi
 	return nil
 }
 
-func (a *Activities) GetUserFeedbackMessageID(ctx context.Context, input resolution_activities.GetUserFeedbackMessageIDArgs) (*resolution_activities.GetUserFeedbackMessageIDResult, error) {
-	result, err := a.getUserFeedbackMessageID.Do(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("get user feedback message ID: %w", err)
-	}
-	return result, nil
-}
-
-func (a *Activities) DeleteChatResolutionsAfterFeedback(ctx context.Context, input resolution_activities.DeleteChatResolutionsAfterFeedbackArgs) error {
-	if err := a.deleteChatResolutions.DoAfterFeedback(ctx, input); err != nil {
-		return fmt.Errorf("delete chat resolutions after feedback: %w", err)
-	}
-	return nil
+func (a *Activities) GetUserFeedbackForChat(ctx context.Context, input resolution_activities.GetUserFeedbackForChatArgs) (*resolution_activities.GetUserFeedbackForChatResult, error) {
+	return a.getUserFeedbackForChat.Do(ctx, input)
 }
