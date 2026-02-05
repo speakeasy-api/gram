@@ -1,4 +1,4 @@
-h1:Bh4BVdIojoumk0K0BPf/0qkTwJ3cc67qv8/fqyg5Wk0=
+h1:K/voiF2x2uki3sgCWvl6glPs9K4wMV9OI3BsBHm5pdU=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -12,3 +12,6 @@ h1:Bh4BVdIojoumk0K0BPf/0qkTwJ3cc67qv8/fqyg5Wk0=
 20260129234507_drop-telemetry-http-cols.sql h1:vdBfBpdPHUKcWvATcM441teFxoGlWB32SeeFmwn+5SM=
 20260130010006_add-chat-id-and-timestamp-cols.sql h1:P3uwGaRXUvFH5J/m0J8vPWneq6aB6kghgkychpSg67U=
 20260205122109_add-materialized-columns-for-filtering.sql h1:9DZnhPod7OBuyqJNcGz8On3+Ot2RnYAuMB+jdIq3SYc=
+20260205142720_drop-telemetry-materialized-col-indices.sql h1:4enC5fre0wRAsHRRw7yjfKm5pC9cQHmwGagfwQ4f/Os=
+20260205142748_drop-telemetry-materialized-cols.sql h1:FNrH/9hOG1kDmqAbsUBsfuCGojU/zYn8xpRnNyHrYKo=
+20260205142913_add-telemetry-materialized-cols.sql h1:bwVf+w7sqps7SBZe7f81LBLmxFQkGJ1K/aCrRZV6UKU=
