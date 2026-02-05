@@ -105,6 +105,7 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 ## Local development settings ##
 ################################
+GO_TEST_RUNNER = "gotestsum"
 GRAM_LOG_PRETTY = 1
 ## DO NOT SET THIS VARIABLE WHEN DEPLOYING TO PRODUCTION.
 GRAM_UNSAFE_LOCAL_ENV_PATH = "{{config_root}}/.local.env.json"
@@ -154,5 +155,6 @@ PULSE_REGISTRY_KEY = "unset"
 
 ##############
 ## Elements ##
+##############
 ## Used for local development only
 VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:6006"

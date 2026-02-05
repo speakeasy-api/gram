@@ -3,12 +3,9 @@
 #MISE dir="{{ config_root }}/server"
 #MISE description="Test the server with optional coverage generation"
 
-#USAGE flag "--runner <runner>" help="The test runner to use" { choices "go" "gotestsum" }
-
 set -e
 
-
-runner="${usage_runner:-go}"
+runner="${GO_TEST_RUNNER:-go}"
 
 # Generate unique ID for this test run (allows parallel execution)
 # Use uuidgen which is available on both Linux and macOS
@@ -32,32 +29,6 @@ cleanup() {
     exit "$exit_code"
 }
 trap cleanup EXIT INT TERM
-
-# Parse arguments
-cover=false
-open_html=false
-args=()
-
-for arg in "$@"; do
-  case $arg in
-    --cover)
-      cover=true
-      shift ;;
-    --html)
-      open_html=true
-      shift ;;
-    *)
-      args+=("$arg") ;;
-  esac
-done
-
-if [ ${#args[@]} -eq 0 ]; then
-  args=("-tags=inv.debug" "./...")
-fi
-
-if [ "$cover" = true ]; then
-  args=("-coverprofile=cover.out" "-covermode=atomic" "${args[@]}")
-fi
 
 echo "Starting test infrastructure (run id: ${TEST_RUN_ID})..."
 
@@ -227,29 +198,26 @@ echo ""
 
 # Run tests
 # PostgreSQL advisory locks serialize template cloning, allowing parallel execution
+
+# Default to ./... if no package pattern is provided
+args=("$@")
+has_package=false
+for arg in "${args[@]}"; do
+  if [[ "$arg" == ./* ]] || [[ "$arg" == *... ]] || [[ "$arg" =~ ^[a-zA-Z] && ! "$arg" =~ ^- ]]; then
+    has_package=true
+    break
+  fi
+done
+
+if [ "$has_package" = false ]; then
+  args=("./..." "${args[@]}")
+fi
+
 if [ "$runner" = "gotestsum" ]; then
   gotestsum --junitfile junit-report.xml --format-hide-empty-pkg -- "${args[@]}"
 else
   go test "${args[@]}"
 fi
 test_exit_code=$?
-
-if [ "$cover" = true ] && [ -f "cover.out" ]; then
-  grep -v "/gen/" cover.out > coverage_filtered.out
-  mv coverage_filtered.out cover.out
-
-  go tool cover -html=cover.out -o cover.html
-  echo "Coverage report generated: cover.html"
-
-  if [ "$open_html" = true ]; then
-    if command -v open >/dev/null 2>&1; then
-      open cover.html
-    elif command -v xdg-open >/dev/null 2>&1; then
-      xdg-open cover.html
-    else
-      echo "Could not open browser automatically. Please open cover.html manually."
-    fi
-  fi
-fi
 
 exit "$test_exit_code"
