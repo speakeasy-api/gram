@@ -1,3 +1,4 @@
+import { FullPageError } from "@/components/full-page-error";
 import { getServerURL } from "@/lib/utils";
 import { LINKED_FROM_PARAM } from "@/pages/home/Home";
 import {
@@ -10,7 +11,12 @@ import { useSessionInfo } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Navigate, useNavigate, useSearchParams } from "react-router";
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -166,27 +172,30 @@ export const useOrganization = (): OrganizationEntry & {
   });
 };
 
-// Error fallback component
-const ErrorFallback = ({ error }: { error: Error }) => {
-  return (
-    <div role="alert">
-      <p>Something went wrong:</p>
-      <pre>{error.message}</pre>
-    </div>
-  );
-};
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
+    <ErrorBoundary FallbackComponent={FullPageError}>
       <AuthHandler>{children}</AuthHandler>
     </ErrorBoundary>
   );
 };
 
+const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite"];
+
+function isUnauthenticatedPath(pathname: string): boolean {
+  return UNAUTHENTICATED_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
+function isSafeRedirect(path: string): boolean {
+  return path.startsWith("/") && !path.startsWith("//") && !path.includes(":");
+}
+
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { session, error, status } = useSessionData();
 
   const isLoading = status === "pending";
@@ -217,9 +226,18 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
+  // Don't redirect away from unauthenticated root-level routes
+  if (isUnauthenticatedPath(location.pathname)) {
+    return (
+      <SessionContext.Provider value={session}>
+        {children}
+      </SessionContext.Provider>
+    );
+  }
+
   // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
-  if (redirectParam) {
+  if (redirectParam && isSafeRedirect(redirectParam)) {
     if (!import.meta.env.DEV) {
       console.log("(0.2) redirecting to redirectParam", redirectParam);
       return <Navigate to={redirectParam} replace />;

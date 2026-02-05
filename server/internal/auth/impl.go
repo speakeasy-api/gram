@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,8 +12,10 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
@@ -31,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	teamsRepo "github.com/speakeasy-api/gram/server/internal/teams/repo"
 )
 
 type authErr string
@@ -43,11 +48,65 @@ const (
 
 const gramWaitlistTypeForm = "https://speakeasyapi.typeform.com/to/h6WJdwWr"
 
+// InviteTokenPayload is the structure encoded in invite tokens.
+// It contains both the random token for security and the workspace slug
+// needed to add the invitee to Speakeasy when they accept.
+type InviteTokenPayload struct {
+	Token         string `json:"t"` // Random token for uniqueness/security
+	WorkspaceSlug string `json:"w"` // Workspace slug for Speakeasy API
+}
+
+// GenerateInviteToken creates a secure token that encodes the workspace slug.
+// The token is base64-encoded JSON containing both a random component and
+// the workspace slug, so invite acceptance doesn't depend on cache state.
+// Uses RawURLEncoding (no padding) to avoid issues with = characters in URLs.
+func GenerateInviteToken(workspaceSlug string) (string, error) {
+	randomBytes := make([]byte, 24)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("generating random token: %w", err)
+	}
+
+	payload := InviteTokenPayload{
+		Token:         hex.EncodeToString(randomBytes),
+		WorkspaceSlug: workspaceSlug,
+	}
+
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshalling token payload: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(jsonBytes), nil
+}
+
+// DecodeInviteToken extracts the workspace slug from an invite token.
+// Returns empty string if the token is in the old format (plain hex).
+// Tries RawURLEncoding first (new format), then URLEncoding (with padding).
+func DecodeInviteToken(token string) string {
+	// Try without padding first (new format)
+	jsonBytes, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		// Try with padding (in case token was generated with old code)
+		jsonBytes, err = base64.URLEncoding.DecodeString(token)
+		if err != nil {
+			return "" // Old hex format token or invalid
+		}
+	}
+
+	var payload InviteTokenPayload
+	if err := json.Unmarshal(jsonBytes, &payload); err != nil {
+		return "" // Old format token or invalid
+	}
+
+	return payload.WorkspaceSlug
+}
+
 type AuthConfigurations struct {
 	SpeakeasyServerAddress string
 	GramServerURL          string
 	SignInRedirectURL      string
 	Environment            string
+	DevMode                bool
 }
 
 // Service for gram dashboard authentication endpoints
@@ -60,6 +119,7 @@ type Service struct {
 	projectsRepo *projectsRepo.Queries
 	envRepo      *envRepo.Queries
 	orgRepo      *orgRepo.Queries
+	teamsRepo    *teamsRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -76,6 +136,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		projectsRepo: projectsRepo.New(db),
 		envRepo:      envRepo.New(db),
 		orgRepo:      orgRepo.New(db),
+		teamsRepo:    teamsRepo.New(db),
 	}
 }
 
@@ -101,7 +162,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
 		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
-			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
+			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, url.QueryEscape(err.Error())),
 			SessionToken:  "",
 			SessionCookie: "",
 		}, nil
@@ -110,6 +171,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if payload.Code == "" {
 		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
 	}
+
+	state := decodeStateParam(payload)
 
 	idToken, err := s.sessions.ExchangeTokenFromSpeakeasy(ctx, payload.Code)
 	if err != nil {
@@ -121,9 +184,53 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, err)
 	}
 
-	if !userInfo.Admin && !userInfo.UserWhitelisted {
+	// Pre-validate the invite token against the database so that a garbage,
+	// expired, or cancelled token cannot be used to bypass the whitelist
+	// check below. Only a pending, non-expired invite grants whitelist bypass.
+	hasValidInvite := false
+	if state != nil && state.InviteToken != "" {
+		s.logger.InfoContext(ctx, "processing invite token from OAuth state")
+		if invite, lookupErr := s.teamsRepo.GetTeamInviteByToken(ctx, state.InviteToken); lookupErr == nil {
+			if invite.Status == "pending" && (!invite.ExpiresAt.Valid || time.Now().Before(invite.ExpiresAt.Time)) {
+				hasValidInvite = true
+				s.logger.InfoContext(ctx, "invite token validated successfully",
+					attr.SlogTeamInviteID(invite.ID.String()),
+				)
+			} else {
+				s.logger.WarnContext(ctx, "invite token is not eligible for whitelist bypass",
+					attr.SlogTeamInviteStatus(invite.Status),
+					attr.SlogTeamInviteID(invite.ID.String()),
+				)
+			}
+		} else {
+			s.logger.WarnContext(ctx, "invite token in state did not resolve to a valid invite",
+				attr.SlogError(lookupErr),
+			)
+		}
+	}
+
+	if !userInfo.Admin && !userInfo.UserWhitelisted && !hasValidInvite {
 		return &gen.CallbackResult{
 			Location:      gramWaitlistTypeForm,
+			SessionToken:  "",
+			SessionCookie: "",
+		}, nil
+	}
+
+	// Gram enforces single-org membership. If the user already belongs to an
+	// organization and is trying to accept an invite, redirect back to the
+	// invite page with an error instead of proceeding.
+	if hasValidInvite && len(userInfo.Organizations) > 0 {
+		s.logger.WarnContext(ctx, "user already belongs to an organization, rejecting invite",
+			attr.SlogUserID(userInfo.UserID),
+			attr.SlogOrganizationID(userInfo.Organizations[0].ID),
+		)
+		inviteURL := fmt.Sprintf("%s/invite?token=%s&error=already_member",
+			strings.TrimRight(s.cfg.SignInRedirectURL, "/"),
+			url.QueryEscape(state.InviteToken),
+		)
+		return &gen.CallbackResult{
+			Location:      inviteURL,
 			SessionToken:  "",
 			SessionCookie: "",
 		}, nil
@@ -139,50 +246,75 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		if err := s.sessions.StoreSession(ctx, session); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
+	} else {
+		activeOrg := userInfo.Organizations[0]
 
-		return &gen.CallbackResult{
-			Location:      s.callbackRedirectURL(ctx, payload),
-			SessionToken:  session.SessionID,
-			SessionCookie: session.SessionID,
-		}, nil
-	}
-
-	activeOrg := userInfo.Organizations[0]
-
-	// For speakeasy users and admins we default speakeasy-team being the active organization if present
-	// For admins we allow you to override the active organization returned by header if present
-	if strings.HasSuffix(userInfo.Email, "@speakeasy.com") || strings.HasSuffix(userInfo.Email, "@speakeasyapi.dev") || userInfo.Admin {
-		override := "speakeasy-team"
-		if userInfo.Admin {
-			if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
-				override = adminOverride
+		// For speakeasy users and admins we default speakeasy-team being the active organization if present
+		// For admins we allow you to override the active organization returned by header if present
+		if strings.HasSuffix(userInfo.Email, "@speakeasy.com") || strings.HasSuffix(userInfo.Email, "@speakeasyapi.dev") || userInfo.Admin {
+			override := "speakeasy-team"
+			if userInfo.Admin {
+				if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
+					override = adminOverride
+				}
+			}
+			for _, org := range userInfo.Organizations {
+				if org.Slug == override {
+					activeOrg = org
+					break
+				}
 			}
 		}
-		for _, org := range userInfo.Organizations {
-			if org.Slug == override {
-				activeOrg = org
-				break
-			}
+
+		orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+			ID:              activeOrg.ID,
+			Name:            activeOrg.Name,
+			Slug:            activeOrg.Slug,
+			SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
+		})
+		if err != nil {
+			return redirectWithError(authErrInit, err)
+		}
+
+		if orgMetadata.DisabledAt.Valid {
+			return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
+		}
+
+		session.ActiveOrganizationID = activeOrg.ID
+		if err := s.sessions.StoreSession(ctx, session); err != nil {
+			return redirectWithError(authErrInit, err)
 		}
 	}
 
-	orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              activeOrg.ID,
-		Name:            activeOrg.Name,
-		Slug:            activeOrg.Slug,
-		SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
-	})
-	if err != nil {
-		return redirectWithError(authErrInit, err)
-	}
+	// Process invite token after the session is stored. processInviteToken
+	// re-validates the token, adds the user to the org, and updates the
+	// session's active org.
+	if hasValidInvite {
+		if orgSlug, err := s.processInviteToken(ctx, state.InviteToken, userInfo.UserID, userInfo.Email, &session); err != nil {
+			s.logger.ErrorContext(ctx, "failed to process invite token", attr.SlogError(err))
 
-	if orgMetadata.DisabledAt.Valid {
-		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
-	}
-
-	session.ActiveOrganizationID = activeOrg.ID
-	if err := s.sessions.StoreSession(ctx, session); err != nil {
-		return redirectWithError(authErrInit, err)
+			// If the invite was the only reason the user bypassed the waitlist,
+			// revoke their session and redirect to the waitlist instead of
+			// silently granting access.
+			if !userInfo.Admin && !userInfo.UserWhitelisted {
+				if clearErr := s.sessions.ClearSession(ctx, session); clearErr != nil {
+					s.logger.ErrorContext(ctx, "failed to clear session after invite failure", attr.SlogError(clearErr))
+				}
+				return &gen.CallbackResult{
+					Location:      gramWaitlistTypeForm,
+					SessionToken:  "",
+					SessionCookie: "",
+				}, nil
+			}
+			// For whitelisted/admin users, fall through — they have legitimate
+			// access regardless of the invite.
+		} else {
+			return &gen.CallbackResult{
+				Location:      strings.TrimRight(s.cfg.SignInRedirectURL, "/") + "/" + orgSlug,
+				SessionToken:  session.SessionID,
+				SessionCookie: session.SessionID,
+			}, nil
+		}
 	}
 
 	return &gen.CallbackResult{
@@ -489,11 +621,13 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 
 type loginState struct {
 	FinalDestinationURL string `json:"final_destination_url"`
+	InviteToken         string `json:"invite_token,omitempty"`
 }
 
 func encodeStateParam(payload *gen.LoginPayload) string {
 	state := loginState{
 		FinalDestinationURL: conv.PtrValOr(payload.Redirect, ""),
+		InviteToken:         conv.PtrValOr(payload.InviteToken, ""),
 	}
 
 	jsonBytes, err := json.Marshal(state)
@@ -549,6 +683,97 @@ func (s *Service) callbackRedirectURL(
 	}
 
 	return s.cfg.SignInRedirectURL
+}
+
+// processInviteToken validates the invite token, adds the user to the
+// organisation, marks the invite as accepted, and returns the org slug for
+// redirect. The session's active org is updated to the invited org.
+func (s *Service) processInviteToken(ctx context.Context, token, userID, userEmail string, session *sessions.Session) (string, error) {
+	invite, err := s.teamsRepo.GetTeamInviteByToken(ctx, token)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", fmt.Errorf("invite not found or already used")
+		}
+		return "", fmt.Errorf("looking up invite: %w", err)
+	}
+
+	if invite.Status != "pending" {
+		return "", fmt.Errorf("invite is no longer pending")
+	}
+
+	if invite.ExpiresAt.Valid && time.Now().After(invite.ExpiresAt.Time) {
+		return "", fmt.Errorf("invite has expired")
+	}
+
+	if !strings.EqualFold(invite.Email, userEmail) {
+		if !s.cfg.DevMode {
+			return "", fmt.Errorf("invite was sent to a different email address")
+		}
+		s.logger.WarnContext(ctx, "dev mode: skipping invite email match check",
+			attr.SlogTeamInviteID(invite.ID.String()),
+		)
+	}
+
+	// Get the org slug for the redirect URL.
+	orgSlug, err := s.teamsRepo.GetOrganizationSlug(ctx, invite.OrganizationID)
+	if err != nil {
+		return "", fmt.Errorf("getting organization slug: %w", err)
+	}
+
+	// Decode the workspace slug from the invite token. The token contains
+	// both a random component and the workspace slug, so we don't need to
+	// rely on the inviter's cached user info.
+	workspaceSlug := DecodeInviteToken(invite.Token)
+	if workspaceSlug == "" {
+		// Fall back to trying the inviter's cached user info for old-format tokens.
+		if invite.InvitedByUserID.Valid {
+			inviterInfo, _, err := s.sessions.GetUserInfo(ctx, invite.InvitedByUserID.String, "")
+			if err == nil {
+				for _, org := range inviterInfo.Organizations {
+					if org.ID == invite.OrganizationID && len(org.UserWorkspaceSlugs) > 0 {
+						workspaceSlug = org.UserWorkspaceSlugs[0]
+						break
+					}
+				}
+			}
+		}
+		if workspaceSlug == "" {
+			return "", fmt.Errorf("could not determine workspace slug for invite acceptance")
+		}
+	}
+
+	// Add user to one of the org's workspaces via Speakeasy API.
+	if err := s.sessions.AddUserToOrg(ctx, []string{workspaceSlug}, userEmail); err != nil {
+		return "", fmt.Errorf("adding user to org via speakeasy: %w", err)
+	}
+
+	// Mark the invite as accepted.
+	if _, err := s.teamsRepo.AcceptTeamInvite(ctx, invite.ID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", fmt.Errorf("invite is no longer pending (concurrent accept)")
+		}
+		return "", fmt.Errorf("accepting invite: %w", err)
+	}
+
+	if err := s.sessions.InvalidateUserInfoCache(ctx, userID); err != nil {
+		s.logger.ErrorContext(ctx, "failed to invalidate user info cache after invite accept",
+			attr.SlogError(err),
+		)
+	}
+
+	// Update session to point at the invited org.
+	session.ActiveOrganizationID = invite.OrganizationID
+	if err := s.sessions.UpdateSession(ctx, *session); err != nil {
+		return "", fmt.Errorf("updating session after invite accept: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "team invite accepted via oauth callback",
+		attr.SlogOrganizationID(invite.OrganizationID),
+		attr.SlogUserID(userID),
+		attr.SlogTeamInviteID(invite.ID.String()),
+	)
+
+	return orgSlug, nil
 }
 
 // relativeURL converts any URL to a safe relative URL by extracting only the

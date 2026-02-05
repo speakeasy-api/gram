@@ -62,12 +62,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 
+	"github.com/speakeasy-api/gram/server/internal/teams"
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/usage"
@@ -269,6 +271,12 @@ func newStartCommand() *cli.Command {
 			Name:     "posthog-personal-api-key",
 			Usage:    "The posthog personal API key for local feature flag evaluation",
 			EnvVars:  []string{"POSTHOG_PERSONAL_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "loops-api-key",
+			Usage:    "The Loops API key for transactional emails",
+			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -617,6 +625,12 @@ func newStartCommand() *cli.Command {
 			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 			authAuth := auth.New(logger, db, sessionManager)
 
+			teamsDevMode := c.String("environment") == "local"
+			if teamsDevMode {
+				logger.WarnContext(ctx, "SECURITY: DevMode is enabled, invite email verification is disabled")
+			}
+			loopsClient := loops.NewClient(logger, c.String("loops-api-key"))
+
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			agentsapi.Attach(mux, agentsapi.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient, authAuth, temporalClient, c.String("temporal-namespace")))
 			auth.Attach(mux, auth.NewService(logger, db, sessionManager, auth.AuthConfigurations{
@@ -624,8 +638,14 @@ func newStartCommand() *cli.Command {
 				GramServerURL:          c.String("server-url"),
 				SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
 				Environment:            c.String("environment"),
+				DevMode:                teamsDevMode,
 			}))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
+			teams.Attach(mux, teams.NewService(logger, db, sessionManager, loopsClient, teams.Config{
+				SiteURL:              c.String("site-url"),
+				DevMode:              teamsDevMode,
+				InviteExpiryDuration: 7 * 24 * time.Hour,
+			}))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient))
 			toolsets.Attach(mux, toolsetsSvc)

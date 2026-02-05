@@ -156,3 +156,6 @@ PULSE_REGISTRY_KEY = "unset"
 ## Elements ##
 ## Used for local development only
 VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:6006"
+
+# Loops transactional email API key. Set to a real key to enable invite emails locally.
+LOOPS_API_KEY = "unset"

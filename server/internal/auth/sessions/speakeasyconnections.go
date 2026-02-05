@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -161,6 +163,16 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
+	// Debug: log workspace slugs from Speakeasy response
+	for _, org := range validateResp.Organizations {
+		s.logger.InfoContext(ctx, "speakeasy org info from validate",
+			slog.String("org_id", org.ID),
+			slog.String("org_name", org.Name),
+			slog.String("org_slug", org.Slug),
+			slog.Any("user_workspace_slugs", org.UserWorkspaceSlugs),
+		)
+	}
+
 	user, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
 		ID:          validateResp.User.ID,
 		Email:       validateResp.User.Email,
@@ -308,6 +320,80 @@ func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, or
 		UserPylonSignature: nil,
 		Organizations:      organizations,
 	}, nil
+}
+
+// AddUserToOrg grants a user access to all workspaces within an organization
+// by calling the Speakeasy workspace team API for each workspace slug.
+func (s *Manager) AddUserToOrg(ctx context.Context, workspaceSlugs []string, email string) error {
+	if s.unsafeLocal {
+		return nil
+	}
+
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient.Timeout = 30 * time.Second
+	client := retryClient.StandardClient()
+
+	for _, slug := range workspaceSlugs {
+		reqURL := fmt.Sprintf("%s/v1/workspace/%s/team/email/%s", s.speakeasyServerAddress, url.PathEscape(slug), url.PathEscape(email))
+
+		req, err := http.NewRequestWithContext(ctx, "PUT", reqURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create add user request for workspace %s: %w", slug, err)
+		}
+
+		req.Header.Set("x-api-key", s.speakeasySecretKey)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to add user to workspace %s: %w", slug, err)
+		}
+		if err := resp.Body.Close(); err != nil {
+			s.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(err))
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to add user to workspace %s: status %s", slug, resp.Status)
+		}
+	}
+
+	return nil
+}
+
+// RemoveUserFromOrg revokes a user's access to all workspaces within an
+// organization by calling the Speakeasy workspace team API for each workspace slug.
+func (s *Manager) RemoveUserFromOrg(ctx context.Context, workspaceSlugs []string, userID string) error {
+	if s.unsafeLocal {
+		return nil
+	}
+
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient.Timeout = 30 * time.Second
+	client := retryClient.StandardClient()
+
+	for _, slug := range workspaceSlugs {
+		reqURL := fmt.Sprintf("%s/v1/workspace/%s/team/%s", s.speakeasyServerAddress, url.PathEscape(slug), url.PathEscape(userID))
+
+		req, err := http.NewRequestWithContext(ctx, "DELETE", reqURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create remove user request for workspace %s: %w", slug, err)
+		}
+
+		req.Header.Set("x-api-key", s.speakeasySecretKey)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to remove user from workspace %s: %w", slug, err)
+		}
+		if err := resp.Body.Close(); err != nil {
+			s.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(err))
+		}
+
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+			return fmt.Errorf("failed to remove user from workspace %s: status %s", slug, resp.Status)
+		}
+	}
+
+	return nil
 }
 
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {

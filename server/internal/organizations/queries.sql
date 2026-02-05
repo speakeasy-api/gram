@@ -55,8 +55,3 @@ FROM organization_user_relationships
 WHERE organization_id = @organization_id
   AND deleted_at IS NULL;    
 
--- name: DeleteOrganizationUserRelationship :exec
-UPDATE organization_user_relationships
-SET deleted_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND user_id = @user_id;
