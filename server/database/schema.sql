@@ -817,15 +817,12 @@ CREATE TABLE IF NOT EXISTS chat_resolutions (
   resolution TEXT NOT NULL,
   resolution_notes TEXT NOT NULL,
   score INT NOT NULL DEFAULT 0, -- score between 0 and 100
-  user_feedback TEXT CHECK (user_feedback IN ('success', 'failure')), -- NULL means agent-generated
-  user_feedback_message_id uuid, -- ID of last message when user gave feedback (for segmentation)
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT chat_resolutions_pkey PRIMARY KEY (id),
   CONSTRAINT chat_resolutions_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_resolutions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-  CONSTRAINT chat_resolutions_user_feedback_message_id_fkey FOREIGN KEY (user_feedback_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS chat_user_feedback (
