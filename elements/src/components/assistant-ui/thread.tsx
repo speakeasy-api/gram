@@ -125,8 +125,6 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const [feedbackHidden, setFeedbackHidden] = useState(false)
   const chatId = useChatId();
 
-  console.log('chatId', chatId)
-
   const setResolved = () => setIsResolved(true)
   const setUnresolved = () => {
     setIsResolved(false)
