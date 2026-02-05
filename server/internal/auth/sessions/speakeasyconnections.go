@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -160,6 +161,16 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 	var validateResp validateTokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&validateResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Debug: log workspace slugs from Speakeasy response
+	for _, org := range validateResp.Organizations {
+		s.logger.InfoContext(ctx, "speakeasy org info from validate",
+			slog.String("org_id", org.ID),
+			slog.String("org_name", org.Name),
+			slog.String("org_slug", org.Slug),
+			slog.Any("user_workspace_slugs", org.UserWorkspaceSlugs),
+		)
 	}
 
 	user, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
