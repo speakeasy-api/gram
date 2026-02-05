@@ -88,7 +88,7 @@ function PlaygroundInner() {
   });
 
   // If toolsets have loaded and there are none, show full-page empty state
-  if (toolsets !== undefined && toolsets.length === 0) {
+  if (!toolsets?.length) {
     return (
       <Page>
         <Page.Header>
