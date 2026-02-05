@@ -79,6 +79,8 @@ export * from "./getprojectresult.js";
 export * from "./getprompttemplateresult.js";
 export * from "./getsignedasseturlform.js";
 export * from "./getslackconnectionresult.js";
+export * from "./getusermetricssummarypayload.js";
+export * from "./getusermetricssummaryresult.js";
 export * from "./httptooldefinition.js";
 export * from "./inforesponsebody.js";
 export * from "./instancemcpserver.js";
