@@ -45,11 +45,11 @@ export type Metrics = {
   /**
    * Earliest activity timestamp in Unix nanoseconds
    */
-  firstSeenUnixNano: number;
+  firstSeenUnixNano: string;
   /**
    * Latest activity timestamp in Unix nanoseconds
    */
-  lastSeenUnixNano: number;
+  lastSeenUnixNano: string;
   /**
    * List of models used with call counts
    */
@@ -102,8 +102,8 @@ export const Metrics$inboundSchema: z.ZodType<Metrics, z.ZodTypeDef, unknown> =
     distinct_providers: z.number().int(),
     finish_reason_stop: z.number().int(),
     finish_reason_tool_calls: z.number().int(),
-    first_seen_unix_nano: z.number().int(),
-    last_seen_unix_nano: z.number().int(),
+    first_seen_unix_nano: z.string(),
+    last_seen_unix_nano: z.string(),
     models: z.array(ModelUsage$inboundSchema),
     tool_call_failure: z.number().int(),
     tool_call_success: z.number().int(),

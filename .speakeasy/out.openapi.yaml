@@ -14226,13 +14226,11 @@ components:
           description: Requests that resulted in tool calls
           format: int64
         first_seen_unix_nano:
-          type: integer
+          type: string
           description: Earliest activity timestamp in Unix nanoseconds
-          format: int64
         last_seen_unix_nano:
-          type: integer
+          type: string
           description: Latest activity timestamp in Unix nanoseconds
-          format: int64
         models:
           type: array
           items:
