@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildListToolsetsQuery,
-  ListToolsetsQueryData,
-  prefetchListToolsets,
-  queryKeyListToolsets,
-} from "./listToolsets.core.js";
+  buildGetUserMetricsSummaryQuery,
+  GetUserMetricsSummaryQueryData,
+  prefetchGetUserMetricsSummary,
+  queryKeyGetUserMetricsSummary,
+} from "./getUserMetricsSummary.core.js";
 export {
-  buildListToolsetsQuery,
-  type ListToolsetsQueryData,
-  prefetchListToolsets,
-  queryKeyListToolsets,
+  buildGetUserMetricsSummaryQuery,
+  type GetUserMetricsSummaryQueryData,
+  prefetchGetUserMetricsSummary,
+  queryKeyGetUserMetricsSummary,
 };
 
-export type ListToolsetsQueryError =
+export type GetUserMetricsSummaryQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,19 +53,25 @@ export type ListToolsetsQueryError =
   | SDKValidationError;
 
 /**
- * listToolsets toolsets
+ * getUserMetricsSummary telemetry
  *
  * @remarks
- * List all toolsets for a project
+ * Get aggregated metrics summary grouped by user
  */
-export function useListToolsets(
-  request?: operations.ListToolsetsRequest | undefined,
-  security?: operations.ListToolsetsSecurity | undefined,
-  options?: QueryHookOptions<ListToolsetsQueryData, ListToolsetsQueryError>,
-): UseQueryResult<ListToolsetsQueryData, ListToolsetsQueryError> {
+export function useGetUserMetricsSummary(
+  request: operations.GetUserMetricsSummaryRequest,
+  security?: operations.GetUserMetricsSummarySecurity | undefined,
+  options?: QueryHookOptions<
+    GetUserMetricsSummaryQueryData,
+    GetUserMetricsSummaryQueryError
+  >,
+): UseQueryResult<
+  GetUserMetricsSummaryQueryData,
+  GetUserMetricsSummaryQueryError
+> {
   const client = useGramContext();
   return useQuery({
-    ...buildListToolsetsQuery(
+    ...buildGetUserMetricsSummaryQuery(
       client,
       request,
       security,
@@ -76,22 +82,25 @@ export function useListToolsets(
 }
 
 /**
- * listToolsets toolsets
+ * getUserMetricsSummary telemetry
  *
  * @remarks
- * List all toolsets for a project
+ * Get aggregated metrics summary grouped by user
  */
-export function useListToolsetsSuspense(
-  request?: operations.ListToolsetsRequest | undefined,
-  security?: operations.ListToolsetsSecurity | undefined,
+export function useGetUserMetricsSummarySuspense(
+  request: operations.GetUserMetricsSummaryRequest,
+  security?: operations.GetUserMetricsSummarySecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    ListToolsetsQueryData,
-    ListToolsetsQueryError
+    GetUserMetricsSummaryQueryData,
+    GetUserMetricsSummaryQueryError
   >,
-): UseSuspenseQueryResult<ListToolsetsQueryData, ListToolsetsQueryError> {
+): UseSuspenseQueryResult<
+  GetUserMetricsSummaryQueryData,
+  GetUserMetricsSummaryQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildListToolsetsQuery(
+    ...buildGetUserMetricsSummaryQuery(
       client,
       request,
       security,
@@ -101,28 +110,28 @@ export function useListToolsetsSuspense(
   });
 }
 
-export function setListToolsetsData(
+export function setGetUserMetricsSummaryData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      gramSession?: string | undefined;
       gramKey?: string | undefined;
+      gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
-  data: ListToolsetsQueryData,
-): ListToolsetsQueryData | undefined {
-  const key = queryKeyListToolsets(...queryKeyBase);
+  data: GetUserMetricsSummaryQueryData,
+): GetUserMetricsSummaryQueryData | undefined {
+  const key = queryKeyGetUserMetricsSummary(...queryKeyBase);
 
-  return client.setQueryData<ListToolsetsQueryData>(key, data);
+  return client.setQueryData<GetUserMetricsSummaryQueryData>(key, data);
 }
 
-export function invalidateListToolsets(
+export function invalidateGetUserMetricsSummary(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      gramSession?: string | undefined;
       gramKey?: string | undefined;
+      gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]
   >,
@@ -130,16 +139,21 @@ export function invalidateListToolsets(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "toolsets", "list", ...queryKeyBase],
+    queryKey: [
+      "@gram/client",
+      "telemetry",
+      "getUserMetricsSummary",
+      ...queryKeyBase,
+    ],
   });
 }
 
-export function invalidateAllListToolsets(
+export function invalidateAllGetUserMetricsSummary(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "toolsets", "list"],
+    queryKey: ["@gram/client", "telemetry", "getUserMetricsSummary"],
   });
 }

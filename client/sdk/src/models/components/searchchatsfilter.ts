@@ -14,6 +14,10 @@ export type SearchChatsFilter = {
    */
   deploymentId?: string | undefined;
   /**
+   * External user ID filter
+   */
+  externalUserId?: string | undefined;
+  /**
    * Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
    */
   from?: Date | undefined;
@@ -25,14 +29,20 @@ export type SearchChatsFilter = {
    * End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
    */
   to?: Date | undefined;
+  /**
+   * User ID filter
+   */
+  userId?: string | undefined;
 };
 
 /** @internal */
 export type SearchChatsFilter$Outbound = {
   deployment_id?: string | undefined;
+  external_user_id?: string | undefined;
   from?: string | undefined;
   gram_urn?: string | undefined;
   to?: string | undefined;
+  user_id?: string | undefined;
 };
 
 /** @internal */
@@ -42,13 +52,17 @@ export const SearchChatsFilter$outboundSchema: z.ZodType<
   SearchChatsFilter
 > = z.object({
   deploymentId: z.string().optional(),
+  externalUserId: z.string().optional(),
   from: z.date().transform(v => v.toISOString()).optional(),
   gramUrn: z.string().optional(),
   to: z.date().transform(v => v.toISOString()).optional(),
+  userId: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     deploymentId: "deployment_id",
+    externalUserId: "external_user_id",
     gramUrn: "gram_urn",
+    userId: "user_id",
   });
 });
 
