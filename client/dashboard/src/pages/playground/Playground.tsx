@@ -104,8 +104,6 @@ function PlaygroundInner() {
     );
   }
 
-  }
-
   const logsButton = (
     <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
       <ScrollTextIcon className="size-4 mr-2" />
