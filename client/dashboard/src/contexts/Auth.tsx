@@ -182,6 +182,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite"];
 
+function isUnauthenticatedPath(pathname: string): boolean {
+  return UNAUTHENTICATED_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
 function isSafeRedirect(path: string): boolean {
   return path.startsWith("/") && !path.startsWith("//") && !path.includes(":");
 }
@@ -221,7 +227,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   }
 
   // Don't redirect away from unauthenticated root-level routes
-  if (UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))) {
+  if (isUnauthenticatedPath(location.pathname)) {
     return (
       <SessionContext.Provider value={session}>
         {children}
