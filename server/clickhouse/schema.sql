@@ -100,9 +100,9 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     -- Materialized fields (auto-extracted from JSON for fast filtering)
     -- These duplicate the above denormalized fields but are auto-computed from JSON at insert time.
     -- New code should prefer these over the gram_* columns above.
-    project_id UUID MATERIALIZED toUUIDOrNull(toString(attributes.`gram.project.id`)) COMMENT 'Project ID (materialized from attributes.gram.project.id).',
-    deployment_id Nullable(UUID) MATERIALIZED toUUIDOrNull(toString(resource_attributes.`gram.deployment.id`)) COMMENT 'Deployment ID (materialized from resource_attributes.gram.deployment.id).',
-    function_id Nullable(UUID) MATERIALIZED toUUIDOrNull(toString(attributes.`gram.function.id`)) COMMENT 'Function ID (materialized from attributes.gram.function.id).',
+    project_id Nullable(String) MATERIALIZED nullIf(toString(attributes.`gram.project.id`), '') COMMENT 'Project ID (materialized from attributes.gram.project.id).',
+    deployment_id Nullable(String) MATERIALIZED nullIf(toString(resource_attributes.`gram.deployment.id`), '') COMMENT 'Deployment ID (materialized from resource_attributes.gram.deployment.id).',
+    function_id Nullable(String) MATERIALIZED nullIf(toString(attributes.`gram.function.id`), '') COMMENT 'Function ID (materialized from attributes.gram.function.id).',
     urn String MATERIALIZED toString(attributes.`gram.tool.urn`) COMMENT 'Tool URN (materialized from attributes.gram.tool.urn).',
     chat_id Nullable(String) MATERIALIZED nullIf(toString(attributes.`gen_ai.conversation.id`), '') COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id).',
     user_id Nullable(String) MATERIALIZED nullIf(toString(attributes.`user.id`), '') COMMENT 'User ID (materialized from attributes.user.id).',

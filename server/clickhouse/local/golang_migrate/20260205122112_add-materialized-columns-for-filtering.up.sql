@@ -1,6 +1,6 @@
-ALTER TABLE `telemetry_logs` ADD COLUMN `project_id` UUID MATERIALIZED toUUIDOrNull(toString(attributes.`gram.project.id`)) COMMENT 'Project ID (materialized from attributes.gram.project.id).';
-ALTER TABLE `telemetry_logs` ADD COLUMN `deployment_id` Nullable(UUID) MATERIALIZED toUUIDOrNull(toString(resource_attributes.`gram.deployment.id`)) COMMENT 'Deployment ID (materialized from resource_attributes.gram.deployment.id).';
-ALTER TABLE `telemetry_logs` ADD COLUMN `function_id` Nullable(UUID) MATERIALIZED toUUIDOrNull(toString(attributes.`gram.function.id`)) COMMENT 'Function ID (materialized from attributes.gram.function.id).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `project_id` Nullable(String) MATERIALIZED nullIf(toString(attributes.`gram.project.id`), '') COMMENT 'Project ID (materialized from attributes.gram.project.id).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `deployment_id` Nullable(String) MATERIALIZED nullIf(toString(resource_attributes.`gram.deployment.id`), '') COMMENT 'Deployment ID (materialized from resource_attributes.gram.deployment.id).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `function_id` Nullable(String) MATERIALIZED nullIf(toString(attributes.`gram.function.id`), '') COMMENT 'Function ID (materialized from attributes.gram.function.id).';
 ALTER TABLE `telemetry_logs` ADD COLUMN `urn` String MATERIALIZED toString(attributes.`gram.tool.urn`) COMMENT 'Tool URN (materialized from attributes.gram.tool.urn).';
 ALTER TABLE `telemetry_logs` ADD COLUMN `chat_id` Nullable(String) MATERIALIZED nullIf(toString(attributes.`gen_ai.conversation.id`), '') COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id).';
 ALTER TABLE `telemetry_logs` ADD COLUMN `user_id` Nullable(String) MATERIALIZED nullIf(toString(attributes.`user.id`), '') COMMENT 'User ID (materialized from attributes.user.id).';
