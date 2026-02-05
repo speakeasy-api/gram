@@ -101,7 +101,10 @@ export function PlaygroundElements({
   );
 
   const { data: oauthStatus, isLoading: oauthStatusLoading } =
-    useExternalMcpOAuthStatus(toolset?.id, mcpOAuthConfig);
+    useExternalMcpOAuthStatus(toolset?.id, {
+      slug: mcpOAuthConfig?.slug,
+      enabled: !!mcpOAuthConfig,
+    });
 
   // Create getSession function using SDK mutation with session auth
   const getSession = useCallback(async () => {

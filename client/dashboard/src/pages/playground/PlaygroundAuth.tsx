@@ -84,6 +84,8 @@ export function useExternalMcpOAuthStatus(
     enabled?: boolean;
   },
 ) {
+  const { enabled = true } = options || {};
+
   const project = useProject();
   const apiUrl = getServerURL();
 
@@ -125,7 +127,7 @@ export function useExternalMcpOAuthStatus(
 
       return parseResult.data;
     },
-    enabled: options?.enabled && !!toolsetId,
+    enabled: enabled && !!toolsetId,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   });
@@ -189,7 +191,9 @@ function ExternalMcpOAuthConnection({
     data: oauthStatus,
     isLoading: statusLoading,
     refetch: refetchStatus,
-  } = useExternalMcpOAuthStatus(toolset?.id, mcpOAuthConfig);
+  } = useExternalMcpOAuthStatus(toolset?.id, {
+    slug: mcpOAuthConfig.slug,
+  });
 
   // Disconnect mutation
   const disconnectMutation = useMutation({
