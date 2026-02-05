@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   generate-docs:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Generate a token
         id: generate-token
