@@ -115,6 +115,17 @@ type ChatResolutionMessage struct {
 	MessageID        uuid.UUID
 }
 
+type ChatUserFeedback struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	ChatID              uuid.UUID
+	MessageID           uuid.UUID
+	UserResolution      string
+	UserResolutionNotes pgtype.Text
+	ChatResolutionID    uuid.NullUUID
+	CreatedAt           pgtype.Timestamptz
+}
+
 type CustomDomain struct {
 	ID             uuid.UUID
 	OrganizationID string

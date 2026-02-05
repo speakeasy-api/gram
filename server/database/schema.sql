@@ -825,6 +825,26 @@ CREATE TABLE IF NOT EXISTS chat_resolutions (
   CONSTRAINT chat_resolutions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chat_user_feedback (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+  message_id uuid NOT NULL,
+
+  user_resolution TEXT NOT NULL,
+  user_resolution_notes TEXT,
+
+  chat_resolution_id uuid,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_resolution_user_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_resolution_user_feedback_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT chat_resolution_user_feedback_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+  CONSTRAINT chat_resolution_user_feedback_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+  CONSTRAINT chat_resolution_user_feedback_chat_resolution_id_fkey FOREIGN KEY (chat_resolution_id) REFERENCES chat_resolutions(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS chat_resolution_messages (
   chat_resolution_id uuid NOT NULL,
   message_id uuid NOT NULL,
