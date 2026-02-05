@@ -584,7 +584,7 @@ jobs:
 
       - name: Test
         if: ${{ needs.changes.outputs.server == 'true' }}
-        run: mise run test:server
+        run: mise run test:server --runner gotestsum
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404

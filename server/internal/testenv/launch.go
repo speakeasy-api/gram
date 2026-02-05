@@ -3,81 +3,100 @@ package testenv
 import (
 	"context"
 	"fmt"
-	"log"
+	"os"
+	"strings"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/testsuite"
-	"golang.org/x/sync/errgroup"
 )
 
+// Environment provides factory functions for creating test database connections
+// and clients. It reads connection details from environment variables set by
+// `mise test:go`.
 type Environment struct {
 	CloneTestDatabase   PostgresDBCloneFunc
 	NewRedisClient      RedisClientFunc
 	NewClickhouseClient ClickhouseClientFunc
-	NewTemporalClient   func(t *testing.T) (client client.Client, server *testsuite.DevServer)
+	NewTemporalClient   func(t *testing.T) client.Client
 }
 
+// requiredEnvVars lists the environment variables that must be set to run tests.
+var requiredEnvVars = []string{
+	"TEST_RUN_ID",
+	"TEST_POSTGRES_URL",
+	"TEST_REDIS_HOST",
+	"TEST_REDIS_PORT",
+	"TEST_CLICKHOUSE_HOST",
+	"TEST_CLICKHOUSE_NATIVE_PORT",
+	"TEST_TEMPORAL_ADDRESS",
+}
+
+// checkEnvVars verifies all required environment variables are set.
+// Returns an error with a helpful message if any are missing.
+func checkEnvVars() error {
+	var missing []string
+	for _, env := range requiredEnvVars {
+		if os.Getenv(env) == "" {
+			missing = append(missing, env)
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf(`missing required environment variables: %s
+
+tests must be run using the mise task which sets up test infrastructure:
+
+    mise test:server ./...
+
+or for a specific package:
+
+    mise test:server ./internal/projects/...
+
+the mise task starts PostgreSQL, Redis, ClickHouse, and Temporal containers
+with unique names, allowing multiple test runs in parallel`, strings.Join(missing, ", "))
+	}
+
+	return nil
+}
+
+// Launch initializes the test environment by reading connection details from
+// environment variables. These variables are set by `mise test:go` which starts
+// the required infrastructure containers.
+//
+// Returns an Environment with factory functions for creating test connections,
+// and a cleanup function (currently a no-op since containers are managed by mise).
 func Launch(ctx context.Context) (*Environment, func() error, error) {
-	pgcontainer, cloner, err := NewTestPostgres(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("start postgres container: %w", err)
+	if err := checkEnvVars(); err != nil {
+		return nil, nil, err
 	}
 
-	rediscontainer, rcFactory, err := NewTestRedis(ctx)
+	pgCloner, err := newPostgresCloner(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("start redis container: %w", err)
+		return nil, nil, fmt.Errorf("initialize postgres cloner: %w", err)
 	}
 
-	clickhousecontainer, chFactory, err := NewTestClickhouse(ctx)
+	redisFactory, err := newRedisClientFactory()
 	if err != nil {
-		return nil, nil, fmt.Errorf("start clickhouse container: %w", err)
+		return nil, nil, fmt.Errorf("initialize redis factory: %w", err)
+	}
+
+	clickhouseFactory, err := newClickhouseClientFactory()
+	if err != nil {
+		return nil, nil, fmt.Errorf("initialize clickhouse factory: %w", err)
+	}
+
+	temporalFactory, err := newTemporalClientFactory()
+	if err != nil {
+		return nil, nil, fmt.Errorf("initialize temporal factory: %w", err)
 	}
 
 	res := &Environment{
-		CloneTestDatabase:   cloner,
-		NewRedisClient:      rcFactory,
-		NewClickhouseClient: chFactory,
-		NewTemporalClient: func(t *testing.T) (client.Client, *testsuite.DevServer) {
-			t.Helper()
-
-			temporal, err := NewTemporalDevServer(t, ctx)
-			require.NoError(t, err, "start temporal dev server")
-
-			client := temporal.Client()
-			return client, temporal
-		},
+		CloneTestDatabase:   pgCloner,
+		NewRedisClient:      redisFactory,
+		NewClickhouseClient: clickhouseFactory,
+		NewTemporalClient:   temporalFactory,
 	}
 
-	return res, func() error {
-		var eg errgroup.Group
-		eg.Go(func() error {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if err := pgcontainer.Terminate(ctx); err != nil {
-				log.Printf("terminate postgres container: %v", err)
-			}
-			return nil
-		})
-		eg.Go(func() error {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if err := rediscontainer.Terminate(ctx); err != nil {
-				log.Printf("terminate redis container: %v", err)
-			}
-			return nil
-		})
-		eg.Go(func() error {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if err := clickhousecontainer.Terminate(ctx); err != nil {
-				log.Printf("terminate clickhouse container: %v", err)
-			}
-			return nil
-		})
-
-		return eg.Wait()
-	}, nil
+	// Cleanup is a no-op since containers are managed by mise test:go
+	return res, func() error { return nil }, nil
 }
