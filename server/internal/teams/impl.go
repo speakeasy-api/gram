@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -101,7 +102,7 @@ func (s *Service) sendInviteEmail(ctx context.Context, email, token, teammateFir
 		return nil
 	}
 
-	inviteURL := fmt.Sprintf("%s/invite?token=%s", strings.TrimRight(s.cfg.SiteURL, "/"), token)
+	inviteURL := fmt.Sprintf("%s/invite?token=%s", strings.TrimRight(s.cfg.SiteURL, "/"), url.QueryEscape(token))
 
 	if err := s.loops.SendTransactionalEmail(ctx, loops.SendTransactionalEmailInput{
 		TransactionalID: transactionalID,

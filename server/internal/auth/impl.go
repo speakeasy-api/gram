@@ -59,6 +59,7 @@ type InviteTokenPayload struct {
 // GenerateInviteToken creates a secure token that encodes the workspace slug.
 // The token is base64-encoded JSON containing both a random component and
 // the workspace slug, so invite acceptance doesn't depend on cache state.
+// Uses RawURLEncoding (no padding) to avoid issues with = characters in URLs.
 func GenerateInviteToken(workspaceSlug string) (string, error) {
 	randomBytes := make([]byte, 24)
 	if _, err := rand.Read(randomBytes); err != nil {
@@ -75,15 +76,21 @@ func GenerateInviteToken(workspaceSlug string) (string, error) {
 		return "", fmt.Errorf("marshalling token payload: %w", err)
 	}
 
-	return base64.URLEncoding.EncodeToString(jsonBytes), nil
+	return base64.RawURLEncoding.EncodeToString(jsonBytes), nil
 }
 
 // DecodeInviteToken extracts the workspace slug from an invite token.
 // Returns empty string if the token is in the old format (plain hex).
+// Tries RawURLEncoding first (new format), then URLEncoding (with padding).
 func DecodeInviteToken(token string) string {
-	jsonBytes, err := base64.URLEncoding.DecodeString(token)
+	// Try without padding first (new format)
+	jsonBytes, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
-		return "" // Old format token or invalid
+		// Try with padding (in case token was generated with old code)
+		jsonBytes, err = base64.URLEncoding.DecodeString(token)
+		if err != nil {
+			return "" // Old hex format token or invalid
+		}
 	}
 
 	var payload InviteTokenPayload
@@ -182,12 +189,17 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	// check below. Only a pending, non-expired invite grants whitelist bypass.
 	hasValidInvite := false
 	if state != nil && state.InviteToken != "" {
+		s.logger.InfoContext(ctx, "processing invite token from OAuth state")
 		if invite, lookupErr := s.teamsRepo.GetTeamInviteByToken(ctx, state.InviteToken); lookupErr == nil {
 			if invite.Status == "pending" && (!invite.ExpiresAt.Valid || time.Now().Before(invite.ExpiresAt.Time)) {
 				hasValidInvite = true
+				s.logger.InfoContext(ctx, "invite token validated successfully",
+					attr.SlogTeamInviteID(invite.ID.String()),
+				)
 			} else {
 				s.logger.WarnContext(ctx, "invite token is not eligible for whitelist bypass",
 					attr.SlogTeamInviteStatus(invite.Status),
+					attr.SlogTeamInviteID(invite.ID.String()),
 				)
 			}
 		} else {
