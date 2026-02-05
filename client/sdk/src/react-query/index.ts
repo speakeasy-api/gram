@@ -51,6 +51,7 @@ export * from "./getSlackConnection.js";
 export * from "./getSourceEnvironment.js";
 export * from "./getToolsetEnvironment.js";
 export * from "./getUsageTiers.js";
+export * from "./getUserMetricsSummary.js";
 export * from "./globalVariations.js";
 export * from "./instance.js";
 export * from "./integrationsIntegrationsNumberGet.js";

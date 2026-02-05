@@ -4,6 +4,7 @@
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
+import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
@@ -44,6 +45,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.GetMetricsSummaryResult> {
     return unwrapAsync(telemetryGetProjectMetricsSummary(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getUserMetricsSummary telemetry
+   *
+   * @remarks
+   * Get aggregated metrics summary grouped by user
+   */
+  async getUserMetricsSummary(
+    request: operations.GetUserMetricsSummaryRequest,
+    security?: operations.GetUserMetricsSummarySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetUserMetricsSummaryResult> {
+    return unwrapAsync(telemetryGetUserMetricsSummary(
       this,
       request,
       security,

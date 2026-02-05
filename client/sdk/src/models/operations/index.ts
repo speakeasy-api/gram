@@ -52,6 +52,7 @@ export * from "./getsourceenvironment.js";
 export * from "./gettemplate.js";
 export * from "./gettoolset.js";
 export * from "./gettoolsetenvironment.js";
+export * from "./getusermetricssummary.js";
 export * from "./integrationsnumberget.js";
 export * from "./listallowedorigins.js";
 export * from "./listapikeys.js";

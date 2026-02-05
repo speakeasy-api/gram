@@ -24,6 +24,8 @@ type SetMcpMetadataRequestBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// A blob of text for the button on the MCP server page
+	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// The default environment to load variables from
@@ -59,6 +61,8 @@ type SetMcpMetadataResponseBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// A blob of text for the button on the MCP server page
+	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// The default environment to load variables from
@@ -668,6 +672,8 @@ type McpMetadataResponseBody struct {
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
 	ExternalDocumentationURL *string `form:"external_documentation_url,omitempty" json:"external_documentation_url,omitempty" xml:"external_documentation_url,omitempty"`
+	// A blob of text for the button on the MCP server page
+	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// The default environment to load variables from
@@ -752,15 +758,16 @@ func NewGetMcpMetadataResponseBody(res *mcpmetadata.GetMcpMetadataResult) *GetMc
 // of the "setMcpMetadata" endpoint of the "mcpMetadata" service.
 func NewSetMcpMetadataResponseBody(res *types.McpMetadata) *SetMcpMetadataResponseBody {
 	body := &SetMcpMetadataResponseBody{
-		ID:                       res.ID,
-		ToolsetID:                res.ToolsetID,
-		LogoAssetID:              res.LogoAssetID,
-		ExternalDocumentationURL: res.ExternalDocumentationURL,
-		Instructions:             res.Instructions,
-		DefaultEnvironmentID:     res.DefaultEnvironmentID,
-		InstallationOverrideURL:  res.InstallationOverrideURL,
-		CreatedAt:                res.CreatedAt,
-		UpdatedAt:                res.UpdatedAt,
+		ID:                        res.ID,
+		ToolsetID:                 res.ToolsetID,
+		LogoAssetID:               res.LogoAssetID,
+		ExternalDocumentationURL:  res.ExternalDocumentationURL,
+		ExternalDocumentationText: res.ExternalDocumentationText,
+		Instructions:              res.Instructions,
+		DefaultEnvironmentID:      res.DefaultEnvironmentID,
+		InstallationOverrideURL:   res.InstallationOverrideURL,
+		CreatedAt:                 res.CreatedAt,
+		UpdatedAt:                 res.UpdatedAt,
 	}
 	if res.EnvironmentConfigs != nil {
 		body.EnvironmentConfigs = make([]*McpEnvironmentConfigResponseBody, len(res.EnvironmentConfigs))
@@ -1251,12 +1258,13 @@ func NewGetMcpMetadataPayload(toolsetSlug string, apikeyToken *string, sessionTo
 // endpoint payload.
 func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *mcpmetadata.SetMcpMetadataPayload {
 	v := &mcpmetadata.SetMcpMetadataPayload{
-		ToolsetSlug:              types.Slug(*body.ToolsetSlug),
-		LogoAssetID:              body.LogoAssetID,
-		ExternalDocumentationURL: body.ExternalDocumentationURL,
-		Instructions:             body.Instructions,
-		DefaultEnvironmentID:     body.DefaultEnvironmentID,
-		InstallationOverrideURL:  body.InstallationOverrideURL,
+		ToolsetSlug:               types.Slug(*body.ToolsetSlug),
+		LogoAssetID:               body.LogoAssetID,
+		ExternalDocumentationURL:  body.ExternalDocumentationURL,
+		ExternalDocumentationText: body.ExternalDocumentationText,
+		Instructions:              body.Instructions,
+		DefaultEnvironmentID:      body.DefaultEnvironmentID,
+		InstallationOverrideURL:   body.InstallationOverrideURL,
 	}
 	if body.EnvironmentConfigs != nil {
 		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfigInput, len(body.EnvironmentConfigs))

@@ -26,6 +26,8 @@ type Service interface {
 	CaptureEvent(context.Context, *CaptureEventPayload) (res *CaptureEventResult, err error)
 	// Get aggregated metrics summary for an entire project
 	GetProjectMetricsSummary(context.Context, *GetProjectMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error)
+	// Get aggregated metrics summary grouped by user
+	GetUserMetricsSummary(context.Context, *GetUserMetricsSummaryPayload) (res *GetUserMetricsSummaryResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -50,7 +52,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"searchLogs", "searchToolCalls", "searchChats", "captureEvent", "getProjectMetricsSummary"}
+var MethodNames = [6]string{"searchLogs", "searchToolCalls", "searchChats", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -126,8 +128,37 @@ type GetProjectMetricsSummaryPayload struct {
 	To string
 }
 
+// GetUserMetricsSummaryPayload is the payload type of the telemetry service
+// getUserMetricsSummary method.
+type GetUserMetricsSummaryPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// User ID to get metrics for (mutually exclusive with external_user_id)
+	UserID *string
+	// External user ID to get metrics for (mutually exclusive with user_id)
+	ExternalUserID *string
+}
+
+// GetUserMetricsSummaryResult is the result type of the telemetry service
+// getUserMetricsSummary method.
+type GetUserMetricsSummaryResult struct {
+	// Aggregated metrics for the user
+	Metrics *Metrics
+	// Whether telemetry is enabled for the organization
+	Enabled bool
+}
+
 // Aggregated metrics
 type Metrics struct {
+	// Earliest activity timestamp in Unix nanoseconds
+	FirstSeenUnixNano string
+	// Latest activity timestamp in Unix nanoseconds
+	LastSeenUnixNano string
 	// Sum of input tokens used
 	TotalInputTokens int64
 	// Sum of output tokens used
@@ -182,6 +213,10 @@ type SearchChatsFilter struct {
 	DeploymentID *string
 	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
+	// User ID filter
+	UserID *string
+	// External user ID filter
+	ExternalUserID *string
 }
 
 // SearchChatsPayload is the payload type of the telemetry service searchChats
@@ -229,6 +264,10 @@ type SearchLogsFilter struct {
 	GramUrns []string
 	// Chat ID filter
 	GramChatID *string
+	// User ID filter
+	UserID *string
+	// External user ID filter
+	ExternalUserID *string
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')

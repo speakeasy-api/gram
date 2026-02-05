@@ -68,7 +68,7 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
 		"resources list-resources",
 		"slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-connection)",
-		"telemetry (search-logs|search-tool-calls|search-chats|capture-event|get-project-metrics-summary)",
+		"telemetry (search-logs|search-tool-calls|search-chats|capture-event|get-project-metrics-summary|get-user-metrics-summary)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server)",
@@ -600,6 +600,12 @@ func ParseEndpoint(
 		telemetryGetProjectMetricsSummarySessionTokenFlag     = telemetryGetProjectMetricsSummaryFlags.String("session-token", "", "")
 		telemetryGetProjectMetricsSummaryProjectSlugInputFlag = telemetryGetProjectMetricsSummaryFlags.String("project-slug-input", "", "")
 
+		telemetryGetUserMetricsSummaryFlags                = flag.NewFlagSet("get-user-metrics-summary", flag.ExitOnError)
+		telemetryGetUserMetricsSummaryBodyFlag             = telemetryGetUserMetricsSummaryFlags.String("body", "REQUIRED", "")
+		telemetryGetUserMetricsSummaryApikeyTokenFlag      = telemetryGetUserMetricsSummaryFlags.String("apikey-token", "", "")
+		telemetryGetUserMetricsSummarySessionTokenFlag     = telemetryGetUserMetricsSummaryFlags.String("session-token", "", "")
+		telemetryGetUserMetricsSummaryProjectSlugInputFlag = telemetryGetUserMetricsSummaryFlags.String("project-slug-input", "", "")
+
 		templatesFlags = flag.NewFlagSet("templates", flag.ContinueOnError)
 
 		templatesCreateTemplateFlags                = flag.NewFlagSet("create-template", flag.ExitOnError)
@@ -882,6 +888,7 @@ func ParseEndpoint(
 	telemetrySearchChatsFlags.Usage = telemetrySearchChatsUsage
 	telemetryCaptureEventFlags.Usage = telemetryCaptureEventUsage
 	telemetryGetProjectMetricsSummaryFlags.Usage = telemetryGetProjectMetricsSummaryUsage
+	telemetryGetUserMetricsSummaryFlags.Usage = telemetryGetUserMetricsSummaryUsage
 
 	templatesFlags.Usage = templatesUsage
 	templatesCreateTemplateFlags.Usage = templatesCreateTemplateUsage
@@ -1339,6 +1346,9 @@ func ParseEndpoint(
 
 			case "get-project-metrics-summary":
 				epf = telemetryGetProjectMetricsSummaryFlags
+
+			case "get-user-metrics-summary":
+				epf = telemetryGetUserMetricsSummaryFlags
 
 			}
 
@@ -1809,6 +1819,9 @@ func ParseEndpoint(
 			case "get-project-metrics-summary":
 				endpoint = c.GetProjectMetricsSummary()
 				data, err = telemetryc.BuildGetProjectMetricsSummaryPayload(*telemetryGetProjectMetricsSummaryBodyFlag, *telemetryGetProjectMetricsSummaryApikeyTokenFlag, *telemetryGetProjectMetricsSummarySessionTokenFlag, *telemetryGetProjectMetricsSummaryProjectSlugInputFlag)
+			case "get-user-metrics-summary":
+				endpoint = c.GetUserMetricsSummary()
+				data, err = telemetryc.BuildGetUserMetricsSummaryPayload(*telemetryGetUserMetricsSummaryBodyFlag, *telemetryGetUserMetricsSummaryApikeyTokenFlag, *telemetryGetUserMetricsSummarySessionTokenFlag, *telemetryGetUserMetricsSummaryProjectSlugInputFlag)
 			}
 		case "templates":
 			c := templatesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3495,7 +3508,7 @@ func mcpMetadataSetMcpMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata set-mcp-metadata --body '{\n      \"default_environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"abc123\",\n            \"provided_by\": \"abc123\",\n            \"variable_name\": \"abc123\"\n         }\n      ],\n      \"external_documentation_url\": \"abc123\",\n      \"installation_override_url\": \"https://example.com/foo\",\n      \"instructions\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"toolset_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata set-mcp-metadata --body '{\n      \"default_environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"abc123\",\n            \"provided_by\": \"abc123\",\n            \"variable_name\": \"abc123\"\n         }\n      ],\n      \"external_documentation_text\": \"abc123\",\n      \"external_documentation_url\": \"abc123\",\n      \"installation_override_url\": \"https://example.com/foo\",\n      \"instructions\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"toolset_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpMetadataExportMcpMetadataUsage() {
@@ -4026,6 +4039,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    search-chats: Search and list chat session summaries that match a search filter`)
 	fmt.Fprintln(os.Stderr, `    capture-event: Capture a telemetry event and forward it to PostHog`)
 	fmt.Fprintln(os.Stderr, `    get-project-metrics-summary: Get aggregated metrics summary for an entire project`)
+	fmt.Fprintln(os.Stderr, `    get-user-metrics-summary: Get aggregated metrics summary grouped by user`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s telemetry COMMAND --help\n", os.Args[0])
@@ -4051,7 +4065,7 @@ func telemetrySearchLogsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-logs --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_chat_id\": \"abc123\",\n         \"gram_urn\": \"abc123\",\n         \"gram_urns\": [\n            \"abc123\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"abc123\",\n         \"http_status_code\": 1,\n         \"service_name\": \"abc123\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"11111111111111111111111111111111\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-logs --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_chat_id\": \"abc123\",\n         \"gram_urn\": \"abc123\",\n         \"gram_urns\": [\n            \"abc123\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"abc123\",\n         \"http_status_code\": 1,\n         \"service_name\": \"abc123\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"11111111111111111111111111111111\",\n         \"user_id\": \"abc123\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetrySearchToolCallsUsage() {
@@ -4099,7 +4113,7 @@ func telemetrySearchChatsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-chats --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"gram_urn\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-chats --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"gram_urn\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_id\": \"abc123\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryCaptureEventUsage() {
@@ -4150,6 +4164,30 @@ func telemetryGetProjectMetricsSummaryUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-project-metrics-summary --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetUserMetricsSummaryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-user-metrics-summary", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get aggregated metrics summary grouped by user`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-user-metrics-summary --body '{\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // templatesUsage displays the usage of the templates command and its

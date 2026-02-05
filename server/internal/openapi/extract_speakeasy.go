@@ -113,7 +113,7 @@ func (p *ToolExtractor) doSpeakeasy(
 
 	doc, err := parseSpeakeasy(ctx, tracer, bytes.NewReader(data))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document.\n%s", err.Error()).Log(ctx, logger)
 	}
 
 	upgradeStart := time.Now()
