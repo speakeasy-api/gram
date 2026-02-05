@@ -120,6 +120,46 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "creditUsage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetCreditUsage"}`)
 	})
+
+	Method("listChatsWithResolutions", func() {
+		Description("List all chats for a project with their resolutions")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+
+			Attribute("external_user_id", String, "Filter by external user ID")
+			Attribute("resolution_status", String, "Filter by resolution status")
+			Attribute("limit", Int, "Number of results per page", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(100)
+			})
+			Attribute("offset", Int, "Pagination offset", func() {
+				Default(0)
+				Minimum(0)
+			})
+		})
+
+		Result(ListChatsWithResolutionsResult)
+
+		HTTP(func() {
+			GET("/rpc/chat.listChatsWithResolutions")
+			Param("external_user_id")
+			Param("resolution_status")
+			Param("limit")
+			Param("offset")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listChatsWithResolutions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listChatsWithResolutions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatsWithResolutions", "type": "query"}`)
+	})
 })
 
 var ListChatsResult = Type("ListChatsResult", func() {
@@ -155,7 +195,7 @@ var Chat = Type("Chat", func() {
 var ChatMessage = Type("ChatMessage", func() {
 	Attribute("id", String, "The ID of the message")
 	Attribute("role", String, "The role of the message")
-	Attribute("content", Bytes, "The content of the message", func() {
+	Attribute("content", String, "The content of the message", func() {
 		Meta("struct:field:type", "json.RawMessage", "encoding/json")
 	})
 	Attribute("model", String, "The model that generated the message")
@@ -170,4 +210,43 @@ var ChatMessage = Type("ChatMessage", func() {
 	})
 
 	Required("id", "role", "model", "created_at")
+})
+
+var ChatResolution = Type("ChatResolution", func() {
+	Description("Resolution information for a chat")
+
+	Attribute("id", String, "Resolution ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("user_goal", String, "User's intended goal")
+	Attribute("resolution", String, "Resolution status")
+	Attribute("resolution_notes", String, "Notes about the resolution")
+	Attribute("score", Int, "Score 0-100")
+	Attribute("created_at", String, "When resolution was created", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("message_ids", ArrayOf(String), "Message IDs associated with this resolution", func() {
+		Example([]string{"abc-123", "def-456"})
+	})
+
+	Required("id", "user_goal", "resolution", "resolution_notes", "score", "created_at", "message_ids")
+})
+
+var ChatOverviewWithResolutions = Type("ChatOverviewWithResolutions", func() {
+	Description("Chat overview with embedded resolution data")
+
+	Extend(ChatOverview)
+
+	Attribute("resolutions", ArrayOf(ChatResolution), "List of resolutions for this chat")
+
+	Required("resolutions")
+})
+
+var ListChatsWithResolutionsResult = Type("ListChatsWithResolutionsResult", func() {
+	Description("Result of listing chats with resolutions")
+
+	Attribute("chats", ArrayOf(ChatOverviewWithResolutions), "List of chats with resolutions")
+	Attribute("total", Int, "Total number of chats (before pagination)")
+
+	Required("chats", "total")
 })

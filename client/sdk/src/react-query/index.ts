@@ -59,6 +59,7 @@ export * from "./listAllowedOrigins.js";
 export * from "./listAPIKeys.js";
 export * from "./listAssets.js";
 export * from "./listChats.js";
+export * from "./listChatsWithResolutions.js";
 export * from "./listDeployments.js";
 export * from "./listEnvironments.js";
 export * from "./listIntegrations.js";
