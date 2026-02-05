@@ -339,7 +339,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 }
 
 const listChatResolutions = `-- name: ListChatResolutions :many
-SELECT id, project_id, chat_id, user_goal, resolution, resolution_notes, score, created_at FROM chat_resolutions
+SELECT id, project_id, chat_id, user_goal, resolution, resolution_notes, score, user_feedback, user_feedback_message_id, created_at FROM chat_resolutions
 WHERE chat_id = $1
 ORDER BY created_at DESC
 `
@@ -361,6 +361,8 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 			&i.Resolution,
 			&i.ResolutionNotes,
 			&i.Score,
+			&i.UserFeedback,
+			&i.UserFeedbackMessageID,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

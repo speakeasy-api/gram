@@ -65,12 +65,7 @@ export function useListToolsets(
 ): UseQueryResult<ListToolsetsQueryData, ListToolsetsQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildListToolsetsQuery(
-      client,
-      request,
-      security,
-      options,
-    ),
+    ...buildListToolsetsQuery(client, request, security, options),
     ...options,
   });
 }
@@ -91,12 +86,7 @@ export function useListToolsetsSuspense(
 ): UseSuspenseQueryResult<ListToolsetsQueryData, ListToolsetsQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildListToolsetsQuery(
-      client,
-      request,
-      security,
-      options,
-    ),
+    ...buildListToolsetsQuery(client, request, security, options),
     ...options,
   });
 }
@@ -120,11 +110,13 @@ export function setListToolsetsData(
 export function invalidateListToolsets(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [
+      parameters: {
+        gramSession?: string | undefined;
+        gramKey?: string | undefined;
+        gramProject?: string | undefined;
+      },
+    ]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

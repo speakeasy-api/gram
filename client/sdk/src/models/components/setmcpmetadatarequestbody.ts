@@ -20,6 +20,10 @@ export type SetMcpMetadataRequestBody = {
    */
   environmentConfigs?: Array<McpEnvironmentConfigInput> | undefined;
   /**
+   * A blob of text for the button on the MCP server page
+   */
+  externalDocumentationText?: string | undefined;
+  /**
    * A link to external documentation for the MCP install page
    */
   externalDocumentationUrl?: string | undefined;
@@ -45,6 +49,7 @@ export type SetMcpMetadataRequestBody = {
 export type SetMcpMetadataRequestBody$Outbound = {
   default_environment_id?: string | undefined;
   environment_configs?: Array<McpEnvironmentConfigInput$Outbound> | undefined;
+  external_documentation_text?: string | undefined;
   external_documentation_url?: string | undefined;
   installation_override_url?: string | undefined;
   instructions?: string | undefined;
@@ -61,6 +66,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   defaultEnvironmentId: z.string().optional(),
   environmentConfigs: z.array(McpEnvironmentConfigInput$outboundSchema)
     .optional(),
+  externalDocumentationText: z.string().optional(),
   externalDocumentationUrl: z.string().optional(),
   installationOverrideUrl: z.string().optional(),
   instructions: z.string().optional(),
@@ -70,6 +76,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   return remap$(v, {
     defaultEnvironmentId: "default_environment_id",
     environmentConfigs: "environment_configs",
+    externalDocumentationText: "external_documentation_text",
     externalDocumentationUrl: "external_documentation_url",
     installationOverrideUrl: "installation_override_url",
     logoAssetId: "logo_asset_id",

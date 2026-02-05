@@ -1331,7 +1331,7 @@ CREATE TABLE IF NOT EXISTS team_invites (
   email TEXT NOT NULL CHECK (email <> '' AND CHAR_LENGTH(email) <= 255),
   invited_by_user_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'cancelled')),
-  token TEXT NOT NULL CHECK (token <> '' AND CHAR_LENGTH(token) <= 64),
+  token TEXT NOT NULL CHECK (token <> ''),
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 

@@ -29,6 +29,10 @@ export type McpMetadata = {
    */
   environmentConfigs?: Array<McpEnvironmentConfig> | undefined;
   /**
+   * A blob of text for the button on the MCP server page
+   */
+  externalDocumentationText?: string | undefined;
+  /**
    * A link to external documentation for the MCP install page
    */
   externalDocumentationUrl?: string | undefined;
@@ -67,6 +71,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   default_environment_id: z.string().optional(),
   environment_configs: z.array(McpEnvironmentConfig$inboundSchema).optional(),
+  external_documentation_text: z.string().optional(),
   external_documentation_url: z.string().optional(),
   id: z.string(),
   installation_override_url: z.string().optional(),
@@ -79,6 +84,7 @@ export const McpMetadata$inboundSchema: z.ZodType<
     "created_at": "createdAt",
     "default_environment_id": "defaultEnvironmentId",
     "environment_configs": "environmentConfigs",
+    "external_documentation_text": "externalDocumentationText",
     "external_documentation_url": "externalDocumentationUrl",
     "installation_override_url": "installationOverrideUrl",
     "logo_asset_id": "logoAssetId",

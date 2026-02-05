@@ -8,7 +8,7 @@ on:
 jobs:
   lint-pr:
     name: Lint PR Title and Changesets
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Validate PR title format
         shell: bash
