@@ -654,16 +654,40 @@ func (s *Service) processInviteToken(ctx context.Context, token, userID, userEma
 		)
 	}
 
-	// The organization slug in organization_metadata is the Speakeasy workspace
-	// slug (set from the SSO connection during Info() materialisation), so it
-	// can be used directly as the workspace identifier for the team API.
+	// Get the org slug for the redirect URL.
 	orgSlug, err := s.teamsRepo.GetOrganizationSlug(ctx, invite.OrganizationID)
 	if err != nil {
 		return "", fmt.Errorf("getting organization slug: %w", err)
 	}
 
-	// Add user to the org's workspaces via Speakeasy API.
-	if err := s.sessions.AddUserToOrg(ctx, []string{orgSlug}, userEmail); err != nil {
+	// Get the inviter's workspace slugs to add the new user to. Speakeasy
+	// doesn't have an API to add a user directly to an org—only to a workspace.
+	// Adding a user to any workspace within the org grants them org access.
+	var workspaceSlug string
+	if invite.InvitedByUserID.Valid {
+		// Try to get the inviter's cached user info to find their workspace slugs.
+		inviterInfo, _, err := s.sessions.GetUserInfo(ctx, invite.InvitedByUserID.String, "")
+		if err == nil {
+			for _, org := range inviterInfo.Organizations {
+				if org.ID == invite.OrganizationID && len(org.UserWorkspaceSlugs) > 0 {
+					workspaceSlug = org.UserWorkspaceSlugs[0]
+					break
+				}
+			}
+		} else {
+			s.logger.WarnContext(ctx, "failed to get inviter's user info for workspace lookup",
+				attr.SlogError(err),
+				attr.SlogUserID(invite.InvitedByUserID.String),
+			)
+		}
+	}
+
+	if workspaceSlug == "" {
+		return "", fmt.Errorf("could not determine workspace slug for invite acceptance")
+	}
+
+	// Add user to one of the org's workspaces via Speakeasy API.
+	if err := s.sessions.AddUserToOrg(ctx, []string{workspaceSlug}, userEmail); err != nil {
 		return "", fmt.Errorf("adding user to org via speakeasy: %w", err)
 	}
 
