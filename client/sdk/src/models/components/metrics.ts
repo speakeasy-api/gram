@@ -43,6 +43,14 @@ export type Metrics = {
    */
   finishReasonToolCalls: number;
   /**
+   * Earliest activity timestamp in Unix nanoseconds
+   */
+  firstSeenUnixNano: string;
+  /**
+   * Latest activity timestamp in Unix nanoseconds
+   */
+  lastSeenUnixNano: string;
+  /**
    * List of models used with call counts
    */
   models: Array<ModelUsage>;
@@ -94,6 +102,8 @@ export const Metrics$inboundSchema: z.ZodType<Metrics, z.ZodTypeDef, unknown> =
     distinct_providers: z.number().int(),
     finish_reason_stop: z.number().int(),
     finish_reason_tool_calls: z.number().int(),
+    first_seen_unix_nano: z.string(),
+    last_seen_unix_nano: z.string(),
     models: z.array(ModelUsage$inboundSchema),
     tool_call_failure: z.number().int(),
     tool_call_success: z.number().int(),
@@ -113,6 +123,8 @@ export const Metrics$inboundSchema: z.ZodType<Metrics, z.ZodTypeDef, unknown> =
       "distinct_providers": "distinctProviders",
       "finish_reason_stop": "finishReasonStop",
       "finish_reason_tool_calls": "finishReasonToolCalls",
+      "first_seen_unix_nano": "firstSeenUnixNano",
+      "last_seen_unix_nano": "lastSeenUnixNano",
       "tool_call_failure": "toolCallFailure",
       "tool_call_success": "toolCallSuccess",
       "total_chat_requests": "totalChatRequests",

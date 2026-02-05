@@ -7995,6 +7995,112 @@ paths:
             x-speakeasy-name-override: getProjectMetricsSummary
             x-speakeasy-react-hook:
                 name: GetProjectMetricsSummary
+                type: query
+    /rpc/telemetry.getUserMetricsSummary:
+        post:
+            description: Get aggregated metrics summary grouped by user
+            operationId: getUserMetricsSummary
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetUserMetricsSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetUserMetricsSummaryResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getUserMetricsSummary telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getUserMetricsSummary
+            x-speakeasy-react-hook:
+                name: GetUserMetricsSummary
+                type: query
     /rpc/telemetry.searchChats:
         post:
             description: Search and list chat session summaries that match a search filter
@@ -13263,6 +13369,41 @@ components:
                 - default_toolset_slug
                 - created_at
                 - updated_at
+        GetUserMetricsSummaryPayload:
+            type: object
+            properties:
+                external_user_id:
+                    type: string
+                    description: External user ID to get metrics for (mutually exclusive with user_id)
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+                user_id:
+                    type: string
+                    description: User ID to get metrics for (mutually exclusive with external_user_id)
+            description: Payload for getting user-level metrics summary
+            required:
+                - from
+                - to
+        GetUserMetricsSummaryResult:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether telemetry is enabled for the organization
+                metrics:
+                    $ref: '#/components/schemas/Metrics'
+            description: Result of user metrics summary query
+            required:
+                - metrics
+                - enabled
         HTTPToolDefinition:
             type: object
             properties:
@@ -13959,6 +14100,12 @@ components:
                     type: integer
                     description: Requests that resulted in tool calls
                     format: int64
+                first_seen_unix_nano:
+                    type: string
+                    description: Earliest activity timestamp in Unix nanoseconds
+                last_seen_unix_nano:
+                    type: string
+                    description: Latest activity timestamp in Unix nanoseconds
                 models:
                     type: array
                     items:
@@ -14003,6 +14150,8 @@ components:
                     format: int64
             description: Aggregated metrics
             required:
+                - first_seen_unix_nano
+                - last_seen_unix_nano
                 - total_input_tokens
                 - total_output_tokens
                 - total_tokens
@@ -14666,6 +14815,9 @@ components:
                     type: string
                     description: Deployment ID filter
                     format: uuid
+                external_user_id:
+                    type: string
+                    description: External user ID filter
                 from:
                     type: string
                     description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
@@ -14679,6 +14831,9 @@ components:
                     description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
                     example: "2025-12-19T11:00:00Z"
                     format: date-time
+                user_id:
+                    type: string
+                    description: User ID filter
             description: Filter criteria for searching chat sessions
         SearchChatsPayload:
             type: object
@@ -14728,6 +14883,9 @@ components:
                     type: string
                     description: Deployment ID filter
                     format: uuid
+                external_user_id:
+                    type: string
+                    description: External user ID filter
                 from:
                     type: string
                     description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
@@ -14787,6 +14945,9 @@ components:
                     type: string
                     description: Trace ID filter (32 hex characters)
                     pattern: ^[a-f0-9]{32}$
+                user_id:
+                    type: string
+                    description: User ID filter
             description: Filter criteria for searching logs
         SearchLogsPayload:
             type: object
