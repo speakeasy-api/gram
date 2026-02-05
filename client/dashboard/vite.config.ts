@@ -25,7 +25,7 @@ export default defineConfig(({ command }) => {
 
   const serverUrl = process.env["GRAM_SERVER_URL"];
   if (isDev && !serverUrl) {
-    throw new Error("GRAM_SERVER_URL must be set");
+    throw new Error("GRAM_SERVER_URL must be set in development");
   }
 
   return {
