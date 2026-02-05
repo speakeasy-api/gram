@@ -95,8 +95,12 @@ type ChatSummary struct {
 }
 
 // MetricsSummaryRow represents aggregated AI metrics from ClickHouse.
-// Used for the getAIMetrics endpoint.
+// Used for the getProjectMetricsSummary and getUserMetricsSummary endpoints.
 type MetricsSummaryRow struct {
+	// Activity timestamps
+	FirstSeenUnixNano int64 `ch:"first_seen_unix_nano"`
+	LastSeenUnixNano  int64 `ch:"last_seen_unix_nano"`
+
 	// Cardinality metrics (project scope only)
 	TotalChats        uint64 `ch:"total_chats"`
 	DistinctModels    uint64 `ch:"distinct_models"`

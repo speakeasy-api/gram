@@ -104,7 +104,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}
 
 	// Extract SearchLogs-specific filter fields
-	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID string
+	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID, userID, externalUserID string
 	var httpStatusCode int32
 	var gramURNs []string
 	if payload.Filter != nil {
@@ -119,6 +119,8 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		httpMethod = conv.PtrValOr(payload.Filter.HTTPMethod, "")
 		serviceName = conv.PtrValOr(payload.Filter.ServiceName, "")
 		gramChatID = conv.PtrValOr(payload.Filter.GramChatID, "")
+		userID = conv.PtrValOr(payload.Filter.UserID, "")
+		externalUserID = conv.PtrValOr(payload.Filter.ExternalUserID, "")
 	}
 
 	// Query with limit+1 to detect if there are more results
@@ -136,6 +138,8 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		HTTPRequestMethod:      httpMethod,
 		ServiceName:            serviceName,
 		GramChatID:             gramChatID,
+		UserID:                 userID,
+		ExternalUserID:         externalUserID,
 		SortOrder:              params.sortOrder,
 		Cursor:                 params.cursor,
 		Limit:                  params.limit + 1,
@@ -250,10 +254,12 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
 	}
 
-	var deploymentID, gramURN string
+	var deploymentID, gramURN, userID, externalUserID string
 	if payload.Filter != nil {
 		deploymentID = conv.PtrValOr(payload.Filter.DeploymentID, "")
 		gramURN = conv.PtrValOr(payload.Filter.GramUrn, "")
+		userID = conv.PtrValOr(payload.Filter.UserID, "")
+		externalUserID = conv.PtrValOr(payload.Filter.ExternalUserID, "")
 	}
 
 	items, err := s.chRepo.ListChats(ctx, repo.ListChatsParams{
@@ -262,6 +268,8 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		TimeEnd:          params.timeEnd,
 		GramDeploymentID: deploymentID,
 		GramURN:          gramURN,
+		UserID:           userID,
+		ExternalUserID:   externalUserID,
 		SortOrder:        params.sortOrder,
 		Cursor:           params.cursor,
 		Limit:            params.limit + 1,
@@ -360,6 +368,8 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 	//nolint:gosec // Values are bounded counts that won't overflow int64
 	return &telem_gen.GetMetricsSummaryResult{
 		Metrics: &telem_gen.Metrics{
+			FirstSeenUnixNano:     metrics.FirstSeenUnixNano,
+			LastSeenUnixNano:      metrics.LastSeenUnixNano,
 			TotalInputTokens:      metrics.TotalInputTokens,
 			TotalOutputTokens:     metrics.TotalOutputTokens,
 			TotalTokens:           metrics.TotalTokens,
@@ -380,6 +390,56 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 		},
 		Enabled: true,
 	}
+}
+
+// GetUserMetricsSummary retrieves aggregated metrics for a specific user.
+func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.GetUserMetricsSummaryPayload) (res *telem_gen.GetUserMetricsSummaryResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+
+	// Validate that exactly one of user_id or external_user_id is provided
+	userID := conv.PtrValOr(payload.UserID, "")
+	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	if userID == "" && externalUserID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "either user_id or external_user_id is required")
+	}
+	if userID != "" && externalUserID != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	metrics, err := s.chRepo.GetUserMetricsSummary(ctx, repo.GetUserMetricsSummaryParams{
+		GramProjectID:  authCtx.ProjectID.String(),
+		TimeStart:      timeStart,
+		TimeEnd:        timeEnd,
+		UserID:         userID,
+		ExternalUserID: externalUserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving user metrics")
+	}
+
+	// Reuse the same helper as project metrics since the response format is identical
+	projectResult := buildMetricsSummaryResult(*metrics)
+	return &telem_gen.GetUserMetricsSummaryResult{
+		Metrics: projectResult.Metrics,
+		Enabled: true,
+	}, nil
 }
 
 // searchParams contains common validated parameters for telemetry search endpoints.

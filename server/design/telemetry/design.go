@@ -159,7 +159,36 @@ var _ = Service("telemetry", func() {
 
 		Meta("openapi:operationId", "getProjectMetricsSummary")
 		Meta("openapi:extension:x-speakeasy-name-override", "getProjectMetricsSummary")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectMetricsSummary"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectMetricsSummary", "type": "query"}`)
+	})
+
+	Method("getUserMetricsSummary", func() {
+		Description("Get aggregated metrics summary grouped by user")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetUserMetricsSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetUserMetricsSummaryResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getUserMetricsSummary")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getUserMetricsSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getUserMetricsSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetUserMetricsSummary", "type": "query"}`)
 	})
 })
 
@@ -202,6 +231,8 @@ var SearchLogsFilter = Type("SearchLogsFilter", func() {
 	Attribute("service_name", String, "Service name filter")
 	Attribute("gram_urns", ArrayOf(String), "Gram URN filter (one or more URNs)")
 	Attribute("gram_chat_id", String, "Chat ID filter")
+	Attribute("user_id", String, "User ID filter")
+	Attribute("external_user_id", String, "External user ID filter")
 })
 
 var SearchLogsPayload = Type("SearchLogsPayload", func() {
@@ -332,6 +363,8 @@ var SearchChatsFilter = Type("SearchChatsFilter", func() {
 		Format(FormatUUID)
 	})
 	Attribute("gram_urn", String, "Gram URN filter (single URN, use gram_urns for multiple)")
+	Attribute("user_id", String, "User ID filter")
+	Attribute("external_user_id", String, "External user ID filter")
 })
 
 var SearchChatsPayload = Type("SearchChatsPayload", func() {
@@ -447,6 +480,10 @@ var ToolUsage = Type("ToolUsage", func() {
 var Metrics = Type("Metrics", func() {
 	Description("Aggregated metrics")
 
+	// Activity timestamps
+	Attribute("first_seen_unix_nano", Int64, "Earliest activity timestamp in Unix nanoseconds")
+	Attribute("last_seen_unix_nano", Int64, "Latest activity timestamp in Unix nanoseconds")
+
 	// Token usage
 	Attribute("total_input_tokens", Int64, "Sum of input tokens used")
 	Attribute("total_output_tokens", Int64, "Sum of output tokens used")
@@ -477,6 +514,8 @@ var Metrics = Type("Metrics", func() {
 	Attribute("tools", ArrayOf(ToolUsage), "List of tools used with success/failure counts")
 
 	Required(
+		"first_seen_unix_nano",
+		"last_seen_unix_nano",
 		"total_input_tokens",
 		"total_output_tokens",
 		"total_tokens",
@@ -516,6 +555,34 @@ var GetMetricsSummaryResult = Type("GetMetricsSummaryResult", func() {
 	Description("Result of metrics summary query")
 
 	Attribute("metrics", Metrics, "Aggregated metrics")
+	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
+
+	Required("metrics", "enabled")
+})
+
+// User metrics types
+
+var GetUserMetricsSummaryPayload = Type("GetUserMetricsSummaryPayload", func() {
+	Description("Payload for getting user-level metrics summary")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("user_id", String, "User ID to get metrics for (mutually exclusive with external_user_id)")
+	Attribute("external_user_id", String, "External user ID to get metrics for (mutually exclusive with user_id)")
+
+	Required("from", "to")
+})
+
+var GetUserMetricsSummaryResult = Type("GetUserMetricsSummaryResult", func() {
+	Description("Result of user metrics summary query")
+
+	Attribute("metrics", Metrics, "Aggregated metrics for the user")
 	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
 	Required("metrics", "enabled")

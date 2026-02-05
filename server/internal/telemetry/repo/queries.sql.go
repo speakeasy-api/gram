@@ -100,6 +100,8 @@ type ListTelemetryLogsParams struct {
 	HTTPRequestMethod      string
 	ServiceName            string
 	GramChatID             string
+	UserID                 string
+	ExternalUserID         string
 	SortOrder              string
 	Cursor                 string
 	Limit                  int
@@ -167,6 +169,12 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 	}
 	if arg.GramChatID != "" {
 		sb = sb.Where(squirrel.Eq{"gram_chat_id": arg.GramChatID})
+	}
+	if arg.UserID != "" {
+		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+	}
+	if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
 
 	sb = withPagination(sb, arg.Cursor, arg.SortOrder)
@@ -300,6 +308,10 @@ type GetMetricsSummaryParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryParams) (*MetricsSummaryRow, error) {
 	sb := sq.Select(
+		// Activity timestamps
+		"min(time_unix_nano) AS first_seen_unix_nano",
+		"max(time_unix_nano) AS last_seen_unix_nano",
+
 		// Cardinality (exclude empty strings)
 		"uniqExactIf(toString(attributes.`gen_ai.conversation.id`), toString(attributes.`gen_ai.conversation.id`) != '') AS total_chats",
 		"uniqExactIf(toString(attributes.`gen_ai.response.model`), toString(attributes.`gen_ai.response.model`) != '') AS distinct_models",
@@ -352,6 +364,8 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 	if !rows.Next() {
 		// Return empty metrics if no rows
 		return &MetricsSummaryRow{
+			FirstSeenUnixNano:     0,
+			LastSeenUnixNano:      0,
 			TotalChats:            0,
 			DistinctModels:        0,
 			DistinctProviders:     0,
@@ -393,6 +407,8 @@ type ListChatsParams struct {
 	TimeEnd          int64
 	GramDeploymentID string
 	GramURN          string
+	UserID           string
+	ExternalUserID   string
 	SortOrder        string
 	Cursor           string // gram_chat_id to paginate from
 	Limit            int
@@ -440,6 +456,12 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	if arg.GramURN != "" {
 		sb = sb.Where("position(telemetry_logs.gram_urn, ?) > 0", arg.GramURN)
 	}
+	if arg.UserID != "" {
+		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+	}
+	if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
 
 	sb = sb.GroupBy("gram_chat_id")
 
@@ -476,4 +498,136 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	}
 
 	return chats, nil
+}
+
+// GetUserMetricsSummaryParams contains the parameters for getting a user's metrics summary.
+type GetUserMetricsSummaryParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	UserID         string // user_id (mutually exclusive with ExternalUserID)
+	ExternalUserID string // external_user_id (mutually exclusive with UserID)
+}
+
+// GetUserMetricsSummary retrieves aggregated metrics for a specific user.
+// Uses the same aggregations as GetMetricsSummary (project metrics) but filtered by user.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsSummaryParams) (*MetricsSummaryRow, error) {
+	sb := sq.Select(
+		// Activity timestamps
+		"min(time_unix_nano) AS first_seen_unix_nano",
+		"max(time_unix_nano) AS last_seen_unix_nano",
+
+		// Cardinality (exclude empty strings)
+		"uniqExactIf(toString(attributes.`gen_ai.conversation.id`), toString(attributes.`gen_ai.conversation.id`) != '') AS total_chats",
+		"uniqExactIf(toString(attributes.`gen_ai.response.model`), toString(attributes.`gen_ai.response.model`) != '') AS distinct_models",
+		"uniqExactIf(toString(attributes.`gen_ai.provider.name`), toString(attributes.`gen_ai.provider.name`) != '') AS distinct_providers",
+
+		// Token metrics (from chat completion events)
+		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.input_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.output_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_output_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.total_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_tokens",
+		"avgIf(toFloat64OrZero(toString(attributes.`gen_ai.usage.total_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS avg_tokens_per_request",
+
+		// Chat request metrics
+		"countIf(toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_chat_requests",
+		"avgIf(toFloat64OrZero(toString(attributes.`gen_ai.conversation.duration`)) * 1000, toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS avg_chat_duration_ms",
+
+		// Resolution status
+		"countIf(position(toString(attributes.`gen_ai.response.finish_reasons`), 'stop') > 0) AS finish_reason_stop",
+		"countIf(position(toString(attributes.`gen_ai.response.finish_reasons`), 'tool_calls') > 0) AS finish_reason_tool_calls",
+
+		// Tool call metrics
+		"countIf(startsWith(toString(attributes.`gram.tool.urn`), 'tools:')) AS total_tool_calls",
+		"countIf(startsWith(toString(attributes.`gram.tool.urn`), 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 200 AND toInt32OrZero(toString(attributes.`http.response.status_code`)) < 300) AS tool_call_success",
+		"countIf(startsWith(toString(attributes.`gram.tool.urn`), 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 400) AS tool_call_failure",
+		"avgIf(toFloat64OrZero(toString(attributes.`http.server.request.duration`)) * 1000, startsWith(toString(attributes.`gram.tool.urn`), 'tools:')) AS avg_tool_duration_ms",
+
+		// Model breakdown (map of model name -> count)
+		"sumMapIf(map(toString(attributes.`gen_ai.response.model`), toUInt64(1)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion' AND toString(attributes.`gen_ai.response.model`) != '') AS models",
+
+		// Tool breakdowns (maps of tool URN -> count)
+		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
+		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 200 AND toInt32OrZero(toString(attributes.`http.response.status_code`)) < 300) AS tool_success_counts",
+		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 400) AS tool_failure_counts",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd)
+
+	// Filter by user ID (one of these must be set)
+	if arg.UserID != "" {
+		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+	} else if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building get user metrics summary query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		// Return empty metrics if no rows
+		return &MetricsSummaryRow{
+			FirstSeenUnixNano:     0,
+			LastSeenUnixNano:      0,
+			TotalChats:            0,
+			DistinctModels:        0,
+			DistinctProviders:     0,
+			TotalInputTokens:      0,
+			TotalOutputTokens:     0,
+			TotalTokens:           0,
+			AvgTokensPerReq:       0,
+			TotalChatRequests:     0,
+			AvgChatDurationMs:     0,
+			FinishReasonStop:      0,
+			FinishReasonToolCalls: 0,
+			TotalToolCalls:        0,
+			ToolCallSuccess:       0,
+			ToolCallFailure:       0,
+			AvgToolDurationMs:     0,
+			Models:                make(map[string]uint64),
+			ToolCounts:            make(map[string]uint64),
+			ToolSuccessCounts:     make(map[string]uint64),
+			ToolFailureCounts:     make(map[string]uint64),
+		}, nil
+	}
+
+	var metrics MetricsSummaryRow
+	if err = rows.Scan(
+		&metrics.FirstSeenUnixNano,
+		&metrics.LastSeenUnixNano,
+		&metrics.TotalChats,
+		&metrics.DistinctModels,
+		&metrics.DistinctProviders,
+		&metrics.TotalInputTokens,
+		&metrics.TotalOutputTokens,
+		&metrics.TotalTokens,
+		&metrics.AvgTokensPerReq,
+		&metrics.TotalChatRequests,
+		&metrics.AvgChatDurationMs,
+		&metrics.FinishReasonStop,
+		&metrics.FinishReasonToolCalls,
+		&metrics.TotalToolCalls,
+		&metrics.ToolCallSuccess,
+		&metrics.ToolCallFailure,
+		&metrics.AvgToolDurationMs,
+		&metrics.Models,
+		&metrics.ToolCounts,
+		&metrics.ToolSuccessCounts,
+		&metrics.ToolFailureCounts,
+	); err != nil {
+		return nil, fmt.Errorf("error scanning row: %w", err)
+	}
+
+	return &metrics, nil
 }
