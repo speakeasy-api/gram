@@ -20,7 +20,7 @@ env:
 jobs:
   changes:
     name: Tag branch changes
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: "read"
       pull-requests: read
@@ -103,7 +103,7 @@ jobs:
           fi
 
   docker-build-server:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
     env:
       GOMAXPROCS: 4
@@ -174,7 +174,7 @@ jobs:
 
   atlas-lint:
     name: Lint migrations with Atlas
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     permissions:
@@ -228,7 +228,7 @@ jobs:
 
   atlas-push:
     name: Push migrations to Atlas Registry
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
     if: needs.changes.outputs.server == 'true'
     permissions:
@@ -290,7 +290,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
   server-build-lint:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GOMAXPROCS: 4
@@ -394,7 +394,7 @@ jobs:
           mise run git:porcelain
 
   cli-build-lint:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GOMAXPROCS: 4
@@ -475,7 +475,7 @@ jobs:
         run: mise run git:porcelain
 
   plog-build-lint:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GOMAXPROCS: 4
@@ -541,7 +541,7 @@ jobs:
         run: mise run git:porcelain
 
   server-test:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GOMAXPROCS: 4
@@ -587,7 +587,7 @@ jobs:
         run: mise run test:server
 
   docker-build-client:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
@@ -686,7 +686,7 @@ jobs:
         run: pnpm store prune
 
   client-build-lint:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     steps:
       - name: Skip if no client changes exist
@@ -747,7 +747,7 @@ jobs:
     strategy:
       matrix:
         target: ["client/sdk"]
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     steps:
       - name: Skip if no client changes exist
@@ -804,7 +804,7 @@ jobs:
         run: mise run git:porcelain
 
   functions-build-host:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     steps:
       - name: Skip if no functions changes exist
@@ -916,7 +916,7 @@ jobs:
         run: pnpm store prune
 
   functions-image:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, functions-build-host]
     strategy:
       matrix:
@@ -1070,7 +1070,7 @@ jobs:
         run: pnpm store prune
 
   ts-framework-test:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     steps:
       - name: Skip if no ts framework changes exist
@@ -1121,7 +1121,7 @@ jobs:
         run: pnpm store prune
 
   elements-build-lint:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
@@ -1181,7 +1181,7 @@ jobs:
         run: pnpm store prune
 
   elements-test:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     steps:
       - name: Skip if no elements changes exist
@@ -1229,7 +1229,7 @@ jobs:
         run: pnpm store prune
 
   dispatch-release:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [docker-build-server]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -1243,7 +1243,7 @@ jobs:
             -f commit_hash=${{ github.sha }}
 
   preview-label:
-    runs-on: ubicloud-standard-2
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     needs: [changes, docker-build-server, docker-build-client]
     if: |
       github.event_name == 'pull_request' &&
