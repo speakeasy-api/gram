@@ -120,7 +120,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const { client, options } = useSdkClient()
   const components = config.components ?? {}
   const showStaticSessionWarning = config.api && 'sessionToken' in config.api
-  const showFeedback = config.thread?.experimental_showFeedback ?? false
+  const showFeedback = config.thread?.showFeedback ?? false
   const [isResolved, setIsResolved] = useState(false)
   const [feedbackHidden, setFeedbackHidden] = useState(false)
   const chatId = useChatId();
