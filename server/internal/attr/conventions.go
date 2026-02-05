@@ -43,7 +43,6 @@ const (
 	URLDomainKey                      = semconv.URLDomainKey
 	URLFullKey                        = semconv.URLFullKey
 	URLOriginalKey                    = semconv.URLOriginalKey
-	UserEmailKey                      = attribute.Key("gram.user.email")
 	UserIDKey                         = semconv.UserIDKey
 
 	ActualKey   = attribute.Key("actual")
@@ -328,9 +327,6 @@ func SlogURLFull(v string) slog.Attr      { return slog.String(string(URLFullKey
 
 func URLOriginal(v string) attribute.KeyValue { return URLOriginalKey.String(v) }
 func SlogURLOriginal(v string) slog.Attr      { return slog.String(string(URLOriginalKey), v) }
-
-func UserEmail(v string) attribute.KeyValue { return UserEmailKey.String(v) }
-func SlogUserEmail(v string) slog.Attr      { return slog.String(string(UserEmailKey), v) }
 
 func UserID(v string) attribute.KeyValue { return UserIDKey.String(v) }
 func SlogUserID(v string) slog.Attr      { return slog.String(string(UserIDKey), v) }
