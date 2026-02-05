@@ -100,14 +100,16 @@ type ChatMessage struct {
 }
 
 type ChatResolution struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	ChatID          uuid.UUID
-	UserGoal        string
-	Resolution      string
-	ResolutionNotes string
-	Score           int32
-	CreatedAt       pgtype.Timestamptz
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	ChatID                uuid.UUID
+	UserGoal              string
+	Resolution            string
+	ResolutionNotes       string
+	Score                 int32
+	UserFeedback          pgtype.Text
+	UserFeedbackMessageID uuid.NullUUID
+	CreatedAt             pgtype.Timestamptz
 }
 
 type ChatResolutionMessage struct {

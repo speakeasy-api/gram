@@ -1,0 +1,2 @@
+-- Modify "chat_resolutions" table
+ALTER TABLE "chat_resolutions" ADD CONSTRAINT "chat_resolutions_user_feedback_check" CHECK (user_feedback = ANY (ARRAY['success'::text, 'failure'::text])), ADD COLUMN "user_feedback" text NULL, ADD COLUMN "user_feedback_message_id" uuid NULL, ADD CONSTRAINT "chat_resolutions_user_feedback_message_id_fkey" FOREIGN KEY ("user_feedback_message_id") REFERENCES "chat_messages" ("id") ON UPDATE NO ACTION ON DELETE SET NULL;
