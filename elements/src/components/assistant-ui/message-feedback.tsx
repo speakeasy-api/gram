@@ -137,10 +137,10 @@ export const MessageFeedback: FC<MessageFeedbackProps> = ({
                               'size-5 transition-[fill] duration-200',
                               button.color,
                               button.type === 'like' &&
-                              'group-hover/btn:fill-emerald-500',
+                                'group-hover/btn:fill-emerald-500',
                               selectedFeedback === button.type &&
-                              button.type === 'like' &&
-                              'fill-emerald-500'
+                                button.type === 'like' &&
+                                'fill-emerald-500'
                             )}
                             strokeWidth={2}
                           />

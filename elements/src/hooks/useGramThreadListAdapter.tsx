@@ -1,6 +1,5 @@
 import {
   GramChat,
-  GramChatOverview,
   convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
 } from '@/lib/messageConverter'
@@ -45,10 +44,6 @@ export interface ThreadListAdapterOptions {
   headers: Record<string, string>
   /** Map to translate local thread IDs to UUIDs (shared with transport) */
   localIdToUuidMap?: Map<string, string>
-}
-
-interface ListChatsResponse {
-  chats: GramChatOverview[]
 }
 
 /**
@@ -217,7 +212,12 @@ export function useGramThreadListAdapter(
 
       async list() {
         try {
-          const response = await chatList(client, undefined, undefined, sdkOptions)
+          const response = await chatList(
+            client,
+            undefined,
+            undefined,
+            sdkOptions
+          )
 
           if (!response.ok || response.error) {
             console.error('Failed to list chats:', response.error)
@@ -300,9 +300,14 @@ export function useGramThreadListAdapter(
         await new Promise((r) => setTimeout(r, TITLE_GENERATION_DELAY_MS))
 
         try {
-          const response = await chatGenerateTitle(client, {
-            serveImageForm: { id: remoteId },
-          }, undefined, sdkOptions)
+          const response = await chatGenerateTitle(
+            client,
+            {
+              serveImageForm: { id: remoteId },
+            },
+            undefined,
+            sdkOptions
+          )
 
           if (response.ok) {
             const title = response.value.title

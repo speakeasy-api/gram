@@ -23,7 +23,12 @@ import {
   useAssistantState,
 } from '@assistant-ui/react'
 
-import { AnimatePresence, LazyMotion, MotionConfig, domAnimation } from 'motion/react'
+import {
+  AnimatePresence,
+  LazyMotion,
+  MotionConfig,
+  domAnimation,
+} from 'motion/react'
 import * as m from 'motion/react-m'
 import {
   createContext,
@@ -86,10 +91,10 @@ const ChatResolutionContext = createContext<{
 }>({
   isResolved: false,
   feedbackHidden: false,
-  setResolved: () => { },
-  setUnresolved: () => { },
-  resetFeedbackHidden: () => { },
-  submitFeedback: async () => { },
+  setResolved: () => {},
+  setUnresolved: () => {},
+  resetFeedbackHidden: () => {},
+  submitFeedback: async () => {},
 })
 
 const useChatResolution = () => useContext(ChatResolutionContext)
@@ -123,7 +128,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const showFeedback = config.thread?.showFeedback ?? false
   const [isResolved, setIsResolved] = useState(false)
   const [feedbackHidden, setFeedbackHidden] = useState(false)
-  const chatId = useChatId();
+  const chatId = useChatId()
 
   const setResolved = () => setIsResolved(true)
   const setUnresolved = () => {
@@ -137,7 +142,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
     async (feedback: Feedback) => {
       if (!chatId) return
       if (isLocalThreadId(chatId)) {
-        console.error('Local thread ID, can\'t submit feedback')
+        console.error("Local thread ID, can't submit feedback")
         return
       }
 
