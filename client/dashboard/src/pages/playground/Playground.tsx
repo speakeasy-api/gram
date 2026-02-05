@@ -88,7 +88,8 @@ function PlaygroundInner() {
   });
 
   // If toolsets have loaded and there are none, show full-page empty state
-  if (!toolsets?.length) {
+  // If toolsets have loaded and there are none, show full-page empty state
+  if (toolsets !== undefined && !toolsets.length) {
     return (
       <Page>
         <Page.Header>
@@ -101,6 +102,8 @@ function PlaygroundInner() {
         </Page.Body>
       </Page>
     );
+  }
+
   }
 
   const logsButton = (
