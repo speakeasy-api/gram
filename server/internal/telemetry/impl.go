@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -368,8 +369,8 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 	//nolint:gosec // Values are bounded counts that won't overflow int64
 	return &telem_gen.GetMetricsSummaryResult{
 		Metrics: &telem_gen.Metrics{
-			FirstSeenUnixNano:     metrics.FirstSeenUnixNano,
-			LastSeenUnixNano:      metrics.LastSeenUnixNano,
+			FirstSeenUnixNano:     strconv.FormatInt(metrics.FirstSeenUnixNano, 10),
+			LastSeenUnixNano:      strconv.FormatInt(metrics.LastSeenUnixNano, 10),
 			TotalInputTokens:      metrics.TotalInputTokens,
 			TotalOutputTokens:     metrics.TotalOutputTokens,
 			TotalTokens:           metrics.TotalTokens,

@@ -480,9 +480,9 @@ var ToolUsage = Type("ToolUsage", func() {
 var Metrics = Type("Metrics", func() {
 	Description("Aggregated metrics")
 
-	// Activity timestamps
-	Attribute("first_seen_unix_nano", Int64, "Earliest activity timestamp in Unix nanoseconds")
-	Attribute("last_seen_unix_nano", Int64, "Latest activity timestamp in Unix nanoseconds")
+	// Activity timestamps (string for JS int64 precision)
+	Attribute("first_seen_unix_nano", String, "Earliest activity timestamp in Unix nanoseconds")
+	Attribute("last_seen_unix_nano", String, "Latest activity timestamp in Unix nanoseconds")
 
 	// Token usage
 	Attribute("total_input_tokens", Int64, "Sum of input tokens used")
