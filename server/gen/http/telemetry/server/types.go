@@ -1335,9 +1335,9 @@ type ChatSummaryResponseBody struct {
 // MetricsResponseBody is used to define fields on response body types.
 type MetricsResponseBody struct {
 	// Earliest activity timestamp in Unix nanoseconds
-	FirstSeenUnixNano int64 `form:"first_seen_unix_nano" json:"first_seen_unix_nano" xml:"first_seen_unix_nano"`
+	FirstSeenUnixNano string `form:"first_seen_unix_nano" json:"first_seen_unix_nano" xml:"first_seen_unix_nano"`
 	// Latest activity timestamp in Unix nanoseconds
-	LastSeenUnixNano int64 `form:"last_seen_unix_nano" json:"last_seen_unix_nano" xml:"last_seen_unix_nano"`
+	LastSeenUnixNano string `form:"last_seen_unix_nano" json:"last_seen_unix_nano" xml:"last_seen_unix_nano"`
 	// Sum of input tokens used
 	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`
 	// Sum of output tokens used

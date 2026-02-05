@@ -156,9 +156,9 @@ type GetUserMetricsSummaryResult struct {
 // Aggregated metrics
 type Metrics struct {
 	// Earliest activity timestamp in Unix nanoseconds
-	FirstSeenUnixNano int64
+	FirstSeenUnixNano string
 	// Latest activity timestamp in Unix nanoseconds
-	LastSeenUnixNano int64
+	LastSeenUnixNano string
 	// Sum of input tokens used
 	TotalInputTokens int64
 	// Sum of output tokens used
