@@ -23,10 +23,11 @@ import {
   useAssistantState,
 } from '@assistant-ui/react'
 
-import { LazyMotion, MotionConfig, domAnimation } from 'motion/react'
+import { AnimatePresence, LazyMotion, MotionConfig, domAnimation } from 'motion/react'
 import * as m from 'motion/react-m'
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -34,7 +35,6 @@ import {
   useState,
   type FC,
 } from 'react'
-import { AnimatePresence } from 'motion/react'
 
 import {
   ComposerAddAttachment,
@@ -43,25 +43,28 @@ import {
 } from '@/components/assistant-ui/attachment'
 import { FollowOnSuggestions } from '@/components/assistant-ui/follow-on-suggestions'
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'
+import { MentionedToolsBadges } from '@/components/assistant-ui/mentioned-tools-badges'
 import { MessageFeedback } from '@/components/assistant-ui/message-feedback'
 import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
 import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
 import { ToolMentionAutocomplete } from '@/components/assistant-ui/tool-mention-autocomplete'
-import { MentionedToolsBadges } from '@/components/assistant-ui/mentioned-tools-badges'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import { Button } from '@/components/ui/button'
-import { useToolMentions } from '@/hooks/useToolMentions'
-
+import { useChatId } from '@/contexts/ChatIdContext'
+import { useReplayContext } from '@/contexts/ReplayContext'
 import { useDensity } from '@/hooks/useDensity'
 import { useElements } from '@/hooks/useElements'
+import { isLocalThreadId } from '@/hooks/useGramThreadListAdapter'
 import { useRadius } from '@/hooks/useRadius'
+import { useRecordCassette } from '@/hooks/useRecordCassette'
+import { useSdkClient } from '@/hooks/useSdkClient'
 import { useThemeProps } from '@/hooks/useThemeProps'
+import { useToolMentions } from '@/hooks/useToolMentions'
 import { EASE_OUT_QUINT } from '@/lib/easing'
 import { MODELS } from '@/lib/models'
 import { cn } from '@/lib/utils'
-import { useRecordCassette } from '@/hooks/useRecordCassette'
-import { useReplayContext } from '@/contexts/ReplayContext'
-import { ConnectionStatusIndicatorSafe } from './connection-status-indicator'
+import { chatSubmitFeedback } from '@gram/client/funcs/chatSubmitFeedback'
+import type { Feedback } from '@gram/client/models/components'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import {
   Tooltip,
@@ -69,6 +72,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip'
+import { ConnectionStatusIndicatorSafe } from './connection-status-indicator'
 import { ToolGroup } from './tool-group'
 
 // Context for chat resolution state
@@ -78,12 +82,14 @@ const ChatResolutionContext = createContext<{
   setResolved: () => void
   setUnresolved: () => void
   resetFeedbackHidden: () => void
+  submitFeedback: (feedback: Feedback) => Promise<void>
 }>({
   isResolved: false,
   feedbackHidden: false,
-  setResolved: () => {},
-  setUnresolved: () => {},
-  resetFeedbackHidden: () => {},
+  setResolved: () => { },
+  setUnresolved: () => { },
+  resetFeedbackHidden: () => { },
+  submitFeedback: async () => { },
 })
 
 const useChatResolution = () => useContext(ChatResolutionContext)
@@ -111,11 +117,15 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const themeProps = useThemeProps()
   const d = useDensity()
   const { config } = useElements()
+  const { client, options } = useSdkClient()
   const components = config.components ?? {}
   const showStaticSessionWarning = config.api && 'sessionToken' in config.api
   const showFeedback = config.thread?.experimental_showFeedback ?? false
   const [isResolved, setIsResolved] = useState(false)
   const [feedbackHidden, setFeedbackHidden] = useState(false)
+  const chatId = useChatId();
+
+  console.log('chatId', chatId)
 
   const setResolved = () => setIsResolved(true)
   const setUnresolved = () => {
@@ -123,6 +133,38 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
     setFeedbackHidden(true)
   }
   const resetFeedbackHidden = () => setFeedbackHidden(false)
+
+  // Submit feedback to the API
+  const submitFeedback = useCallback(
+    async (feedback: Feedback) => {
+      if (!chatId) return
+      if (isLocalThreadId(chatId)) {
+        console.error('Local thread ID, can\'t submit feedback')
+        return
+      }
+
+      try {
+        const result = await chatSubmitFeedback(
+          client,
+          {
+            submitFeedbackRequestBody: {
+              id: chatId,
+              feedback,
+            },
+          },
+          undefined,
+          options
+        )
+
+        if (!result.ok) {
+          console.error('Failed to submit feedback:', result.error)
+        }
+      } catch (error) {
+        console.error('Error submitting feedback:', error)
+      }
+    },
+    [chatId, client, options.headers]
+  )
 
   return (
     <ChatResolutionContext.Provider
@@ -132,6 +174,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
         setResolved,
         setUnresolved,
         resetFeedbackHidden,
+        submitFeedback,
       }}
     >
       <LazyMotion features={domAnimation}>
@@ -448,7 +491,16 @@ const FeedbackHiddenResetter: FC = () => {
 }
 
 const ComposerFeedback: FC = () => {
-  const { isResolved, feedbackHidden, setResolved } = useChatResolution()
+  const { isResolved, feedbackHidden, setResolved, submitFeedback } =
+    useChatResolution()
+
+  const handleFeedback = useCallback(
+    async (type: 'like' | 'dislike') => {
+      const feedback = type === 'like' ? 'success' : 'failure'
+      await submitFeedback(feedback)
+    },
+    [submitFeedback]
+  )
 
   return (
     <ThreadPrimitive.If empty={false}>
@@ -466,7 +518,11 @@ const ComposerFeedback: FC = () => {
               transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
               className="mb-3"
             >
-              <MessageFeedback className="mx-auto" onResolved={setResolved} />
+              <MessageFeedback
+                className="mx-auto"
+                onResolved={setResolved}
+                onFeedback={handleFeedback}
+              />
             </m.div>
           )}
         </AnimatePresence>

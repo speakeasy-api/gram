@@ -61,27 +61,45 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 
 	var a *Activities
 
-	// Phase 1: Segment the chat into logical breakpoints
-	var segmentOutput activities.SegmentChatOutput
+	// Phase 0: Get user feedback message ID if it exists
+	var feedbackResult activities.GetUserFeedbackMessageIDResult
 	err := workflow.ExecuteActivity(
+		ctx,
+		a.GetUserFeedbackMessageID,
+		activities.GetUserFeedbackMessageIDArgs{
+			ChatID: params.ChatID,
+		},
+	).Get(ctx, &feedbackResult)
+	if err != nil {
+		return fmt.Errorf("failed to get user feedback message ID: %w", err)
+	}
+
+	// Phase 1: Segment the chat into logical breakpoints
+	// Start from user feedback message if it exists
+	var segmentOutput activities.SegmentChatOutput
+	err = workflow.ExecuteActivity(
 		ctx,
 		a.SegmentChat,
 		activities.SegmentChatArgs{
-			ChatID:    params.ChatID,
-			ProjectID: params.ProjectID,
-			OrgID:     params.OrgID,
+			ChatID:             params.ChatID,
+			ProjectID:          params.ProjectID,
+			OrgID:              params.OrgID,
+			StartFromMessageID: feedbackResult.MessageID,
+			HasStartMessage:    feedbackResult.HasFeedback,
 		},
 	).Get(ctx, &segmentOutput)
 	if err != nil {
 		return fmt.Errorf("failed to segment chat: %w", err)
 	}
 
-	// Delete existing resolutions before analyzing segments
+	// Delete existing resolutions, preserving user feedback
 	err = workflow.ExecuteActivity(
 		ctx,
-		a.DeleteChatResolutions,
-		activities.DeleteChatResolutionsArgs{
-			ChatID: params.ChatID,
+		a.DeleteChatResolutionsAfterFeedback,
+		activities.DeleteChatResolutionsAfterFeedbackArgs{
+			ChatID:                params.ChatID,
+			UserFeedbackMessageID: feedbackResult.MessageID,
+			HasUserFeedback:       feedbackResult.HasFeedback,
 		},
 	).Get(ctx, nil)
 	if err != nil {

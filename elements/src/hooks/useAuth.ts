@@ -49,11 +49,10 @@ export const useAuth = ({
       : defaultGetSession
   }, [auth])
 
-  // The session request is only neccessary if we are not using an API key auth
+  // The session request is only neccessary if we are not using static session auth
   // configuration. If a custom session fetcher is provided, we use it,
   // otherwise we fallback to the default session fetcher
   const session = useSession({
-    // We want to check it's NOT API key auth, as the default auth scheme is session auth (if the user hasn't provided an explicit API config, we have a session auth config by default)
     getSession,
     projectSlug,
   })

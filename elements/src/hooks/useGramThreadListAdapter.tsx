@@ -1,18 +1,20 @@
 import {
-  unstable_RemoteThreadListAdapter as RemoteThreadListAdapter,
-  ThreadMessage,
-  RuntimeAdapterProvider,
-  ThreadHistoryAdapter,
-  useAssistantApi,
-  type AssistantApi,
-} from '@assistant-ui/react'
-import { createAssistantStream, type AssistantStream } from 'assistant-stream'
-import {
-  GramChatOverview,
   GramChat,
+  GramChatOverview,
   convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
 } from '@/lib/messageConverter'
+import {
+  unstable_RemoteThreadListAdapter as RemoteThreadListAdapter,
+  RuntimeAdapterProvider,
+  ThreadHistoryAdapter,
+  ThreadMessage,
+  useAssistantApi,
+  type AssistantApi,
+} from '@assistant-ui/react'
+import { chatGenerateTitle } from '@gram/client/funcs/chatGenerateTitle'
+import { chatList } from '@gram/client/funcs/chatList'
+import { createAssistantStream, type AssistantStream } from 'assistant-stream'
 import {
   useCallback,
   useEffect,
@@ -21,6 +23,7 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react'
+import { useSdkClient } from './useSdkClient'
 
 /**
  * Prefix used by assistant-ui for local thread IDs that haven't been persisted yet.
@@ -188,6 +191,7 @@ function useGramThreadHistoryAdapter(
 export function useGramThreadListAdapter(
   options: ThreadListAdapterOptions
 ): RemoteThreadListAdapter {
+  const { client, options: sdkOptions } = useSdkClient()
   const optionsRef = useRef(options)
   useEffect(() => {
     optionsRef.current = options
@@ -213,21 +217,16 @@ export function useGramThreadListAdapter(
 
       async list() {
         try {
-          const response = await fetch(
-            `${optionsRef.current.apiUrl}/rpc/chat.list`,
-            {
-              headers: optionsRef.current.headers,
-            }
-          )
+          const response = await chatList(client, undefined, undefined, sdkOptions)
 
-          if (!response.ok) {
-            console.error('Failed to list chats:', response.status)
+          if (!response.ok || response.error) {
+            console.error('Failed to list chats:', response.error)
             return { threads: [] }
           }
 
-          const data = (await response.json()) as ListChatsResponse
+          const chats = response.value.chats
           return {
-            threads: data.chats.map((chat) => ({
+            threads: chats.map((chat) => ({
               remoteId: chat.id,
               externalId: chat.id,
               status: 'regular' as const,
@@ -301,22 +300,12 @@ export function useGramThreadListAdapter(
         await new Promise((r) => setTimeout(r, TITLE_GENERATION_DELAY_MS))
 
         try {
-          // TODO: rename generateTitle endpoint to getTitle
-          const response = await fetch(
-            `${optionsRef.current.apiUrl}/rpc/chat.generateTitle`,
-            {
-              method: 'POST',
-              headers: {
-                ...optionsRef.current.headers,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ id: remoteId }),
-            }
-          )
+          const response = await chatGenerateTitle(client, {
+            serveImageForm: { id: remoteId },
+          }, undefined, sdkOptions)
 
           if (response.ok) {
-            const result = (await response.json()) as { title: string }
-            const title = result.title
+            const title = response.value.title
 
             if (title) {
               return createAssistantStream((controller) => {

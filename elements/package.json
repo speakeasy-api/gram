@@ -119,6 +119,7 @@
     "@ai-sdk/mcp": "^0.0.11",
     "@chromatic-com/storybook": "^5.0.0",
     "@datadog/browser-rum": "^6.24.1",
+    "@gram/client": "workspace:*",
     "@json-render/core": "^0.2.0",
     "@openrouter/ai-sdk-provider": "^1.4.1",
     "@radix-ui/react-avatar": "^1.1.10",

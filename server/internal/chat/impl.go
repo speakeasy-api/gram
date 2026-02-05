@@ -70,22 +70,22 @@ type ChatResolutionAnalyzer interface {
 }
 
 type Service struct {
-	auth                 *auth.Auth
-	db                   *pgxpool.Pool
-	repo                 *repo.Queries
-	tracer               trace.Tracer
-	openRouter           openrouter.Provisioner
-	chatClient           *openrouter.ChatClient
-	logger               *slog.Logger
-	sessions             *sessions.Manager
-	chatSessions         *chatsessions.Manager
-	assetStorage            assets.BlobStore
-	proxyTransport          http.RoundTripper
-	fallbackUsageTracker    FallbackModelUsageTracker
-	chatTitleGenerator      ChatTitleGenerator
-	chatResolutionAnalyzer  ChatResolutionAnalyzer
-	posthog                 *posthog.Posthog
-	telemetryService        *telemetry.Service
+	auth                   *auth.Auth
+	db                     *pgxpool.Pool
+	repo                   *repo.Queries
+	tracer                 trace.Tracer
+	openRouter             openrouter.Provisioner
+	chatClient             *openrouter.ChatClient
+	logger                 *slog.Logger
+	sessions               *sessions.Manager
+	chatSessions           *chatsessions.Manager
+	assetStorage           assets.BlobStore
+	proxyTransport         http.RoundTripper
+	fallbackUsageTracker   FallbackModelUsageTracker
+	chatTitleGenerator     ChatTitleGenerator
+	chatResolutionAnalyzer ChatResolutionAnalyzer
+	posthog                *posthog.Posthog
+	telemetryService       *telemetry.Service
 }
 
 func NewService(
@@ -498,7 +498,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				CompletionTokens: 0,
 				TotalTokens:      0,
 			},
-			usageSet:           false,
+			usageSet:               false,
 			isFirstMessage:         chatResult.IsFirstMessage,
 			chatTitleGenerator:     s.chatTitleGenerator,
 			chatResolutionAnalyzer: s.chatResolutionAnalyzer,
@@ -658,6 +658,82 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	return &gen.GenerateTitleResult{Title: title}, nil
 }
 
+func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbackPayload) (*gen.SubmitFeedbackResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+
+	// Load the chat to verify access
+	chat, err := s.repo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Validate feedback value
+	if payload.Feedback != "success" && payload.Feedback != "failure" {
+		return nil, oops.E(oops.CodeInvalid, nil, "feedback must be 'success' or 'failure'")
+	}
+
+	// Get the most recent message ID to track where user gave feedback
+	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list messages").Log(ctx, s.logger)
+	}
+
+	var lastMessageID uuid.NullUUID
+	if len(messages) > 0 {
+		lastMessageID = uuid.NullUUID{UUID: messages[len(messages)-1].ID, Valid: true}
+	}
+
+	// Insert user feedback
+	_, err = s.repo.InsertUserFeedback(ctx, repo.InsertUserFeedbackParams{
+		ProjectID:             *authCtx.ProjectID,
+		ChatID:                chatID,
+		UserFeedback:          payload.Feedback,
+		UserFeedbackMessageID: lastMessageID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to store feedback").Log(ctx, s.logger)
+	}
+
+	// Schedule chat resolution analysis to fill in the details
+	if s.chatResolutionAnalyzer != nil {
+		if err := s.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
+			context.WithoutCancel(ctx),
+			chatID,
+			*authCtx.ProjectID,
+			authCtx.ActiveOrganizationID,
+		); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
+			// Don't fail the request if analysis scheduling fails
+		}
+	}
+
+	s.logger.InfoContext(ctx, "user feedback submitted",
+		attr.SlogChatID(chatID.String()),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogOutcome(payload.Feedback),
+	)
+
+	return &gen.SubmitFeedbackResult{Success: true}, nil
+}
+
 // startOrResumeChatResult contains the result of starting or resuming a chat.
 type startOrResumeChatResult struct {
 	ChatID         uuid.UUID
@@ -761,9 +837,9 @@ type responseCaptor struct {
 	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
 	usage                openrouter.Usage
 	// Title generation
-	isFirstMessage          bool
-	chatTitleGenerator      ChatTitleGenerator
-	chatResolutionAnalyzer  ChatResolutionAnalyzer
+	isFirstMessage         bool
+	chatTitleGenerator     ChatTitleGenerator
+	chatResolutionAnalyzer ChatResolutionAnalyzer
 	// GenAI telemetry
 	telemetryService *telemetry.Service
 	userID           string

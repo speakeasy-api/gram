@@ -56,6 +56,30 @@ func (q *Queries) DeleteChatResolutions(ctx context.Context, chatID uuid.UUID) e
 	return err
 }
 
+const deleteChatResolutionsAfterMessage = `-- name: DeleteChatResolutionsAfterMessage :exec
+DELETE FROM chat_resolutions
+WHERE id IN (
+    SELECT DISTINCT cr.id
+    FROM chat_resolutions cr
+    JOIN chat_resolution_messages crm ON cr.id = crm.chat_resolution_id
+    JOIN chat_messages cm ON crm.message_id = cm.id
+    WHERE cr.chat_id = $1
+      AND cm.seq > (
+        SELECT seq FROM chat_messages WHERE chat_messages.id = $2
+      )
+  )
+`
+
+type DeleteChatResolutionsAfterMessageParams struct {
+	ChatID         uuid.UUID
+	AfterMessageID uuid.UUID
+}
+
+func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg DeleteChatResolutionsAfterMessageParams) error {
+	_, err := q.db.Exec(ctx, deleteChatResolutionsAfterMessage, arg.ChatID, arg.AfterMessageID)
+	return err
+}
+
 const getChat = `-- name: GetChat :one
 SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
 `
@@ -150,6 +174,22 @@ func (q *Queries) GetToolCallMessages(ctx context.Context, chatID uuid.UUID) ([]
 	return items, nil
 }
 
+const getUserFeedbackMessageID = `-- name: GetUserFeedbackMessageID :one
+SELECT user_feedback_message_id
+FROM chat_resolutions
+WHERE chat_id = $1
+  AND user_feedback IS NOT NULL
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetUserFeedbackMessageID(ctx context.Context, chatID uuid.UUID) (uuid.NullUUID, error) {
+	row := q.db.QueryRow(ctx, getUserFeedbackMessageID, chatID)
+	var user_feedback_message_id uuid.NullUUID
+	err := row.Scan(&user_feedback_message_id)
+	return user_feedback_message_id, err
+}
+
 const insertChatResolution = `-- name: InsertChatResolution :one
 INSERT INTO chat_resolutions (
     project_id,
@@ -157,24 +197,30 @@ INSERT INTO chat_resolutions (
     user_goal,
     resolution,
     resolution_notes,
-    score
+    score,
+    user_feedback,
+    user_feedback_message_id
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7,
+    $8
 ) RETURNING id
 `
 
 type InsertChatResolutionParams struct {
-	ProjectID       uuid.UUID
-	ChatID          uuid.UUID
-	UserGoal        string
-	Resolution      string
-	ResolutionNotes string
-	Score           int32
+	ProjectID             uuid.UUID
+	ChatID                uuid.UUID
+	UserGoal              string
+	Resolution            string
+	ResolutionNotes       string
+	Score                 int32
+	UserFeedback          pgtype.Text
+	UserFeedbackMessageID uuid.NullUUID
 }
 
 func (q *Queries) InsertChatResolution(ctx context.Context, arg InsertChatResolutionParams) (uuid.UUID, error) {
@@ -185,6 +231,8 @@ func (q *Queries) InsertChatResolution(ctx context.Context, arg InsertChatResolu
 		arg.Resolution,
 		arg.ResolutionNotes,
 		arg.Score,
+		arg.UserFeedback,
+		arg.UserFeedbackMessageID,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -209,6 +257,47 @@ type InsertChatResolutionMessageParams struct {
 func (q *Queries) InsertChatResolutionMessage(ctx context.Context, arg InsertChatResolutionMessageParams) error {
 	_, err := q.db.Exec(ctx, insertChatResolutionMessage, arg.ChatResolutionID, arg.MessageID)
 	return err
+}
+
+const insertUserFeedback = `-- name: InsertUserFeedback :one
+INSERT INTO chat_resolutions (
+    project_id,
+    chat_id,
+    user_goal,
+    resolution,
+    resolution_notes,
+    score,
+    user_feedback,
+    user_feedback_message_id
+) VALUES (
+    $1,
+    $2,
+    '', -- Will be filled by agent analysis
+    $3,
+    '', -- Will be filled by agent analysis
+    0,  -- Will be filled by agent analysis
+    $3,
+    $4
+) RETURNING id
+`
+
+type InsertUserFeedbackParams struct {
+	ProjectID             uuid.UUID
+	ChatID                uuid.UUID
+	UserFeedback          string
+	UserFeedbackMessageID uuid.NullUUID
+}
+
+func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedbackParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertUserFeedback,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.UserFeedback,
+		arg.UserFeedbackMessageID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listAllChats = `-- name: ListAllChats :many
@@ -339,7 +428,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 }
 
 const listChatResolutions = `-- name: ListChatResolutions :many
-SELECT id, project_id, chat_id, user_goal, resolution, resolution_notes, score, created_at FROM chat_resolutions
+SELECT id, project_id, chat_id, user_goal, resolution, resolution_notes, score, user_feedback, user_feedback_message_id, created_at FROM chat_resolutions
 WHERE chat_id = $1
 ORDER BY created_at DESC
 `
@@ -361,6 +450,8 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 			&i.Resolution,
 			&i.ResolutionNotes,
 			&i.Score,
+			&i.UserFeedback,
+			&i.UserFeedbackMessageID,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

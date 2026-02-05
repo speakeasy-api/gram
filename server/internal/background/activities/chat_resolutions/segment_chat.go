@@ -33,9 +33,11 @@ func NewSegmentChat(logger *slog.Logger, db *pgxpool.Pool, chatClient *openroute
 }
 
 type SegmentChatArgs struct {
-	ChatID    uuid.UUID
-	ProjectID uuid.UUID
-	OrgID     string
+	ChatID                uuid.UUID
+	ProjectID             uuid.UUID
+	OrgID                 string
+	StartFromMessageID    uuid.UUID // If set, only segment messages after this ID
+	HasStartMessage       bool      // Whether StartFromMessageID is valid
 }
 
 type ChatSegment struct {
@@ -63,18 +65,43 @@ func (s *SegmentChat) Do(ctx context.Context, args SegmentChatArgs) (*SegmentCha
 		}, nil
 	}
 
+	// If we have a start message ID, find the index and only segment from there
+	startIndex := 0
+	if args.HasStartMessage {
+		for i, msg := range messages {
+			if msg.ID == args.StartFromMessageID {
+				startIndex = i + 1 // Start from the message AFTER the feedback message
+				break
+			}
+		}
+		// If we're starting from after the last message, return empty segments
+		if startIndex >= len(messages) {
+			return &SegmentChatOutput{
+				Segments: []ChatSegment{},
+			}, nil
+		}
+	}
+
+	// Get the subset of messages to segment
+	messagesToSegment := messages[startIndex:]
+
 	// If no messages or very few messages, return single segment
-	if len(messages) <= 3 {
+	if len(messagesToSegment) == 0 {
 		return &SegmentChatOutput{
-			Segments: []ChatSegment{{StartIndex: 0, EndIndex: len(messages) - 1}},
+			Segments: []ChatSegment{},
+		}, nil
+	}
+	if len(messagesToSegment) <= 3 {
+		return &SegmentChatOutput{
+			Segments: []ChatSegment{{StartIndex: startIndex, EndIndex: len(messages) - 1}},
 		}, nil
 	}
 
 	// Format messages for segmentation
-	conversationText := s.formatMessages(messages)
+	conversationText := s.formatMessages(messagesToSegment)
 
 	// Call cheap model to identify breakpoints
-	segments, err := s.segmentWithLLM(ctx, args.OrgID, args.ProjectID, conversationText, len(messages))
+	segments, err := s.segmentWithLLM(ctx, args.OrgID, args.ProjectID, conversationText, len(messagesToSegment))
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to segment chat with LLM, using single segment",
 			attr.SlogError(err),
@@ -82,8 +109,14 @@ func (s *SegmentChat) Do(ctx context.Context, args SegmentChatArgs) (*SegmentCha
 		)
 		// Fallback to single segment
 		return &SegmentChatOutput{
-			Segments: []ChatSegment{{StartIndex: 0, EndIndex: len(messages) - 1}},
+			Segments: []ChatSegment{{StartIndex: startIndex, EndIndex: len(messages) - 1}},
 		}, nil
+	}
+
+	// Adjust segment indices to account for the offset
+	for i := range segments {
+		segments[i].StartIndex += startIndex
+		segments[i].EndIndex += startIndex
 	}
 
 	// Validate segments

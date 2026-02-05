@@ -422,6 +422,9 @@ importers:
       '@datadog/browser-rum':
         specifier: ^6.24.1
         version: 6.24.1
+      '@gram/client':
+        specifier: workspace:*
+        version: link:../client/sdk
       '@json-render/core':
         specifier: ^0.2.0
         version: 0.2.0(zod@4.2.1)
