@@ -1,5 +1,3 @@
--- Modify "chat_resolutions" table
-ALTER TABLE "chat_resolutions" DROP CONSTRAINT "chat_resolutions_user_feedback_check", DROP COLUMN "user_feedback", DROP COLUMN "user_feedback_message_id";
 -- Create "chat_user_feedback" table
 CREATE TABLE "chat_user_feedback" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
