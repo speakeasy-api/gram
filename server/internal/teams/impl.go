@@ -223,6 +223,9 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		return nil, err
 	}
 
+	// Normalize email to lowercase to ensure case-insensitive uniqueness at the DB level.
+	email := strings.ToLower(strings.TrimSpace(payload.Email))
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to start transaction").Log(ctx, s.logger)
@@ -234,7 +237,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 	// Check if there's already a pending invite for this email
 	existingInvite, err := txRepo.GetPendingInviteByEmail(ctx, repo.GetPendingInviteByEmailParams{
 		OrganizationID: payload.OrganizationID,
-		Email:          payload.Email,
+		Email:          email,
 	})
 	if err == nil && existingInvite.ID != uuid.Nil {
 		return nil, oops.E(oops.CodeConflict, nil, "an invite is already pending for this email")
@@ -249,7 +252,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to check existing members").Log(ctx, s.logger)
 	}
 	for _, m := range members {
-		if strings.EqualFold(m.Email, payload.Email) {
+		if strings.EqualFold(m.Email, email) {
 			return nil, oops.E(oops.CodeConflict, nil, "user is already a member of this organization")
 		}
 	}
@@ -265,7 +268,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 	// Returns pgx.ErrNoRows when the org already has >= 50 invites in the last 24h.
 	invite, err := txRepo.CreateTeamInvite(ctx, repo.CreateTeamInviteParams{
 		OrganizationID:  payload.OrganizationID,
-		Email:           payload.Email,
+		Email:           email,
 		InvitedByUserID: pgtype.Text{String: userInfo.UserID, Valid: true},
 		Token:           token,
 		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, Valid: true, InfinityModifier: 0},
@@ -287,7 +290,7 @@ func (s *Service) InviteMember(ctx context.Context, payload *gen.InviteMemberPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit invite").Log(ctx, s.logger)
 	}
 
-	if err := s.sendInviteEmail(ctx, payload.Email, token, firstName(invitedByName), userInfo.Email, orgName(userInfo, payload.OrganizationID)); err != nil {
+	if err := s.sendInviteEmail(ctx, email, token, firstName(invitedByName), userInfo.Email, orgName(userInfo, payload.OrganizationID)); err != nil {
 		// Invite is committed but email failed — cancel it so it can be retried.
 		if cancelErr := s.repo.CancelTeamInvite(ctx, invite.ID); cancelErr != nil {
 			s.logger.ErrorContext(ctx, "failed to cancel invite after email failure",
