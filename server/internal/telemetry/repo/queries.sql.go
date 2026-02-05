@@ -156,13 +156,13 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		sb = sb.Where(squirrel.Eq{"severity_text": arg.SeverityText})
 	}
 	if arg.HTTPResponseStatusCode != 0 {
-		sb = sb.Where("toInt32OrZero(toString(attributes.`http.response.status_code`)) = ?", arg.HTTPResponseStatusCode)
+		sb = sb.Where("toInt32OrZero(toString(attributes.http.response.status_code)) = ?", arg.HTTPResponseStatusCode)
 	}
 	if arg.HTTPRoute != "" {
-		sb = sb.Where("toString(attributes.`http.route`) = ?", arg.HTTPRoute)
+		sb = sb.Where("toString(attributes.http.route) = ?", arg.HTTPRoute)
 	}
 	if arg.HTTPRequestMethod != "" {
-		sb = sb.Where("toString(attributes.`http.request.method`) = ?", arg.HTTPRequestMethod)
+		sb = sb.Where("toString(attributes.http.request.method) = ?", arg.HTTPRequestMethod)
 	}
 	if arg.ServiceName != "" {
 		sb = sb.Where(squirrel.Eq{"service_name": arg.ServiceName})
@@ -236,7 +236,7 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		"trace_id",
 		"min(time_unix_nano) as start_time_unix_nano",
 		"count(*) as log_count",
-		"anyIf(toInt32OrNull(toString(attributes.`http.response.status_code`)), toString(attributes.`http.response.status_code`) != '') as http_status_code",
+		"anyIf(toInt32OrNull(toString(attributes.http.response.status_code)), toString(attributes.http.response.status_code) != '') as http_status_code",
 		"any(gram_urn) as gram_urn",
 	).
 		From("telemetry_logs").
@@ -313,37 +313,37 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 		"max(time_unix_nano) AS last_seen_unix_nano",
 
 		// Cardinality (exclude empty strings)
-		"uniqExactIf(toString(attributes.`gen_ai.conversation.id`), toString(attributes.`gen_ai.conversation.id`) != '') AS total_chats",
-		"uniqExactIf(toString(attributes.`gen_ai.response.model`), toString(attributes.`gen_ai.response.model`) != '') AS distinct_models",
-		"uniqExactIf(toString(attributes.`gen_ai.provider.name`), toString(attributes.`gen_ai.provider.name`) != '') AS distinct_providers",
+		"uniqExactIf(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats",
+		"uniqExactIf(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') AS distinct_models",
+		"uniqExactIf(toString(attributes.gen_ai.provider.name), toString(attributes.gen_ai.provider.name) != '') AS distinct_providers",
 
 		// Token metrics (from chat completion events)
-		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.input_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.output_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.total_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_tokens",
-		"avgIf(toFloat64OrZero(toString(attributes.`gen_ai.usage.total_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS avg_tokens_per_request",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_output_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_tokens",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_tokens_per_request",
 
 		// Chat request metrics
-		"countIf(toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_chat_requests",
-		"avgIf(toFloat64OrZero(toString(attributes.`gen_ai.conversation.duration`)) * 1000, toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS avg_chat_duration_ms",
+		"countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_chat_requests",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_chat_duration_ms",
 
 		// Resolution status
-		"countIf(position(toString(attributes.`gen_ai.response.finish_reasons`), 'stop') > 0) AS finish_reason_stop",
-		"countIf(position(toString(attributes.`gen_ai.response.finish_reasons`), 'tool_calls') > 0) AS finish_reason_tool_calls",
+		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) AS finish_reason_stop",
+		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'tool_calls') > 0) AS finish_reason_tool_calls",
 
 		// Tool call metrics
-		"countIf(startsWith(toString(attributes.`gram.tool.urn`), 'tools:')) AS total_tool_calls",
-		"countIf(startsWith(toString(attributes.`gram.tool.urn`), 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 200 AND toInt32OrZero(toString(attributes.`http.response.status_code`)) < 300) AS tool_call_success",
-		"countIf(startsWith(toString(attributes.`gram.tool.urn`), 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 400) AS tool_call_failure",
-		"avgIf(toFloat64OrZero(toString(attributes.`http.server.request.duration`)) * 1000, startsWith(toString(attributes.`gram.tool.urn`), 'tools:')) AS avg_tool_duration_ms",
+		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls",
+		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_call_success",
+		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_call_failure",
+		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS avg_tool_duration_ms",
 
 		// Model breakdown (map of model name -> count)
-		"sumMapIf(map(toString(attributes.`gen_ai.response.model`), toUInt64(1)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion' AND toString(attributes.`gen_ai.response.model`) != '') AS models",
+		"sumMapIf(map(toString(attributes.gen_ai.response.model), toUInt64(1)), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') AS models",
 
 		// Tool breakdowns (maps of tool URN -> count)
 		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 200 AND toInt32OrZero(toString(attributes.`http.response.status_code`)) < 300) AS tool_success_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 400) AS tool_failure_counts",
+		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
+		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -430,17 +430,17 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		"count(*) as log_count",
 		"countIf(startsWith(gram_urn, 'tools:')) as tool_call_count",
 		// Message count: number of LLM completion events in this chat
-		"countIf(toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') as message_count",
+		"countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as message_count",
 		// Duration in seconds (max event time - min event time)
 		"toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0 as duration_seconds",
 		// Status: failed if any tool call returned 4xx/5xx, otherwise success
-		"if(countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 400) > 0, 'error', 'success') as status",
-		"anyIf(toString(attributes.`user.id`), toString(attributes.`user.id`) != '') as user_id",
+		"if(countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) > 0, 'error', 'success') as status",
+		"anyIf(toString(attributes.user.id), toString(attributes.user.id) != '') as user_id",
 		// Model used (pick any non-empty response model from completion events)
-		"anyIf(toString(attributes.`gen_ai.response.model`), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion' AND toString(attributes.`gen_ai.response.model`) != '') as model",
-		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.input_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') as total_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.output_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') as total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.total_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') as total_tokens",
+		"anyIf(toString(attributes.gen_ai.response.model), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') as model",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') as total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') as total_output_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') as total_tokens",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -520,37 +520,37 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"max(time_unix_nano) AS last_seen_unix_nano",
 
 		// Cardinality (exclude empty strings)
-		"uniqExactIf(toString(attributes.`gen_ai.conversation.id`), toString(attributes.`gen_ai.conversation.id`) != '') AS total_chats",
-		"uniqExactIf(toString(attributes.`gen_ai.response.model`), toString(attributes.`gen_ai.response.model`) != '') AS distinct_models",
-		"uniqExactIf(toString(attributes.`gen_ai.provider.name`), toString(attributes.`gen_ai.provider.name`) != '') AS distinct_providers",
+		"uniqExactIf(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats",
+		"uniqExactIf(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') AS distinct_models",
+		"uniqExactIf(toString(attributes.gen_ai.provider.name), toString(attributes.gen_ai.provider.name) != '') AS distinct_providers",
 
 		// Token metrics (from chat completion events)
-		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.input_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.output_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.`gen_ai.usage.total_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_tokens",
-		"avgIf(toFloat64OrZero(toString(attributes.`gen_ai.usage.total_tokens`)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS avg_tokens_per_request",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_output_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_tokens",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_tokens_per_request",
 
 		// Chat request metrics
-		"countIf(toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS total_chat_requests",
-		"avgIf(toFloat64OrZero(toString(attributes.`gen_ai.conversation.duration`)) * 1000, toString(attributes.`gram.resource.urn`) = 'agents:chat:completion') AS avg_chat_duration_ms",
+		"countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_chat_requests",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_chat_duration_ms",
 
 		// Resolution status
-		"countIf(position(toString(attributes.`gen_ai.response.finish_reasons`), 'stop') > 0) AS finish_reason_stop",
-		"countIf(position(toString(attributes.`gen_ai.response.finish_reasons`), 'tool_calls') > 0) AS finish_reason_tool_calls",
+		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) AS finish_reason_stop",
+		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'tool_calls') > 0) AS finish_reason_tool_calls",
 
 		// Tool call metrics
-		"countIf(startsWith(toString(attributes.`gram.tool.urn`), 'tools:')) AS total_tool_calls",
-		"countIf(startsWith(toString(attributes.`gram.tool.urn`), 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 200 AND toInt32OrZero(toString(attributes.`http.response.status_code`)) < 300) AS tool_call_success",
-		"countIf(startsWith(toString(attributes.`gram.tool.urn`), 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 400) AS tool_call_failure",
-		"avgIf(toFloat64OrZero(toString(attributes.`http.server.request.duration`)) * 1000, startsWith(toString(attributes.`gram.tool.urn`), 'tools:')) AS avg_tool_duration_ms",
+		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls",
+		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_call_success",
+		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_call_failure",
+		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS avg_tool_duration_ms",
 
 		// Model breakdown (map of model name -> count)
-		"sumMapIf(map(toString(attributes.`gen_ai.response.model`), toUInt64(1)), toString(attributes.`gram.resource.urn`) = 'agents:chat:completion' AND toString(attributes.`gen_ai.response.model`) != '') AS models",
+		"sumMapIf(map(toString(attributes.gen_ai.response.model), toUInt64(1)), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') AS models",
 
 		// Tool breakdowns (maps of tool URN -> count)
 		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 200 AND toInt32OrZero(toString(attributes.`http.response.status_code`)) < 300) AS tool_success_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.`http.response.status_code`)) >= 400) AS tool_failure_counts",
+		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
+		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
