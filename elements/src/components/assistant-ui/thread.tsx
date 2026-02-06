@@ -57,6 +57,7 @@ import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button
 import { Button } from '@/components/ui/button'
 import { useChatId } from '@/contexts/ChatIdContext'
 import { useReplayContext } from '@/contexts/ReplayContext'
+import { useAuth } from '@/hooks/useAuth'
 import { useDensity } from '@/hooks/useDensity'
 import { useElements } from '@/hooks/useElements'
 import { isLocalThreadId } from '@/hooks/useGramThreadListAdapter'
@@ -64,12 +65,10 @@ import { useRadius } from '@/hooks/useRadius'
 import { useRecordCassette } from '@/hooks/useRecordCassette'
 import { useThemeProps } from '@/hooks/useThemeProps'
 import { useToolMentions } from '@/hooks/useToolMentions'
+import { getApiUrl } from '@/lib/api'
 import { EASE_OUT_QUINT } from '@/lib/easing'
 import { MODELS } from '@/lib/models'
 import { cn } from '@/lib/utils'
-import { getApiUrl } from '@/lib/api'
-import { useAuth } from '@/hooks/useAuth'
-import { Feedback } from '@gram/client/models/components/submitfeedbackrequestbody'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import {
   Tooltip,
@@ -79,6 +78,8 @@ import {
 } from '../ui/tooltip'
 import { ConnectionStatusIndicatorSafe } from './connection-status-indicator'
 import { ToolGroup } from './tool-group'
+
+type Feedback = 'success' | 'failure'
 
 // Context for chat resolution state
 const ChatResolutionContext = createContext<{
