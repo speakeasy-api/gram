@@ -116,10 +116,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	}
 
 	// Insert resolution
-	score := result.Score
-	if score < 0 {
-		score = 0
-	}
+	score := max(result.Score, 0)
 	if score > 100 {
 		score = 100
 	}
@@ -159,36 +156,36 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return nil
 	}
 
-	// Emit resolution telemetry event
+	attrs := map[attr.Key]any{
+		attr.GenAIEvaluationNameKey:        "chat_resolution",
+		attr.GenAIEvaluationScoreLabelKey:  result.Resolution,
+		attr.GenAIEvaluationScoreValueKey:  score,
+		attr.GenAIEvaluationExplanationKey: result.ResolutionNotes,
+		attr.GenAIConversationIDKey:        args.ChatID.String(),
+		attr.ProjectIDKey:                  args.ProjectID.String(),
+		attr.OrganizationIDKey:             args.OrgID,
+	}
+
 	chatInfo, err := a.repo.GetChat(ctx, args.ChatID)
 	if err == nil && chatInfo.CreatedAt.Valid {
 		resolutionTimeSecs := time.Since(chatInfo.CreatedAt.Time).Seconds()
 
-		attrs := map[attr.Key]any{
-			attr.GenAIEvaluationNameKey:        "chat_resolution",
-			attr.GenAIEvaluationScoreLabelKey:  result.Resolution,
-			attr.GenAIEvaluationScoreValueKey:  score,
-			attr.GenAIEvaluationExplanationKey: result.ResolutionNotes,
-			attr.GenAIConversationIDKey:        args.ChatID.String(),
-			attr.ProjectIDKey:                  args.ProjectID.String(),
-			attr.OrganizationIDKey:             args.OrgID,
-			attr.GenAIConversationDuration:     resolutionTimeSecs,
-		}
-
-		a.telemetryService.CreateLog(telemetry.LogParams{
-			Timestamp: time.Now(),
-			ToolInfo: telemetry.ToolInfo{
-				ID:             "",
-				URN:            "agents:chat:resolution",
-				Name:           "chat_resolution",
-				ProjectID:      args.ProjectID.String(),
-				DeploymentID:   "",
-				FunctionID:     nil,
-				OrganizationID: args.OrgID,
-			},
-			Attributes: attrs,
-		})
+		attrs[attr.GenAIConversationDuration] = resolutionTimeSecs
 	}
+
+	a.telemetryService.CreateLog(telemetry.LogParams{
+		Timestamp: time.Now(),
+		ToolInfo: telemetry.ToolInfo{
+			ID:             "",
+			URN:            "agents:chat:resolution",
+			Name:           "chat_resolution",
+			ProjectID:      args.ProjectID.String(),
+			DeploymentID:   "",
+			FunctionID:     nil,
+			OrganizationID: args.OrgID,
+		},
+		Attributes: attrs,
+	})
 
 	return nil
 }
