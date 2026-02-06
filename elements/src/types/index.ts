@@ -315,7 +315,7 @@ export interface ElementsConfig {
    * @example
    * const config: ElementsConfig = {
    *   thread: {
-   *     experimental_showFeedback: true,
+   *     showFeedback: true,
    *     followUpSuggestions: true,
    *   },
    * }
@@ -853,7 +853,7 @@ export interface SidecarConfig extends ExpandableConfig {
  * @example
  * const config: ElementsConfig = {
  *   thread: {
- *     experimental_showFeedback: true,
+ *     showFeedback: true,
  *     followUpSuggestions: true,
  *   },
  * }
@@ -862,9 +862,9 @@ export interface ThreadConfig {
   /**
    * Whether to show feedback buttons (like/dislike) after assistant messages.
    * When enabled, users can mark conversations as resolved or provide feedback.
-   * @default false
+   * @default true
    */
-  experimental_showFeedback?: boolean
+  showFeedback?: boolean
 
   /**
    * Whether to show AI-generated follow-up question suggestions after each assistant response.

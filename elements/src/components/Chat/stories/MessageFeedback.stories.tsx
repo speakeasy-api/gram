@@ -1,7 +1,7 @@
-import { Chat } from '..'
-import type { Meta, StoryFn } from '@storybook/react-vite'
 import { MessageFeedback } from '@/components/assistant-ui/message-feedback'
+import type { Meta, StoryFn } from '@storybook/react-vite'
 import { LazyMotion, domAnimation } from 'motion/react'
+import { Chat } from '..'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Message Feedback',
@@ -25,7 +25,7 @@ Default.parameters = {
     config: {
       variant: 'standalone',
       thread: {
-        experimental_showFeedback: true,
+        showFeedback: true,
       },
       welcome: {
         title: 'Message Feedback Demo',
@@ -59,7 +59,7 @@ Widget.parameters = {
       variant: 'widget',
       modal: { defaultOpen: true },
       thread: {
-        experimental_showFeedback: true,
+        showFeedback: true,
       },
       welcome: {
         title: 'Message Feedback Demo',
@@ -91,7 +91,7 @@ Sidecar.parameters = {
     config: {
       variant: 'sidecar',
       thread: {
-        experimental_showFeedback: true,
+        showFeedback: true,
       },
       welcome: {
         title: 'Message Feedback Demo',
@@ -122,7 +122,7 @@ WithFollowUpSuggestions.parameters = {
       systemPrompt:
         'You are a helpful customer support assistant. Keep ALL responses extremely brief - 1-2 sentences only. No lists, no elaboration.',
       thread: {
-        experimental_showFeedback: true,
+        showFeedback: true,
         followUpSuggestions: true,
       },
       welcome: {
