@@ -151,6 +151,14 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	a.logger.InfoContext(ctx, "successfully analyzed segment",
+		attr.SlogChatID(args.ChatID.String()),
+	)
+
+	if a.telemetryService == nil {
+		return nil
+	}
+
 	// Emit resolution telemetry event
 	chatInfo, err := a.repo.GetChat(ctx, args.ChatID)
 	if err == nil && chatInfo.CreatedAt.Valid {
@@ -181,10 +189,6 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 			Attributes: attrs,
 		})
 	}
-
-	a.logger.InfoContext(ctx, "successfully analyzed segment",
-		attr.SlogChatID(args.ChatID.String()),
-	)
 
 	return nil
 }
