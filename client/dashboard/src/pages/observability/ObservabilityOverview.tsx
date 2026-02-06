@@ -8,10 +8,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { useGramContext } from "@gram/client/react-query/_context";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Icon, IconName } from "@speakeasy-api/moonshine";
 import {
   Chart as ChartJS,
@@ -26,15 +26,88 @@ import {
   type TooltipItem,
 } from "chart.js";
 import { Line, Bar } from "react-chartjs-2";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { AreaChart, BarChart3, LineChart } from "lucide-react";
 
 type ChartType = "area" | "bar" | "line";
+
+function ChartTypeToggle({
+  value,
+  onChange,
+}: {
+  value: ChartType;
+  onChange: (value: ChartType) => void;
+}) {
+  return (
+    <TooltipProvider delayDuration={0}>
+      <ToggleGroup
+        type="single"
+        value={value}
+        onValueChange={(v) => v && onChange(v as ChartType)}
+        variant="outline"
+        size="sm"
+      >
+        <UITooltip>
+          <TooltipTrigger asChild>
+            <ToggleGroupItem
+              value="area"
+              aria-label="Area chart"
+              className={`px-2 ${value === "area" ? "bg-muted" : ""}`}
+            >
+              <AreaChart
+                className="size-4 text-muted-foreground"
+                strokeWidth={1.75}
+              />
+            </ToggleGroupItem>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={4}>
+            Area
+          </TooltipContent>
+        </UITooltip>
+        <UITooltip>
+          <TooltipTrigger asChild>
+            <ToggleGroupItem
+              value="bar"
+              aria-label="Bar chart"
+              className={`px-2 ${value === "bar" ? "bg-muted" : ""}`}
+            >
+              <BarChart3
+                className="size-4 text-muted-foreground"
+                strokeWidth={1.75}
+              />
+            </ToggleGroupItem>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={4}>
+            Bar
+          </TooltipContent>
+        </UITooltip>
+        <UITooltip>
+          <TooltipTrigger asChild>
+            <ToggleGroupItem
+              value="line"
+              aria-label="Line chart"
+              className={`px-2 ${value === "line" ? "bg-muted" : ""}`}
+            >
+              <LineChart
+                className="size-4 text-muted-foreground"
+                strokeWidth={1.75}
+              />
+            </ToggleGroupItem>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={4}>
+            Line
+          </TooltipContent>
+        </UITooltip>
+      </ToggleGroup>
+    </TooltipProvider>
+  );
+}
 
 // Register Chart.js components
 ChartJS.register(
@@ -48,14 +121,39 @@ ChartJS.register(
   Legend,
 );
 
-export default function ObservabilityOverview() {
-  const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
+/**
+ * Apply a centered moving average to smooth data (like Datadog).
+ * Window size auto-scales based on data length for consistent smoothing.
+ */
+function smoothData(data: number[], windowSize?: number): number[] {
+  if (data.length < 3) return data;
 
-  const { from, to } = getDateRange(dateRange);
+  // Auto-scale window: ~3% of data points, min 3, max 9
+  const autoWindow = Math.max(3, Math.min(9, Math.floor(data.length * 0.03)));
+  const window = windowSize ?? autoWindow;
+  const halfWindow = Math.floor(window / 2);
+
+  return data.map((_, i) => {
+    const start = Math.max(0, i - halfWindow);
+    const end = Math.min(data.length, i + halfWindow + 1);
+    const slice = data.slice(start, end);
+    return slice.reduce((a, b) => a + b, 0) / slice.length;
+  });
+}
+
+export default function ObservabilityOverview() {
+  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
+  const [customRange, setCustomRange] = useState<{
+    from: Date;
+    to: Date;
+  } | null>(null);
+
+  // Use custom range if set, otherwise use preset
+  const { from, to } = customRange ?? getDateRange(dateRange);
   const client = useGramContext();
 
-  const { data, isPending, error } = useQuery({
-    queryKey: ["observability", "overview", dateRange],
+  const { data, isPending, isFetching, error } = useQuery({
+    queryKey: ["observability", "overview", customRange ?? dateRange],
     queryFn: () =>
       unwrapAsync(
         telemetryGetObservabilityOverview(client, {
@@ -66,7 +164,21 @@ export default function ObservabilityOverview() {
           },
         }),
       ),
+    placeholderData: keepPreviousData,
   });
+
+  const handleTimeRangeSelect = useCallback((newFrom: Date, newTo: Date) => {
+    setCustomRange({ from: newFrom, to: newTo });
+  }, []);
+
+  const handleClearCustomRange = useCallback(() => {
+    setCustomRange(null);
+  }, []);
+
+  const handlePresetChange = useCallback((preset: DateRangePreset) => {
+    setDateRange(preset);
+    setCustomRange(null);
+  }, []);
 
   return (
     <Page>
@@ -87,21 +199,35 @@ export default function ObservabilityOverview() {
               Monitor chat sessions, tool performance, and system health
             </p>
           </div>
-          <DateRangeSelect value={dateRange} onValueChange={setDateRange} />
+          <DateRangeSelect
+            value={dateRange}
+            onValueChange={handlePresetChange}
+            customRange={customRange}
+            onClearCustomRange={handleClearCustomRange}
+          />
         </div>
 
         <ObservabilityContent
           isPending={isPending}
+          isFetching={isFetching}
           error={error}
           data={data}
           dateRange={dateRange}
+          customRange={customRange}
+          onTimeRangeSelect={handleTimeRangeSelect}
         />
       </Page.Body>
     </Page>
   );
 }
 
-function getComparisonLabel(dateRange: DateRangePreset): string {
+function getComparisonLabel(
+  dateRange: DateRangePreset,
+  isCustomRange: boolean,
+): string {
+  if (isCustomRange) {
+    return "vs previous period";
+  }
   switch (dateRange) {
     case "24h":
       return "vs last 24 hours";
@@ -118,14 +244,20 @@ function getComparisonLabel(dateRange: DateRangePreset): string {
 
 function ObservabilityContent({
   isPending,
+  isFetching,
   error,
   data,
   dateRange,
+  customRange,
+  onTimeRangeSelect,
 }: {
   isPending: boolean;
+  isFetching: boolean;
   error: Error | null;
   data: GetObservabilityOverviewResult | undefined;
   dateRange: DateRangePreset;
+  customRange: { from: Date; to: Date } | null;
+  onTimeRangeSelect: (from: Date, to: Date) => void;
 }) {
   if (isPending) {
     return <LoadingSkeleton />;
@@ -151,7 +283,7 @@ function ObservabilityContent({
     topToolsByFailureRate,
   } = data;
 
-  const comparisonLabel = getComparisonLabel(dateRange);
+  const comparisonLabel = getComparisonLabel(dateRange, customRange !== null);
 
   // Calculate error rate
   const errorRate =
@@ -163,13 +295,20 @@ function ObservabilityContent({
       ? ((comparison.failedToolCalls ?? 0) / comparison.totalToolCalls) * 100
       : 0;
 
+  // Show loading indicator when refetching (but keep showing old data)
+  const isRefetching = isFetching && !isPending;
+
+  // Calculate the actual time range for chart label formatting
+  const { from, to } = customRange ?? getDateRange(dateRange);
+  const timeRangeMs = to.getTime() - from.getTime();
+
   return (
     <div className="space-y-8">
       {/* ===== CHAT RESOLUTION SECTION ===== */}
       <section>
         <h2 className="text-lg font-semibold mb-4">Chat Resolution</h2>
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <MetricCard
               title="Total Chats"
               value={summary?.totalChats ?? 0}
@@ -196,12 +335,43 @@ function ObservabilityContent({
               thresholds={{ red: 30, amber: 60 }}
               comparisonLabel={comparisonLabel}
             />
+            <MetricCard
+              title="Avg Session Duration"
+              value={(summary?.avgSessionDurationMs ?? 0) / 1000}
+              previousValue={(comparison?.avgSessionDurationMs ?? 0) / 1000}
+              format="seconds"
+              icon="timer"
+              invertDelta
+              thresholds={{ red: 300, amber: 120, inverted: true }}
+              comparisonLabel={comparisonLabel}
+            />
+            <MetricCard
+              title="Avg Resolution Time"
+              value={(summary?.avgResolutionTimeMs ?? 0) / 1000}
+              previousValue={(comparison?.avgResolutionTimeMs ?? 0) / 1000}
+              format="seconds"
+              icon="clock"
+              invertDelta
+              thresholds={{ red: 180, amber: 60, inverted: true }}
+              comparisonLabel={comparisonLabel}
+            />
           </div>
-          <ResolutionRateChart
-            data={timeSeries ?? []}
-            dateRange={dateRange}
-            title="Resolution rate over time"
-          />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ResolvedChatsChart
+              data={timeSeries ?? []}
+              timeRangeMs={timeRangeMs}
+              title="Active vs Resolved Chats"
+              onTimeRangeSelect={onTimeRangeSelect}
+              isLoading={isRefetching}
+            />
+            <SessionDurationChart
+              data={timeSeries ?? []}
+              timeRangeMs={timeRangeMs}
+              title="Avg Session Duration Over Time"
+              onTimeRangeSelect={onTimeRangeSelect}
+              isLoading={isRefetching}
+            />
+          </div>
         </div>
       </section>
 
@@ -211,14 +381,14 @@ function ObservabilityContent({
         <div className="space-y-4">
           <ToolCallsChart
             data={timeSeries ?? []}
-            dateRange={dateRange}
-            title="Tool calls & errors"
+            timeRangeMs={timeRangeMs}
+            title="Tool Calls & Errors"
+            onTimeRangeSelect={onTimeRangeSelect}
+            isLoading={isRefetching}
           />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="rounded-lg border border-border bg-card p-6">
-              <h3 className="text-sm font-medium text-muted-foreground mb-4">
-                Top tools by usage
-              </h3>
+              <h3 className="text-sm font-semibold mb-4">Top Tools by Usage</h3>
               <ToolBarList
                 tools={topToolsByCount ?? []}
                 valueKey="callCount"
@@ -226,8 +396,8 @@ function ObservabilityContent({
               />
             </div>
             <div className="rounded-lg border border-border bg-card p-6">
-              <h3 className="text-sm font-medium text-muted-foreground mb-4">
-                Tools by failure rate
+              <h3 className="text-sm font-semibold mb-4">
+                Tools by Failure Rate
               </h3>
               <ToolBarList
                 tools={topToolsByFailureRate ?? []}
@@ -313,7 +483,7 @@ function MetricCard({
   title: string;
   value: number;
   previousValue: number;
-  format?: "number" | "percent" | "ms";
+  format?: "number" | "percent" | "ms" | "seconds";
   icon: IconName;
   invertDelta?: boolean;
   thresholds?: ThresholdConfig;
@@ -325,6 +495,13 @@ function MetricCard({
         return `${v.toFixed(1)}%`;
       case "ms":
         return `${v.toFixed(0)}ms`;
+      case "seconds":
+        if (v >= 60) {
+          const mins = Math.floor(v / 60);
+          const secs = Math.round(v % 60);
+          return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+        }
+        return `${v.toFixed(1)}s`;
       default:
         return v.toLocaleString();
     }
@@ -342,17 +519,13 @@ function MetricCard({
   return (
     <div className="rounded-lg border border-border bg-card p-5">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium text-muted-foreground">
-          {title}
-        </span>
+        <span className="text-sm font-semibold">{title}</span>
         <div className="p-2 rounded-lg bg-muted/50">
           <Icon name={icon} className="size-4 text-muted-foreground" />
         </div>
       </div>
       <div className="flex items-end justify-between">
-        <span
-          className={`text-3xl font-semibold tracking-tight ${valueColor}`}
-        >
+        <span className={`text-3xl font-semibold tracking-tight ${valueColor}`}>
           {formatValue(value)}
         </span>
         {previousValue > 0 && delta !== 0 && (
@@ -380,53 +553,178 @@ function MetricCard({
   );
 }
 
-function formatChartLabel(date: Date, dateRange: DateRangePreset): string {
-  switch (dateRange) {
-    case "24h":
-      // Time only: "14:00"
-      return date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    case "7d":
-      // Date only: "Jan 5"
-      return date.toLocaleDateString([], { month: "short", day: "numeric" });
-    case "30d":
-    case "90d":
-    default:
-      // Date only: "Jan 5"
-      return date.toLocaleDateString([], { month: "short", day: "numeric" });
+function formatChartLabel(date: Date, timeRangeMs: number): string {
+  const hours = timeRangeMs / (1000 * 60 * 60);
+  const days = hours / 24;
+
+  if (hours <= 24) {
+    // ≤24 hours: Show time only "14:00"
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } else if (days <= 2) {
+    // ≤2 days: Show date + time "Jan 5, 14:00"
+    return date.toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } else {
+    // >2 days: Show date only "Jan 5"
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
   }
+}
+
+// Chart selection wrapper for drag-to-zoom functionality
+function ChartWithSelection({
+  children,
+  data,
+  onTimeRangeSelect,
+}: {
+  children: React.ReactNode;
+  data: Array<{ bucketTimeUnixNano?: string }>;
+  onTimeRangeSelect?: (from: Date, to: Date) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [selection, setSelection] = useState<{
+    startX: number;
+    currentX: number;
+  } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (!onTimeRangeSelect || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      setSelection({ startX: x, currentX: x });
+      setIsDragging(true);
+    },
+    [onTimeRangeSelect],
+  );
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isDragging || !selection || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      setSelection((prev) => (prev ? { ...prev, currentX: x } : null));
+    },
+    [isDragging, selection],
+  );
+
+  const handleMouseUp = useCallback(() => {
+    if (
+      !isDragging ||
+      !selection ||
+      !containerRef.current ||
+      !onTimeRangeSelect
+    )
+      return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const startPercent =
+      Math.min(selection.startX, selection.currentX) / rect.width;
+    const endPercent =
+      Math.max(selection.startX, selection.currentX) / rect.width;
+
+    // Only trigger if selection is meaningful (> 5% of chart width)
+    if (endPercent - startPercent > 0.05 && data.length > 0) {
+      const startIndex = Math.floor(startPercent * data.length);
+      const endIndex = Math.min(
+        Math.ceil(endPercent * data.length),
+        data.length - 1,
+      );
+
+      const startTimestamp =
+        Number(data[startIndex]?.bucketTimeUnixNano) / 1_000_000;
+      const endTimestamp =
+        Number(data[endIndex]?.bucketTimeUnixNano) / 1_000_000;
+
+      if (startTimestamp && endTimestamp) {
+        onTimeRangeSelect(new Date(startTimestamp), new Date(endTimestamp));
+      }
+    }
+
+    setSelection(null);
+    setIsDragging(false);
+  }, [isDragging, selection, data, onTimeRangeSelect]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (isDragging) {
+      setSelection(null);
+      setIsDragging(false);
+    }
+  }, [isDragging]);
+
+  const selectionLeft = selection
+    ? Math.min(selection.startX, selection.currentX)
+    : 0;
+  const selectionWidth = selection
+    ? Math.abs(selection.currentX - selection.startX)
+    : 0;
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative h-72 cursor-crosshair"
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
+    >
+      {children}
+      {selection && selectionWidth > 5 && (
+        <div
+          className="absolute top-0 bottom-0 bg-blue-500/20 border-l border-r border-blue-500/50 pointer-events-none"
+          style={{
+            left: selectionLeft,
+            width: selectionWidth,
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
 function ToolCallsChart({
   data,
-  dateRange,
+  timeRangeMs,
   title,
+  onTimeRangeSelect,
+  isLoading,
 }: {
   data: Array<{
     bucketTimeUnixNano?: string;
     totalToolCalls?: number;
     failedToolCalls?: number;
   }>;
-  dateRange: DateRangePreset;
+  timeRangeMs: number;
   title: string;
+  onTimeRangeSelect?: (from: Date, to: Date) => void;
+  isLoading?: boolean;
 }) {
   const [chartType, setChartType] = useState<ChartType>("area");
 
   const labels = data.map((d) => {
     const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
     const date = new Date(timestamp);
-    return formatChartLabel(date, dateRange);
+    return formatChartLabel(date, timeRangeMs);
   });
 
-  const toolCallsData = data.map(
+  const rawToolCallsData = data.map(
     (d) => (d.totalToolCalls ?? 0) - (d.failedToolCalls ?? 0),
   );
-  const errorsData = data.map((d) => d.failedToolCalls ?? 0);
+  const rawErrorsData = data.map((d) => d.failedToolCalls ?? 0);
 
   const isArea = chartType === "area";
   const isBar = chartType === "bar";
+
+  // Apply smoothing for line/area charts, use raw data for bar charts
+  const toolCallsData = isBar ? rawToolCallsData : smoothData(rawToolCallsData);
+  const errorsData = isBar ? rawErrorsData : smoothData(rawErrorsData);
 
   const toolCallsDataset = {
     label: " Tool Calls",
@@ -482,21 +780,22 @@ function ToolCallsChart({
         position: "top" as const,
         align: "end" as const,
         labels: {
-          usePointStyle: true,
-          pointStyle: "circle",
-          boxWidth: 8,
-          padding: 15,
-          color: "#374151",
+          boxWidth: 12,
+          boxHeight: 12,
+          useBorderRadius: true,
+          borderRadius: 2,
+          padding: 16,
+          color: "#9ca3af",
           font: {
             size: 12,
           },
         },
       },
       tooltip: {
-        backgroundColor: "white",
-        titleColor: "#111",
-        bodyColor: "#666",
-        borderColor: "#e5e7eb",
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255, 255, 255, 0.1)",
         borderWidth: 1,
         padding: 12,
         boxPadding: 4,
@@ -505,7 +804,7 @@ function ToolCallsChart({
           label: (context: TooltipItem<"line"> | TooltipItem<"bar">) => {
             const label = context.dataset.label || "";
             const value = context.parsed.y ?? 0;
-            return `${label}: ${value.toLocaleString()}`;
+            return `${label}: ${Math.round(value).toLocaleString()}`;
           },
         },
       },
@@ -522,7 +821,7 @@ function ToolCallsChart({
       y: {
         beginAtZero: true,
         grid: {
-          color: "#f3f4f6",
+          color: "rgba(128, 128, 128, 0.2)",
         },
       },
     },
@@ -531,68 +830,84 @@ function ToolCallsChart({
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
-        <Select
-          value={chartType}
-          onValueChange={(v) => setChartType(v as ChartType)}
-        >
-          <SelectTrigger className="w-28">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="area">Area</SelectItem>
-            <SelectItem value="bar">Bar</SelectItem>
-            <SelectItem value="line">Line</SelectItem>
-          </SelectContent>
-        </Select>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <ChartTypeToggle value={chartType} onChange={setChartType} />
       </div>
-      <div className="h-72">
-        {isBar ? (
-          <Bar data={chartData} options={options} />
-        ) : (
-          <Line data={chartData} options={options} />
+      <div className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded">
+            <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
+          </div>
         )}
+        <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
+          {isBar ? (
+            <Bar data={chartData} options={options} />
+          ) : (
+            <Line data={chartData} options={options} />
+          )}
+        </ChartWithSelection>
       </div>
     </div>
   );
 }
 
-function ResolutionRateChart({
+function ResolvedChatsChart({
   data,
-  dateRange,
+  timeRangeMs,
   title,
+  onTimeRangeSelect,
+  isLoading,
 }: {
   data: Array<{
     bucketTimeUnixNano?: string;
     totalChats?: number;
     resolvedChats?: number;
   }>;
-  dateRange: DateRangePreset;
+  timeRangeMs: number;
   title: string;
+  onTimeRangeSelect?: (from: Date, to: Date) => void;
+  isLoading?: boolean;
 }) {
   const [chartType, setChartType] = useState<ChartType>("area");
 
   const labels = data.map((d) => {
     const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
     const date = new Date(timestamp);
-    return formatChartLabel(date, dateRange);
+    return formatChartLabel(date, timeRangeMs);
   });
 
-  const resolutionRateData = data.map((d) => {
-    const total = d.totalChats ?? 0;
-    const resolved = d.resolvedChats ?? 0;
-    return total > 0 ? (resolved / total) * 100 : 0;
-  });
+  const rawTotalData = data.map((d) => d.totalChats ?? 0);
+  const rawResolvedData = data.map((d) => d.resolvedChats ?? 0);
 
   const isArea = chartType === "area";
   const isBar = chartType === "bar";
+
+  // Apply smoothing for line/area charts, use raw data for bar charts
+  const totalChatsData = isBar ? rawTotalData : smoothData(rawTotalData);
+  const resolvedChatsData = isBar
+    ? rawResolvedData
+    : smoothData(rawResolvedData);
 
   const chartData = {
     labels,
     datasets: [
       {
-        label: " Resolution Rate",
-        data: resolutionRateData,
+        label: " Active",
+        data: totalChatsData,
+        borderColor: "#6b7280",
+        backgroundColor: isBar ? "#6b7280" : "rgba(107, 114, 128, 0.1)",
+        pointBackgroundColor: "#6b7280",
+        fill: isArea,
+        barPercentage: 1.0,
+        categoryPercentage: 1.0,
+        tension: 0.3,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      },
+      {
+        label: " Resolved",
+        data: resolvedChatsData,
         borderColor: "#10b981",
         backgroundColor: isBar ? "#10b981" : "rgba(16, 185, 129, 0.1)",
         pointBackgroundColor: "#10b981",
@@ -616,13 +931,24 @@ function ResolutionRateChart({
     },
     plugins: {
       legend: {
-        display: false,
+        display: true,
+        position: "top" as const,
+        align: "end" as const,
+        labels: {
+          boxWidth: 12,
+          boxHeight: 12,
+          useBorderRadius: true,
+          borderRadius: 2,
+          padding: 16,
+          color: "#9ca3af",
+          font: { size: 12 },
+        },
       },
       tooltip: {
-        backgroundColor: "white",
-        titleColor: "#111",
-        bodyColor: "#666",
-        borderColor: "#e5e7eb",
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255, 255, 255, 0.1)",
         borderWidth: 1,
         padding: 12,
         boxPadding: 4,
@@ -630,7 +956,8 @@ function ResolutionRateChart({
         callbacks: {
           label: (context: TooltipItem<"line"> | TooltipItem<"bar">) => {
             const value = context.parsed.y ?? 0;
-            return ` Resolution Rate: ${value.toFixed(1)}%`;
+            const label = context.dataset.label?.trim() ?? "";
+            return ` ${label}: ${Math.round(value).toLocaleString()}`;
           },
         },
       },
@@ -646,12 +973,8 @@ function ResolutionRateChart({
       },
       y: {
         beginAtZero: true,
-        max: 100,
         grid: {
-          color: "#f3f4f6",
-        },
-        ticks: {
-          callback: (value: number | string) => `${value}%`,
+          color: "rgba(128, 128, 128, 0.2)",
         },
       },
     },
@@ -660,44 +983,193 @@ function ResolutionRateChart({
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
-        <Select
-          value={chartType}
-          onValueChange={(v) => setChartType(v as ChartType)}
-        >
-          <SelectTrigger className="w-28">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="area">Area</SelectItem>
-            <SelectItem value="bar">Bar</SelectItem>
-            <SelectItem value="line">Line</SelectItem>
-          </SelectContent>
-        </Select>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <ChartTypeToggle value={chartType} onChange={setChartType} />
       </div>
-      <div className="h-72">
-        {isBar ? (
-          <Bar data={chartData} options={options} />
-        ) : (
-          <Line data={chartData} options={options} />
+      <div className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded">
+            <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
+          </div>
         )}
+        <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
+          {isBar ? (
+            <Bar data={chartData} options={options} />
+          ) : (
+            <Line data={chartData} options={options} />
+          )}
+        </ChartWithSelection>
+      </div>
+      <div className="flex items-center justify-between mt-3">
+        <p className="text-xs text-muted-foreground">
+          Active = chats with events in interval; Resolved = chats that
+          completed
+        </p>
+        <a
+          href="#"
+          className="text-xs text-primary hover:underline"
+          onClick={(e) => e.preventDefault()}
+        >
+          View individual sessions →
+        </a>
       </div>
     </div>
   );
 }
 
-// Vibrant color palette for bars (similar to Datadog)
+function SessionDurationChart({
+  data,
+  timeRangeMs,
+  title,
+  onTimeRangeSelect,
+  isLoading,
+}: {
+  data: Array<{
+    bucketTimeUnixNano?: string;
+    avgSessionDurationMs?: number;
+  }>;
+  timeRangeMs: number;
+  title: string;
+  onTimeRangeSelect?: (from: Date, to: Date) => void;
+  isLoading?: boolean;
+}) {
+  const [chartType, setChartType] = useState<ChartType>("area");
+
+  const labels = data.map((d) => {
+    const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
+    const date = new Date(timestamp);
+    return formatChartLabel(date, timeRangeMs);
+  });
+
+  // Convert ms to seconds for display
+  const rawData = data.map((d) => (d.avgSessionDurationMs ?? 0) / 1000);
+
+  const isArea = chartType === "area";
+  const isBar = chartType === "bar";
+
+  // Apply smoothing for line/area charts, use raw data for bar charts
+  const durationData = isBar ? rawData : smoothData(rawData);
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        label: " Avg Duration",
+        data: durationData,
+        borderColor: "#8b5cf6",
+        backgroundColor: isBar ? "#8b5cf6" : "rgba(139, 92, 246, 0.1)",
+        pointBackgroundColor: "#8b5cf6",
+        fill: isArea,
+        barPercentage: 1.0,
+        categoryPercentage: 1.0,
+        tension: 0.3,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      },
+    ],
+  };
+
+  const formatDuration = (seconds: number) => {
+    if (seconds >= 60) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.round(seconds % 60);
+      return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+    }
+    return `${seconds.toFixed(1)}s`;
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: "index" as const,
+      intersect: false,
+    },
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        borderWidth: 1,
+        padding: 12,
+        boxPadding: 4,
+        usePointStyle: true,
+        callbacks: {
+          label: (context: TooltipItem<"line"> | TooltipItem<"bar">) => {
+            const value = context.parsed.y ?? 0;
+            return ` Avg Duration: ${formatDuration(value)}`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+        ticks: {
+          maxTicksLimit: 8,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        grid: {
+          color: "rgba(128, 128, 128, 0.2)",
+        },
+        ticks: {
+          callback: (value: number | string) => {
+            const num = typeof value === "string" ? parseFloat(value) : value;
+            return formatDuration(num);
+          },
+        },
+      },
+    },
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <ChartTypeToggle value={chartType} onChange={setChartType} />
+      </div>
+      <div className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded">
+            <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+        <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
+          {isBar ? (
+            <Bar data={chartData} options={options} />
+          ) : (
+            <Line data={chartData} options={options} />
+          )}
+        </ChartWithSelection>
+      </div>
+      <p className="text-xs text-muted-foreground mt-3">
+        Values are rolled up and averaged across the time window interval
+      </p>
+    </div>
+  );
+}
+
+// Brand-inspired muted palette (from moonshine gradient colors)
 const barColors = [
-  "bg-cyan-400",
-  "bg-fuchsia-400",
-  "bg-amber-400",
-  "bg-emerald-400",
-  "bg-rose-400",
-  "bg-violet-400",
-  "bg-orange-400",
-  "bg-sky-400",
-  "bg-lime-400",
-  "bg-pink-400",
+  "bg-[hsl(214,69%,50%)]", // Java blue
+  "bg-[hsl(4,67%,52%)]", // Swift red
+  "bg-[hsl(108,35%,45%)]", // Terraform green
+  "bg-[hsl(216,70%,60%)]", // Python blue
+  "bg-[hsl(23,80%,55%)]", // Ruby orange
+  "bg-[hsl(334,50%,45%)]", // PHP magenta
+  "bg-[hsl(68,45%,50%)]", // Unity lime
+  "bg-[hsl(154,50%,40%)]", // C teal
+  "bg-[hsl(220,60%,45%)]", // Go blue
+  "bg-[hsl(280,40%,50%)]", // Purple accent
 ];
 
 function ToolBarList({
@@ -743,18 +1215,29 @@ function ToolBarList({
           : item.value.toLocaleString();
 
         return (
-          <div key={item.name} className="flex items-center gap-3">
-            <span className="text-sm font-medium tabular-nums w-14 text-right shrink-0">
+          <div key={item.name} className="flex items-center gap-2">
+            <span className="text-sm font-medium text-right shrink-0 min-w-[3rem]">
               {displayValue}
             </span>
             <div className="flex-1 relative h-7">
+              {/* Background text (for overflow outside bar) */}
+              <span className="absolute inset-y-0 left-2 flex items-center text-sm font-medium text-foreground truncate pr-2 z-0">
+                {item.name}
+              </span>
+              {/* Colored bar */}
               <div
                 className={`absolute inset-y-0 left-0 rounded ${barColors[index % barColors.length]}`}
                 style={{ width: `${Math.max(widthPercent, 5)}%` }}
               />
-              <span className="absolute inset-y-0 left-2 flex items-center text-sm font-medium text-gray-900 truncate pr-2">
-                {item.name}
-              </span>
+              {/* White text clipped to bar */}
+              <div
+                className="absolute inset-y-0 left-0 overflow-hidden z-10"
+                style={{ width: `${Math.max(widthPercent, 5)}%` }}
+              >
+                <span className="absolute inset-y-0 left-2 flex items-center text-sm font-medium text-white truncate pr-2 whitespace-nowrap">
+                  {item.name}
+                </span>
+              </div>
             </div>
           </div>
         );

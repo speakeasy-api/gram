@@ -1,5 +1,5 @@
-import { CalendarIcon } from "lucide-react";
-import { subDays, subHours } from "date-fns";
+import { CalendarIcon, X } from "lucide-react";
+import { subDays, subHours, format } from "date-fns";
 import {
   Select,
   SelectContent,
@@ -7,8 +7,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
-export type DateRangePreset = "24h" | "7d" | "30d";
+export type DateRangePreset = "24h" | "7d" | "30d" | "90d";
+
+export type DateRange =
+  | { type: "preset"; preset: DateRangePreset }
+  | { type: "custom"; from: Date; to: Date };
 
 const PRESETS: Record<
   DateRangePreset,
@@ -26,17 +31,47 @@ const PRESETS: Record<
     label: "Last 30 days",
     getRange: () => ({ from: subDays(new Date(), 30), to: new Date() }),
   },
+  "90d": {
+    label: "Last 90 days",
+    getRange: () => ({ from: subDays(new Date(), 90), to: new Date() }),
+  },
 };
 
 interface DateRangeSelectProps {
   value: DateRangePreset;
   onValueChange: (value: DateRangePreset) => void;
+  customRange?: { from: Date; to: Date } | null;
+  onClearCustomRange?: () => void;
 }
 
 export function DateRangeSelect({
   value,
   onValueChange,
+  customRange,
+  onClearCustomRange,
 }: DateRangeSelectProps) {
+  if (customRange) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-blue-50 border-blue-200">
+        <CalendarIcon className="size-4 text-blue-600" />
+        <span className="text-sm text-blue-800">
+          {format(customRange.from, "MMM d, HH:mm")} –{" "}
+          {format(customRange.to, "MMM d, HH:mm")}
+        </span>
+        {onClearCustomRange && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 w-5 p-0 hover:bg-blue-100"
+            onClick={onClearCustomRange}
+          >
+            <X className="size-3 text-blue-600" />
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <Select value={value} onValueChange={onValueChange}>
       <SelectTrigger className="w-[180px]">
