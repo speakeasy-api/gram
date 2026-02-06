@@ -58,8 +58,8 @@ const ImpersonationBanner = () => {
   return (
     <div className="flex items-center justify-center gap-3 bg-red-600 px-4 py-2 text-white text-sm">
       <ShieldAlert className="h-4 w-4 shrink-0" />
-      <span>
-        Impersonating <strong>{organization.name}</strong> ({overrideSlug})
+      <span className="font-bold font-mono">
+        Impersonating {organization.slug}
       </span>
       <button
         type="button"
