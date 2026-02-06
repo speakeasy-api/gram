@@ -312,14 +312,13 @@ func ToToolListEntry(tool *types.Tool) (ToolListEntry, error) {
 // getToolAnnotations extracts or infers annotations for a tool.
 // For HTTP tools without explicit annotations, infers from HTTP method.
 func getToolAnnotations(tool *types.Tool) *ToolAnnotations {
-	// TODO: Re-enable after Goa types are generated
 	// Check for stored annotations first
-	// if tool.HTTPToolDefinition != nil && tool.HTTPToolDefinition.Annotations != nil {
-	// 	return convertStoredAnnotations(tool.HTTPToolDefinition.Annotations)
-	// }
-	// if tool.FunctionToolDefinition != nil && tool.FunctionToolDefinition.Annotations != nil {
-	// 	return convertStoredAnnotations(tool.FunctionToolDefinition.Annotations)
-	// }
+	if tool.HTTPToolDefinition != nil && tool.HTTPToolDefinition.Annotations != nil {
+		return convertStoredAnnotations(tool.HTTPToolDefinition.Annotations)
+	}
+	if tool.FunctionToolDefinition != nil && tool.FunctionToolDefinition.Annotations != nil {
+		return convertStoredAnnotations(tool.FunctionToolDefinition.Annotations)
+	}
 
 	// For HTTP tools without explicit annotations, infer from HTTP method
 	if tool.HTTPToolDefinition != nil && tool.HTTPToolDefinition.HTTPMethod != "" {
@@ -330,23 +329,22 @@ func getToolAnnotations(tool *types.Tool) *ToolAnnotations {
 }
 
 // convertStoredAnnotations converts stored types.ToolAnnotations to conv.ToolAnnotations.
-// TODO: Uncomment after Goa types are generated
-// func convertStoredAnnotations(stored *types.ToolAnnotations) *ToolAnnotations {
-// 	if stored == nil {
-// 		return nil
-// 	}
-// 	var title string
-// 	if stored.Title != nil {
-// 		title = *stored.Title
-// 	}
-// 	return &ToolAnnotations{
-// 		Title:           title,
-// 		ReadOnlyHint:    stored.ReadOnlyHint,
-// 		DestructiveHint: stored.DestructiveHint,
-// 		IdempotentHint:  stored.IdempotentHint,
-// 		OpenWorldHint:   stored.OpenWorldHint,
-// 	}
-// }
+func convertStoredAnnotations(stored *types.ToolAnnotations) *ToolAnnotations {
+	if stored == nil {
+		return nil
+	}
+	var title string
+	if stored.Title != nil {
+		title = *stored.Title
+	}
+	return &ToolAnnotations{
+		Title:           title,
+		ReadOnlyHint:    &stored.ReadOnlyHint,
+		DestructiveHint: &stored.DestructiveHint,
+		IdempotentHint:  &stored.IdempotentHint,
+		OpenWorldHint:   &stored.OpenWorldHint,
+	}
+}
 
 // inferAnnotationsFromHTTPMethod returns inferred annotations based on HTTP method semantics.
 func inferAnnotationsFromHTTPMethod(method string) *ToolAnnotations {
