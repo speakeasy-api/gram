@@ -268,6 +268,9 @@ func handleToolsCall(
 		if payload.externalUserID != "" {
 			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
 		}
+		if payload.apiKeyID != "" {
+			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
+		}
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{
