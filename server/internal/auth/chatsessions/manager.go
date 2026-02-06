@@ -109,7 +109,7 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		Email:                nil,
 		AccountType:          "",
 		APIKeyScopes:         nil,
-		SessionID:            nil,
+		SessionID:            nil, // DO NOT SET THIS for chat sessions. The existence of this field implies that this is a dashboard-authenticated request.
 	}
 
 	return contextvalues.SetAuthContext(ctx, authCtx), nil

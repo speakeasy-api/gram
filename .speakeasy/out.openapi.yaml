@@ -2574,6 +2574,140 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListChats
+  /rpc/chat.listChatsWithResolutions:
+    get:
+      description: List all chats for a project with their resolutions
+      operationId: listChatsWithResolutions
+      parameters:
+        - allowEmptyValue: true
+          description: Filter by external user ID
+          in: query
+          name: external_user_id
+          schema:
+            description: Filter by external user ID
+            type: string
+        - allowEmptyValue: true
+          description: Filter by resolution status
+          in: query
+          name: resolution_status
+          schema:
+            description: Filter by resolution status
+            type: string
+        - allowEmptyValue: true
+          description: Number of results per page
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Number of results per page
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Pagination offset
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: Pagination offset
+            format: int64
+            minimum: 0
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: Chat Sessions token header
+          in: header
+          name: Gram-Chat-Session
+          schema:
+            description: Chat Sessions token header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListChatsWithResolutionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - chat_sessions_token_header_Gram-Chat-Session: []
+        - {}
+      summary: listChatsWithResolutions chat
+      tags:
+        - chat
+      x-speakeasy-name-override: listChatsWithResolutions
+      x-speakeasy-react-hook:
+        name: ListChatsWithResolutions
+        type: query
   /rpc/chat.load:
     get:
       description: Load a chat by its ID
@@ -11715,7 +11849,6 @@ components:
         content:
           type: string
           description: The content of the message
-          format: binary
         created_at:
           type: string
           description: When the message was created.
@@ -11782,6 +11915,87 @@ components:
         - num_messages
         - created_at
         - updated_at
+    ChatOverviewWithResolutions:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the chat was created.
+          format: date-time
+        external_user_id:
+          type: string
+          description: The ID of the external user who created the chat
+        id:
+          type: string
+          description: The ID of the chat
+        num_messages:
+          type: integer
+          description: The number of messages in the chat
+          format: int64
+        resolutions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatResolution'
+          description: List of resolutions for this chat
+        title:
+          type: string
+          description: The title of the chat
+        updated_at:
+          type: string
+          description: When the chat was last updated.
+          format: date-time
+        user_id:
+          type: string
+          description: The ID of the user who created the chat
+      description: Chat overview with embedded resolution data
+      required:
+        - resolutions
+        - id
+        - title
+        - num_messages
+        - created_at
+        - updated_at
+    ChatResolution:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When resolution was created
+          format: date-time
+        id:
+          type: string
+          description: Resolution ID
+          format: uuid
+        message_ids:
+          type: array
+          items:
+            type: string
+          description: Message IDs associated with this resolution
+          example:
+            - abc-123
+            - def-456
+        resolution:
+          type: string
+          description: Resolution status
+        resolution_notes:
+          type: string
+          description: Notes about the resolution
+        score:
+          type: integer
+          description: Score 0-100
+          format: int64
+        user_goal:
+          type: string
+          description: User's intended goal
+      description: Resolution information for a chat
+      required:
+        - id
+        - user_goal
+        - resolution
+        - resolution_notes
+        - score
+        - created_at
+        - message_ids
     ChatSummary:
       type: object
       properties:
@@ -13852,6 +14066,22 @@ components:
           description: The list of chats
       required:
         - chats
+    ListChatsWithResolutionsResult:
+      type: object
+      properties:
+        chats:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatOverviewWithResolutions'
+          description: List of chats with resolutions
+        total:
+          type: integer
+          description: Total number of chats (before pagination)
+          format: int64
+      description: Result of listing chats with resolutions
+      required:
+        - chats
+        - total
     ListDeploymentForm:
       type: object
       properties:

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
@@ -912,6 +913,270 @@ func EncodeCreditUsageError(encoder func(context.Context, http.ResponseWriter) g
 	}
 }
 
+// EncodeListChatsWithResolutionsResponse returns an encoder for responses
+// returned by the chat listChatsWithResolutions endpoint.
+func EncodeListChatsWithResolutionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*chat.ListChatsWithResolutionsResult)
+		enc := encoder(ctx, w)
+		body := NewListChatsWithResolutionsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListChatsWithResolutionsRequest returns a decoder for requests sent to
+// the chat listChatsWithResolutions endpoint.
+func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*chat.ListChatsWithResolutionsPayload, error) {
+	return func(r *http.Request) (*chat.ListChatsWithResolutionsPayload, error) {
+		var (
+			externalUserID    *string
+			resolutionStatus  *string
+			limit             int
+			offset            int
+			sessionToken      *string
+			projectSlugInput  *string
+			chatSessionsToken *string
+			err               error
+		)
+		qp := r.URL.Query()
+		externalUserIDRaw := qp.Get("external_user_id")
+		if externalUserIDRaw != "" {
+			externalUserID = &externalUserIDRaw
+		}
+		resolutionStatusRaw := qp.Get("resolution_status")
+		if resolutionStatusRaw != "" {
+			resolutionStatus = &resolutionStatusRaw
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 50
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+		}
+		{
+			offsetRaw := qp.Get("offset")
+			if offsetRaw != "" {
+				v, err2 := strconv.ParseInt(offsetRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("offset", offsetRaw, "integer"))
+				}
+				offset = int(v)
+			}
+		}
+		if offset < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		chatSessionsTokenRaw := r.Header.Get("Gram-Chat-Session")
+		if chatSessionsTokenRaw != "" {
+			chatSessionsToken = &chatSessionsTokenRaw
+		}
+		if err != nil {
+			return nil, err
+		}
+		payload := NewListChatsWithResolutionsPayload(externalUserID, resolutionStatus, limit, offset, sessionToken, projectSlugInput, chatSessionsToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ChatSessionsToken != nil {
+			if strings.Contains(*payload.ChatSessionsToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ChatSessionsToken, " ", 2)[1]
+				payload.ChatSessionsToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListChatsWithResolutionsError returns an encoder for errors returned
+// by the listChatsWithResolutions chat endpoint.
+func EncodeListChatsWithResolutionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListChatsWithResolutionsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListChatsWithResolutionsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListChatsWithResolutionsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListChatsWithResolutionsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListChatsWithResolutionsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListChatsWithResolutionsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListChatsWithResolutionsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListChatsWithResolutionsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListChatsWithResolutionsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListChatsWithResolutionsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalChatChatOverviewToChatOverviewResponseBody builds a value of type
 // *ChatOverviewResponseBody from a value of type *chat.ChatOverview.
 func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *ChatOverviewResponseBody {
@@ -942,6 +1207,58 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      v.CreatedAt,
+	}
+
+	return res
+}
+
+// marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponseBody
+// builds a value of type *ChatOverviewWithResolutionsResponseBody from a value
+// of type *chat.ChatOverviewWithResolutions.
+func marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponseBody(v *chat.ChatOverviewWithResolutions) *ChatOverviewWithResolutionsResponseBody {
+	res := &ChatOverviewWithResolutionsResponseBody{
+		ID:             v.ID,
+		Title:          v.Title,
+		UserID:         v.UserID,
+		ExternalUserID: v.ExternalUserID,
+		NumMessages:    v.NumMessages,
+		CreatedAt:      v.CreatedAt,
+		UpdatedAt:      v.UpdatedAt,
+	}
+	if v.Resolutions != nil {
+		res.Resolutions = make([]*ChatResolutionResponseBody, len(v.Resolutions))
+		for i, val := range v.Resolutions {
+			if val == nil {
+				res.Resolutions[i] = nil
+				continue
+			}
+			res.Resolutions[i] = marshalChatChatResolutionToChatResolutionResponseBody(val)
+		}
+	} else {
+		res.Resolutions = []*ChatResolutionResponseBody{}
+	}
+
+	return res
+}
+
+// marshalChatChatResolutionToChatResolutionResponseBody builds a value of type
+// *ChatResolutionResponseBody from a value of type *chat.ChatResolution.
+func marshalChatChatResolutionToChatResolutionResponseBody(v *chat.ChatResolution) *ChatResolutionResponseBody {
+	res := &ChatResolutionResponseBody{
+		ID:              v.ID,
+		UserGoal:        v.UserGoal,
+		Resolution:      v.Resolution,
+		ResolutionNotes: v.ResolutionNotes,
+		Score:           v.Score,
+		CreatedAt:       v.CreatedAt,
+	}
+	if v.MessageIds != nil {
+		res.MessageIds = make([]string, len(v.MessageIds))
+		for i, val := range v.MessageIds {
+			res.MessageIds[i] = val
+		}
+	} else {
+		res.MessageIds = []string{}
 	}
 
 	return res

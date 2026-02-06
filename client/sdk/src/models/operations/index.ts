@@ -58,6 +58,7 @@ export * from "./listallowedorigins.js";
 export * from "./listapikeys.js";
 export * from "./listassets.js";
 export * from "./listchats.js";
+export * from "./listchatswithresolutions.js";
 export * from "./listdeployments.js";
 export * from "./listenvironments.js";
 export * from "./listglobalvariations.js";

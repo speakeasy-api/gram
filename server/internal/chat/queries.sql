@@ -198,3 +198,92 @@ DELETE FROM chat_resolutions WHERE chat_id = @chat_id;
 SELECT * FROM chat_resolutions
 WHERE chat_id = @chat_id
 ORDER BY created_at DESC;
+
+-- name: ListChatsWithResolutions :many
+WITH limited_chats AS (
+  SELECT c.id, c.title, c.user_id, c.external_user_id, c.created_at, c.updated_at
+  FROM chats c
+  WHERE c.project_id = @project_id
+    AND c.deleted IS FALSE
+    AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
+    AND (
+      @resolution_status = ''
+      OR (
+        @resolution_status = 'unresolved' AND NOT EXISTS (
+          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
+        )
+      )
+      OR (
+        @resolution_status != 'unresolved' AND EXISTS (
+          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = @resolution_status
+        )
+      )
+    )
+  ORDER BY c.updated_at DESC
+  LIMIT @page_limit
+  OFFSET @page_offset
+)
+SELECT
+    lc.id as chat_id,
+    lc.title,
+    lc.user_id,
+    lc.external_user_id,
+    lc.created_at,
+    lc.updated_at,
+    (
+        COALESCE(
+            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = lc.id),
+            0
+        )
+    )::integer as num_messages,
+    cr.id as resolution_id,
+    cr.user_goal,
+    cr.resolution,
+    cr.resolution_notes,
+    cr.score,
+    cr.created_at as resolution_created_at,
+    COALESCE(
+        (
+            SELECT array_agg(crm.message_id)
+            FROM chat_resolution_messages crm
+            WHERE crm.chat_resolution_id = cr.id
+        ),
+        ARRAY[]::uuid[]
+    ) as message_ids
+FROM limited_chats lc
+LEFT JOIN chat_resolutions cr ON cr.chat_id = lc.id
+ORDER BY lc.updated_at DESC, cr.created_at DESC;
+
+-- name: GetChatWithResolutions :one
+SELECT
+    c.*,
+    (
+        COALESCE(
+            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as num_messages,
+    COALESCE(
+        (
+            SELECT json_agg(
+                json_build_object(
+                    'id', cr.id,
+                    'user_goal', cr.user_goal,
+                    'resolution', cr.resolution,
+                    'resolution_notes', cr.resolution_notes,
+                    'score', cr.score,
+                    'created_at', cr.created_at,
+                    'message_ids', (
+                        SELECT COALESCE(array_agg(crm.message_id), ARRAY[]::uuid[])
+                        FROM chat_resolution_messages crm
+                        WHERE crm.chat_resolution_id = cr.id
+                    )
+                ) ORDER BY cr.created_at DESC
+            )
+            FROM chat_resolutions cr
+            WHERE cr.chat_id = c.id
+        ),
+        '[]'::json
+    ) as resolutions
+FROM chats c
+WHERE c.id = @id;
