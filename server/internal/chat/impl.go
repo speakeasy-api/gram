@@ -498,7 +498,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				CompletionTokens: 0,
 				TotalTokens:      0,
 			},
-			usageSet:           false,
+			usageSet:               false,
 			isFirstMessage:         chatResult.IsFirstMessage,
 			chatTitleGenerator:     s.chatTitleGenerator,
 			chatResolutionAnalyzer: s.chatResolutionAnalyzer,
@@ -508,6 +508,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			externalUserID:   authCtx.ExternalUserID,
 			startTime:        time.Now(),
 			httpMetadata:     metadata,
+			apiKeyID:         authCtx.APIKeyID,
 		}
 	}
 
@@ -761,15 +762,16 @@ type responseCaptor struct {
 	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
 	usage                openrouter.Usage
 	// Title generation
-	isFirstMessage          bool
-	chatTitleGenerator      ChatTitleGenerator
-	chatResolutionAnalyzer  ChatResolutionAnalyzer
+	isFirstMessage         bool
+	chatTitleGenerator     ChatTitleGenerator
+	chatResolutionAnalyzer ChatResolutionAnalyzer
 	// GenAI telemetry
 	telemetryService *telemetry.Service
 	userID           string
 	externalUserID   string
 	startTime        time.Time // Track request start time for duration calculation
 	httpMetadata     httpMetadata
+	apiKeyID         string
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -997,6 +999,7 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 		attr.GenAIUsageTotalTokensKey:  r.usage.TotalTokens,
 		attr.GenAIConversationIDKey:    r.chatID.String(),
 		attr.GenAIConversationDuration: duration,
+		attr.APIKeyIDKey:               r.apiKeyID,
 	}
 
 	if r.messageID != "" {
