@@ -36,6 +36,7 @@ type SegmentChatArgs struct {
 	ChatID    uuid.UUID
 	ProjectID uuid.UUID
 	OrgID     string
+	APIKeyID  string
 }
 
 type ChatSegment struct {
