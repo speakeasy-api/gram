@@ -500,6 +500,107 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	return chats, nil
 }
 
+// SearchUsersParams contains the parameters for searching users with aggregated metrics.
+type SearchUsersParams struct {
+	GramProjectID    string
+	TimeStart        int64
+	TimeEnd          int64
+	GramDeploymentID string // optional
+	GroupBy          string // "user_id" or "external_user_id"
+	SortOrder        string // "asc" or "desc"
+	Cursor           string // user identifier to paginate from
+	Limit            int
+}
+
+// SearchUsers retrieves aggregated usage metrics grouped by user identifier.
+//
+// Groups telemetry logs by user_id or external_user_id and computes per-user
+// metrics including tokens, chats, and tool call breakdowns.
+// Pagination uses last_seen_unix_nano + the group column for stable cursor ordering.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]UserSummary, error) {
+	groupCol := "user_id"
+	if arg.GroupBy == "external_user_id" {
+		groupCol = "external_user_id"
+	}
+
+	sb := sq.Select(
+		groupCol+" AS user_id",
+
+		// Activity timestamps
+		"min(time_unix_nano) AS first_seen_unix_nano",
+		"max(time_unix_nano) AS last_seen_unix_nano",
+
+		// Chat metrics
+		"uniqExactIf(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats",
+		"countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_chat_requests",
+
+		// Token metrics (from chat completion events)
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_output_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_tokens",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_tokens_per_request",
+
+		// Tool call metrics
+		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls",
+		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_call_success",
+		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_call_failure",
+
+		// Tool breakdowns (maps of tool URN -> count)
+		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
+		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
+		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(groupCol + " IS NOT NULL").
+		Where(groupCol + " != ''")
+
+	// Optional deployment filter
+	if arg.GramDeploymentID != "" {
+		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+	}
+
+	sb = sb.GroupBy(groupCol)
+
+	// Cursor pagination using last_seen + group column for stable ordering
+	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupCol, "max(time_unix_nano)")
+
+	// Order by last_seen with group column as tie-breaker
+	sb = withOrdering(sb, arg.SortOrder, "last_seen_unix_nano", groupCol)
+
+	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building search users query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []UserSummary
+	for rows.Next() {
+		var u UserSummary
+		if err = rows.ScanStruct(&u); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		users = append(users, u)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
 // GetUserMetricsSummaryParams contains the parameters for getting a user's metrics summary.
 type GetUserMetricsSummaryParams struct {
 	GramProjectID  string
