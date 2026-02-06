@@ -91,10 +91,10 @@ const ChatResolutionContext = createContext<{
 }>({
   isResolved: false,
   feedbackHidden: false,
-  setResolved: () => { },
-  setUnresolved: () => { },
-  resetFeedbackHidden: () => { },
-  submitFeedback: async () => { },
+  setResolved: () => {},
+  setUnresolved: () => {},
+  resetFeedbackHidden: () => {},
+  submitFeedback: async () => {},
 })
 
 const useChatResolution = () => useContext(ChatResolutionContext)
