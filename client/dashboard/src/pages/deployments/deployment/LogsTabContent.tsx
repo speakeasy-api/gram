@@ -1,4 +1,5 @@
 import { Heading } from "@/components/ui/heading";
+import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useDeploymentLogsSuspense } from "@gram/client/react-query";
 import { Icon, Input } from "@speakeasy-api/moonshine";
@@ -30,6 +31,11 @@ const TIMESTAMP_PATTERNS = [
 ];
 
 const LEVEL_PATTERN = /^\[?(WARN|WARNING|INFO|DEBUG|ERROR|OK)\]?\s+(.*)$/i;
+
+function formatLogTimestamp(createdAt: string): string {
+  const date = new Date(createdAt);
+  return dateTimeFormatters.logTimestamp.format(date);
+}
 
 function parseLogMessage(message: string, event: string): ParsedLogEntry {
   let source: string | undefined;
@@ -680,11 +686,9 @@ export const LogsTabContent = () => {
                               (isError || isWarn) && "text-inherit",
                             )}
                           >
-                            {log.timestamp ||
-                              `${String(globalIndex + 1).padStart(
-                                2,
-                                "0",
-                              )}:00:00.000`}
+                            {formatLogTimestamp(
+                              deploymentLogs.events[globalIndex]!.createdAt,
+                            )}
                           </span>
                           <span
                             className={cn(
@@ -740,8 +744,9 @@ export const LogsTabContent = () => {
                         (isError || isWarn) && "text-inherit",
                       )}
                     >
-                      {log.timestamp ||
-                        `14:30:${String(index).padStart(2, "0")}.000`}
+                      {formatLogTimestamp(
+                        deploymentLogs.events[index]!.createdAt,
+                      )}
                     </span>
                     <span
                       className={cn(
