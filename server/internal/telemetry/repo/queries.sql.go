@@ -400,6 +400,221 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 	return &metrics, nil
 }
 
+// GetTimeSeriesMetricsParams contains the parameters for getting time series metrics.
+type GetTimeSeriesMetricsParams struct {
+	GramProjectID   string
+	TimeStart       int64
+	TimeEnd         int64
+	IntervalSeconds int64  // Bucket interval in seconds
+	ExternalUserID  string // Optional filter
+}
+
+// GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMetricsParams) ([]TimeSeriesBucket, error) {
+	sb := sq.Select(
+		// Time bucket
+		"toInt64(toStartOfInterval(fromUnixTimestamp64Nano(time_unix_nano), INTERVAL "+fmt.Sprintf("%d", arg.IntervalSeconds)+" SECOND)) * 1000000000 as bucket_time_unix_nano",
+
+		// Chat metrics (count distinct chat sessions per bucket)
+		"uniqExactIf(gram_chat_id, gram_chat_id != '') as total_chats",
+		// Resolved: finish_reason contains 'stop' and no HTTP errors in the chat
+		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) as resolved_chats",
+		// Failed: any HTTP 4xx/5xx error in the chat
+		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_chats",
+
+		// Tool metrics
+		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
+		"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls",
+		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_tool_latency_ms",
+
+		// Session duration (average duration of chats ending in this bucket)
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd)
+
+	// Optional external user filter
+	if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+
+	sb = sb.GroupBy("bucket_time_unix_nano").
+		OrderBy("bucket_time_unix_nano ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building time series query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var buckets []TimeSeriesBucket
+	for rows.Next() {
+		var bucket TimeSeriesBucket
+		if err = rows.ScanStruct(&bucket); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		buckets = append(buckets, bucket)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return buckets, nil
+}
+
+// GetToolMetricsBreakdownParams contains the parameters for getting tool metrics breakdown.
+type GetToolMetricsBreakdownParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	ExternalUserID string // Optional filter
+	Limit          int
+	SortBy         string // "count" or "failure_rate"
+}
+
+// GetToolMetricsBreakdown retrieves per-tool aggregated metrics for top tools tables.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetricsBreakdownParams) ([]ToolMetric, error) {
+	sb := sq.Select(
+		"gram_urn",
+		"count(*) as call_count",
+		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) as success_count",
+		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failure_count",
+		"avg(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000) as avg_latency_ms",
+		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) / count(*) as failure_rate",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("startsWith(gram_urn, 'tools:')")
+
+	// Optional external user filter
+	if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+
+	sb = sb.GroupBy("gram_urn")
+
+	// Sort by count or failure rate
+	if arg.SortBy == "failure_rate" {
+		sb = sb.OrderBy("failure_rate DESC", "call_count DESC")
+	} else {
+		sb = sb.OrderBy("call_count DESC")
+	}
+
+	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool metrics query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tools []ToolMetric
+	for rows.Next() {
+		var tool ToolMetric
+		if err = rows.ScanStruct(&tool); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		tools = append(tools, tool)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return tools, nil
+}
+
+// GetOverviewSummaryParams contains the parameters for getting overview summary metrics.
+type GetOverviewSummaryParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	ExternalUserID string // Optional filter
+}
+
+// GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
+	sb := sq.Select(
+		// Chat metrics
+		"uniqExactIf(gram_chat_id, gram_chat_id != '') as total_chats",
+		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) as resolved_chats",
+		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_chats",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
+		// Resolution time: average duration for resolved chats
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) as avg_resolution_time_ms",
+
+		// Tool metrics
+		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
+		"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls",
+		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_latency_ms",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd)
+
+	// Optional external user filter
+	if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building overview summary query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return &OverviewSummary{
+			TotalChats:           0,
+			ResolvedChats:        0,
+			FailedChats:          0,
+			AvgSessionDurationMs: 0,
+			AvgResolutionTimeMs:  0,
+			TotalToolCalls:       0,
+			FailedToolCalls:      0,
+			AvgLatencyMs:         0,
+		}, nil
+	}
+
+	var summary OverviewSummary
+	if err = rows.ScanStruct(&summary); err != nil {
+		return nil, fmt.Errorf("error scanning row: %w", err)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &summary, nil
+}
+
 // ListChatsParams contains the parameters for listing chats.
 type ListChatsParams struct {
 	GramProjectID    string

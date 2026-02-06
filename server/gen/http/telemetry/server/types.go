@@ -53,21 +53,6 @@ type SearchChatsRequestBody struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
 }
 
-// SearchUsersRequestBody is the type of the "telemetry" service "searchUsers"
-// endpoint HTTP request body.
-type SearchUsersRequestBody struct {
-	// Filter criteria for the search
-	Filter *SearchUsersFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
-	// Type of user identifier to group by
-	UserType *string `form:"user_type,omitempty" json:"user_type,omitempty" xml:"user_type,omitempty"`
-	// Cursor for pagination (user identifier from last item)
-	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
-	// Sort order
-	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
-	// Number of items to return (1-1000)
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
-}
-
 // CaptureEventRequestBody is the type of the "telemetry" service
 // "captureEvent" endpoint HTTP request body.
 type CaptureEventRequestBody struct {
@@ -100,6 +85,19 @@ type GetUserMetricsSummaryRequestBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// External user ID to get metrics for (mutually exclusive with user_id)
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+}
+
+// GetObservabilityOverviewRequestBody is the type of the "telemetry" service
+// "getObservabilityOverview" endpoint HTTP request body.
+type GetObservabilityOverviewRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Optional external user ID filter
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// Whether to include time series data (default: true)
+	IncludeTimeSeries *bool `form:"include_time_series,omitempty" json:"include_time_series,omitempty" xml:"include_time_series,omitempty"`
 }
 
 // SearchLogsResponseBody is the type of the "telemetry" service "searchLogs"
@@ -135,17 +133,6 @@ type SearchChatsResponseBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
-// SearchUsersResponseBody is the type of the "telemetry" service "searchUsers"
-// endpoint HTTP response body.
-type SearchUsersResponseBody struct {
-	// List of user usage summaries
-	Users []*UserSummaryResponseBody `form:"users" json:"users" xml:"users"`
-	// Cursor for next page
-	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-}
-
 // CaptureEventResponseBody is the type of the "telemetry" service
 // "captureEvent" endpoint HTTP response body.
 type CaptureEventResponseBody struct {
@@ -157,7 +144,7 @@ type CaptureEventResponseBody struct {
 // "getProjectMetricsSummary" endpoint HTTP response body.
 type GetProjectMetricsSummaryResponseBody struct {
 	// Aggregated metrics
-	Metrics *ProjectSummaryResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
+	Metrics *MetricsResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
 	// Whether telemetry is enabled for the organization
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
@@ -166,7 +153,24 @@ type GetProjectMetricsSummaryResponseBody struct {
 // "getUserMetricsSummary" endpoint HTTP response body.
 type GetUserMetricsSummaryResponseBody struct {
 	// Aggregated metrics for the user
-	Metrics *ProjectSummaryResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
+	Metrics *MetricsResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
+	// Whether telemetry is enabled for the organization
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+}
+
+// GetObservabilityOverviewResponseBody is the type of the "telemetry" service
+// "getObservabilityOverview" endpoint HTTP response body.
+type GetObservabilityOverviewResponseBody struct {
+	// Current period summary metrics
+	Summary *ObservabilitySummaryResponseBody `form:"summary" json:"summary" xml:"summary"`
+	// Previous period summary metrics for trend calculation
+	Comparison *ObservabilitySummaryResponseBody `form:"comparison" json:"comparison" xml:"comparison"`
+	// Time series data points
+	TimeSeries []*TimeSeriesBucketResponseBody `form:"time_series" json:"time_series" xml:"time_series"`
+	// Top tools by call count
+	TopToolsByCount []*ToolMetricResponseBody `form:"top_tools_by_count" json:"top_tools_by_count" xml:"top_tools_by_count"`
+	// Top tools by failure rate
+	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate" json:"top_tools_by_failure_rate" xml:"top_tools_by_failure_rate"`
 	// Whether telemetry is enabled for the organization
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
@@ -704,188 +708,6 @@ type SearchChatsUnexpectedResponseBody struct {
 // SearchChatsGatewayErrorResponseBody is the type of the "telemetry" service
 // "searchChats" endpoint HTTP response body for the "gateway_error" error.
 type SearchChatsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchUsersUnauthorizedResponseBody is the type of the "telemetry" service
-// "searchUsers" endpoint HTTP response body for the "unauthorized" error.
-type SearchUsersUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchUsersForbiddenResponseBody is the type of the "telemetry" service
-// "searchUsers" endpoint HTTP response body for the "forbidden" error.
-type SearchUsersForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchUsersBadRequestResponseBody is the type of the "telemetry" service
-// "searchUsers" endpoint HTTP response body for the "bad_request" error.
-type SearchUsersBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchUsersNotFoundResponseBody is the type of the "telemetry" service
-// "searchUsers" endpoint HTTP response body for the "not_found" error.
-type SearchUsersNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchUsersConflictResponseBody is the type of the "telemetry" service
-// "searchUsers" endpoint HTTP response body for the "conflict" error.
-type SearchUsersConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchUsersUnsupportedMediaResponseBody is the type of the "telemetry"
-// service "searchUsers" endpoint HTTP response body for the
-// "unsupported_media" error.
-type SearchUsersUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchUsersInvalidResponseBody is the type of the "telemetry" service
-// "searchUsers" endpoint HTTP response body for the "invalid" error.
-type SearchUsersInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchUsersInvariantViolationResponseBody is the type of the "telemetry"
-// service "searchUsers" endpoint HTTP response body for the
-// "invariant_violation" error.
-type SearchUsersInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchUsersUnexpectedResponseBody is the type of the "telemetry" service
-// "searchUsers" endpoint HTTP response body for the "unexpected" error.
-type SearchUsersUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SearchUsersGatewayErrorResponseBody is the type of the "telemetry" service
-// "searchUsers" endpoint HTTP response body for the "gateway_error" error.
-type SearchUsersGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1463,6 +1285,196 @@ type GetUserMetricsSummaryGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetObservabilityOverviewUnauthorizedResponseBody is the type of the
+// "telemetry" service "getObservabilityOverview" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetObservabilityOverviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetObservabilityOverviewForbiddenResponseBody is the type of the "telemetry"
+// service "getObservabilityOverview" endpoint HTTP response body for the
+// "forbidden" error.
+type GetObservabilityOverviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetObservabilityOverviewBadRequestResponseBody is the type of the
+// "telemetry" service "getObservabilityOverview" endpoint HTTP response body
+// for the "bad_request" error.
+type GetObservabilityOverviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetObservabilityOverviewNotFoundResponseBody is the type of the "telemetry"
+// service "getObservabilityOverview" endpoint HTTP response body for the
+// "not_found" error.
+type GetObservabilityOverviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetObservabilityOverviewConflictResponseBody is the type of the "telemetry"
+// service "getObservabilityOverview" endpoint HTTP response body for the
+// "conflict" error.
+type GetObservabilityOverviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetObservabilityOverviewUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getObservabilityOverview" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetObservabilityOverviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetObservabilityOverviewInvalidResponseBody is the type of the "telemetry"
+// service "getObservabilityOverview" endpoint HTTP response body for the
+// "invalid" error.
+type GetObservabilityOverviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetObservabilityOverviewInvariantViolationResponseBody is the type of the
+// "telemetry" service "getObservabilityOverview" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetObservabilityOverviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetObservabilityOverviewUnexpectedResponseBody is the type of the
+// "telemetry" service "getObservabilityOverview" endpoint HTTP response body
+// for the "unexpected" error.
+type GetObservabilityOverviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetObservabilityOverviewGatewayErrorResponseBody is the type of the
+// "telemetry" service "getObservabilityOverview" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetObservabilityOverviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TelemetryLogRecordResponseBody is used to define fields on response body
 // types.
 type TelemetryLogRecordResponseBody struct {
@@ -1540,50 +1552,8 @@ type ChatSummaryResponseBody struct {
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
 }
 
-// UserSummaryResponseBody is used to define fields on response body types.
-type UserSummaryResponseBody struct {
-	// User identifier (user_id or external_user_id depending on group_by)
-	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
-	// Earliest activity timestamp in Unix nanoseconds
-	FirstSeenUnixNano string `form:"first_seen_unix_nano" json:"first_seen_unix_nano" xml:"first_seen_unix_nano"`
-	// Latest activity timestamp in Unix nanoseconds
-	LastSeenUnixNano string `form:"last_seen_unix_nano" json:"last_seen_unix_nano" xml:"last_seen_unix_nano"`
-	// Number of unique chat sessions
-	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
-	// Total number of chat completion requests
-	TotalChatRequests int64 `form:"total_chat_requests" json:"total_chat_requests" xml:"total_chat_requests"`
-	// Sum of input tokens used
-	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`
-	// Sum of output tokens used
-	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
-	// Sum of all tokens used
-	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
-	// Average tokens per chat request
-	AvgTokensPerRequest float64 `form:"avg_tokens_per_request" json:"avg_tokens_per_request" xml:"avg_tokens_per_request"`
-	// Total number of tool calls
-	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
-	// Successful tool calls (2xx status)
-	ToolCallSuccess int64 `form:"tool_call_success" json:"tool_call_success" xml:"tool_call_success"`
-	// Failed tool calls (4xx/5xx status)
-	ToolCallFailure int64 `form:"tool_call_failure" json:"tool_call_failure" xml:"tool_call_failure"`
-	// Per-tool usage breakdown
-	Tools []*ToolUsageResponseBody `form:"tools" json:"tools" xml:"tools"`
-}
-
-// ToolUsageResponseBody is used to define fields on response body types.
-type ToolUsageResponseBody struct {
-	// Tool URN
-	Urn string `form:"urn" json:"urn" xml:"urn"`
-	// Total call count
-	Count int64 `form:"count" json:"count" xml:"count"`
-	// Successful calls (2xx status)
-	SuccessCount int64 `form:"success_count" json:"success_count" xml:"success_count"`
-	// Failed calls (4xx/5xx status)
-	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
-}
-
-// ProjectSummaryResponseBody is used to define fields on response body types.
-type ProjectSummaryResponseBody struct {
+// MetricsResponseBody is used to define fields on response body types.
+type MetricsResponseBody struct {
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string `form:"first_seen_unix_nano" json:"first_seen_unix_nano" xml:"first_seen_unix_nano"`
 	// Latest activity timestamp in Unix nanoseconds
@@ -1630,6 +1600,75 @@ type ModelUsageResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Number of times used
 	Count int64 `form:"count" json:"count" xml:"count"`
+}
+
+// ToolUsageResponseBody is used to define fields on response body types.
+type ToolUsageResponseBody struct {
+	// Tool URN
+	Urn string `form:"urn" json:"urn" xml:"urn"`
+	// Total call count
+	Count int64 `form:"count" json:"count" xml:"count"`
+	// Successful calls (2xx status)
+	SuccessCount int64 `form:"success_count" json:"success_count" xml:"success_count"`
+	// Failed calls (4xx/5xx status)
+	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
+}
+
+// ObservabilitySummaryResponseBody is used to define fields on response body
+// types.
+type ObservabilitySummaryResponseBody struct {
+	// Total number of chat sessions
+	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
+	// Number of resolved chat sessions
+	ResolvedChats int64 `form:"resolved_chats" json:"resolved_chats" xml:"resolved_chats"`
+	// Number of failed chat sessions
+	FailedChats int64 `form:"failed_chats" json:"failed_chats" xml:"failed_chats"`
+	// Average session duration in milliseconds
+	AvgSessionDurationMs float64 `form:"avg_session_duration_ms" json:"avg_session_duration_ms" xml:"avg_session_duration_ms"`
+	// Average time to resolution in milliseconds
+	AvgResolutionTimeMs float64 `form:"avg_resolution_time_ms" json:"avg_resolution_time_ms" xml:"avg_resolution_time_ms"`
+	// Total number of tool calls
+	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
+	// Number of failed tool calls
+	FailedToolCalls int64 `form:"failed_tool_calls" json:"failed_tool_calls" xml:"failed_tool_calls"`
+	// Average tool latency in milliseconds
+	AvgLatencyMs float64 `form:"avg_latency_ms" json:"avg_latency_ms" xml:"avg_latency_ms"`
+}
+
+// TimeSeriesBucketResponseBody is used to define fields on response body types.
+type TimeSeriesBucketResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
+	// Total chat sessions in this bucket
+	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
+	// Resolved chat sessions in this bucket
+	ResolvedChats int64 `form:"resolved_chats" json:"resolved_chats" xml:"resolved_chats"`
+	// Failed chat sessions in this bucket
+	FailedChats int64 `form:"failed_chats" json:"failed_chats" xml:"failed_chats"`
+	// Total tool calls in this bucket
+	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
+	// Failed tool calls in this bucket
+	FailedToolCalls int64 `form:"failed_tool_calls" json:"failed_tool_calls" xml:"failed_tool_calls"`
+	// Average tool latency in milliseconds
+	AvgToolLatencyMs float64 `form:"avg_tool_latency_ms" json:"avg_tool_latency_ms" xml:"avg_tool_latency_ms"`
+	// Average session duration in milliseconds
+	AvgSessionDurationMs float64 `form:"avg_session_duration_ms" json:"avg_session_duration_ms" xml:"avg_session_duration_ms"`
+}
+
+// ToolMetricResponseBody is used to define fields on response body types.
+type ToolMetricResponseBody struct {
+	// Tool URN
+	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
+	// Total number of calls
+	CallCount int64 `form:"call_count" json:"call_count" xml:"call_count"`
+	// Number of successful calls
+	SuccessCount int64 `form:"success_count" json:"success_count" xml:"success_count"`
+	// Number of failed calls
+	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
+	// Average latency in milliseconds
+	AvgLatencyMs float64 `form:"avg_latency_ms" json:"avg_latency_ms" xml:"avg_latency_ms"`
+	// Failure rate (0.0 to 1.0)
+	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
 // SearchLogsFilterRequestBody is used to define fields on request body types.
@@ -1695,16 +1734,6 @@ type SearchChatsFilterRequestBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// External user ID filter
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
-}
-
-// SearchUsersFilterRequestBody is used to define fields on request body types.
-type SearchUsersFilterRequestBody struct {
-	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
-	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
-	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
-	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
-	// Deployment ID filter
-	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 }
 
 // NewSearchLogsResponseBody builds the HTTP response body from the result of
@@ -1773,28 +1802,6 @@ func NewSearchChatsResponseBody(res *telemetry.SearchChatsResult) *SearchChatsRe
 	return body
 }
 
-// NewSearchUsersResponseBody builds the HTTP response body from the result of
-// the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersResponseBody(res *telemetry.SearchUsersResult) *SearchUsersResponseBody {
-	body := &SearchUsersResponseBody{
-		NextCursor: res.NextCursor,
-		Enabled:    res.Enabled,
-	}
-	if res.Users != nil {
-		body.Users = make([]*UserSummaryResponseBody, len(res.Users))
-		for i, val := range res.Users {
-			if val == nil {
-				body.Users[i] = nil
-				continue
-			}
-			body.Users[i] = marshalTelemetryUserSummaryToUserSummaryResponseBody(val)
-		}
-	} else {
-		body.Users = []*UserSummaryResponseBody{}
-	}
-	return body
-}
-
 // NewCaptureEventResponseBody builds the HTTP response body from the result of
 // the "captureEvent" endpoint of the "telemetry" service.
 func NewCaptureEventResponseBody(res *telemetry.CaptureEventResult) *CaptureEventResponseBody {
@@ -1812,7 +1819,7 @@ func NewGetProjectMetricsSummaryResponseBody(res *telemetry.GetMetricsSummaryRes
 		Enabled: res.Enabled,
 	}
 	if res.Metrics != nil {
-		body.Metrics = marshalTelemetryProjectSummaryToProjectSummaryResponseBody(res.Metrics)
+		body.Metrics = marshalTelemetryMetricsToMetricsResponseBody(res.Metrics)
 	}
 	return body
 }
@@ -1824,7 +1831,59 @@ func NewGetUserMetricsSummaryResponseBody(res *telemetry.GetUserMetricsSummaryRe
 		Enabled: res.Enabled,
 	}
 	if res.Metrics != nil {
-		body.Metrics = marshalTelemetryProjectSummaryToProjectSummaryResponseBody(res.Metrics)
+		body.Metrics = marshalTelemetryMetricsToMetricsResponseBody(res.Metrics)
+	}
+	return body
+}
+
+// NewGetObservabilityOverviewResponseBody builds the HTTP response body from
+// the result of the "getObservabilityOverview" endpoint of the "telemetry"
+// service.
+func NewGetObservabilityOverviewResponseBody(res *telemetry.GetObservabilityOverviewResult) *GetObservabilityOverviewResponseBody {
+	body := &GetObservabilityOverviewResponseBody{
+		Enabled: res.Enabled,
+	}
+	if res.Summary != nil {
+		body.Summary = marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(res.Summary)
+	}
+	if res.Comparison != nil {
+		body.Comparison = marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(res.Comparison)
+	}
+	if res.TimeSeries != nil {
+		body.TimeSeries = make([]*TimeSeriesBucketResponseBody, len(res.TimeSeries))
+		for i, val := range res.TimeSeries {
+			if val == nil {
+				body.TimeSeries[i] = nil
+				continue
+			}
+			body.TimeSeries[i] = marshalTelemetryTimeSeriesBucketToTimeSeriesBucketResponseBody(val)
+		}
+	} else {
+		body.TimeSeries = []*TimeSeriesBucketResponseBody{}
+	}
+	if res.TopToolsByCount != nil {
+		body.TopToolsByCount = make([]*ToolMetricResponseBody, len(res.TopToolsByCount))
+		for i, val := range res.TopToolsByCount {
+			if val == nil {
+				body.TopToolsByCount[i] = nil
+				continue
+			}
+			body.TopToolsByCount[i] = marshalTelemetryToolMetricToToolMetricResponseBody(val)
+		}
+	} else {
+		body.TopToolsByCount = []*ToolMetricResponseBody{}
+	}
+	if res.TopToolsByFailureRate != nil {
+		body.TopToolsByFailureRate = make([]*ToolMetricResponseBody, len(res.TopToolsByFailureRate))
+		for i, val := range res.TopToolsByFailureRate {
+			if val == nil {
+				body.TopToolsByFailureRate[i] = nil
+				continue
+			}
+			body.TopToolsByFailureRate[i] = marshalTelemetryToolMetricToToolMetricResponseBody(val)
+		}
+	} else {
+		body.TopToolsByFailureRate = []*ToolMetricResponseBody{}
 	}
 	return body
 }
@@ -2240,146 +2299,6 @@ func NewSearchChatsUnexpectedResponseBody(res *goa.ServiceError) *SearchChatsUne
 // the result of the "searchChats" endpoint of the "telemetry" service.
 func NewSearchChatsGatewayErrorResponseBody(res *goa.ServiceError) *SearchChatsGatewayErrorResponseBody {
 	body := &SearchChatsGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchUsersUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersUnauthorizedResponseBody(res *goa.ServiceError) *SearchUsersUnauthorizedResponseBody {
-	body := &SearchUsersUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchUsersForbiddenResponseBody builds the HTTP response body from the
-// result of the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersForbiddenResponseBody(res *goa.ServiceError) *SearchUsersForbiddenResponseBody {
-	body := &SearchUsersForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchUsersBadRequestResponseBody builds the HTTP response body from the
-// result of the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersBadRequestResponseBody(res *goa.ServiceError) *SearchUsersBadRequestResponseBody {
-	body := &SearchUsersBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchUsersNotFoundResponseBody builds the HTTP response body from the
-// result of the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersNotFoundResponseBody(res *goa.ServiceError) *SearchUsersNotFoundResponseBody {
-	body := &SearchUsersNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchUsersConflictResponseBody builds the HTTP response body from the
-// result of the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersConflictResponseBody(res *goa.ServiceError) *SearchUsersConflictResponseBody {
-	body := &SearchUsersConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchUsersUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersUnsupportedMediaResponseBody(res *goa.ServiceError) *SearchUsersUnsupportedMediaResponseBody {
-	body := &SearchUsersUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchUsersInvalidResponseBody builds the HTTP response body from the
-// result of the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersInvalidResponseBody(res *goa.ServiceError) *SearchUsersInvalidResponseBody {
-	body := &SearchUsersInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchUsersInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersInvariantViolationResponseBody(res *goa.ServiceError) *SearchUsersInvariantViolationResponseBody {
-	body := &SearchUsersInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchUsersUnexpectedResponseBody builds the HTTP response body from the
-// result of the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersUnexpectedResponseBody(res *goa.ServiceError) *SearchUsersUnexpectedResponseBody {
-	body := &SearchUsersUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSearchUsersGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "searchUsers" endpoint of the "telemetry" service.
-func NewSearchUsersGatewayErrorResponseBody(res *goa.ServiceError) *SearchUsersGatewayErrorResponseBody {
-	body := &SearchUsersGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2830,6 +2749,156 @@ func NewGetUserMetricsSummaryGatewayErrorResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
+// NewGetObservabilityOverviewUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getObservabilityOverview" endpoint of the
+// "telemetry" service.
+func NewGetObservabilityOverviewUnauthorizedResponseBody(res *goa.ServiceError) *GetObservabilityOverviewUnauthorizedResponseBody {
+	body := &GetObservabilityOverviewUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetObservabilityOverviewForbiddenResponseBody builds the HTTP response
+// body from the result of the "getObservabilityOverview" endpoint of the
+// "telemetry" service.
+func NewGetObservabilityOverviewForbiddenResponseBody(res *goa.ServiceError) *GetObservabilityOverviewForbiddenResponseBody {
+	body := &GetObservabilityOverviewForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetObservabilityOverviewBadRequestResponseBody builds the HTTP response
+// body from the result of the "getObservabilityOverview" endpoint of the
+// "telemetry" service.
+func NewGetObservabilityOverviewBadRequestResponseBody(res *goa.ServiceError) *GetObservabilityOverviewBadRequestResponseBody {
+	body := &GetObservabilityOverviewBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetObservabilityOverviewNotFoundResponseBody builds the HTTP response
+// body from the result of the "getObservabilityOverview" endpoint of the
+// "telemetry" service.
+func NewGetObservabilityOverviewNotFoundResponseBody(res *goa.ServiceError) *GetObservabilityOverviewNotFoundResponseBody {
+	body := &GetObservabilityOverviewNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetObservabilityOverviewConflictResponseBody builds the HTTP response
+// body from the result of the "getObservabilityOverview" endpoint of the
+// "telemetry" service.
+func NewGetObservabilityOverviewConflictResponseBody(res *goa.ServiceError) *GetObservabilityOverviewConflictResponseBody {
+	body := &GetObservabilityOverviewConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetObservabilityOverviewUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getObservabilityOverview" endpoint of
+// the "telemetry" service.
+func NewGetObservabilityOverviewUnsupportedMediaResponseBody(res *goa.ServiceError) *GetObservabilityOverviewUnsupportedMediaResponseBody {
+	body := &GetObservabilityOverviewUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetObservabilityOverviewInvalidResponseBody builds the HTTP response body
+// from the result of the "getObservabilityOverview" endpoint of the
+// "telemetry" service.
+func NewGetObservabilityOverviewInvalidResponseBody(res *goa.ServiceError) *GetObservabilityOverviewInvalidResponseBody {
+	body := &GetObservabilityOverviewInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetObservabilityOverviewInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getObservabilityOverview" endpoint of
+// the "telemetry" service.
+func NewGetObservabilityOverviewInvariantViolationResponseBody(res *goa.ServiceError) *GetObservabilityOverviewInvariantViolationResponseBody {
+	body := &GetObservabilityOverviewInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetObservabilityOverviewUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getObservabilityOverview" endpoint of the
+// "telemetry" service.
+func NewGetObservabilityOverviewUnexpectedResponseBody(res *goa.ServiceError) *GetObservabilityOverviewUnexpectedResponseBody {
+	body := &GetObservabilityOverviewUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetObservabilityOverviewGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getObservabilityOverview" endpoint of the
+// "telemetry" service.
+func NewGetObservabilityOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetObservabilityOverviewGatewayErrorResponseBody {
+	body := &GetObservabilityOverviewGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSearchLogsPayload builds a telemetry service searchLogs endpoint payload.
 func NewSearchLogsPayload(body *SearchLogsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.SearchLogsPayload {
 	v := &telemetry.SearchLogsPayload{
@@ -2913,33 +2982,6 @@ func NewSearchChatsPayload(body *SearchChatsRequestBody, apikeyToken *string, se
 	return v
 }
 
-// NewSearchUsersPayload builds a telemetry service searchUsers endpoint
-// payload.
-func NewSearchUsersPayload(body *SearchUsersRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.SearchUsersPayload {
-	v := &telemetry.SearchUsersPayload{
-		UserType: *body.UserType,
-		Cursor:   body.Cursor,
-	}
-	if body.Sort != nil {
-		v.Sort = *body.Sort
-	}
-	if body.Limit != nil {
-		v.Limit = *body.Limit
-	}
-	v.Filter = unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(body.Filter)
-	if body.Sort == nil {
-		v.Sort = "desc"
-	}
-	if body.Limit == nil {
-		v.Limit = 50
-	}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v
-}
-
 // NewCaptureEventPayload builds a telemetry service captureEvent endpoint
 // payload.
 func NewCaptureEventPayload(body *CaptureEventRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *telemetry.CaptureEventPayload {
@@ -2985,6 +3027,27 @@ func NewGetUserMetricsSummaryPayload(body *GetUserMetricsSummaryRequestBody, api
 		To:             *body.To,
 		UserID:         body.UserID,
 		ExternalUserID: body.ExternalUserID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetObservabilityOverviewPayload builds a telemetry service
+// getObservabilityOverview endpoint payload.
+func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetObservabilityOverviewPayload {
+	v := &telemetry.GetObservabilityOverviewPayload{
+		From:           *body.From,
+		To:             *body.To,
+		ExternalUserID: body.ExternalUserID,
+	}
+	if body.IncludeTimeSeries != nil {
+		v.IncludeTimeSeries = *body.IncludeTimeSeries
+	}
+	if body.IncludeTimeSeries == nil {
+		v.IncludeTimeSeries = true
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -3071,43 +3134,6 @@ func ValidateSearchChatsRequestBody(body *SearchChatsRequestBody) (err error) {
 	return
 }
 
-// ValidateSearchUsersRequestBody runs the validations defined on
-// SearchUsersRequestBody
-func ValidateSearchUsersRequestBody(body *SearchUsersRequestBody) (err error) {
-	if body.Filter == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("filter", "body"))
-	}
-	if body.UserType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_type", "body"))
-	}
-	if body.Filter != nil {
-		if err2 := ValidateSearchUsersFilterRequestBody(body.Filter); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	if body.UserType != nil {
-		if !(*body.UserType == "internal" || *body.UserType == "external") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_type", *body.UserType, []any{"internal", "external"}))
-		}
-	}
-	if body.Sort != nil {
-		if !(*body.Sort == "asc" || *body.Sort == "desc") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", *body.Sort, []any{"asc", "desc"}))
-		}
-	}
-	if body.Limit != nil {
-		if *body.Limit < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
-		}
-	}
-	if body.Limit != nil {
-		if *body.Limit > 1000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
-		}
-	}
-	return
-}
-
 // ValidateCaptureEventRequestBody runs the validations defined on
 // CaptureEventRequestBody
 func ValidateCaptureEventRequestBody(body *CaptureEventRequestBody) (err error) {
@@ -3148,6 +3174,24 @@ func ValidateGetProjectMetricsSummaryRequestBody(body *GetProjectMetricsSummaryR
 // ValidateGetUserMetricsSummaryRequestBody runs the validations defined on
 // GetUserMetricsSummaryRequestBody
 func ValidateGetUserMetricsSummaryRequestBody(body *GetUserMetricsSummaryRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetObservabilityOverviewRequestBody runs the validations defined on
+// GetObservabilityOverviewRequestBody
+func ValidateGetObservabilityOverviewRequestBody(body *GetObservabilityOverviewRequestBody) (err error) {
 	if body.From == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
 	}
@@ -3215,27 +3259,6 @@ func ValidateSearchToolCallsFilterRequestBody(body *SearchToolCallsFilterRequest
 // ValidateSearchChatsFilterRequestBody runs the validations defined on
 // SearchChatsFilterRequestBody
 func ValidateSearchChatsFilterRequestBody(body *SearchChatsFilterRequestBody) (err error) {
-	if body.From != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
-	}
-	if body.To != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
-	}
-	if body.DeploymentID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
-	}
-	return
-}
-
-// ValidateSearchUsersFilterRequestBody runs the validations defined on
-// SearchUsersFilterRequestBody
-func ValidateSearchUsersFilterRequestBody(body *SearchUsersFilterRequestBody) (err error) {
-	if body.From == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
-	}
-	if body.To == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
-	}
 	if body.From != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
 	}

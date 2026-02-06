@@ -22,14 +22,15 @@ type Service interface {
 	SearchToolCalls(context.Context, *SearchToolCallsPayload) (res *SearchToolCallsResult, err error)
 	// Search and list chat session summaries that match a search filter
 	SearchChats(context.Context, *SearchChatsPayload) (res *SearchChatsResult, err error)
-	// Search and list user usage summaries grouped by user_id or external_user_id
-	SearchUsers(context.Context, *SearchUsersPayload) (res *SearchUsersResult, err error)
 	// Capture a telemetry event and forward it to PostHog
 	CaptureEvent(context.Context, *CaptureEventPayload) (res *CaptureEventResult, err error)
 	// Get aggregated metrics summary for an entire project
 	GetProjectMetricsSummary(context.Context, *GetProjectMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error)
 	// Get aggregated metrics summary grouped by user
 	GetUserMetricsSummary(context.Context, *GetUserMetricsSummaryPayload) (res *GetUserMetricsSummaryResult, err error)
+	// Get observability overview metrics including time series, tool breakdowns,
+	// and summary stats
+	GetObservabilityOverview(context.Context, *GetObservabilityOverviewPayload) (res *GetObservabilityOverviewResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -54,7 +55,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary"}
+var MethodNames = [7]string{"searchLogs", "searchToolCalls", "searchChats", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -113,7 +114,40 @@ type ChatSummary struct {
 // getProjectMetricsSummary method.
 type GetMetricsSummaryResult struct {
 	// Aggregated metrics
-	Metrics *ProjectSummary
+	Metrics *Metrics
+	// Whether telemetry is enabled for the organization
+	Enabled bool
+}
+
+// GetObservabilityOverviewPayload is the payload type of the telemetry service
+// getObservabilityOverview method.
+type GetObservabilityOverviewPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional external user ID filter
+	ExternalUserID *string
+	// Whether to include time series data (default: true)
+	IncludeTimeSeries bool
+}
+
+// GetObservabilityOverviewResult is the result type of the telemetry service
+// getObservabilityOverview method.
+type GetObservabilityOverviewResult struct {
+	// Current period summary metrics
+	Summary *ObservabilitySummary
+	// Previous period summary metrics for trend calculation
+	Comparison *ObservabilitySummary
+	// Time series data points
+	TimeSeries []*TimeSeriesBucket
+	// Top tools by call count
+	TopToolsByCount []*ToolMetric
+	// Top tools by failure rate
+	TopToolsByFailureRate []*ToolMetric
 	// Whether telemetry is enabled for the organization
 	Enabled bool
 }
@@ -150,21 +184,13 @@ type GetUserMetricsSummaryPayload struct {
 // getUserMetricsSummary method.
 type GetUserMetricsSummaryResult struct {
 	// Aggregated metrics for the user
-	Metrics *ProjectSummary
+	Metrics *Metrics
 	// Whether telemetry is enabled for the organization
 	Enabled bool
 }
 
-// Model usage statistics
-type ModelUsage struct {
-	// Model name
-	Name string
-	// Number of times used
-	Count int64
-}
-
 // Aggregated metrics
-type ProjectSummary struct {
+type Metrics struct {
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string
 	// Latest activity timestamp in Unix nanoseconds
@@ -203,6 +229,34 @@ type ProjectSummary struct {
 	Models []*ModelUsage
 	// List of tools used with success/failure counts
 	Tools []*ToolUsage
+}
+
+// Model usage statistics
+type ModelUsage struct {
+	// Model name
+	Name string
+	// Number of times used
+	Count int64
+}
+
+// Aggregated summary metrics for a time period
+type ObservabilitySummary struct {
+	// Total number of chat sessions
+	TotalChats int64
+	// Number of resolved chat sessions
+	ResolvedChats int64
+	// Number of failed chat sessions
+	FailedChats int64
+	// Average session duration in milliseconds
+	AvgSessionDurationMs float64
+	// Average time to resolution in milliseconds
+	AvgResolutionTimeMs float64
+	// Total number of tool calls
+	TotalToolCalls int64
+	// Number of failed tool calls
+	FailedToolCalls int64
+	// Average tool latency in milliseconds
+	AvgLatencyMs float64
 }
 
 // Filter criteria for searching chat sessions
@@ -350,45 +404,6 @@ type SearchToolCallsResult struct {
 	Enabled bool
 }
 
-// Filter criteria for searching user usage summaries
-type SearchUsersFilter struct {
-	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
-	From string
-	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
-	To string
-	// Deployment ID filter
-	DeploymentID *string
-}
-
-// SearchUsersPayload is the payload type of the telemetry service searchUsers
-// method.
-type SearchUsersPayload struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-	// Filter criteria for the search
-	Filter *SearchUsersFilter
-	// Type of user identifier to group by
-	UserType string
-	// Cursor for pagination (user identifier from last item)
-	Cursor *string
-	// Sort order
-	Sort string
-	// Number of items to return (1-1000)
-	Limit int
-}
-
-// SearchUsersResult is the result type of the telemetry service searchUsers
-// method.
-type SearchUsersResult struct {
-	// List of user usage summaries
-	Users []*UserSummary
-	// Cursor for next page
-	NextCursor *string
-	// Whether telemetry is enabled for the organization
-	Enabled bool
-}
-
 // Service information
 type ServiceInfo struct {
 	// Service name
@@ -421,6 +436,26 @@ type TelemetryLogRecord struct {
 	Service *ServiceInfo
 }
 
+// A single time bucket for time series metrics
+type TimeSeriesBucket struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string
+	// Total chat sessions in this bucket
+	TotalChats int64
+	// Resolved chat sessions in this bucket
+	ResolvedChats int64
+	// Failed chat sessions in this bucket
+	FailedChats int64
+	// Total tool calls in this bucket
+	TotalToolCalls int64
+	// Failed tool calls in this bucket
+	FailedToolCalls int64
+	// Average tool latency in milliseconds
+	AvgToolLatencyMs float64
+	// Average session duration in milliseconds
+	AvgSessionDurationMs float64
+}
+
 // Summary information for a tool call
 type ToolCallSummary struct {
 	// Trace ID (32 hex characters)
@@ -435,6 +470,22 @@ type ToolCallSummary struct {
 	GramUrn string
 }
 
+// Aggregated metrics for a single tool
+type ToolMetric struct {
+	// Tool URN
+	GramUrn string
+	// Total number of calls
+	CallCount int64
+	// Number of successful calls
+	SuccessCount int64
+	// Number of failed calls
+	FailureCount int64
+	// Average latency in milliseconds
+	AvgLatencyMs float64
+	// Failure rate (0.0 to 1.0)
+	FailureRate float64
+}
+
 // Tool usage statistics
 type ToolUsage struct {
 	// Tool URN
@@ -445,36 +496,6 @@ type ToolUsage struct {
 	SuccessCount int64
 	// Failed calls (4xx/5xx status)
 	FailureCount int64
-}
-
-// Aggregated usage summary for a single user
-type UserSummary struct {
-	// User identifier (user_id or external_user_id depending on group_by)
-	UserID string
-	// Earliest activity timestamp in Unix nanoseconds
-	FirstSeenUnixNano string
-	// Latest activity timestamp in Unix nanoseconds
-	LastSeenUnixNano string
-	// Number of unique chat sessions
-	TotalChats int64
-	// Total number of chat completion requests
-	TotalChatRequests int64
-	// Sum of input tokens used
-	TotalInputTokens int64
-	// Sum of output tokens used
-	TotalOutputTokens int64
-	// Sum of all tokens used
-	TotalTokens int64
-	// Average tokens per chat request
-	AvgTokensPerRequest float64
-	// Total number of tool calls
-	TotalToolCalls int64
-	// Successful tool calls (2xx status)
-	ToolCallSuccess int64
-	// Failed tool calls (4xx/5xx status)
-	ToolCallFailure int64
-	// Per-tool usage breakdown
-	Tools []*ToolUsage
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

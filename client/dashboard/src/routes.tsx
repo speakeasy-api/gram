@@ -21,6 +21,7 @@ import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import Logs from "./pages/logs/Logs";
 import Metrics from "./pages/metrics/Metrics";
+import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
@@ -262,6 +263,12 @@ const ROUTE_STRUCTURE = {
     url: "metrics",
     icon: "chart-no-axes-combined",
     component: Metrics,
+  },
+  observability: {
+    title: "Overview",
+    url: "observability",
+    icon: "gauge",
+    component: ObservabilityOverview,
   },
   sdks: {
     title: "SDKs",

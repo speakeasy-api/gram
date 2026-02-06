@@ -44,6 +44,7 @@ export * from "./getdomain.js";
 export * from "./getinstance.js";
 export * from "./getlatestdeployment.js";
 export * from "./getmcpmetadata.js";
+export * from "./getobservabilityoverview.js";
 export * from "./getperiodusage.js";
 export * from "./getproject.js";
 export * from "./getprojectmetricssummary.js";

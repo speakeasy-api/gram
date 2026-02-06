@@ -124,3 +124,96 @@
   text-transform: inherit;
   letter-spacing: inherit;
 }
+
+/* Tremor chart colors - needed for Tailwind v4 compatibility */
+/* Using !important to override Recharts inline/attribute styles */
+/* Red colors for errors */
+.fill-red-200 {
+  fill: #fecaca !important;
+}
+.fill-red-500 {
+  fill: #ef4444 !important;
+}
+.stroke-red-500 {
+  stroke: #ef4444 !important;
+}
+.bg-red-500 {
+  background-color: #ef4444;
+}
+.text-red-500 {
+  color: #ef4444;
+}
+/* Blue colors for tool calls */
+.fill-blue-200 {
+  fill: #bfdbfe !important;
+}
+.fill-blue-500 {
+  fill: #3b82f6 !important;
+}
+.stroke-blue-500 {
+  stroke: #3b82f6 !important;
+}
+.bg-blue-500 {
+  background-color: #3b82f6;
+}
+.text-blue-500 {
+  color: #3b82f6;
+}
+
+/* Tailwind v4 arbitrary color support for Tremor charts */
+.fill-\[\#3b82f6\] {
+  fill: #3b82f6 !important;
+}
+.fill-\[\#ef4444\] {
+  fill: #ef4444 !important;
+}
+.stroke-\[\#3b82f6\] {
+  stroke: #3b82f6 !important;
+}
+.stroke-\[\#ef4444\] {
+  stroke: #ef4444 !important;
+}
+.text-\[\#3b82f6\] {
+  color: #3b82f6;
+}
+.text-\[\#ef4444\] {
+  color: #ef4444;
+}
+.bg-\[\#3b82f6\] {
+  background-color: #3b82f6;
+}
+.bg-\[\#ef4444\] {
+  background-color: #ef4444;
+}
+
+/* Force fill inheritance for Recharts bar/line elements */
+.fill-\[\#3b82f6\] rect,
+.fill-\[\#3b82f6\] path {
+  fill: #3b82f6 !important;
+}
+.fill-\[\#ef4444\] rect,
+.fill-\[\#ef4444\] path {
+  fill: #ef4444 !important;
+}
+.stroke-\[\#3b82f6\] path {
+  stroke: #3b82f6 !important;
+}
+.stroke-\[\#ef4444\] path {
+  stroke: #ef4444 !important;
+}
+
+/* Also for named colors */
+.fill-blue-500 rect,
+.fill-blue-500 path {
+  fill: #3b82f6 !important;
+}
+.fill-red-500 rect,
+.fill-red-500 path {
+  fill: #ef4444 !important;
+}
+.stroke-blue-500 path {
+  stroke: #3b82f6 !important;
+}
+.stroke-red-500 path {
+  stroke: #ef4444 !important;
+}

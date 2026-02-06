@@ -744,248 +744,6 @@ func DecodeSearchChatsResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
-// BuildSearchUsersRequest instantiates a HTTP request object with method and
-// path set to call the "telemetry" service "searchUsers" endpoint
-func (c *Client) BuildSearchUsersRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SearchUsersTelemetryPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("telemetry", "searchUsers", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeSearchUsersRequest returns an encoder for requests sent to the
-// telemetry searchUsers server.
-func EncodeSearchUsersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*telemetry.SearchUsersPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("telemetry", "searchUsers", "*telemetry.SearchUsersPayload", v)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
-		if p.SessionToken != nil {
-			head := *p.SessionToken
-			req.Header.Set("Gram-Session", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
-		body := NewSearchUsersRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("telemetry", "searchUsers", err)
-		}
-		return nil
-	}
-}
-
-// DecodeSearchUsersResponse returns a decoder for responses returned by the
-// telemetry searchUsers endpoint. restoreBody controls whether the response
-// body should be restored after having been read.
-// DecodeSearchUsersResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeSearchUsersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body SearchUsersResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-			}
-			err = ValidateSearchUsersResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-			}
-			res := NewSearchUsersResultOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body SearchUsersUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-			}
-			err = ValidateSearchUsersUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-			}
-			return nil, NewSearchUsersUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body SearchUsersForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-			}
-			err = ValidateSearchUsersForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-			}
-			return nil, NewSearchUsersForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body SearchUsersBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-			}
-			err = ValidateSearchUsersBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-			}
-			return nil, NewSearchUsersBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body SearchUsersNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-			}
-			err = ValidateSearchUsersNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-			}
-			return nil, NewSearchUsersNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body SearchUsersConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-			}
-			err = ValidateSearchUsersConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-			}
-			return nil, NewSearchUsersConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body SearchUsersUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-			}
-			err = ValidateSearchUsersUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-			}
-			return nil, NewSearchUsersUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body SearchUsersInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-			}
-			err = ValidateSearchUsersInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-			}
-			return nil, NewSearchUsersInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body SearchUsersInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-				}
-				err = ValidateSearchUsersInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-				}
-				return nil, NewSearchUsersInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body SearchUsersUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-				}
-				err = ValidateSearchUsersUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-				}
-				return nil, NewSearchUsersUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("telemetry", "searchUsers", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body SearchUsersGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("telemetry", "searchUsers", err)
-			}
-			err = ValidateSearchUsersGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("telemetry", "searchUsers", err)
-			}
-			return nil, NewSearchUsersGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("telemetry", "searchUsers", resp.StatusCode, string(body))
-		}
-	}
-}
-
 // BuildCaptureEventRequest instantiates a HTTP request object with method and
 // path set to call the "telemetry" service "captureEvent" endpoint
 func (c *Client) BuildCaptureEventRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1718,6 +1476,249 @@ func DecodeGetUserMetricsSummaryResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetObservabilityOverviewRequest instantiates a HTTP request object with
+// method and path set to call the "telemetry" service
+// "getObservabilityOverview" endpoint
+func (c *Client) BuildGetObservabilityOverviewRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetObservabilityOverviewTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getObservabilityOverview", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetObservabilityOverviewRequest returns an encoder for requests sent
+// to the telemetry getObservabilityOverview server.
+func EncodeGetObservabilityOverviewRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetObservabilityOverviewPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getObservabilityOverview", "*telemetry.GetObservabilityOverviewPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetObservabilityOverviewRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getObservabilityOverview", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetObservabilityOverviewResponse returns a decoder for responses
+// returned by the telemetry getObservabilityOverview endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetObservabilityOverviewResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetObservabilityOverviewResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetObservabilityOverviewResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+			}
+			err = ValidateGetObservabilityOverviewResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+			}
+			res := NewGetObservabilityOverviewResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetObservabilityOverviewUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+			}
+			err = ValidateGetObservabilityOverviewUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+			}
+			return nil, NewGetObservabilityOverviewUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetObservabilityOverviewForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+			}
+			err = ValidateGetObservabilityOverviewForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+			}
+			return nil, NewGetObservabilityOverviewForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetObservabilityOverviewBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+			}
+			err = ValidateGetObservabilityOverviewBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+			}
+			return nil, NewGetObservabilityOverviewBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetObservabilityOverviewNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+			}
+			err = ValidateGetObservabilityOverviewNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+			}
+			return nil, NewGetObservabilityOverviewNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetObservabilityOverviewConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+			}
+			err = ValidateGetObservabilityOverviewConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+			}
+			return nil, NewGetObservabilityOverviewConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetObservabilityOverviewUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+			}
+			err = ValidateGetObservabilityOverviewUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+			}
+			return nil, NewGetObservabilityOverviewUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetObservabilityOverviewInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+			}
+			err = ValidateGetObservabilityOverviewInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+			}
+			return nil, NewGetObservabilityOverviewInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetObservabilityOverviewInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+				}
+				err = ValidateGetObservabilityOverviewInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+				}
+				return nil, NewGetObservabilityOverviewInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetObservabilityOverviewUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+				}
+				err = ValidateGetObservabilityOverviewUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+				}
+				return nil, NewGetObservabilityOverviewUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getObservabilityOverview", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetObservabilityOverviewGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getObservabilityOverview", err)
+			}
+			err = ValidateGetObservabilityOverviewGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getObservabilityOverview", err)
+			}
+			return nil, NewGetObservabilityOverviewGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getObservabilityOverview", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalTelemetrySearchLogsFilterToSearchLogsFilterRequestBody builds a value
 // of type *SearchLogsFilterRequestBody from a value of type
 // *telemetry.SearchLogsFilter.
@@ -1926,79 +1927,10 @@ func unmarshalChatSummaryResponseBodyToTelemetryChatSummary(v *ChatSummaryRespon
 	return res
 }
 
-// marshalTelemetrySearchUsersFilterToSearchUsersFilterRequestBody builds a
-// value of type *SearchUsersFilterRequestBody from a value of type
-// *telemetry.SearchUsersFilter.
-func marshalTelemetrySearchUsersFilterToSearchUsersFilterRequestBody(v *telemetry.SearchUsersFilter) *SearchUsersFilterRequestBody {
-	res := &SearchUsersFilterRequestBody{
-		From:         v.From,
-		To:           v.To,
-		DeploymentID: v.DeploymentID,
-	}
-
-	return res
-}
-
-// marshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter builds a
-// value of type *telemetry.SearchUsersFilter from a value of type
-// *SearchUsersFilterRequestBody.
-func marshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(v *SearchUsersFilterRequestBody) *telemetry.SearchUsersFilter {
-	res := &telemetry.SearchUsersFilter{
-		From:         v.From,
-		To:           v.To,
-		DeploymentID: v.DeploymentID,
-	}
-
-	return res
-}
-
-// unmarshalUserSummaryResponseBodyToTelemetryUserSummary builds a value of
-// type *telemetry.UserSummary from a value of type *UserSummaryResponseBody.
-func unmarshalUserSummaryResponseBodyToTelemetryUserSummary(v *UserSummaryResponseBody) *telemetry.UserSummary {
-	res := &telemetry.UserSummary{
-		UserID:              *v.UserID,
-		FirstSeenUnixNano:   *v.FirstSeenUnixNano,
-		LastSeenUnixNano:    *v.LastSeenUnixNano,
-		TotalChats:          *v.TotalChats,
-		TotalChatRequests:   *v.TotalChatRequests,
-		TotalInputTokens:    *v.TotalInputTokens,
-		TotalOutputTokens:   *v.TotalOutputTokens,
-		TotalTokens:         *v.TotalTokens,
-		AvgTokensPerRequest: *v.AvgTokensPerRequest,
-		TotalToolCalls:      *v.TotalToolCalls,
-		ToolCallSuccess:     *v.ToolCallSuccess,
-		ToolCallFailure:     *v.ToolCallFailure,
-	}
-	res.Tools = make([]*telemetry.ToolUsage, len(v.Tools))
-	for i, val := range v.Tools {
-		if val == nil {
-			res.Tools[i] = nil
-			continue
-		}
-		res.Tools[i] = unmarshalToolUsageResponseBodyToTelemetryToolUsage(val)
-	}
-
-	return res
-}
-
-// unmarshalToolUsageResponseBodyToTelemetryToolUsage builds a value of type
-// *telemetry.ToolUsage from a value of type *ToolUsageResponseBody.
-func unmarshalToolUsageResponseBodyToTelemetryToolUsage(v *ToolUsageResponseBody) *telemetry.ToolUsage {
-	res := &telemetry.ToolUsage{
-		Urn:          *v.Urn,
-		Count:        *v.Count,
-		SuccessCount: *v.SuccessCount,
-		FailureCount: *v.FailureCount,
-	}
-
-	return res
-}
-
-// unmarshalProjectSummaryResponseBodyToTelemetryProjectSummary builds a value
-// of type *telemetry.ProjectSummary from a value of type
-// *ProjectSummaryResponseBody.
-func unmarshalProjectSummaryResponseBodyToTelemetryProjectSummary(v *ProjectSummaryResponseBody) *telemetry.ProjectSummary {
-	res := &telemetry.ProjectSummary{
+// unmarshalMetricsResponseBodyToTelemetryMetrics builds a value of type
+// *telemetry.Metrics from a value of type *MetricsResponseBody.
+func unmarshalMetricsResponseBodyToTelemetryMetrics(v *MetricsResponseBody) *telemetry.Metrics {
+	res := &telemetry.Metrics{
 		FirstSeenUnixNano:     *v.FirstSeenUnixNano,
 		LastSeenUnixNano:      *v.LastSeenUnixNano,
 		TotalInputTokens:      *v.TotalInputTokens,
@@ -2043,6 +1975,70 @@ func unmarshalModelUsageResponseBodyToTelemetryModelUsage(v *ModelUsageResponseB
 	res := &telemetry.ModelUsage{
 		Name:  *v.Name,
 		Count: *v.Count,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageResponseBodyToTelemetryToolUsage builds a value of type
+// *telemetry.ToolUsage from a value of type *ToolUsageResponseBody.
+func unmarshalToolUsageResponseBodyToTelemetryToolUsage(v *ToolUsageResponseBody) *telemetry.ToolUsage {
+	res := &telemetry.ToolUsage{
+		Urn:          *v.Urn,
+		Count:        *v.Count,
+		SuccessCount: *v.SuccessCount,
+		FailureCount: *v.FailureCount,
+	}
+
+	return res
+}
+
+// unmarshalObservabilitySummaryResponseBodyToTelemetryObservabilitySummary
+// builds a value of type *telemetry.ObservabilitySummary from a value of type
+// *ObservabilitySummaryResponseBody.
+func unmarshalObservabilitySummaryResponseBodyToTelemetryObservabilitySummary(v *ObservabilitySummaryResponseBody) *telemetry.ObservabilitySummary {
+	res := &telemetry.ObservabilitySummary{
+		TotalChats:           *v.TotalChats,
+		ResolvedChats:        *v.ResolvedChats,
+		FailedChats:          *v.FailedChats,
+		AvgSessionDurationMs: *v.AvgSessionDurationMs,
+		AvgResolutionTimeMs:  *v.AvgResolutionTimeMs,
+		TotalToolCalls:       *v.TotalToolCalls,
+		FailedToolCalls:      *v.FailedToolCalls,
+		AvgLatencyMs:         *v.AvgLatencyMs,
+	}
+
+	return res
+}
+
+// unmarshalTimeSeriesBucketResponseBodyToTelemetryTimeSeriesBucket builds a
+// value of type *telemetry.TimeSeriesBucket from a value of type
+// *TimeSeriesBucketResponseBody.
+func unmarshalTimeSeriesBucketResponseBodyToTelemetryTimeSeriesBucket(v *TimeSeriesBucketResponseBody) *telemetry.TimeSeriesBucket {
+	res := &telemetry.TimeSeriesBucket{
+		BucketTimeUnixNano:   *v.BucketTimeUnixNano,
+		TotalChats:           *v.TotalChats,
+		ResolvedChats:        *v.ResolvedChats,
+		FailedChats:          *v.FailedChats,
+		TotalToolCalls:       *v.TotalToolCalls,
+		FailedToolCalls:      *v.FailedToolCalls,
+		AvgToolLatencyMs:     *v.AvgToolLatencyMs,
+		AvgSessionDurationMs: *v.AvgSessionDurationMs,
+	}
+
+	return res
+}
+
+// unmarshalToolMetricResponseBodyToTelemetryToolMetric builds a value of type
+// *telemetry.ToolMetric from a value of type *ToolMetricResponseBody.
+func unmarshalToolMetricResponseBodyToTelemetryToolMetric(v *ToolMetricResponseBody) *telemetry.ToolMetric {
+	res := &telemetry.ToolMetric{
+		GramUrn:      *v.GramUrn,
+		CallCount:    *v.CallCount,
+		SuccessCount: *v.SuccessCount,
+		FailureCount: *v.FailureCount,
+		AvgLatencyMs: *v.AvgLatencyMs,
+		FailureRate:  *v.FailureRate,
 	}
 
 	return res

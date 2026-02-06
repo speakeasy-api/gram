@@ -41,3 +41,8 @@ func GetProjectMetricsSummaryTelemetryPath() string {
 func GetUserMetricsSummaryTelemetryPath() string {
 	return "/rpc/telemetry.getUserMetricsSummary"
 }
+
+// GetObservabilityOverviewTelemetryPath returns the URL path to the telemetry service getObservabilityOverview HTTP endpoint.
+func GetObservabilityOverviewTelemetryPath() string {
+	return "/rpc/telemetry.getObservabilityOverview"
+}

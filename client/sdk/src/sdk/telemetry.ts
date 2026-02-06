@@ -3,6 +3,7 @@
  */
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
+import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
@@ -27,6 +28,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CaptureEventResult> {
     return unwrapAsync(telemetryCaptureEvent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getObservabilityOverview telemetry
+   *
+   * @remarks
+   * Get observability overview metrics including time series, tool breakdowns, and summary stats
+   */
+  async getObservabilityOverview(
+    request: operations.GetObservabilityOverviewRequest,
+    security?: operations.GetObservabilityOverviewSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetObservabilityOverviewResult> {
+    return unwrapAsync(telemetryGetObservabilityOverview(
       this,
       request,
       security,
