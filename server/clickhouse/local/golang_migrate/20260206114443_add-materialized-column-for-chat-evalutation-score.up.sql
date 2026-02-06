@@ -1,0 +1,1 @@
+ALTER TABLE `telemetry_logs` ADD COLUMN `evaluation_score_label` String MATERIALIZED toString(attributes.gen_ai.evaluation.score.label) COMMENT 'Evaluation result label (success, failure, partial, abandoned).';

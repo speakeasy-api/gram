@@ -1,4 +1,4 @@
-h1:UORNkdnipFmkdBXiTlUajr7H5NPEqvr4bvyUk6VUNIM=
+h1:ttLi6zwpUOCORMS4iuQbVUUy59kEAwNuT9QDYIzfNMQ=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -11,3 +11,5 @@ h1:UORNkdnipFmkdBXiTlUajr7H5NPEqvr4bvyUk6VUNIM=
 20260205142751_drop-telemetry-materialized-cols.up.sql h1:gEbtbNCvNv2p2KBqgPNGCNVE7tNQK21BUsm2XVbt5wU=
 20260205142915_add-telemetry-materialized-cols.up.sql h1:OELvwpMsl1noENBrRSOb90/HSOVTIIfjqucLsJUHBd8=
 20260206100103_add-api-key-id-materialized-col.up.sql h1:onLGWT+hY47HKScXjiGFZZnl9/j6QHNao8XPh6Swmdc=
+20260206114443_add-materialized-column-for-chat-evalutation-score.up.sql h1:VSEr6KPOlda/TXDaZAC3GMQfEEIB4E0+27zpBa/TM5k=
+20260206114500_add-index-for-chat-evaluation-score.up.sql h1:Xq6AZLk613h4Fjyb7SJPXdaFwYJTFSeDgj+H9dx/hfs=
