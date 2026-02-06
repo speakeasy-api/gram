@@ -1,7 +1,9 @@
-import { useSession } from "@/contexts/Auth.tsx";
+import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth.tsx";
+import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState.ts";
 import { Modal, ModalProvider, useModal } from "@speakeasy-api/moonshine";
-import { useEffect } from "react";
+import { ShieldAlert } from "lucide-react";
+import { useEffect, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { FunctionsAnnouncementModal } from "./functions-announcement-modal/index.tsx";
@@ -27,16 +29,64 @@ export const LoginCheck = () => {
 };
 
 export const AppLayout = () => {
+  const isAdmin = useIsAdmin();
+  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
+  const isImpersonating = isAdmin && !!overrideSlug;
+
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      style={
+        isImpersonating
+          ? ({ "--header-offset": "5.75rem" } as React.CSSProperties)
+          : undefined
+      }
+    >
       <ModalProvider>
-        <AppLayoutContent />
+        <AppLayoutContent isImpersonating={isImpersonating} />
       </ModalProvider>
     </SidebarProvider>
   );
 };
 
-const AppLayoutContent = () => {
+function getAdminOverrideCookie(): string | null {
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("gram_admin_override="));
+  if (!match) return null;
+  const value = match.split("=")[1];
+  return value || null;
+}
+
+const ImpersonationBanner = () => {
+  const organization = useOrganization();
+  const client = useSdkClient();
+
+  return (
+    <div className="flex items-center justify-center gap-3 bg-red-600 px-4 py-2 text-white text-sm">
+      <ShieldAlert className="h-4 w-4 shrink-0" />
+      <span className="font-bold font-mono">
+        Impersonating {organization.slug}
+      </span>
+      <button
+        type="button"
+        className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium hover:bg-white/30 transition-colors"
+        onClick={async () => {
+          document.cookie = "gram_admin_override=; path=/; max-age=0;";
+          await client.auth.logout();
+          window.location.href = "/login";
+        }}
+      >
+        Stop impersonating
+      </button>
+    </div>
+  );
+};
+
+const AppLayoutContent = ({
+  isImpersonating,
+}: {
+  isImpersonating: boolean;
+}) => {
   const [hasSeenFunctionsModal, setHasSeenFunctionsModal] =
     useLocalStorageState(
       "gram-dashboard-has-seen-functions-announcement-modal",
@@ -63,6 +113,7 @@ const AppLayoutContent = () => {
 
   return (
     <div className="flex flex-col h-screen w-full">
+      {isImpersonating && <ImpersonationBanner />}
       <TopHeader />
       <div className="flex flex-1 w-full overflow-hidden pt-2">
         <AppSidebar variant="inset" />

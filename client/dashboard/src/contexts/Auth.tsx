@@ -1,5 +1,4 @@
 import { FullPageError } from "@/components/full-page-error";
-import { getServerURL } from "@/lib/utils";
 import { LINKED_FROM_PARAM } from "@/pages/home/Home";
 import {
   InfoResponseBody,
@@ -312,11 +311,7 @@ export const useUser = () => {
 
 export const useIsAdmin = () => {
   const { isAdmin } = useUser();
-  const devHostnames = import.meta.env.VITE_DEV_HOSTNAMES?.split(",") ?? [
-    "localhost",
-  ];
-  const isLocal = devHostnames.some((h) => getServerURL().includes(h));
-  return isAdmin || isLocal;
+  return isAdmin;
 };
 
 export function usePylonInAppChat(user: User | undefined) {
