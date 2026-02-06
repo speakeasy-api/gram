@@ -253,13 +253,40 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
     }
   };
 
-  const handleUrlUpload = (result: UploadOpenAPIv3Result) => {
+  const handleUrlUpload = async (result: UploadOpenAPIv3Result) => {
     setAsset(result);
-    setFile(
-      new File([], "My API", {
-        type: result.asset?.contentType ?? "application/yaml",
-      }),
-    );
+
+    try {
+      // Fetch the actual content from the backend
+      const response = await fetch(
+        `${getServerURL()}/rpc/assets.serveOpenAPIv3?id=${result.asset.id}&project_id=${project.id}`,
+        {
+          headers: {
+            "gram-session": session.session,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch OpenAPI content");
+      }
+
+      const blob = await response.blob();
+      const file = new File([blob], "My API", {
+        type: result.asset.contentType,
+      });
+
+      setFile(file);
+    } catch (error) {
+      console.error("Failed to fetch OpenAPI content:", error);
+      // Fallback to empty file if fetch fails
+      setFile(
+        new File([], "My API", {
+          type: result.asset?.contentType ?? "application/yaml",
+        }),
+      );
+    }
+
     telemetry.capture("onboarding_event", {
       action: "spec_uploaded",
       source: "url",
