@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	temporal_client "go.temporal.io/sdk/client"
 )
 
 var (
@@ -123,11 +122,9 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		posthog,
 	)
 
-	var temporalClient temporal_client.Client
-	temporalClient, devserver := infra.NewTemporalClient(t)
+	temporalClient := infra.NewTemporalClient(t)
 	t.Cleanup(func() {
 		temporalClient.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
 	})
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
@@ -202,11 +199,9 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	var temporalClient temporal_client.Client
-	temporalClient, devserver := infra.NewTemporalClient(t)
+	temporalClient := infra.NewTemporalClient(t)
 	t.Cleanup(func() {
 		temporalClient.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
 	})
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
