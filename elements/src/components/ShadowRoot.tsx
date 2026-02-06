@@ -69,7 +69,11 @@ export const ShadowRoot = ({
   }, [shadowRoot, elementsStyles])
 
   return (
-    <div ref={hostRef} className={hostClassName} style={hostStyle}>
+    <div
+      ref={hostRef}
+      className={hostClassName}
+      style={{ isolation: 'isolate', ...hostStyle }}
+    >
       {shadowRoot
         ? createPortal(
             <div

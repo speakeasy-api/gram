@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -84,6 +85,7 @@ func NewActivities(
 	agentsService *agents.Service,
 	mcpRegistryClient *externalmcp.RegistryClient,
 	temporalClient client.Client,
+	telemetryService *telemetry.Service,
 ) *Activities {
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -113,7 +115,7 @@ func NewActivities(
 		recordAgentExecution:          activities.NewRecordAgentExecution(logger, db),
 		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, openrouterChatClient),
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, openrouterChatClient),
+		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, openrouterChatClient, telemetryService),
 		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 	}
 }
