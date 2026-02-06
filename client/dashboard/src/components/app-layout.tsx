@@ -29,10 +29,19 @@ export const LoginCheck = () => {
 };
 
 export const AppLayout = () => {
+  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
+  const isImpersonating = !!overrideSlug;
+
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      style={
+        isImpersonating
+          ? ({ "--header-offset": "5.75rem" } as React.CSSProperties)
+          : undefined
+      }
+    >
       <ModalProvider>
-        <AppLayoutContent />
+        <AppLayoutContent isImpersonating={isImpersonating} />
       </ModalProvider>
     </SidebarProvider>
   );
@@ -48,12 +57,8 @@ function getAdminOverrideCookie(): string | null {
 }
 
 const ImpersonationBanner = () => {
-  const isAdmin = useIsAdmin();
   const organization = useOrganization();
   const client = useSdkClient();
-  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
-
-  if (!isAdmin || !overrideSlug) return null;
 
   return (
     <div className="flex items-center justify-center gap-3 bg-red-600 px-4 py-2 text-white text-sm">
@@ -76,7 +81,11 @@ const ImpersonationBanner = () => {
   );
 };
 
-const AppLayoutContent = () => {
+const AppLayoutContent = ({
+  isImpersonating,
+}: {
+  isImpersonating: boolean;
+}) => {
   const [hasSeenFunctionsModal, setHasSeenFunctionsModal] =
     useLocalStorageState(
       "gram-dashboard-has-seen-functions-announcement-modal",
@@ -103,7 +112,7 @@ const AppLayoutContent = () => {
 
   return (
     <div className="flex flex-col h-screen w-full">
-      <ImpersonationBanner />
+      {isImpersonating && <ImpersonationBanner />}
       <TopHeader />
       <div className="flex flex-1 w-full overflow-hidden pt-2">
         <AppSidebar variant="inset" />
