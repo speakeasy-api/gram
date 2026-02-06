@@ -127,7 +127,6 @@ export default defineConfig(({ mode }) => {
     ],
     resolve: {
       alias: {
-        '@gram/client': resolve(__dirname, '../../client/sdk/src'),
         '@': resolve(__dirname, '../src'),
       },
     },

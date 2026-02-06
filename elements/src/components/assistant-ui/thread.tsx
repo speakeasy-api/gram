@@ -62,13 +62,13 @@ import { useElements } from '@/hooks/useElements'
 import { isLocalThreadId } from '@/hooks/useGramThreadListAdapter'
 import { useRadius } from '@/hooks/useRadius'
 import { useRecordCassette } from '@/hooks/useRecordCassette'
-import { useSdkClient } from '@/hooks/useSdkClient'
 import { useThemeProps } from '@/hooks/useThemeProps'
 import { useToolMentions } from '@/hooks/useToolMentions'
 import { EASE_OUT_QUINT } from '@/lib/easing'
 import { MODELS } from '@/lib/models'
 import { cn } from '@/lib/utils'
-import { chatSubmitFeedback } from '@gram/client/funcs/chatSubmitFeedback'
+import { getApiUrl } from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
 import { Feedback } from '@gram/client/models/components/submitfeedbackrequestbody'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import {
@@ -122,13 +122,18 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const themeProps = useThemeProps()
   const d = useDensity()
   const { config } = useElements()
-  const client = useSdkClient()
   const components = config.components ?? {}
   const showStaticSessionWarning = config.api && 'sessionToken' in config.api
   const showFeedback = config.thread?.showFeedback ?? false
   const [isResolved, setIsResolved] = useState(false)
   const [feedbackHidden, setFeedbackHidden] = useState(false)
   const chatId = useChatId()
+
+  const apiUrl = getApiUrl(config)
+  const auth = useAuth({
+    auth: config.api,
+    projectSlug: config.projectSlug,
+  })
 
   const setResolved = () => setIsResolved(true)
   const setUnresolved = () => {
@@ -146,18 +151,27 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
         return
       }
 
-      const result = await chatSubmitFeedback(client, {
-        submitFeedbackRequestBody: {
-          id: chatId,
-          feedback,
-        },
-      })
+      try {
+        const response = await fetch(`${apiUrl}/rpc/chat.submitFeedback`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...auth.headers,
+          },
+          body: JSON.stringify({
+            id: chatId,
+            feedback,
+          }),
+        })
 
-      if (!result.ok) {
-        console.error('Failed to submit feedback:', result.error)
+        if (!response.ok) {
+          console.error('Failed to submit feedback:', response.statusText)
+        }
+      } catch (error) {
+        console.error('Failed to submit feedback:', error)
       }
     },
-    [chatId, client]
+    [chatId, apiUrl, auth.headers]
   )
 
   return (
