@@ -116,6 +116,7 @@ type mcpInputs struct {
 	mode             ToolMode
 	userID           string
 	externalUserID   string
+	apiKeyID         string
 }
 
 func NewService(
@@ -592,11 +593,13 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
 
 	// Extract user IDs for telemetry
-	var userID, externalUserID string
+	var userID, externalUserID, apiKeyID string
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
 		userID = authCtx.UserID
 		externalUserID = authCtx.ExternalUserID
+		apiKeyID = authCtx.APIKeyID
 	}
+
 	mcpInputs := &mcpInputs{
 		projectID:        toolset.ProjectID,
 		toolset:          toolset.Slug,
@@ -609,6 +612,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		mode:             resolveToolMode(r, *toolset),
 		userID:           userID,
 		externalUserID:   externalUserID,
+		apiKeyID:         apiKeyID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -762,6 +766,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		mode:             resolveToolMode(r, toolset),
 		userID:           authCtx.UserID,
 		externalUserID:   authCtx.ExternalUserID,
+		apiKeyID:         authCtx.APIKeyID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)

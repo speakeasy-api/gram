@@ -80,6 +80,7 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		OrganizationSlug: authCtx.OrganizationSlug,
 		ProjectSlug:      *authCtx.ProjectSlug,
 		ExternalUserID:   p.UserIdentifier,
+		APIKeyID:         authCtx.APIKeyID,
 		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct // to be populated by chatSessionsManager
 	}
 

@@ -23,12 +23,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -100,7 +100,7 @@ func handleResourcesRead(
 	}
 
 	descriptor := plan.Descriptor
-	
+
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
@@ -171,6 +171,9 @@ func handleResourcesRead(
 		}
 		if payload.externalUserID != "" {
 			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
+		}
+		if payload.apiKeyID != "" {
+			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
 
 		params := tm.LogParams{

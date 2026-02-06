@@ -42,6 +42,7 @@ type AnalyzeSegmentArgs struct {
 	ChatID     uuid.UUID
 	ProjectID  uuid.UUID
 	OrgID      string
+	APIKeyID   string
 	StartIndex int
 	EndIndex   int
 }

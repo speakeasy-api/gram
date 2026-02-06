@@ -129,6 +129,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		ActiveOrganizationID: apiKey.OrganizationID,
 		UserID:               apiKey.CreatedByUserID,
 		ExternalUserID:       "",
+		APIKeyID:             apiKey.ID.String(),
 		SessionID:            nil,
 		ProjectID:            nil,
 		OrganizationSlug:     org.Slug,
