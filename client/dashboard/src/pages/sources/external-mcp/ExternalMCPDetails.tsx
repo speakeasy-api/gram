@@ -14,7 +14,7 @@ import {
 import { ToolsetEntry } from "@gram/client/models/components";
 import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { ChevronRight, Globe, Lock, Power, Server, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -37,20 +37,11 @@ export default function ExternalMCPDetails() {
     return validTabs.includes(hash) ? hash : "overview";
   });
 
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace("#", "");
-      if (validTabs.includes(hash)) {
-        setActiveTab(hash);
-      }
-    };
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
-
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    window.location.hash = value;
+    const url = new URL(window.location.href);
+    url.hash = value;
+    window.history.replaceState(null, "", url.toString());
   };
 
   const {
