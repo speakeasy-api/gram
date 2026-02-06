@@ -16,22 +16,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 type AnalyzeSegment struct {
-	logger     *slog.Logger
-	repo       *repo.Queries
-	chatClient *openrouter.ChatClient
-	db         *pgxpool.Pool
+	logger           *slog.Logger
+	repo             *repo.Queries
+	chatClient       *openrouter.ChatClient
+	db               *pgxpool.Pool
+	telemetryService *telemetry.Service
 }
 
-func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *AnalyzeSegment {
+func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient *openrouter.ChatClient, telemetryService *telemetry.Service) *AnalyzeSegment {
 	return &AnalyzeSegment{
-		logger:     logger,
-		repo:       repo.New(db),
-		chatClient: chatClient,
-		db:         db,
+		logger:           logger,
+		repo:             repo.New(db),
+		chatClient:       chatClient,
+		db:               db,
+		telemetryService: telemetryService,
 	}
 }
 
@@ -146,6 +149,37 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Emit resolution telemetry event
+	chatInfo, err := a.repo.GetChat(ctx, args.ChatID)
+	if err == nil && chatInfo.CreatedAt.Valid {
+		resolutionTimeSecs := time.Since(chatInfo.CreatedAt.Time).Seconds()
+
+		attrs := map[attr.Key]any{
+			attr.GenAIEvaluationNameKey:        "chat_resolution",
+			attr.GenAIEvaluationScoreLabelKey:  result.Resolution,
+			attr.GenAIEvaluationScoreValueKey:  score,
+			attr.GenAIEvaluationExplanationKey: result.ResolutionNotes,
+			attr.GenAIConversationIDKey:        args.ChatID.String(),
+			attr.ProjectIDKey:                  args.ProjectID.String(),
+			attr.OrganizationIDKey:             args.OrgID,
+			attr.GenAIConversationDuration:     resolutionTimeSecs,
+		}
+
+		a.telemetryService.CreateLog(telemetry.LogParams{
+			Timestamp: time.Now(),
+			ToolInfo: telemetry.ToolInfo{
+				ID:             "",
+				URN:            "agents:chat:resolution",
+				Name:           "chat_resolution",
+				ProjectID:      args.ProjectID.String(),
+				DeploymentID:   "",
+				FunctionID:     nil,
+				OrganizationID: args.OrgID,
+			},
+			Attributes: attrs,
+		})
 	}
 
 	a.logger.InfoContext(ctx, "successfully analyzed segment",
