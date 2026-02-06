@@ -44,6 +44,7 @@ type Service struct {
 var _ telem_gen.Service = (*Service)(nil)
 var _ telem_gen.Auther = (*Service)(nil)
 
+// NewService creates a telemetry service.
 func NewService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
@@ -55,8 +56,16 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("logs"))
 	chRepo := repo.New(chConn)
 
+	// The sessions and chatSessions parameters may be nil for callers that only need
+	// telemetry emission (e.g., Temporal workers using CreateLog). When nil, the HTTP
+	// API auth methods (APIKeyAuth, JWTAuth) will return unauthorized errors.
+	var a *auth.Auth
+	if sessions != nil {
+		a = auth.New(logger, db, sessions)
+	}
+
 	return &Service{
-		auth:         auth.New(logger, db, sessions),
+		auth:         a,
 		db:           db,
 		chConn:       chConn,
 		chRepo:       chRepo,
@@ -81,10 +90,16 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	if s.auth == nil {
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "auth not configured")
+	}
 	return s.auth.Authorize(ctx, key, schema)
 }
 
 func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error) {
+	if s.chatSessions == nil {
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "chat sessions not configured")
+	}
 	return s.chatSessions.Authorize(ctx, token)
 }
 
