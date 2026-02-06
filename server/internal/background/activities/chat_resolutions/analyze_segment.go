@@ -177,7 +177,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		Timestamp: time.Now(),
 		ToolInfo: telemetry.ToolInfo{
 			ID:             "",
-			URN:            "agents:chat:resolution",
+			URN:            "",
 			Name:           "chat_resolution",
 			ProjectID:      args.ProjectID.String(),
 			DeploymentID:   "",
