@@ -11,7 +11,7 @@ import { UploadOpenAPIv3Result } from "@gram/client/models/components";
 
 interface OpenApiSourceInputProps {
   onUpload: (file: File) => void;
-  onUrlUpload?: (result: UploadOpenAPIv3Result) => void;
+  onUrlUpload?: (result: UploadOpenAPIv3Result) => void | Promise<void>;
   className?: string;
 }
 
@@ -32,9 +32,9 @@ export function OpenApiSourceInput({
       });
       return result;
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (onUrlUpload) {
-        onUrlUpload(result);
+        await onUrlUpload(result);
       } else {
         // Fallback: create a placeholder file for compatibility
         const filename = url.split("/").pop() || "openapi.yaml";
