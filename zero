@@ -4,10 +4,15 @@ set -e
 
 # Parse command line arguments
 agent_mode=false
+auto_yes=false
 for arg in "$@"; do
     case $arg in
         --agent)
             agent_mode=true
+            shift
+            ;;
+        -y|--yes)
+            auto_yes=true
             shift
             ;;
     esac
@@ -113,7 +118,9 @@ interactive_only mise zero:summary
 
 echo -e "\n✅ All set up!"
 
-if ! $agent_mode; then
+if $auto_yes; then
+    exec mise run start
+elif ! $agent_mode; then
     echo "Want me to start the server and dashboard (\`mise run start\`)?"
     echo -n "[y/N] "
     read -r answer
