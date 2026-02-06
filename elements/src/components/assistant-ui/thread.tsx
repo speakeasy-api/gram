@@ -91,10 +91,10 @@ const ChatResolutionContext = createContext<{
 }>({
   isResolved: false,
   feedbackHidden: false,
-  setResolved: () => {},
-  setUnresolved: () => {},
-  resetFeedbackHidden: () => {},
-  submitFeedback: async () => {},
+  setResolved: () => { },
+  setUnresolved: () => { },
+  resetFeedbackHidden: () => { },
+  submitFeedback: async () => { },
 })
 
 const useChatResolution = () => useContext(ChatResolutionContext)
@@ -146,19 +146,15 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
         return
       }
 
-      try {
-        const result = await chatSubmitFeedback(client, {
-          submitFeedbackRequestBody: {
-            id: chatId,
-            feedback,
-          },
-        })
+      const result = await chatSubmitFeedback(client, {
+        submitFeedbackRequestBody: {
+          id: chatId,
+          feedback,
+        },
+      })
 
-        if (!result.ok) {
-          console.error('Failed to submit feedback:', result.error)
-        }
-      } catch (error) {
-        console.error('Error submitting feedback:', error)
+      if (!result.ok) {
+        console.error('Failed to submit feedback:', result.error)
       }
     },
     [chatId, client]

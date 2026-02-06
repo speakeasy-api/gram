@@ -1,20 +1,18 @@
 import {
+  unstable_RemoteThreadListAdapter as RemoteThreadListAdapter,
+  ThreadMessage,
+  RuntimeAdapterProvider,
+  ThreadHistoryAdapter,
+  useAssistantApi,
+  type AssistantApi,
+} from '@assistant-ui/react'
+import { createAssistantStream, type AssistantStream } from 'assistant-stream'
+import {
+  GramChatOverview,
   GramChat,
   convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
 } from '@/lib/messageConverter'
-import {
-  unstable_RemoteThreadListAdapter as RemoteThreadListAdapter,
-  RuntimeAdapterProvider,
-  ThreadHistoryAdapter,
-  ThreadMessage,
-  useAssistantApi,
-  type AssistantApi,
-} from '@assistant-ui/react'
-import { chatGenerateTitle } from '@gram/client/funcs/chatGenerateTitle'
-import { chatList } from '@gram/client/funcs/chatList'
-import { chatLoad } from '@gram/client/funcs/chatLoad'
-import { createAssistantStream, type AssistantStream } from 'assistant-stream'
 import {
   useCallback,
   useEffect,
@@ -23,7 +21,6 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react'
-import { useSdkClient } from './useSdkClient'
 
 /**
  * Prefix used by assistant-ui for local thread IDs that haven't been persisted yet.
@@ -45,6 +42,10 @@ export interface ThreadListAdapterOptions {
   headers: Record<string, string>
   /** Map to translate local thread IDs to UUIDs (shared with transport) */
   localIdToUuidMap?: Map<string, string>
+}
+
+interface ListChatsResponse {
+  chats: GramChatOverview[]
 }
 
 /**
@@ -187,7 +188,6 @@ function useGramThreadHistoryAdapter(
 export function useGramThreadListAdapter(
   options: ThreadListAdapterOptions
 ): RemoteThreadListAdapter {
-  const client = useSdkClient()
   const optionsRef = useRef(options)
   useEffect(() => {
     optionsRef.current = options
@@ -213,16 +213,21 @@ export function useGramThreadListAdapter(
 
       async list() {
         try {
-          const response = await chatList(client)
+          const response = await fetch(
+            `${optionsRef.current.apiUrl}/rpc/chat.list`,
+            {
+              headers: optionsRef.current.headers,
+            }
+          )
 
-          if (!response.ok || response.error) {
-            console.error('Failed to list chats:', response.error)
+          if (!response.ok) {
+            console.error('Failed to list chats:', response.status)
             return { threads: [] }
           }
 
-          const chats = response.value.chats
+          const data = (await response.json()) as ListChatsResponse
           return {
-            threads: chats.map((chat) => ({
+            threads: data.chats.map((chat) => ({
               remoteId: chat.id,
               externalId: chat.id,
               status: 'regular' as const,
@@ -296,12 +301,22 @@ export function useGramThreadListAdapter(
         await new Promise((r) => setTimeout(r, TITLE_GENERATION_DELAY_MS))
 
         try {
-          const response = await chatGenerateTitle(client, {
-            serveImageForm: { id: remoteId },
-          })
+          // TODO: rename generateTitle endpoint to getTitle
+          const response = await fetch(
+            `${optionsRef.current.apiUrl}/rpc/chat.generateTitle`,
+            {
+              method: 'POST',
+              headers: {
+                ...optionsRef.current.headers,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ id: remoteId }),
+            }
+          )
 
           if (response.ok) {
-            const title = response.value.title
+            const result = (await response.json()) as { title: string }
+            const title = result.title
 
             if (title) {
               return createAssistantStream((controller) => {
@@ -330,17 +345,22 @@ export function useGramThreadListAdapter(
         }
 
         try {
-          const response = await chatLoad(client, { id: threadId })
+          const response = await fetch(
+            `${optionsRef.current.apiUrl}/rpc/chat.load?id=${encodeURIComponent(threadId)}`,
+            {
+              headers: optionsRef.current.headers,
+            }
+          )
 
           if (!response.ok) {
-            console.error('Failed to fetch thread:', response.error)
+            console.error('Failed to fetch thread:', response.status)
             return {
               remoteId: threadId,
               status: 'regular' as const,
             }
           }
 
-          const chat = response.value
+          const chat = await response.json()
           return {
             remoteId: chat.id,
             externalId: chat.id,
