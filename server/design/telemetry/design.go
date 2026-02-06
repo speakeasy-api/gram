@@ -504,6 +504,13 @@ var Metrics = Type("Metrics", func() {
 	Attribute("tool_call_failure", Int64, "Failed tool calls (4xx/5xx status)")
 	Attribute("avg_tool_duration_ms", Float64, "Average tool call duration in milliseconds")
 
+	// Chat resolution metrics (from AI evaluation of chat outcomes)
+	Attribute("chat_resolution_success", Int64, "Chats resolved successfully")
+	Attribute("chat_resolution_failure", Int64, "Chats that failed to resolve")
+	Attribute("chat_resolution_partial", Int64, "Chats partially resolved")
+	Attribute("chat_resolution_abandoned", Int64, "Chats abandoned by user")
+	Attribute("avg_chat_resolution_score", Float64, "Average chat resolution score (0-100)")
+
 	// Cardinality (project scope only, 0 for chat scope)
 	Attribute("total_chats", Int64, "Number of unique chat sessions (project scope only)")
 	Attribute("distinct_models", Int64, "Number of distinct models used (project scope only)")
@@ -528,6 +535,11 @@ var Metrics = Type("Metrics", func() {
 		"tool_call_success",
 		"tool_call_failure",
 		"avg_tool_duration_ms",
+		"chat_resolution_success",
+		"chat_resolution_failure",
+		"chat_resolution_partial",
+		"chat_resolution_abandoned",
+		"avg_chat_resolution_score",
 		"total_chats",
 		"distinct_models",
 		"distinct_providers",

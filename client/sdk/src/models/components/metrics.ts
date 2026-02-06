@@ -19,6 +19,10 @@ export type Metrics = {
    */
   avgChatDurationMs: number;
   /**
+   * Average chat resolution score (0-100)
+   */
+  avgChatResolutionScore: number;
+  /**
    * Average tokens per chat request
    */
   avgTokensPerRequest: number;
@@ -26,6 +30,22 @@ export type Metrics = {
    * Average tool call duration in milliseconds
    */
   avgToolDurationMs: number;
+  /**
+   * Chats abandoned by user
+   */
+  chatResolutionAbandoned: number;
+  /**
+   * Chats that failed to resolve
+   */
+  chatResolutionFailure: number;
+  /**
+   * Chats partially resolved
+   */
+  chatResolutionPartial: number;
+  /**
+   * Chats resolved successfully
+   */
+  chatResolutionSuccess: number;
   /**
    * Number of distinct models used (project scope only)
    */
@@ -96,8 +116,13 @@ export type Metrics = {
 export const Metrics$inboundSchema: z.ZodType<Metrics, z.ZodTypeDef, unknown> =
   z.object({
     avg_chat_duration_ms: z.number(),
+    avg_chat_resolution_score: z.number(),
     avg_tokens_per_request: z.number(),
     avg_tool_duration_ms: z.number(),
+    chat_resolution_abandoned: z.number().int(),
+    chat_resolution_failure: z.number().int(),
+    chat_resolution_partial: z.number().int(),
+    chat_resolution_success: z.number().int(),
     distinct_models: z.number().int(),
     distinct_providers: z.number().int(),
     finish_reason_stop: z.number().int(),
@@ -117,8 +142,13 @@ export const Metrics$inboundSchema: z.ZodType<Metrics, z.ZodTypeDef, unknown> =
   }).transform((v) => {
     return remap$(v, {
       "avg_chat_duration_ms": "avgChatDurationMs",
+      "avg_chat_resolution_score": "avgChatResolutionScore",
       "avg_tokens_per_request": "avgTokensPerRequest",
       "avg_tool_duration_ms": "avgToolDurationMs",
+      "chat_resolution_abandoned": "chatResolutionAbandoned",
+      "chat_resolution_failure": "chatResolutionFailure",
+      "chat_resolution_partial": "chatResolutionPartial",
+      "chat_resolution_success": "chatResolutionSuccess",
       "distinct_models": "distinctModels",
       "distinct_providers": "distinctProviders",
       "finish_reason_stop": "finishReasonStop",

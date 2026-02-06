@@ -126,6 +126,13 @@ type MetricsSummaryRow struct {
 	ToolCallFailure   uint64  `ch:"tool_call_failure"`
 	AvgToolDurationMs float64 `ch:"avg_tool_duration_ms"`
 
+	// Chat resolution metrics
+	ChatResolutionSuccess   uint64  `ch:"chat_resolution_success"`
+	ChatResolutionFailure   uint64  `ch:"chat_resolution_failure"`
+	ChatResolutionPartial   uint64  `ch:"chat_resolution_partial"`
+	ChatResolutionAbandoned uint64  `ch:"chat_resolution_abandoned"`
+	AvgChatResolutionScore  float64 `ch:"avg_chat_resolution_score"`
+
 	// Model breakdown (map of model name -> count)
 	Models map[string]uint64 `ch:"models"`
 
