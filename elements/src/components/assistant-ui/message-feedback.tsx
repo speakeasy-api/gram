@@ -1,16 +1,15 @@
-import { X, Heart } from 'lucide-react'
-import * as m from 'motion/react-m'
-import { useState, type FC } from 'react'
-import { AnimatePresence } from 'motion/react'
-
-import { cn } from '@/lib/utils'
-import { EASE_OUT_QUINT } from '@/lib/easing'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { EASE_OUT_QUINT } from '@/lib/easing'
+import { cn } from '@/lib/utils'
+import { Heart, X } from 'lucide-react'
+import { AnimatePresence } from 'motion/react'
+import * as m from 'motion/react-m'
+import { useState, type FC } from 'react'
 
 export type FeedbackType = 'dislike' | 'like'
 

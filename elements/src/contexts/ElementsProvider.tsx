@@ -59,6 +59,7 @@ import {
   useConnectionStatusOptional,
 } from './ConnectionStatusContext'
 import { ToolExecutionProvider } from './ToolExecutionContext'
+import { ChatIdContext } from './ChatIdContext'
 
 /**
  * Extracts executable tools from frontend tool definitions.
@@ -176,6 +177,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // When history is enabled, the thread adapter manages chat IDs instead
   const chatIdRef = useRef<string | null>(null)
 
+  // State to expose the current chat ID via context
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null)
+
   const { data: mcpTools, mcpHeaders } = useMCPTools({
     auth,
     mcp: config.mcp,
@@ -288,6 +292,8 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         // chat ID on subsequent tool call requests.
         if (chatId) {
           mcpHeaders['Gram-Chat-ID'] = chatId
+          // Update the context state so consumers can access the current chat ID
+          setCurrentChatId(chatId)
         }
 
         const context = runtimeRef.current?.thread.getModelContext()
@@ -467,6 +473,8 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         localIdToUuidMap={localIdToUuidMapRef.current}
         currentRemoteIdRef={currentRemoteIdRef}
         executableTools={executableTools}
+        currentChatId={currentChatId}
+        setCurrentChatId={setCurrentChatId}
       >
         {children}
       </ElementsProviderWithHistory>
@@ -480,6 +488,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       runtimeRef={runtimeRef}
       frontendTools={frontendTools}
       executableTools={executableTools}
+      currentChatId={currentChatId}
     >
       {children}
     </ElementsProviderWithoutHistory>
@@ -506,23 +515,28 @@ interface ElementsProviderWithHistoryProps {
   localIdToUuidMap: Map<string, string>
   currentRemoteIdRef: React.RefObject<string | null>
   executableTools: ExecutableToolSet
+  currentChatId: string | null
+  setCurrentChatId: (chatId: string | null) => void
 }
 
 /**
- * Component that syncs the current thread's remoteId to a ref.
+ * Component that syncs the current thread's remoteId to a ref and updates the chat ID context.
  * Must be rendered inside AssistantRuntimeProvider to access the state.
  */
 const ThreadIdSync = ({
   remoteIdRef,
+  onChatIdChange,
 }: {
   remoteIdRef: React.RefObject<string | null>
+  onChatIdChange: (chatId: string | null) => void
 }) => {
   const remoteId = useAssistantState(
     ({ threadListItem }) => threadListItem.remoteId ?? null
   )
   useEffect(() => {
     remoteIdRef.current = remoteId
-  }, [remoteId, remoteIdRef])
+    onChatIdChange(remoteId)
+  }, [remoteId, remoteIdRef, onChatIdChange])
   return null
 }
 
@@ -537,6 +551,8 @@ const ElementsProviderWithHistory = ({
   localIdToUuidMap,
   currentRemoteIdRef,
   executableTools,
+  currentChatId,
+  setCurrentChatId,
 }: ElementsProviderWithHistoryProps) => {
   const threadListAdapter = useGramThreadListAdapter({
     apiUrl,
@@ -582,8 +598,64 @@ const ElementsProviderWithHistory = ({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ThreadIdSync remoteIdRef={currentRemoteIdRef} />
+      <ThreadIdSync
+        remoteIdRef={currentRemoteIdRef}
+        onChatIdChange={setCurrentChatId}
+      />
       <HistoryProvider>
+        <ChatIdContext.Provider value={{ chatId: currentChatId }}>
+          <ElementsContext.Provider value={contextValue}>
+            <ToolExecutionProvider tools={executableTools}>
+              <div
+                className={cn(
+                  ROOT_SELECTOR,
+                  (contextValue?.config.variant === 'standalone' ||
+                    contextValue?.config.variant === 'sidecar') &&
+                    'h-full'
+                )}
+              >
+                {children}
+              </div>
+              <FrontendTools tools={frontendTools} />
+            </ToolExecutionProvider>
+          </ElementsContext.Provider>
+        </ChatIdContext.Provider>
+      </HistoryProvider>
+    </AssistantRuntimeProvider>
+  )
+}
+
+// Separate component for non-history mode to avoid conditional hook calls
+interface ElementsProviderWithoutHistoryProps {
+  children: ReactNode
+  transport: ChatTransport<UIMessage>
+  contextValue: React.ContextType<typeof ElementsContext>
+  runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
+  executableTools: ExecutableToolSet
+  currentChatId: string | null
+}
+
+const ElementsProviderWithoutHistory = ({
+  children,
+  transport,
+  contextValue,
+  runtimeRef,
+  frontendTools,
+  executableTools,
+  currentChatId,
+}: ElementsProviderWithoutHistoryProps) => {
+  const runtime = useChatRuntime({ transport })
+
+  // Populate runtimeRef so transport can access thread context
+  useEffect(() => {
+    runtimeRef.current = runtime
+  }, [runtime, runtimeRef])
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <ChatIdContext.Provider value={{ chatId: currentChatId }}>
         <ElementsContext.Provider value={contextValue}>
           <ToolExecutionProvider tools={executableTools}>
             <div
@@ -599,54 +671,7 @@ const ElementsProviderWithHistory = ({
             <FrontendTools tools={frontendTools} />
           </ToolExecutionProvider>
         </ElementsContext.Provider>
-      </HistoryProvider>
-    </AssistantRuntimeProvider>
-  )
-}
-
-// Separate component for non-history mode to avoid conditional hook calls
-interface ElementsProviderWithoutHistoryProps {
-  children: ReactNode
-  transport: ChatTransport<UIMessage>
-  contextValue: React.ContextType<typeof ElementsContext>
-  runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>
-  executableTools: ExecutableToolSet
-}
-
-const ElementsProviderWithoutHistory = ({
-  children,
-  transport,
-  contextValue,
-  runtimeRef,
-  frontendTools,
-  executableTools,
-}: ElementsProviderWithoutHistoryProps) => {
-  const runtime = useChatRuntime({ transport })
-
-  // Populate runtimeRef so transport can access thread context
-  useEffect(() => {
-    runtimeRef.current = runtime
-  }, [runtime, runtimeRef])
-
-  return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <ElementsContext.Provider value={contextValue}>
-        <ToolExecutionProvider tools={executableTools}>
-          <div
-            className={cn(
-              ROOT_SELECTOR,
-              (contextValue?.config.variant === 'standalone' ||
-                contextValue?.config.variant === 'sidecar') &&
-                'h-full'
-            )}
-          >
-            {children}
-          </div>
-          <FrontendTools tools={frontendTools} />
-        </ToolExecutionProvider>
-      </ElementsContext.Provider>
+      </ChatIdContext.Provider>
     </AssistantRuntimeProvider>
   )
 }

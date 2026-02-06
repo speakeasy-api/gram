@@ -405,7 +405,7 @@ Configuration for the chat thread display and behavior.
 ```ts
 const config: ElementsConfig = {
   thread: {
-    experimental_showFeedback: true,
+    showFeedback: true,
     followUpSuggestions: true,
   },
 }
