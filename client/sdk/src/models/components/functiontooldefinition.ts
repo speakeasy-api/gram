@@ -11,12 +11,20 @@ import {
   CanonicalToolAttributes,
   CanonicalToolAttributes$inboundSchema,
 } from "./canonicaltoolattributes.js";
+import {
+  ToolAnnotations,
+  ToolAnnotations$inboundSchema,
+} from "./toolannotations.js";
 import { ToolVariation, ToolVariation$inboundSchema } from "./toolvariation.js";
 
 /**
  * A function tool
  */
 export type FunctionToolDefinition = {
+  /**
+   * MCP tool annotations providing hints about tool behavior
+   */
+  annotations?: ToolAnnotations | undefined;
   /**
    * The ID of the asset
    */
@@ -106,6 +114,7 @@ export const FunctionToolDefinition$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  annotations: ToolAnnotations$inboundSchema.optional(),
   asset_id: z.string(),
   canonical: CanonicalToolAttributes$inboundSchema.optional(),
   canonical_name: z.string(),

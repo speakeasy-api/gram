@@ -71,4 +71,6 @@ type ExternalMCPToolDefinition struct {
 	Canonical *CanonicalToolAttributes
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariation
+	// MCP tool annotations providing hints about tool behavior
+	Annotations *ToolAnnotations
 }

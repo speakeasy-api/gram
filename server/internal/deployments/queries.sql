@@ -290,8 +290,9 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , input_schema
+  , annotations
 )
-SELECT 
+SELECT
   @clone_deployment_id
   , current.function_id
   , current.tool_urn
@@ -302,6 +303,7 @@ SELECT
   , current.variables
   , current.auth_input
   , current.input_schema
+  , current.annotations
 FROM function_tool_definitions as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.name <> ALL (@excluded_names::text[])
@@ -444,6 +446,7 @@ INSERT INTO http_tool_definitions (
   , default_server_url
   , request_content_type
   , response_filter
+  , annotations
 ) VALUES (
     @project_id
   , @deployment_id
@@ -473,6 +476,7 @@ INSERT INTO http_tool_definitions (
   , @default_server_url
   , @request_content_type
   , @response_filter
+  , @annotations
 )
 RETURNING *;
 
@@ -519,6 +523,7 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , meta
+  , annotations
 ) VALUES (
     @deployment_id
   , @function_id
@@ -531,6 +536,7 @@ INSERT INTO function_tool_definitions (
   , @variables
   , @auth_input
   , @meta
+  , @annotations
 )
 RETURNING *;
 
