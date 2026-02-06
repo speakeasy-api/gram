@@ -699,6 +699,8 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 	var lastMessageID uuid.NullUUID
 	if len(messages) > 0 {
 		lastMessageID = uuid.NullUUID{UUID: messages[len(messages)-1].ID, Valid: true}
+	} else {
+		return nil, oops.E(oops.CodeInvalid, nil, "no messages found for chat")
 	}
 
 	// Insert user feedback

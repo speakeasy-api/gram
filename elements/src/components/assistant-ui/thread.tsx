@@ -69,7 +69,7 @@ import { EASE_OUT_QUINT } from '@/lib/easing'
 import { MODELS } from '@/lib/models'
 import { cn } from '@/lib/utils'
 import { chatSubmitFeedback } from '@gram/client/funcs/chatSubmitFeedback'
-import type { Feedback } from '@gram/client/models/components'
+import { Feedback } from '@gram/client/models/components/submitfeedbackrequestbody'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import {
   Tooltip,
@@ -91,10 +91,10 @@ const ChatResolutionContext = createContext<{
 }>({
   isResolved: false,
   feedbackHidden: false,
-  setResolved: () => {},
-  setUnresolved: () => {},
-  resetFeedbackHidden: () => {},
-  submitFeedback: async () => {},
+  setResolved: () => { },
+  setUnresolved: () => { },
+  resetFeedbackHidden: () => { },
+  submitFeedback: async () => { },
 })
 
 const useChatResolution = () => useContext(ChatResolutionContext)
