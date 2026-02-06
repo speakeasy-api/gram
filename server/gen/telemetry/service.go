@@ -22,6 +22,8 @@ type Service interface {
 	SearchToolCalls(context.Context, *SearchToolCallsPayload) (res *SearchToolCallsResult, err error)
 	// Search and list chat session summaries that match a search filter
 	SearchChats(context.Context, *SearchChatsPayload) (res *SearchChatsResult, err error)
+	// Search and list user usage summaries grouped by user_id or external_user_id
+	SearchUsers(context.Context, *SearchUsersPayload) (res *SearchUsersResult, err error)
 	// Capture a telemetry event and forward it to PostHog
 	CaptureEvent(context.Context, *CaptureEventPayload) (res *CaptureEventResult, err error)
 	// Get aggregated metrics summary for an entire project
@@ -52,7 +54,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"searchLogs", "searchToolCalls", "searchChats", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary"}
+var MethodNames = [7]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -348,6 +350,45 @@ type SearchToolCallsResult struct {
 	Enabled bool
 }
 
+// Filter criteria for searching user usage summaries
+type SearchUsersFilter struct {
+	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+	From string
+	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+	To string
+	// Deployment ID filter
+	DeploymentID *string
+}
+
+// SearchUsersPayload is the payload type of the telemetry service searchUsers
+// method.
+type SearchUsersPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Filter criteria for the search
+	Filter *SearchUsersFilter
+	// Type of user identifier to group by
+	UserType string
+	// Cursor for pagination (user identifier from last item)
+	Cursor *string
+	// Sort order
+	Sort string
+	// Number of items to return (1-1000)
+	Limit int
+}
+
+// SearchUsersResult is the result type of the telemetry service searchUsers
+// method.
+type SearchUsersResult struct {
+	// List of user usage summaries
+	Users []*UserSummary
+	// Cursor for next page
+	NextCursor *string
+	// Whether telemetry is enabled for the organization
+	Enabled bool
+}
+
 // Service information
 type ServiceInfo struct {
 	// Service name
@@ -404,6 +445,36 @@ type ToolUsage struct {
 	SuccessCount int64
 	// Failed calls (4xx/5xx status)
 	FailureCount int64
+}
+
+// Aggregated usage summary for a single user
+type UserSummary struct {
+	// User identifier (user_id or external_user_id depending on group_by)
+	UserID string
+	// Earliest activity timestamp in Unix nanoseconds
+	FirstSeenUnixNano string
+	// Latest activity timestamp in Unix nanoseconds
+	LastSeenUnixNano string
+	// Number of unique chat sessions
+	TotalChats int64
+	// Total number of chat completion requests
+	TotalChatRequests int64
+	// Sum of input tokens used
+	TotalInputTokens int64
+	// Sum of output tokens used
+	TotalOutputTokens int64
+	// Sum of all tokens used
+	TotalTokens int64
+	// Average tokens per chat request
+	AvgTokensPerRequest float64
+	// Total number of tool calls
+	TotalToolCalls int64
+	// Successful tool calls (2xx status)
+	ToolCallSuccess int64
+	// Failed tool calls (4xx/5xx status)
+	ToolCallFailure int64
+	// Per-tool usage breakdown
+	Tools []*ToolUsage
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

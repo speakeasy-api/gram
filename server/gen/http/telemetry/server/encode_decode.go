@@ -727,6 +727,242 @@ func EncodeSearchChatsError(encoder func(context.Context, http.ResponseWriter) g
 	}
 }
 
+// EncodeSearchUsersResponse returns an encoder for responses returned by the
+// telemetry searchUsers endpoint.
+func EncodeSearchUsersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*telemetry.SearchUsersResult)
+		enc := encoder(ctx, w)
+		body := NewSearchUsersResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSearchUsersRequest returns a decoder for requests sent to the
+// telemetry searchUsers endpoint.
+func DecodeSearchUsersRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.SearchUsersPayload, error) {
+	return func(r *http.Request) (*telemetry.SearchUsersPayload, error) {
+		var (
+			body SearchUsersRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return nil, gerr
+			}
+			return nil, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSearchUsersRequestBody(&body)
+		if err != nil {
+			return nil, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload := NewSearchUsersPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSearchUsersError returns an encoder for errors returned by the
+// searchUsers telemetry endpoint.
+func EncodeSearchUsersError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSearchUsersUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSearchUsersForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSearchUsersBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSearchUsersNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSearchUsersConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSearchUsersUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSearchUsersInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSearchUsersInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSearchUsersUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSearchUsersGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeCaptureEventResponse returns an encoder for responses returned by the
 // telemetry captureEvent endpoint.
 func EncodeCaptureEventResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1587,6 +1823,65 @@ func marshalTelemetryChatSummaryToChatSummaryResponseBody(v *telemetry.ChatSumma
 	return res
 }
 
+// unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter builds a
+// value of type *telemetry.SearchUsersFilter from a value of type
+// *SearchUsersFilterRequestBody.
+func unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(v *SearchUsersFilterRequestBody) *telemetry.SearchUsersFilter {
+	res := &telemetry.SearchUsersFilter{
+		From:         *v.From,
+		To:           *v.To,
+		DeploymentID: v.DeploymentID,
+	}
+
+	return res
+}
+
+// marshalTelemetryUserSummaryToUserSummaryResponseBody builds a value of type
+// *UserSummaryResponseBody from a value of type *telemetry.UserSummary.
+func marshalTelemetryUserSummaryToUserSummaryResponseBody(v *telemetry.UserSummary) *UserSummaryResponseBody {
+	res := &UserSummaryResponseBody{
+		UserID:              v.UserID,
+		FirstSeenUnixNano:   v.FirstSeenUnixNano,
+		LastSeenUnixNano:    v.LastSeenUnixNano,
+		TotalChats:          v.TotalChats,
+		TotalChatRequests:   v.TotalChatRequests,
+		TotalInputTokens:    v.TotalInputTokens,
+		TotalOutputTokens:   v.TotalOutputTokens,
+		TotalTokens:         v.TotalTokens,
+		AvgTokensPerRequest: v.AvgTokensPerRequest,
+		TotalToolCalls:      v.TotalToolCalls,
+		ToolCallSuccess:     v.ToolCallSuccess,
+		ToolCallFailure:     v.ToolCallFailure,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]*ToolUsageResponseBody, len(v.Tools))
+		for i, val := range v.Tools {
+			if val == nil {
+				res.Tools[i] = nil
+				continue
+			}
+			res.Tools[i] = marshalTelemetryToolUsageToToolUsageResponseBody(val)
+		}
+	} else {
+		res.Tools = []*ToolUsageResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageToToolUsageResponseBody builds a value of type
+// *ToolUsageResponseBody from a value of type *telemetry.ToolUsage.
+func marshalTelemetryToolUsageToToolUsageResponseBody(v *telemetry.ToolUsage) *ToolUsageResponseBody {
+	res := &ToolUsageResponseBody{
+		Urn:          v.Urn,
+		Count:        v.Count,
+		SuccessCount: v.SuccessCount,
+		FailureCount: v.FailureCount,
+	}
+
+	return res
+}
+
 // marshalTelemetryMetricsToMetricsResponseBody builds a value of type
 // *MetricsResponseBody from a value of type *telemetry.Metrics.
 func marshalTelemetryMetricsToMetricsResponseBody(v *telemetry.Metrics) *MetricsResponseBody {
@@ -1643,19 +1938,6 @@ func marshalTelemetryModelUsageToModelUsageResponseBody(v *telemetry.ModelUsage)
 	res := &ModelUsageResponseBody{
 		Name:  v.Name,
 		Count: v.Count,
-	}
-
-	return res
-}
-
-// marshalTelemetryToolUsageToToolUsageResponseBody builds a value of type
-// *ToolUsageResponseBody from a value of type *telemetry.ToolUsage.
-func marshalTelemetryToolUsageToToolUsageResponseBody(v *telemetry.ToolUsage) *ToolUsageResponseBody {
-	res := &ToolUsageResponseBody{
-		Urn:          v.Urn,
-		Count:        v.Count,
-		SuccessCount: v.SuccessCount,
-		FailureCount: v.FailureCount,
 	}
 
 	return res

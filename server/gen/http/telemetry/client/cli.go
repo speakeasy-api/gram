@@ -184,6 +184,86 @@ func BuildSearchChatsPayload(telemetrySearchChatsBody string, telemetrySearchCha
 	return v, nil
 }
 
+// BuildSearchUsersPayload builds the payload for the telemetry searchUsers
+// endpoint from CLI flags.
+func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUsersApikeyToken string, telemetrySearchUsersSessionToken string, telemetrySearchUsersProjectSlugInput string) (*telemetry.SearchUsersPayload, error) {
+	var err error
+	var body SearchUsersRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetrySearchUsersBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }'")
+		}
+		if body.Filter == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("filter", "body"))
+		}
+		if body.Filter != nil {
+			if err2 := ValidateSearchUsersFilterRequestBody(body.Filter); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if !(body.UserType == "internal" || body.UserType == "external") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_type", body.UserType, []any{"internal", "external"}))
+		}
+		if !(body.Sort == "asc" || body.Sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", body.Sort, []any{"asc", "desc"}))
+		}
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
+		}
+		if body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetrySearchUsersApikeyToken != "" {
+			apikeyToken = &telemetrySearchUsersApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetrySearchUsersSessionToken != "" {
+			sessionToken = &telemetrySearchUsersSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetrySearchUsersProjectSlugInput != "" {
+			projectSlugInput = &telemetrySearchUsersProjectSlugInput
+		}
+	}
+	v := &telemetry.SearchUsersPayload{
+		UserType: body.UserType,
+		Cursor:   body.Cursor,
+		Sort:     body.Sort,
+		Limit:    body.Limit,
+	}
+	if body.Filter != nil {
+		v.Filter = marshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(body.Filter)
+	}
+	{
+		var zero string
+		if v.Sort == zero {
+			v.Sort = "desc"
+		}
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 50
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCaptureEventPayload builds the payload for the telemetry captureEvent
 // endpoint from CLI flags.
 func BuildCaptureEventPayload(telemetryCaptureEventBody string, telemetryCaptureEventApikeyToken string, telemetryCaptureEventSessionToken string, telemetryCaptureEventProjectSlugInput string, telemetryCaptureEventChatSessionsToken string) (*telemetry.CaptureEventPayload, error) {
