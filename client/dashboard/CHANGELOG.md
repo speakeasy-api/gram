@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.27.5
+
+### Patch Changes
+
+- a7422f8: feat: add OAuth support for external MCP servers in the Playground
+- a753172: feat: customize documentation button text on MCP install page
+- 7505433: fix: allow creating MCP server when project has sources but no toolsets
+- 1f74200: Fixes issue with loading of metrics when logs are disabled.
+- Updated dependencies [a7422f8]
+- Updated dependencies [a753172]
+- Updated dependencies [6e29702]
+- Updated dependencies [1f74200]
+  - @gram/client@0.26.18
+
 ## 0.27.4
 
 ### Patch Changes
