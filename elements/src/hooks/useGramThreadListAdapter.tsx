@@ -13,6 +13,7 @@ import {
 } from '@assistant-ui/react'
 import { chatGenerateTitle } from '@gram/client/funcs/chatGenerateTitle'
 import { chatList } from '@gram/client/funcs/chatList'
+import { chatLoad } from '@gram/client/funcs/chatLoad'
 import { createAssistantStream, type AssistantStream } from 'assistant-stream'
 import {
   useCallback,
@@ -186,7 +187,7 @@ function useGramThreadHistoryAdapter(
 export function useGramThreadListAdapter(
   options: ThreadListAdapterOptions
 ): RemoteThreadListAdapter {
-  const { client, options: sdkOptions } = useSdkClient()
+  const client = useSdkClient()
   const optionsRef = useRef(options)
   useEffect(() => {
     optionsRef.current = options
@@ -212,12 +213,7 @@ export function useGramThreadListAdapter(
 
       async list() {
         try {
-          const response = await chatList(
-            client,
-            undefined,
-            undefined,
-            sdkOptions
-          )
+          const response = await chatList(client)
 
           if (!response.ok || response.error) {
             console.error('Failed to list chats:', response.error)
@@ -300,14 +296,9 @@ export function useGramThreadListAdapter(
         await new Promise((r) => setTimeout(r, TITLE_GENERATION_DELAY_MS))
 
         try {
-          const response = await chatGenerateTitle(
-            client,
-            {
-              serveImageForm: { id: remoteId },
-            },
-            undefined,
-            sdkOptions
-          )
+          const response = await chatGenerateTitle(client, {
+            serveImageForm: { id: remoteId },
+          })
 
           if (response.ok) {
             const title = response.value.title
@@ -339,22 +330,17 @@ export function useGramThreadListAdapter(
         }
 
         try {
-          const response = await fetch(
-            `${optionsRef.current.apiUrl}/rpc/chat.load?id=${encodeURIComponent(threadId)}`,
-            {
-              headers: optionsRef.current.headers,
-            }
-          )
+          const response = await chatLoad(client, { id: threadId })
 
           if (!response.ok) {
-            console.error('Failed to fetch thread:', response.status)
+            console.error('Failed to fetch thread:', response.error)
             return {
               remoteId: threadId,
               status: 'regular' as const,
             }
           }
 
-          const chat = await response.json()
+          const chat = response.value
           return {
             remoteId: chat.id,
             externalId: chat.id,

@@ -91,10 +91,10 @@ const ChatResolutionContext = createContext<{
 }>({
   isResolved: false,
   feedbackHidden: false,
-  setResolved: () => { },
-  setUnresolved: () => { },
-  resetFeedbackHidden: () => { },
-  submitFeedback: async () => { },
+  setResolved: () => {},
+  setUnresolved: () => {},
+  resetFeedbackHidden: () => {},
+  submitFeedback: async () => {},
 })
 
 const useChatResolution = () => useContext(ChatResolutionContext)
@@ -122,7 +122,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const themeProps = useThemeProps()
   const d = useDensity()
   const { config } = useElements()
-  const { client, options } = useSdkClient()
+  const client = useSdkClient()
   const components = config.components ?? {}
   const showStaticSessionWarning = config.api && 'sessionToken' in config.api
   const showFeedback = config.thread?.showFeedback ?? false
@@ -147,17 +147,12 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
       }
 
       try {
-        const result = await chatSubmitFeedback(
-          client,
-          {
-            submitFeedbackRequestBody: {
-              id: chatId,
-              feedback,
-            },
+        const result = await chatSubmitFeedback(client, {
+          submitFeedbackRequestBody: {
+            id: chatId,
+            feedback,
           },
-          undefined,
-          options
-        )
+        })
 
         if (!result.ok) {
           console.error('Failed to submit feedback:', result.error)
@@ -166,7 +161,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
         console.error('Error submitting feedback:', error)
       }
     },
-    [chatId, client, options.headers]
+    [chatId, client]
   )
 
   return (
