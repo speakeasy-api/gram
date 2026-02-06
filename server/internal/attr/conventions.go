@@ -227,6 +227,12 @@ const (
 	GenAIToolCallsKey         = attribute.Key("gen_ai.tool.calls")         // Array of tool calls
 	GenAIUsageTotalTokensKey  = attribute.Key("gen_ai.usage.total_tokens") // Total tokens (input + output)
 	GenAIConversationDuration = attribute.Key("gen_ai.conversation.duration")
+
+	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
+	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
+	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)
+	GenAIEvaluationScoreLabelKey  = attribute.Key("gen_ai.evaluation.score.label") // Low cardinality label (success, failure, partial, abandoned)
+	GenAIEvaluationExplanationKey = attribute.Key("gen_ai.evaluation.explanation") // Free-form explanation
 )
 
 const (
@@ -951,6 +957,31 @@ func GenAIConversationDurationMs(v float64) attribute.KeyValue {
 }
 func SlogGenAIConversationDurationMs(v float64) slog.Attr {
 	return slog.Float64(string(GenAIConversationDuration), v)
+}
+
+// GenAI Evaluation helpers
+func GenAIEvaluationName(v string) attribute.KeyValue { return GenAIEvaluationNameKey.String(v) }
+func SlogGenAIEvaluationName(v string) slog.Attr {
+	return slog.String(string(GenAIEvaluationNameKey), v)
+}
+
+func GenAIEvaluationScoreValue(v int) attribute.KeyValue { return GenAIEvaluationScoreValueKey.Int(v) }
+func SlogGenAIEvaluationScoreValue(v int) slog.Attr {
+	return slog.Int(string(GenAIEvaluationScoreValueKey), v)
+}
+
+func GenAIEvaluationScoreLabel(v string) attribute.KeyValue {
+	return GenAIEvaluationScoreLabelKey.String(v)
+}
+func SlogGenAIEvaluationScoreLabel(v string) slog.Attr {
+	return slog.String(string(GenAIEvaluationScoreLabelKey), v)
+}
+
+func GenAIEvaluationExplanation(v string) attribute.KeyValue {
+	return GenAIEvaluationExplanationKey.String(v)
+}
+func SlogGenAIEvaluationExplanation(v string) slog.Attr {
+	return slog.String(string(GenAIEvaluationExplanationKey), v)
 }
 
 func TimeUnixNano(v int64) attribute.KeyValue { return TimeUnixNanoKey.Int64(v) }
