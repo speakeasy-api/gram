@@ -77,6 +77,7 @@ GRAM_WORKER_CONTROL_ADDRESS = ":8082"
 GRAM_ENVIRONMENT = "local"
 GRAM_SERVER_URL = "https://localhost:8080"
 GRAM_SITE_URL = "https://localhost:5173"
+GRAM_DASHBOARD_URL = "{{env.GRAM_SITE_URL}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.
