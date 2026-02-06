@@ -134,3 +134,35 @@ type MetricsSummaryRow struct {
 	ToolSuccessCounts map[string]uint64 `ch:"tool_success_counts"`
 	ToolFailureCounts map[string]uint64 `ch:"tool_failure_counts"`
 }
+
+// UserSummary represents aggregated usage metrics for a single user from ClickHouse.
+// Used for the searchUsers endpoint, grouping by user_id or external_user_id.
+// The UserID field holds whichever identifier was used for grouping; the caller
+// knows which one it represents based on the group_by parameter.
+type UserSummary struct {
+	UserID string `ch:"user_id"`
+
+	// Activity timestamps
+	FirstSeenUnixNano int64 `ch:"first_seen_unix_nano"`
+	LastSeenUnixNano  int64 `ch:"last_seen_unix_nano"`
+
+	// Chat metrics
+	TotalChats        uint64 `ch:"total_chats"`
+	TotalChatRequests uint64 `ch:"total_chat_requests"`
+
+	// Token metrics
+	TotalInputTokens  int64   `ch:"total_input_tokens"`
+	TotalOutputTokens int64   `ch:"total_output_tokens"`
+	TotalTokens       int64   `ch:"total_tokens"`
+	AvgTokensPerReq   float64 `ch:"avg_tokens_per_request"`
+
+	// Tool call metrics
+	TotalToolCalls  uint64 `ch:"total_tool_calls"`
+	ToolCallSuccess uint64 `ch:"tool_call_success"`
+	ToolCallFailure uint64 `ch:"tool_call_failure"`
+
+	// Tool breakdowns (maps of tool URN -> count)
+	ToolCounts        map[string]uint64 `ch:"tool_counts"`
+	ToolSuccessCounts map[string]uint64 `ch:"tool_success_counts"`
+	ToolFailureCounts map[string]uint64 `ch:"tool_failure_counts"`
+}
