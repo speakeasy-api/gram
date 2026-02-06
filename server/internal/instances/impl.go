@@ -429,6 +429,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			if authCtx.ExternalUserID != "" {
 				attrRecorder[attr.ExternalUserIDKey] = authCtx.ExternalUserID
 			}
+			if authCtx.APIKeyID != "" {
+				attrRecorder[attr.APIKeyIDKey] = authCtx.APIKeyID
+			}
 		}
 
 		logParams := tm.LogParams{
