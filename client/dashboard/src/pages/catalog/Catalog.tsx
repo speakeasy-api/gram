@@ -2,24 +2,22 @@ import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
+import { AddServersDialog } from "@/pages/catalog/AddServerDialog";
+import { CommandBar } from "@/pages/catalog/CommandBar";
 import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { DeploymentExternalMCP } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Badge, Button, Input, Stack } from "@speakeasy-api/moonshine";
-import { useMutation } from "@tanstack/react-query";
 import {
   Loader2,
-  Minus,
-  Plus,
   Search,
   SearchXIcon,
   Server as ServerIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, Outlet } from "react-router";
+import { Link, Outlet, useNavigate } from "react-router";
 
 export function CatalogRoot() {
   return <Outlet />;
@@ -28,8 +26,14 @@ export function CatalogRoot() {
 export default function Catalog() {
   const routes = useRoutes();
   const client = useSdkClient();
+  const organization = useOrganization();
+  const project = useProject();
   const [searchQuery, setSearchQuery] = useState("");
-  const [serverToAdd, setServerToAdd] = useState<Server | null>(null);
+  const [selectedServers, setSelectedServers] = useState<Set<string>>(
+    new Set(),
+  );
+  const [addingServers, setAddingServers] = useState<Server[]>([]);
+  const [targetProjectSlug, setTargetProjectSlug] = useState(project.slug);
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteListMCPCatalog(searchQuery);
   const { data: deploymentResult, refetch: refetchDeployment } =
@@ -38,39 +42,54 @@ export default function Catalog() {
   const externalMcps = deployment?.externalMcps ?? [];
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const removeServerMutation = useMutation({
-    mutationFn: async (slug: string) => {
-      const toolUrn = `tools:externalmcp:${slug}:proxy`;
-
-      // Find and delete any toolsets that use this external MCP
-      const toolsets = await client.toolsets.list();
-      const matchingToolsets =
-        toolsets.toolsets?.filter((ts) => ts.toolUrns?.includes(toolUrn)) ?? [];
-
-      // Delete matching toolsets
-      await Promise.all(
-        matchingToolsets.map((ts) =>
-          client.toolsets.deleteBySlug({ slug: ts.slug }),
-        ),
-      );
-
-      // Remove the external MCP from the deployment
-      await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment?.id,
-          excludeExternalMcps: [slug],
-        },
-      });
-    },
-    onSuccess: async () => {
-      await refetchDeployment();
-    },
-  });
-
   // Flatten all pages into a single list
   const allServers = useMemo(() => {
     return data?.pages.flatMap((page) => page.servers as Server[]) ?? [];
   }, [data]);
+
+  const toggleServerSelection = (serverKey: string) => {
+    setSelectedServers((prev) => {
+      const next = new Set(prev);
+      if (next.has(serverKey)) {
+        next.delete(serverKey);
+      } else {
+        next.add(serverKey);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedServers(new Set());
+
+  const getSelectedServerObjects = () =>
+    allServers.filter((s) =>
+      selectedServers.has(`${s.registryId}-${s.registrySpecifier}`),
+    );
+
+  const projectOptions = organization.projects.map((p) => ({
+    value: p.slug,
+    label: p.name || p.slug,
+  }));
+
+  const handleAdd = () => {
+    setAddingServers(getSelectedServerObjects());
+  };
+
+  const navigate = useNavigate();
+  const handleGoToMCPs = () => {
+    navigate(`/${organization.slug}/${targetProjectSlug}/mcp`);
+  };
+
+  const handleCreateProject = async (name: string) => {
+    const result = await client.projects.create({
+      createProjectRequestBody: {
+        name,
+        organizationId: organization.id,
+      },
+    });
+    await organization.refetch();
+    setTargetProjectSlug(result.project.slug);
+  };
 
   // Infinite scroll with IntersectionObserver
   useEffect(() => {
@@ -120,19 +139,25 @@ export default function Catalog() {
                     <Skeleton key={i} className="h-[200px]" />
                   ))}
                 {!isLoading &&
-                  allServers?.map((server) => (
-                    <MCPServerCard
-                      key={`${server.registryId}-${server.registrySpecifier}`}
-                      server={server}
-                      detailHref={routes.catalog.detail.href(
-                        encodeURIComponent(server.registrySpecifier),
-                      )}
-                      externalMcps={externalMcps}
-                      onAdd={() => setServerToAdd(server)}
-                      onRemove={(slug) => removeServerMutation.mutate(slug)}
-                      isRemoving={removeServerMutation.isPending}
-                    />
-                  ))}
+                  allServers?.map((server) => {
+                    const serverKey = `${server.registryId}-${server.registrySpecifier}`;
+                    return (
+                      <MCPServerCard
+                        key={serverKey}
+                        server={server}
+                        detailHref={routes.catalog.detail.href(
+                          encodeURIComponent(server.registrySpecifier),
+                        )}
+                        isAdded={externalMcps.some(
+                          (mcp) =>
+                            mcp.registryServerSpecifier ===
+                            server.registrySpecifier,
+                        )}
+                        isSelected={selectedServers.has(serverKey)}
+                        onToggleSelect={() => toggleServerSelection(serverKey)}
+                      />
+                    );
+                  })}
               </div>
 
               {/* Load more trigger */}
@@ -159,11 +184,30 @@ export default function Catalog() {
           </Page.Section.Body>
         </Page.Section>
       </Page.Body>
-      <AddServerDialog
-        server={serverToAdd}
-        open={!!serverToAdd}
-        onOpenChange={(open) => !open && setServerToAdd(null)}
-        onServerAdded={() => refetchDeployment()}
+      <AddServersDialog
+        servers={addingServers}
+        projects={projectOptions}
+        projectSlug={targetProjectSlug}
+        onProjectChange={setTargetProjectSlug}
+        onCreateProject={handleCreateProject}
+        onGoToMCPs={handleGoToMCPs}
+        open={addingServers.length > 0}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddingServers([]);
+            clearSelection();
+          }
+        }}
+        onServersAdded={() => refetchDeployment()}
+      />
+      <CommandBar
+        selectedCount={selectedServers.size}
+        projects={projectOptions}
+        currentProjectSlug={targetProjectSlug}
+        onSelectProject={setTargetProjectSlug}
+        onCreateProject={handleCreateProject}
+        onAdd={handleAdd}
+        onClear={clearSelection}
       />
     </Page>
   );
@@ -199,115 +243,77 @@ function EmptySearchResult({ onClear }: { onClear: () => void }) {
 interface MCPServerCardProps {
   server: Server;
   detailHref: string;
-  externalMcps: DeploymentExternalMCP[];
-  onAdd: () => void;
-  onRemove: (slug: string) => void;
-  isRemoving: boolean;
+  isAdded: boolean;
+  isSelected: boolean;
+  onToggleSelect: () => void;
 }
 
 function MCPServerCard({
   server,
   detailHref,
-  externalMcps,
-  onAdd,
-  onRemove,
-  isRemoving,
+  isAdded,
+  isSelected,
+  onToggleSelect,
 }: MCPServerCardProps) {
   const meta = server.meta["com.pulsemcp/server"];
   const isOfficial = meta?.isOfficial;
   const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
   const displayName = server.title ?? server.registrySpecifier;
 
-  const existingMcp = externalMcps.find(
-    (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-  );
-  const isAdded = !!existingMcp;
-
   return (
-    <Link to={detailHref}>
-      <div className="group flex flex-col gap-4 rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all h-full">
-        <Stack direction="horizontal" gap={3}>
-          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
-            {server.iconUrl ? (
-              <img
-                src={server.iconUrl}
-                alt={displayName}
-                className="w-8 h-8 rounded"
-              />
-            ) : (
-              <ServerIcon className="w-6 h-6 text-muted-foreground" />
-            )}
-          </div>
-          <Stack gap={1} className="min-w-0">
-            <Stack direction="horizontal" gap={2} align="center">
-              <Type
-                variant="subheading"
-                className="group-hover:text-primary transition-colors"
-              >
-                {displayName}
-              </Type>
-              {isOfficial && <Badge>Official</Badge>}
-            </Stack>
-            <Type small muted>
-              {server.registrySpecifier} • v{server.version}
-            </Type>
-          </Stack>
-        </Stack>
-        <Type small muted className="line-clamp-2">
-          {server.description}
-        </Type>
-        <div className="mt-auto pt-2">
-          <Stack direction="horizontal" justify="space-between" align="center">
-            {visitorsTotal && visitorsTotal > 0 ? (
-              <Type small muted>
-                {visitorsTotal.toLocaleString()} monthly users
-              </Type>
-            ) : (
-              <div />
-            )}
-            {isAdded ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={isRemoving}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (existingMcp) {
-                    onRemove(existingMcp.slug);
-                  }
-                }}
-              >
-                <Button.LeftIcon>
-                  {isRemoving ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Minus className="w-3.5 h-3.5" />
-                  )}
-                </Button.LeftIcon>
-                <Button.Text>
-                  {isRemoving ? "Removing..." : "Remove"}
-                </Button.Text>
-              </Button>
-            ) : (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onAdd();
-                }}
-              >
-                <Button.LeftIcon>
-                  <Plus className="w-3.5 h-3.5" />
-                </Button.LeftIcon>
-                <Button.Text>Add</Button.Text>
-              </Button>
-            )}
-          </Stack>
+    <div
+      className={`group relative flex flex-col gap-4 rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer h-full ${
+        isSelected ? "ring-2 ring-primary border-primary" : ""
+      }`}
+      onClick={onToggleSelect}
+    >
+      <Stack direction="horizontal" gap={3}>
+        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
+          {server.iconUrl ? (
+            <img
+              src={server.iconUrl}
+              alt={displayName}
+              className="w-8 h-8 rounded"
+            />
+          ) : (
+            <ServerIcon className="w-6 h-6 text-muted-foreground" />
+          )}
         </div>
+        <Stack gap={1} className="min-w-0">
+          <Stack direction="horizontal" gap={2} align="center">
+            <Type
+              variant="subheading"
+              className="group-hover:text-primary transition-colors"
+            >
+              {displayName}
+            </Type>
+            {isOfficial && <Badge>Official</Badge>}
+            {isAdded && <Badge>Added</Badge>}
+          </Stack>
+          <Type small muted>
+            {server.registrySpecifier} • v{server.version}
+          </Type>
+        </Stack>
+      </Stack>
+      <Type small muted className="line-clamp-2">
+        {server.description}
+      </Type>
+      <div className="mt-auto pt-2">
+        <Stack direction="horizontal" justify="space-between" align="center">
+          {visitorsTotal && visitorsTotal > 0 ? (
+            <Type small muted>
+              {visitorsTotal.toLocaleString()} monthly users
+            </Type>
+          ) : (
+            <div />
+          )}
+          <Link to={detailHref} onClick={(e) => e.stopPropagation()}>
+            <Button variant="secondary" size="sm">
+              <Button.Text>View Details</Button.Text>
+            </Button>
+          </Link>
+        </Stack>
       </div>
-    </Link>
+    </div>
   );
 }
