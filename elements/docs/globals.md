@@ -55,6 +55,7 @@
 - [ChatHistory](functions/ChatHistory.md)
 - [Replay](functions/Replay.md)
 - [ShareButton](functions/ShareButton.md)
+- [useChatId](functions/useChatId.md)
 - [GramElementsProvider](functions/GramElementsProvider.md)
 - [useRecordCassette](functions/useRecordCassette.md)
 - [useThreadId](functions/useThreadId.md)
