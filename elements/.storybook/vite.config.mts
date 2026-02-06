@@ -1,10 +1,10 @@
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig, loadEnv, Plugin, ViteDevServer } from 'vite'
 import react from '@vitejs/plugin-react'
-import { createServer as createHttpServer } from 'node:http'
-import { createServer as createNetServer, Socket } from 'node:net'
+import tailwindcss from '@tailwindcss/vite'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defineConfig, loadEnv, Plugin, ViteDevServer } from 'vite'
+import { createServer as createHttpServer } from 'node:http'
+import { createServer as createNetServer, Socket } from 'node:net'
 import { createElementsServerHandlers } from '../src/server'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -101,6 +101,7 @@ const apiMiddlewarePlugin = (): Plugin => ({
       this.error(
         'VITE_GRAM_ELEMENTS_STORYBOOK_URL is not defined in the environment variables.'
       )
+      return
     }
 
     const handlers = createElementsServerHandlers()
