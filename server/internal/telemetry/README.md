@@ -99,6 +99,72 @@ This follows the [OTel resource model](https://opentelemetry.io/docs/specs/otel/
 
 > **Note:** `gram.deployment.id` is currently listed in `ResourceAttributeKeys` but arguably belongs in span attributes since a deployment is closer to the operation context than the producing service. This should be revisited.
 
+## Emitting Telemetry Data
+
+All telemetry is emitted through `Service.CreateLog(LogParams)` in `crud.go`. Every attribute you want stored in ClickHouse must be passed in the `Attributes` map — this is the single entry point for writing wide events.
+
+### Basic pattern: direct attribute map
+
+Build a `map[attr.Key]any`, populate it with typed attribute keys from the `attr` package, and pass it to `CreateLog`:
+
+```go
+attrs := map[attr.Key]any{
+    attr.ResourceURNKey:           "agents:chat:completion",
+    attr.LogBodyKey:               "LLM chat completion: model=gpt-4o",
+    attr.GenAIOperationNameKey:    telemetry.GenAIOperationChat,
+    attr.GenAIRequestModelKey:     "gpt-4o",
+    attr.GenAIUsageInputTokensKey: 150,
+    attr.GenAIConversationIDKey:   chatID.String(),
+}
+
+// Conditionally add optional attributes
+if userID != "" {
+    attrs[attr.UserIDKey] = userID
+}
+
+svc.CreateLog(telemetry.LogParams{
+    Timestamp:  time.Now(),
+    ToolInfo:   toolInfo,  // will be removed (see below)
+    Attributes: attrs,
+})
+```
+
+This pattern is used for GenAI chat completions (`chat/impl.go`) and evaluation results (`chat_resolutions/analyze_segment.go`).
+
+### HTTP tool calls: `HTTPLogAttributes` recorder
+
+For HTTP-based tool calls, use the `HTTPLogAttributes` recorder. It's a `map[attr.Key]any` with typed setter methods that accumulate attributes throughout the request lifecycle:
+
+```go
+attrRecorder := make(telemetry.HTTPLogAttributes)
+
+// Recorded progressively as data becomes available
+attrRecorder.RecordMethod(req.Method)
+attrRecorder.RecordRoute(req.URL.Path)
+attrRecorder.RecordServerURL(serverURL, repo.ToolTypeHTTP)
+attrRecorder.RecordRequestHeaders(headers, isSensitive)
+attrRecorder.RecordTraceContext(ctx)  // extracts trace/span IDs from OTel context
+
+// After the response comes back
+attrRecorder.RecordStatusCode(resp.StatusCode)
+attrRecorder.RecordDuration(duration)
+attrRecorder.RecordResponseHeaders(responseHeaders)
+
+// You can also set attributes directly on the map
+attrRecorder[attr.GenAIConversationIDKey] = chatID
+attrRecorder[attr.UserIDKey] = userID
+```
+
+The recorder is passed as the `Attributes` field of `LogParams`. This is the pattern used by the HTTP roundtripper (`roundtripper.go`) and tool call execution (`instances/impl.go`).
+
+### Key rules
+
+- **Always use typed `attr.Key` constants** — never raw strings. Define new keys in `attr/conventions.go`.
+- **`CreateLog` is fire-and-forget** — it runs on a background context and won't block or return errors to the caller. ClickHouse has [async inserts](https://clickhouse.com/docs/optimize/asynchronous-inserts) enabled, so the client buffers rows and flushes in batches — no goroutine needed.
+- **Everything goes through `Attributes`** — the `ToolInfo` struct also converts to attributes internally via `AsAttributes()`, but new fields should be passed directly in the map.
+- **Severity is auto-inferred** — from `attr.LogSeverityKey` if set, otherwise from `http.response.status_code` (5xx → ERROR, 4xx → WARN, else INFO).
+- **Provider is auto-inferred** — if `gen_ai.request.model` is set, `crud.go` automatically infers and sets `gen_ai.provider.name` (e.g., `openai`, `anthropic`).
+
 ## Deprecation Notice: `ToolInfo`
 
 > **`ToolInfo` is deprecated and will be removed in a future iteration.**
