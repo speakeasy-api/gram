@@ -1,5 +1,4 @@
 import { FullPageError } from "@/components/full-page-error";
-import { getServerURL } from "@/lib/utils";
 import { LINKED_FROM_PARAM } from "@/pages/home/Home";
 import {
   InfoResponseBody,
