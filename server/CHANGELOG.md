@@ -1,5 +1,16 @@
 # server
 
+## 0.22.3
+
+### Patch Changes
+
+- e246458: Starts writing chat resolution telemetry data.
+- a7422f8: feat: add OAuth support for external MCP servers in the Playground
+- a753172: feat: customize documentation button text on MCP install page
+- 4ef4d5e: fix: allow surfacing openapi parse errors in the UI
+- 6e29702: Adds a new endpoint to get metrics per user. Allows filtering logs per user.
+- 1f74200: Fixes issue with loading of metrics when logs are disabled.
+
 ## 0.22.2
 
 ### Patch Changes
