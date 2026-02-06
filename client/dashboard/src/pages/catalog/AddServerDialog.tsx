@@ -6,7 +6,7 @@ import { getServerURL } from "@/lib/utils";
 import { Server } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Button, Input } from "@speakeasy-api/moonshine";
+import { Button, Combobox, Input, Stack } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Plug,
   Plus,
+  Server as ServerIcon,
   Settings,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -318,5 +319,230 @@ function AddServerForm({
         </Button>
       </Dialog.Footer>
     </div>
+  );
+}
+
+// --- Batch add (multi-select) ---
+
+function useAddServersMutation() {
+  const client = useSdkClient();
+  const { refetch: refetchDeployment } = useLatestDeployment();
+
+  const mutation = useMutation({
+    mutationFn: async ({
+      servers,
+      projectSlug,
+    }: {
+      servers: Server[];
+      projectSlug: string;
+    }) => {
+      const reqOpts = {
+        headers: { "gram-project": projectSlug },
+      };
+
+      // Fetch the target project's latest deployment
+      const depResult = await client.deployments.latest(
+        undefined,
+        undefined,
+        reqOpts,
+      );
+      const deploymentId = depResult.deployment?.id;
+
+      // Evolve deployment with all selected MCPs in one call
+      await client.deployments.evolveDeployment(
+        {
+          evolveForm: {
+            deploymentId,
+            upsertExternalMcps: servers.map((server) => {
+              const slug = generateSlug(server.registrySpecifier);
+              return {
+                registryId: server.registryId,
+                name: server.title ?? server.registrySpecifier,
+                slug,
+                registryServerSpecifier: server.registrySpecifier,
+              };
+            }),
+          },
+        },
+        undefined,
+        reqOpts,
+      );
+
+      // Create a toolset for each server
+      for (const server of servers) {
+        const slug = generateSlug(server.registrySpecifier);
+        let toolUrns = [`tools:externalmcp:${slug}:proxy`];
+        if (server.tools) {
+          toolUrns = server.tools.map(
+            (t) => `tools:externalmcp:${slug}:${t.name}`,
+          );
+        }
+
+        const toolset = await client.toolsets.create(
+          {
+            createToolsetRequestBody: {
+              name: server.title ?? server.registrySpecifier,
+              description:
+                server.description ?? `MCP server: ${server.registrySpecifier}`,
+              toolUrns,
+            },
+          },
+          undefined,
+          reqOpts,
+        );
+
+        await client.toolsets.updateBySlug(
+          {
+            slug: toolset.slug,
+            updateToolsetRequestBody: {
+              mcpEnabled: true,
+              mcpIsPublic: true,
+            },
+          },
+          undefined,
+          reqOpts,
+        );
+      }
+
+      return servers.length;
+    },
+  });
+
+  return { mutation, refetchDeployment };
+}
+
+interface AddServersDialogProps {
+  servers: Server[];
+  projects: { value: string; label: string }[];
+  projectSlug: string;
+  onProjectChange: (slug: string) => void;
+  onCreateProject: (name: string) => void;
+  onGoToMCPs: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onServersAdded?: () => void;
+}
+
+export function AddServersDialog({
+  servers,
+  projects,
+  projectSlug,
+  onProjectChange,
+  onCreateProject,
+  onGoToMCPs,
+  open,
+  onOpenChange,
+  onServersAdded,
+}: AddServersDialogProps) {
+  const { mutation, refetchDeployment } = useAddServersMutation();
+  const [addedCount, setAddedCount] = useState(0);
+
+  const selectedLabel =
+    projects.find((p) => p.value === projectSlug)?.label ?? projectSlug;
+
+  useEffect(() => {
+    if (!open) {
+      setAddedCount(0);
+      mutation.reset();
+    }
+  }, [open]);
+
+  const handleAdd = () => {
+    mutation.mutate(
+      { servers, projectSlug },
+      {
+        onSuccess: async (count) => {
+          await refetchDeployment();
+          setAddedCount(count);
+          onServersAdded?.();
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>
+            Add {servers.length} server{servers.length !== 1 ? "s" : ""} to
+            project
+          </Dialog.Title>
+          <Dialog.Description>
+            {addedCount > 0
+              ? `Successfully added ${addedCount} server${addedCount !== 1 ? "s" : ""} to ${selectedLabel}.`
+              : "Select a project and add these MCP servers to it."}
+          </Dialog.Description>
+        </Dialog.Header>
+        {addedCount > 0 ? (
+          <Dialog.Footer>
+            <Button variant="tertiary" onClick={() => onOpenChange(false)}>
+              <Button.Text>Keep browsing</Button.Text>
+            </Button>
+            <Button onClick={onGoToMCPs}>
+              <Button.Text>Go to MCPs</Button.Text>
+            </Button>
+          </Dialog.Footer>
+        ) : (
+          <>
+            <Stack gap={4} className="py-2">
+              <Combobox
+                options={projects}
+                value={projectSlug}
+                onValueChange={(v) => v && onProjectChange(v)}
+                searchable
+                placeholder="Select project..."
+                createOptions={{
+                  handleCreate: onCreateProject,
+                }}
+              />
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {servers.map((s) => (
+                  <div
+                    key={s.registrySpecifier}
+                    className="flex items-center gap-2"
+                  >
+                    <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                      {s.iconUrl ? (
+                        <img
+                          src={s.iconUrl}
+                          alt=""
+                          className="w-4 h-4 rounded"
+                        />
+                      ) : (
+                        <ServerIcon className="w-3 h-3 text-muted-foreground" />
+                      )}
+                    </div>
+                    <Type small>{s.title ?? s.registrySpecifier}</Type>
+                  </div>
+                ))}
+              </div>
+            </Stack>
+            <Dialog.Footer>
+              <Button
+                variant="tertiary"
+                onClick={() => onOpenChange(false)}
+                disabled={mutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleAdd} disabled={mutation.isPending}>
+                {mutation.isPending ? (
+                  <Stack direction="horizontal" gap={2} align="center">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Button.Text>Adding...</Button.Text>
+                  </Stack>
+                ) : (
+                  <Button.Text>
+                    Add {servers.length} server
+                    {servers.length !== 1 ? "s" : ""}
+                  </Button.Text>
+                )}
+              </Button>
+            </Dialog.Footer>
+          </>
+        )}
+      </Dialog.Content>
+    </Dialog>
   );
 }
