@@ -10,6 +10,7 @@ junit-report.xml
 !.vscode/extensions.json
 *.code-workspace
 .idea
+/responses/docs
 /client/sdk/docs
 /server/goa*
 /server/gram

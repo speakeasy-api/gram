@@ -1,0 +1,52 @@
+overlay: 1.0.0
+x-speakeasy-jsonpath: rfc9535
+info:
+  title: Modify Open Responses OpenAPI to generate server SDK
+  version: 0.0.0
+actions:
+  - target: $.info.title
+    update: Open Responses
+
+  - target: $.servers
+    remove: true
+  - target: $
+    update: {
+      "servers": [{"url": "https://app.getgram.ai/chat"}]
+    }
+
+  - target: $.components.securitySchemes[?@.type == 'http'].in
+    remove: true
+
+  - target: $.components.schemas.ReasoningItemParam.properties.id.anyOf[?@.type == 'null']
+    remove: true
+  - target: $.components.schemas.ReasoningItemParam.properties.id.anyOf[?@.type == 'string'].type
+    update: ["string", "null"]
+
+  - target: $.components.schemas.ReasoningItemParam.properties.content
+    remove: true
+  - target: $.components.schemas.ReasoningItemParam.properties
+    update: {"content": {"x-speakeasy-type-override": "any"}}
+
+  - target: $.components.schemas.JsonSchemaResponseFormat.properties.description.anyOf[?@.type == 'null']
+    remove: true
+  - target: $.components.schemas.JsonSchemaResponseFormat.properties.description.anyOf[?@.type == 'string'].type
+    update: ["string", "null"]
+
+  - target: $.components.schemas.JsonSchemaResponseFormat.properties.schema
+    remove: true
+  - target: $.components.schemas.JsonSchemaResponseFormat.properties
+    update: {"schema": {"x-speakeasy-type-override": "any"}}
+
+  - target: $.paths["/responses"].post
+    update: {"x-speakeasy-name-override": "Create"}
+
+  - target: $.paths["/responses"].post.responses["200"].content["text/event-stream"].schema
+    update: {"type": "object", "required": ["data"], "properties": {"data": {"oneOf": [], "discriminator": {}}}}
+  - target: $.paths["/responses"].post.responses["200"].content["text/event-stream"].schema.properties.data.oneOf
+    copy: $.paths["/responses"].post.responses["200"].content["text/event-stream"].schema.oneOf
+  - target: $.paths["/responses"].post.responses["200"].content["text/event-stream"].schema.properties.data.discriminator
+    copy: $.paths["/responses"].post.responses["200"].content["text/event-stream"].schema.discriminator
+  - target: $.paths["/responses"].post.responses["200"].content["text/event-stream"].schema.oneOf
+    remove: true
+  - target: $.paths["/responses"].post.responses["200"].content["text/event-stream"].schema.discriminator
+    remove: true

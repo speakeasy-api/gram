@@ -13,6 +13,10 @@ targets:
         sourceNamespace: gram-api-description
         sourceRevisionDigest: sha256:8e08b59576cd0b1e2097e41289f6571948780ebe977b5cccb5df87ebf7a0da37
         sourceBlobDigest: sha256:fb7c038f76d7a9d685d678b118e0cf6794d66557fde2d55b20550c50163e358f
+    open-responses-go:
+        source: Open-Responses
+    responses-go:
+        source: Open-Responses
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned
@@ -34,6 +38,14 @@ workflow:
             output: .speakeasy/openapi-public.yaml
             registry:
                 location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
+        Open-Responses:
+            inputs:
+                - location: https://raw.githubusercontent.com/openresponses/openresponses/refs/heads/main/public/openapi/openapi.json
+            overlays:
+                - location: overlays/openresponses.yaml
+            output: .speakeasy/openresponses.yaml
+            registry:
+                location: registry.speakeasyapi.dev/gram/gram/open-responses
     targets:
         gram-internal:
             target: typescript
@@ -45,3 +57,7 @@ workflow:
                 labelOverride:
                     fixedValue: Typescript (SDK)
                 blocking: false
+        open-responses-go:
+            target: go
+            source: Open-Responses
+            output: responses
