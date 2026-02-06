@@ -29,8 +29,9 @@ export const LoginCheck = () => {
 };
 
 export const AppLayout = () => {
+  const isAdmin = useIsAdmin();
   const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
-  const isImpersonating = !!overrideSlug;
+  const isImpersonating = isAdmin && !!overrideSlug;
 
   return (
     <SidebarProvider

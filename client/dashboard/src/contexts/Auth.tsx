@@ -312,11 +312,7 @@ export const useUser = () => {
 
 export const useIsAdmin = () => {
   const { isAdmin } = useUser();
-  const devHostnames = import.meta.env.VITE_DEV_HOSTNAMES?.split(",") ?? [
-    "localhost",
-  ];
-  const isLocal = devHostnames.some((h) => getServerURL().includes(h));
-  return isAdmin || isLocal;
+  return isAdmin;
 };
 
 export function usePylonInAppChat(user: User | undefined) {
