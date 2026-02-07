@@ -11,19 +11,11 @@ import { ROOT_SELECTOR } from '@/constants/tailwind'
 import { CommandBarInput } from './command-bar-input'
 import { CommandBarList } from './command-bar-list'
 import { CommandBarAIFallback } from './command-bar-ai-fallback'
-import { CommandBarToolForm } from './command-bar-tool-form'
-import { CommandBarToolResult } from './command-bar-tool-result'
+import { CommandBarToolPrompt } from './command-bar-tool-prompt'
 import type { CommandBarAction, CommandBarToolMeta } from '@/types'
 
 export function CommandBarDialog() {
-  const {
-    isOpen,
-    close,
-    query,
-    setQuery,
-    actions,
-    config,
-  } = useCommandBar()
+  const { isOpen, close, query, setQuery, actions, config } = useCommandBar()
 
   const portalContainer = usePortalContainer()
   const [isExecuting, setIsExecuting] = useState(false)
@@ -31,67 +23,29 @@ export function CommandBarDialog() {
   const fireAndForget = config.fireAndForget ?? true
   const aiSubmitRef = useRef<(() => void) | null>(null)
 
-  // Tool form mode state
-  const [selectedTool, setSelectedTool] = useState<CommandBarToolMeta | null>(null)
-  const [toolResult, setToolResult] = useState<{
-    result?: unknown
-    error?: string | null
-  } | null>(null)
+  // Tool prompt mode state
+  const [selectedTool, setSelectedTool] = useState<CommandBarToolMeta | null>(
+    null
+  )
 
   // Reset tool state when dialog closes
   React.useEffect(() => {
     if (!isOpen) {
       setSelectedTool(null)
-      setToolResult(null)
     }
   }, [isOpen])
 
   const handleToolBack = useCallback(() => {
     setSelectedTool(null)
-    setToolResult(null)
   }, [])
-
-  const handleToolRetry = useCallback(() => {
-    setToolResult(null)
-  }, [])
-
-  const handleToolSubmit = useCallback(
-    async (args: Record<string, unknown>) => {
-      if (!selectedTool) return
-      setIsExecuting(true)
-      setToolResult(null)
-
-      try {
-        const result = await selectedTool.execute(args)
-        setToolResult({ result })
-        config.onToolCall?.({
-          toolName: selectedTool.toolName,
-          args,
-          result,
-        })
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error'
-        setToolResult({ error: message })
-        config.onToolCall?.({
-          toolName: selectedTool.toolName,
-          args,
-          result: `Error: ${message}`,
-        })
-      } finally {
-        setIsExecuting(false)
-      }
-    },
-    [selectedTool, config]
-  )
 
   const handleActionSelect = useCallback(
     (action: CommandBarAction) => {
       if (action.disabled) return
 
-      // Tool with metadata → enter form mode
+      // Tool with metadata → enter prompt mode
       if (action.toolMeta) {
         setSelectedTool(action.toolMeta)
-        setToolResult(null)
         return
       }
 
@@ -107,9 +61,7 @@ export function CommandBarDialog() {
         close()
         if (result instanceof Promise) {
           result
-            .then((res) =>
-              config.onAction?.({ action, result: res })
-            )
+            .then((res) => config.onAction?.({ action, result: res }))
             .catch((err: Error) =>
               config.onAction?.({ action, error: err.message })
             )
@@ -142,15 +94,11 @@ export function CommandBarDialog() {
   // Handle Enter → submit to AI when cmdk has no matching items
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // In form/result mode, let the child components handle keys
+      // In tool prompt mode, let the child component handle keys
       if (selectedTool) {
         if (e.key === 'Escape') {
           e.preventDefault()
-          if (toolResult) {
-            close()
-          } else {
-            handleToolBack()
-          }
+          handleToolBack()
         }
         return
       }
@@ -169,7 +117,7 @@ export function CommandBarDialog() {
         }
       }
     },
-    [close, selectedTool, toolResult, handleToolBack]
+    [close, selectedTool, handleToolBack]
   )
 
   const placeholder = config.placeholder ?? 'Type a command or ask anything...'
@@ -181,7 +129,10 @@ export function CommandBarDialog() {
   const needsScopeWrapper = !portalContainer
 
   return (
-    <DialogPrimitive.Root open={isOpen} onOpenChange={(open) => !open && close()}>
+    <DialogPrimitive.Root
+      open={isOpen}
+      onOpenChange={(open) => !open && close()}
+    >
       <DialogPrimitive.Portal container={portalContainer}>
         <CommandBarPortalScope enabled={needsScopeWrapper}>
           <DialogPrimitive.Overlay
@@ -201,108 +152,105 @@ export function CommandBarDialog() {
             )}
             onKeyDown={handleKeyDown}
           >
-          {/* Visually hidden title for accessibility */}
-          <DialogPrimitive.Title className="sr-only">
-            Command Bar
-          </DialogPrimitive.Title>
-          <DialogPrimitive.Description className="sr-only">
-            Search for commands or ask AI
-          </DialogPrimitive.Description>
+            {/* Visually hidden title for accessibility */}
+            <DialogPrimitive.Title className="sr-only">
+              Command Bar
+            </DialogPrimitive.Title>
+            <DialogPrimitive.Description className="sr-only">
+              Search for commands or ask AI
+            </DialogPrimitive.Description>
 
-          {selectedTool ? (
-            // Tool form / result mode
-            toolResult ? (
-              <CommandBarToolResult
-                toolName={selectedTool.toolName}
-                result={toolResult.result}
-                error={toolResult.error}
-                onClose={close}
-                onRetry={handleToolRetry}
+            {selectedTool ? (
+              // Tool prompt mode - natural language input
+              <CommandBarToolPrompt
+                toolMeta={selectedTool}
+                onBack={handleToolBack}
+                onToolCall={config.onToolCall}
               />
             ) : (
-              <CommandBarToolForm
-                toolMeta={selectedTool}
-                onSubmit={handleToolSubmit}
-                onBack={handleToolBack}
-                isExecuting={isExecuting}
-              />
-            )
-          ) : (
-            // Standard command list mode
-            <CommandPrimitive shouldFilter loop>
-              <CommandBarInput
-                placeholder={placeholder}
-                value={query}
-                onValueChange={setQuery}
-              />
-
-              <CommandBarList
-                actions={actions}
-                onSelect={handleActionSelect}
-                maxVisible={maxVisible}
-              />
-
-              {/* Empty state: AI fallback */}
-              <CommandPrimitive.Empty className="py-0">
-                <CommandBarAIFallback
-                  query={query}
-                  onToolCall={config.onToolCall}
-                  onMessage={config.onMessage}
-                  submitRef={aiSubmitRef}
+              // Standard command list mode
+              <CommandPrimitive shouldFilter loop>
+                <CommandBarInput
+                  placeholder={placeholder}
+                  value={query}
+                  onValueChange={setQuery}
                 />
-              </CommandPrimitive.Empty>
 
-              {/* Execution states */}
-              {isExecuting && (
-                <div className="border-t px-3 py-2 text-xs text-muted-foreground">
-                  Running...
-                </div>
-              )}
-              {executionError && (
-                <div className="border-t px-3 py-2 text-xs text-destructive">
-                  {executionError}
-                </div>
-              )}
-            </CommandPrimitive>
-          )}
+                <CommandBarList
+                  actions={actions}
+                  onSelect={handleActionSelect}
+                  maxVisible={maxVisible}
+                />
 
-          {/* Footer hint */}
-          <div className="border-t px-3 py-2">
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <div className="flex items-center gap-3">
-                {selectedTool ? (
-                  <>
-                    <span>
-                      <kbd className="bg-muted rounded px-1 py-0.5 font-medium">Esc</kbd>{' '}
-                      {toolResult ? 'Close' : 'Back'}
-                    </span>
-                    {!toolResult && (
-                      <span>
-                        <kbd className="bg-muted rounded px-1 py-0.5 font-medium">↵</kbd>{' '}
-                        Execute
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <span>
-                      <kbd className="bg-muted rounded px-1 py-0.5 font-medium">↑↓</kbd>{' '}
-                      Navigate
-                    </span>
-                    <span>
-                      <kbd className="bg-muted rounded px-1 py-0.5 font-medium">↵</kbd>{' '}
-                      Select
-                    </span>
-                    <span>
-                      <kbd className="bg-muted rounded px-1 py-0.5 font-medium">Esc</kbd>{' '}
-                      Close
-                    </span>
-                  </>
+                {/* Empty state: AI fallback */}
+                <CommandPrimitive.Empty className="py-0">
+                  <CommandBarAIFallback
+                    query={query}
+                    onToolCall={config.onToolCall}
+                    onMessage={config.onMessage}
+                    submitRef={aiSubmitRef}
+                  />
+                </CommandPrimitive.Empty>
+
+                {/* Execution states */}
+                {isExecuting && (
+                  <div className="text-muted-foreground border-t px-3 py-2 text-xs">
+                    Running...
+                  </div>
                 )}
+                {executionError && (
+                  <div className="text-destructive border-t px-3 py-2 text-xs">
+                    {executionError}
+                  </div>
+                )}
+              </CommandPrimitive>
+            )}
+
+            {/* Footer hint */}
+            <div className="border-t px-3 py-2">
+              <div className="text-muted-foreground flex items-center justify-between text-[10px]">
+                <div className="flex items-center gap-3">
+                  {selectedTool ? (
+                    <>
+                      <span>
+                        <kbd className="bg-muted rounded px-1 py-0.5 font-medium">
+                          Esc
+                        </kbd>{' '}
+                        Back
+                      </span>
+                      <span>
+                        <kbd className="bg-muted rounded px-1 py-0.5 font-medium">
+                          ↵
+                        </kbd>{' '}
+                        Send
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        <kbd className="bg-muted rounded px-1 py-0.5 font-medium">
+                          ↑↓
+                        </kbd>{' '}
+                        Navigate
+                      </span>
+                      <span>
+                        <kbd className="bg-muted rounded px-1 py-0.5 font-medium">
+                          ↵
+                        </kbd>{' '}
+                        Select
+                      </span>
+                      <span>
+                        <kbd className="bg-muted rounded px-1 py-0.5 font-medium">
+                          Esc
+                        </kbd>{' '}
+                        Close
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </DialogPrimitive.Content>
+          </DialogPrimitive.Content>
         </CommandBarPortalScope>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

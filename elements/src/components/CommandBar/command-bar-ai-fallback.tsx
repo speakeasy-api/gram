@@ -59,10 +59,7 @@ export function CommandBarAIFallback({
     return (
       <div
         data-slot="command-bar-ai-hint"
-        className={cn(
-          'flex items-center gap-2 px-3 py-4 text-sm',
-          className
-        )}
+        className={cn('flex items-center gap-2 px-3 py-4 text-sm', className)}
       >
         <SparklesIcon className="text-muted-foreground size-4 shrink-0" />
         <span className="text-muted-foreground">
@@ -88,10 +85,7 @@ export function CommandBarAIFallback({
   return (
     <div
       data-slot="command-bar-ai-result"
-      className={cn(
-        'max-h-[300px] overflow-y-auto px-3 py-3',
-        className
-      )}
+      className={cn('max-h-[300px] overflow-y-auto px-3 py-3', className)}
     >
       {/* Loading state before any content arrives */}
       {isLoading && (
@@ -114,7 +108,7 @@ export function CommandBarAIFallback({
       {text && (
         <div
           className={cn(
-            'text-foreground whitespace-pre-wrap text-sm leading-relaxed',
+            'text-foreground text-sm leading-relaxed whitespace-pre-wrap',
             toolCalls.length > 0 && 'mt-2 border-t pt-2'
           )}
         >

@@ -13,6 +13,7 @@ import { authInfo } from "@gram/client/funcs/authInfo.js";
 import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
 import { keysCreate } from "@gram/client/funcs/keysCreate.js";
 import { keysList } from "@gram/client/funcs/keysList.js";
+import { keysRevokeById } from "@gram/client/funcs/keysRevokeById.js";
 import { keysValidate } from "@gram/client/funcs/keysValidate.js";
 import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
 import { projectsRead } from "@gram/client/funcs/projectsRead.js";
@@ -187,13 +188,15 @@ async function initAPIKey(init: {
   const keyRes = await keysCreate(
     gram,
     {
-      createKeyForm: { name: "seed-key", scopes: ["producer"] },
+      createKeyForm: { name: "seed-key", scopes: ["producer", "chat"] },
     },
     {
       sessionHeaderGramSession: sessionId,
     },
   );
   if (!keyRes.ok) {
+    // Key creation failed, likely because it already exists
+    // Find and revoke the existing key, then create a new one
     const listRes = await keysList(gram, undefined, {
       sessionHeaderGramSession: sessionId,
     });
@@ -205,7 +208,35 @@ async function initAPIKey(init: {
       abort(`Failed to create API key 'seed-key'`, keyRes.error);
     }
 
-    log.info(`Found existing API key. Continuing...`);
+    // Revoke the existing key and create a new one
+    log.info(`Revoking existing 'seed-key' to create fresh one with correct scopes...`);
+    const revokeRes = await keysRevokeById(
+      gram,
+      { id: existingKey.id },
+      { sessionHeaderGramSession: sessionId },
+    );
+    if (!revokeRes.ok) {
+      abort(`Failed to revoke existing API key`, revokeRes.error);
+    }
+
+    // Create new key
+    const newKeyRes = await keysCreate(
+      gram,
+      {
+        createKeyForm: { name: "seed-key", scopes: ["producer", "chat"] },
+      },
+      {
+        sessionHeaderGramSession: sessionId,
+      },
+    );
+    if (!newKeyRes.ok) {
+      abort(`Failed to create new API key after revoking old one`, newKeyRes.error);
+    }
+
+    const apiKey = newKeyRes.value.key;
+    assert(apiKey, "API key not found in /rpc/keys.create response");
+    await $`mise set --file mise.local.toml GRAM_API_KEY=${apiKey}`;
+    log.info(`Created new API key and set GRAM_API_KEY in mise.local.toml.`);
     return;
   }
 
