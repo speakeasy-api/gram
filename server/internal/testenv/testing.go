@@ -82,6 +82,7 @@ func NewMCPRegistryClient(t *testing.T, logger *slog.Logger, tracerProvider trac
 		NewLogger(t),
 		tracerProvider,
 		externalmcp.NewPulseBackend(pulseURL, "test-tenant-id", conv.NewSecret([]byte("test-api-key"))),
+		nil,
 	)
 	require.NoError(t, err, "expected mcp registry client to initialize without error")
 
