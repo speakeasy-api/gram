@@ -61,7 +61,7 @@ StandaloneWithHistory.parameters = {
       history: { enabled: true, showThreadList: true },
       model: { showModelPicker: true },
       tools: {
-        toolsRequiringApproval: ['kitchen_sink_get_salutation'],
+        toolsRequiringApproval: ['ecommerce_api_create_order'],
       },
     },
   },
