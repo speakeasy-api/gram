@@ -135,7 +135,7 @@ export const LogsTabContent = () => {
       const next = { ...prev };
       if (value) next.grouping = "by_source";
       else next.grouping = undefined;
-      return { ...prev };
+      return next;
     });
   };
 
