@@ -94,14 +94,25 @@ export interface ElementsProviderProps {
   config: ElementsConfig
 }
 
-const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer questions and help with tasks.`
+const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer questions and help with tasks.
+
+Tool Result Display:
+Some tools have custom visual components that automatically render their results (you'll see a rich card/widget appear). For these, do not repeat the data - just add brief context or a follow-up question if needed.
+
+For tools WITHOUT custom components, you should present the data clearly - either as plain text for simple results, or using the UI code block format for structured data like lists of items, categories, or dashboards.`
 
 function mergeInternalSystemPromptWith(
   userSystemPrompt: string | undefined,
-  plugins: Plugin[]
+  plugins: Plugin[],
+  toolsWithCustomComponents: string[]
 ) {
+  const customToolsSection =
+    toolsWithCustomComponents.length > 0
+      ? `\n\nTools with custom visual components (DO NOT render UI widgets for these - they already display rich visuals):\n${toolsWithCustomComponents.map((t) => `- ${t}`).join('\n')}`
+      : ''
+
   return `
-  ${BASE_SYSTEM_PROMPT}
+  ${BASE_SYSTEM_PROMPT}${customToolsSection}
 
   User-provided System Prompt:
   ${userSystemPrompt ?? 'None provided'}
@@ -159,9 +170,13 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
 
   const plugins = config.plugins ?? recommended
 
+  // Get list of tools that have custom components registered
+  const toolsWithCustomComponents = Object.keys(config.tools?.components ?? {})
+
   const systemPrompt = mergeInternalSystemPromptWith(
     config.systemPrompt,
-    plugins
+    plugins,
+    toolsWithCustomComponents
   )
 
   // Initialize error tracking on mount

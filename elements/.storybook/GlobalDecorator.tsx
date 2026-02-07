@@ -5,6 +5,22 @@ import { ElementsProvider } from '../src/contexts/ElementsProvider'
 import { recommended } from '../src/plugins'
 import { ElementsConfig } from '../src/types'
 
+// Custom merge function that replaces arrays instead of merging by index
+// This allows stories to fully override array configs like `plugins`
+function mergeConfig(
+  defaultConfig: ElementsConfig,
+  storyConfig: Partial<ElementsConfig> | undefined
+): ElementsConfig {
+  const merged = merge({}, defaultConfig, storyConfig ?? {})
+
+  // Arrays should be replaced, not merged - check for explicit overrides
+  if (storyConfig?.plugins !== undefined) {
+    merged.plugins = storyConfig.plugins
+  }
+
+  return merged
+}
+
 interface ElementsDecoratorProps {
   children: React.ReactNode
   // Partial so stories can override only what they need
@@ -63,7 +79,7 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
   // Include colorScheme in deps to ensure theme changes trigger re-render
   const colorScheme = config?.theme?.colorScheme
   const finalConfig = useMemo(
-    () => merge({}, DEFAULT_ELEMENTS_CONFIG, config ?? {}),
+    () => mergeConfig(DEFAULT_ELEMENTS_CONFIG, config),
     [config, colorScheme]
   )
 
