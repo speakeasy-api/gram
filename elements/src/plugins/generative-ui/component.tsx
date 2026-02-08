@@ -3,6 +3,7 @@
 import { GenerativeUI } from '@/components/ui/generative-ui'
 import { SyntaxHighlighterProps } from '@assistant-ui/react-markdown'
 import { FC, useMemo } from 'react'
+import { MacOSWindowFrame } from '../components/MacOSWindowFrame'
 import { PluginLoadingState } from '../components/PluginLoadingState'
 
 const loadingMessages = [
@@ -47,10 +48,10 @@ export const GenerativeUIRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
     return <PluginLoadingState text={loadingMessage} />
   }
 
-  // Render without outer border - the Card component inside provides the border
+  // Render with macOS-style window frame
   return (
-    <div className="overflow-hidden after:hidden">
+    <MacOSWindowFrame>
       <GenerativeUI content={content} />
-    </div>
+    </MacOSWindowFrame>
   )
 }

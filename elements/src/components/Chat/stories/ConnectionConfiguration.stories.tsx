@@ -83,14 +83,14 @@ LanguageModel.parameters = {
         subtitle: 'Using Google Gemini 3 Flash Preview',
         suggestions: [
           {
-            title: 'Generate a chart',
-            label: 'Generate a chart',
-            prompt: 'Generate a chart of these values: 1, 2, 3, 4, 5',
+            title: 'Browse Products',
+            label: "See what's available",
+            prompt: 'What products do you have?',
           },
           {
-            title: 'Call all tools',
-            label: 'Call all tools',
-            prompt: 'Call all tools',
+            title: 'Sales Chart',
+            label: 'Visualize data',
+            prompt: 'Show me a chart of product prices',
           },
         ],
       },

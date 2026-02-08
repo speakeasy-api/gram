@@ -129,13 +129,20 @@ EXAMPLE - WITH ACTIONS:
   ]
 }
 
+COMPOSITION RULES:
+- Always wrap your entire UI in a single Card at the root
+- Place different sections (metrics, tables, lists) as direct children of the Card
+- Use Divider between major sections for visual separation
+- Use Grid for side-by-side layouts (metrics, cards)
+- Use Stack for vertical or horizontal arrangements
+- Children of Card are automatically spaced - no need for manual margins
+
 STYLE GUIDELINES:
-- Prefer spacious, breathable layouts with adequate visual hierarchy
-- Use Grid with 2-3 columns max for metrics; avoid cramming too many items
-- Group related content in Cards with clear titles
-- Use Dividers to separate logical sections
-- Balance information density: show what matters, hide the noise
-- For dashboards, lead with the most important metrics at the top
+- Keep it simple - show only what's essential
+- Use Grid with 2-3 columns max for metrics
+- Use Dividers between logically distinct sections
+- Lead with the most important information at the top
+- Prefer tables for lists of items with multiple attributes
 
 CONTENT GUIDELINES:
 - Outside the code block, provide context and insights about the data
@@ -151,16 +158,3 @@ Examples:
   Component: GenerativeUIRenderer,
   Header: undefined,
 }
-
-// Re-export individual UI components
-export { ActionButton, type ActionButtonProps } from './ActionButton'
-export { Badge, type BadgeProps } from './Badge'
-export { Card, type CardProps } from './Card'
-export { Divider, type DividerProps } from './Divider'
-export { Grid, type GridProps } from './Grid'
-export { List, type ListProps } from './List'
-export { Metric, type MetricProps } from './Metric'
-export { Progress, type ProgressProps } from './Progress'
-export { Stack, type StackProps } from './Stack'
-export { Table, type TableProps } from './Table'
-export { Text, type TextProps } from './Text'

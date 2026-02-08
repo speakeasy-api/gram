@@ -6,18 +6,20 @@ import { isJsonRenderTree, type JsonRenderNode } from '@/lib/generative-ui'
 import { AlertCircleIcon } from 'lucide-react'
 import { FC, useMemo } from 'react'
 
-// Import individual components from the generative-ui plugin
-import { ActionButton } from '@/plugins/generative-ui/ActionButton'
-import { Badge } from '@/plugins/generative-ui/Badge'
-import { Card } from '@/plugins/generative-ui/Card'
-import { Divider } from '@/plugins/generative-ui/Divider'
-import { Grid } from '@/plugins/generative-ui/Grid'
-import { List } from '@/plugins/generative-ui/List'
-import { Metric } from '@/plugins/generative-ui/Metric'
-import { Progress } from '@/plugins/generative-ui/Progress'
-import { Stack } from '@/plugins/generative-ui/Stack'
-import { Table } from '@/plugins/generative-ui/Table'
-import { Text } from '@/plugins/generative-ui/Text'
+// Import all components from the generative-ui plugin ui directory
+import {
+  ActionButton,
+  Badge,
+  CardWrapper,
+  DataTable,
+  Grid,
+  List,
+  Metric,
+  Progress,
+  Separator,
+  Stack,
+  Text,
+} from '@/plugins/generative-ui/ui'
 
 interface GenerativeUIProps {
   /** The JSON content to render - can be a json-render tree or raw object */
@@ -32,15 +34,16 @@ interface GenerativeUIProps {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const components: Record<string, FC<any>> = {
-  Card,
+  Card: CardWrapper,
   Metric,
   Grid,
   Stack,
   Text,
   Badge,
-  Table,
+  Table: DataTable,
   List,
-  Divider,
+  Divider: Separator,
+  Separator,
   Progress,
   ActionButton,
 }

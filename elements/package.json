@@ -134,14 +134,18 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",
+    "radix-ui": "^1.4.3",
+    "recharts": "^2.15.4",
     "tailwind-merge": "^3.3.1",
     "tw-shimmer": "^0.4.0",
+    "vaul": "^1.1.2",
     "vega": "^6.2.0",
     "vega-interpreter": "^1.0.5",
     "vite-plugin-externalize-deps": "^0.10.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "react-is": "19.2.3",
     "@ai-sdk/google": "^2",
     "@eslint/compat": "^2.0.0",
     "@eslint/js": "^9.39.1",
