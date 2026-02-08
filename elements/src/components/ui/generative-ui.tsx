@@ -1,18 +1,23 @@
 'use client'
 
-import { useToolExecution } from '@/contexts/ToolExecutionContext'
 import { useDensity } from '@/hooks/useDensity'
-import { useRadius } from '@/hooks/useRadius'
 import { cn } from '@/lib/utils'
 import { isJsonRenderTree, type JsonRenderNode } from '@/lib/generative-ui'
-import { useThreadRuntime } from '@assistant-ui/react'
-import {
-  AlertCircleIcon,
-  CheckCircleIcon,
-  Loader2Icon,
-  XCircleIcon,
-} from 'lucide-react'
-import { FC, useMemo, useState, useCallback } from 'react'
+import { AlertCircleIcon } from 'lucide-react'
+import { FC, useMemo } from 'react'
+
+// Import individual components from the generative-ui plugin
+import { ActionButton } from '@/plugins/generative-ui/ActionButton'
+import { Badge } from '@/plugins/generative-ui/Badge'
+import { Card } from '@/plugins/generative-ui/Card'
+import { Divider } from '@/plugins/generative-ui/Divider'
+import { Grid } from '@/plugins/generative-ui/Grid'
+import { List } from '@/plugins/generative-ui/List'
+import { Metric } from '@/plugins/generative-ui/Metric'
+import { Progress } from '@/plugins/generative-ui/Progress'
+import { Stack } from '@/plugins/generative-ui/Stack'
+import { Table } from '@/plugins/generative-ui/Table'
+import { Text } from '@/plugins/generative-ui/Text'
 
 interface GenerativeUIProps {
   /** The JSON content to render - can be a json-render tree or raw object */
@@ -25,357 +30,19 @@ interface GenerativeUIProps {
  * Built-in components for rendering json-render trees.
  * These provide a default set of UI primitives for tool results.
  */
-const components: Record<string, FC<Record<string, unknown>>> = {
-  Card: ({ title, children, className }) => {
-    const r = useRadius()
-    const d = useDensity()
-    const titleStr = title != null ? String(title) : null
-    return (
-      <div
-        className={cn(
-          'border-border bg-card border',
-          r('lg'),
-          d('p-lg'),
-          className as string
-        )}
-      >
-        {titleStr && <h3 className="mb-4 text-lg font-semibold">{titleStr}</h3>}
-        {children as React.ReactNode}
-      </div>
-    )
-  },
-
-  Metric: ({ label, value, format, className }) => {
-    const formattedValue = useMemo(() => {
-      const numValue = Number(value)
-      if (isNaN(numValue)) return String(value)
-
-      switch (format) {
-        case 'currency':
-          return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-          }).format(numValue)
-        case 'percent':
-          return new Intl.NumberFormat('en-US', {
-            style: 'percent',
-            minimumFractionDigits: 1,
-          }).format(numValue)
-        case 'number':
-        default:
-          return new Intl.NumberFormat('en-US').format(numValue)
-      }
-    }, [value, format])
-
-    return (
-      <div className={cn('flex flex-col gap-2', className as string)}>
-        <span className="text-muted-foreground text-sm">{String(label)}</span>
-        <span className="text-3xl font-bold">{formattedValue}</span>
-      </div>
-    )
-  },
-
-  Grid: ({ columns = 2, children, className }) => {
-    const d = useDensity()
-    return (
-      <div
-        className={cn('grid', d('gap-lg'), className as string)}
-        style={{
-          gridTemplateColumns: `repeat(${columns as number}, minmax(0, 1fr))`,
-        }}
-      >
-        {children as React.ReactNode}
-      </div>
-    )
-  },
-
-  Stack: ({ direction = 'vertical', children, className }) => {
-    const d = useDensity()
-    return (
-      <div
-        className={cn(
-          'flex',
-          direction === 'horizontal' ? 'flex-row' : 'flex-col',
-          d('gap-md'),
-          className as string
-        )}
-      >
-        {children as React.ReactNode}
-      </div>
-    )
-  },
-
-  Text: ({ children, content, variant = 'body', className }) => {
-    const variantClasses: Record<string, string> = {
-      heading: 'text-lg font-semibold',
-      body: 'text-sm',
-      caption: 'text-xs text-muted-foreground',
-      code: 'font-mono text-sm bg-muted px-1 rounded',
-    }
-    // Support both content prop (for direct text) and children (for nested components)
-    const textContent = content != null ? String(content) : null
-    return (
-      <span
-        className={cn(variantClasses[variant as string], className as string)}
-      >
-        {textContent ?? (children as React.ReactNode)}
-      </span>
-    )
-  },
-
-  Badge: ({ children, content, variant = 'default', className }) => {
-    const r = useRadius()
-    const variantClasses: Record<string, string> = {
-      default: 'bg-primary text-primary-foreground',
-      secondary: 'bg-secondary text-secondary-foreground',
-      success:
-        'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100',
-      warning:
-        'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100',
-      error: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100',
-    }
-    // Support both content prop (for direct text) and children (for nested components)
-    const textContent = content != null ? String(content) : null
-    return (
-      <span
-        className={cn(
-          'inline-flex items-center px-2 py-0.5 text-xs font-medium',
-          r('sm'),
-          variantClasses[variant as string] ?? variantClasses.default,
-          className as string
-        )}
-      >
-        {textContent ?? (children as React.ReactNode)}
-      </span>
-    )
-  },
-
-  Table: ({ headers, rows, className }) => {
-    const r = useRadius()
-    const headerArray = Array.isArray(headers) ? (headers as string[]) : []
-    const rowsArray = Array.isArray(rows) ? (rows as unknown[][]) : []
-    return (
-      <div className={cn('overflow-auto', className as string)}>
-        <table className={cn('w-full border-collapse text-sm', r('lg'))}>
-          {headerArray.length > 0 && (
-            <thead>
-              <tr className="border-border border-b">
-                {headerArray.map((header, i) => (
-                  <th
-                    key={i}
-                    className="text-muted-foreground px-4 py-3 text-left font-medium"
-                  >
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-          )}
-          <tbody>
-            {rowsArray.map((row, i) => (
-              <tr key={i} className="border-border border-b last:border-0">
-                {row.map((cell, j) => (
-                  <td key={j} className="px-4 py-3">
-                    {String(cell)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )
-  },
-
-  List: ({ items, ordered = false, className }) => {
-    const Tag = ordered ? 'ol' : 'ul'
-    const itemsArray = Array.isArray(items) ? (items as string[]) : []
-    return (
-      <Tag
-        className={cn(
-          'list-inside space-y-2 text-sm',
-          ordered ? 'list-decimal' : 'list-disc',
-          className as string
-        )}
-      >
-        {itemsArray.map((item, i) => (
-          <li key={i}>{item}</li>
-        ))}
-      </Tag>
-    )
-  },
-
-  Divider: ({ className }) => (
-    <hr className={cn('border-border my-4', className as string)} />
-  ),
-
-  Progress: ({ value, max = 100, label, className }) => {
-    const r = useRadius()
-    const numValue = Number(value)
-    const numMax = Number(max)
-    const percentage =
-      isNaN(numValue) || isNaN(numMax) || numMax === 0
-        ? 0
-        : Math.min(100, Math.max(0, (numValue / numMax) * 100))
-    const labelStr = label != null ? String(label) : null
-    return (
-      <div className={cn('w-full space-y-2', className as string)}>
-        {labelStr && (
-          <div className="flex justify-between text-sm">
-            <span>{labelStr}</span>
-            <span className="text-muted-foreground">
-              {percentage.toFixed(0)}%
-            </span>
-          </div>
-        )}
-        <div className={cn('bg-muted h-3 overflow-hidden', r('sm'))}>
-          <div
-            className={cn('bg-primary h-full transition-all', r('sm'))}
-            style={{ width: `${percentage}%` }}
-          />
-        </div>
-      </div>
-    )
-  },
-
-  ActionButton: ({ label, action, args, variant = 'default', className }) => {
-    const r = useRadius()
-    const { executeTool, isToolAvailable } = useToolExecution()
-    const runtime = useThreadRuntime({ optional: true })
-    const [isLoading, setIsLoading] = useState(false)
-    const [result, setResult] = useState<{
-      success: boolean
-      message?: string
-    } | null>(null)
-
-    const toolAvailable = action ? isToolAvailable(action as string) : false
-
-    const handleClick = useCallback(async () => {
-      if (!action) return
-
-      setIsLoading(true)
-      setResult(null)
-
-      try {
-        const toolResult = await executeTool(
-          action as string,
-          (args as Record<string, unknown>) ?? {}
-        )
-
-        if (toolResult.success) {
-          // Format the result message
-          let message = 'Done'
-          if (toolResult.result) {
-            if (typeof toolResult.result === 'string') {
-              message = toolResult.result
-            } else if (
-              typeof toolResult.result === 'object' &&
-              toolResult.result !== null &&
-              'content' in toolResult.result
-            ) {
-              // Handle MCP tool result format
-              const content = (
-                toolResult.result as { content: Array<{ text?: string }> }
-              ).content
-              if (Array.isArray(content) && content[0]?.text) {
-                message = content[0].text
-              }
-            }
-          }
-          setResult({ success: true, message })
-
-          // Notify the LLM of the action result so it can respond
-          if (runtime) {
-            await runtime.append({
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `[Action completed] ${action}: ${message}`,
-                },
-              ],
-            })
-          }
-        } else {
-          setResult({ success: false, message: toolResult.error })
-
-          // Also notify on failure so LLM can help
-          if (runtime) {
-            await runtime.append({
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `[Action failed] ${action}: ${toolResult.error}`,
-                },
-              ],
-            })
-          }
-        }
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : 'Unknown error'
-        setResult({
-          success: false,
-          message: errorMessage,
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }, [action, args, executeTool, runtime])
-
-    const variantClasses: Record<string, string> = {
-      default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-      secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-      outline:
-        'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-      destructive:
-        'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-    }
-
-    // Show result state if we have one
-    if (result) {
-      return (
-        <div
-          className={cn(
-            'inline-flex items-center gap-2 px-4 py-2 text-sm',
-            r('md'),
-            result.success
-              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100'
-              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100',
-            className as string
-          )}
-        >
-          {result.success ? (
-            <CheckCircleIcon className="size-4" />
-          ) : (
-            <XCircleIcon className="size-4" />
-          )}
-          <span className="max-w-[200px] truncate">
-            {result.message ?? (result.success ? 'Success' : 'Failed')}
-          </span>
-        </div>
-      )
-    }
-
-    return (
-      <button
-        onClick={handleClick}
-        disabled={isLoading || !toolAvailable}
-        title={!toolAvailable ? `Tool "${action}" not available` : undefined}
-        className={cn(
-          'inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
-          'disabled:pointer-events-none disabled:opacity-50',
-          r('md'),
-          variantClasses[variant as string] ?? variantClasses.default,
-          className as string
-        )}
-      >
-        {isLoading && <Loader2Icon className="size-4 animate-spin" />}
-        {String(label)}
-      </button>
-    )
-  },
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const components: Record<string, FC<any>> = {
+  Card,
+  Metric,
+  Grid,
+  Stack,
+  Text,
+  Badge,
+  Table,
+  List,
+  Divider,
+  Progress,
+  ActionButton,
 }
 
 /**

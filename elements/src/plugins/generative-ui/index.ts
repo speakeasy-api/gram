@@ -151,3 +151,16 @@ Examples:
   Component: GenerativeUIRenderer,
   Header: undefined,
 }
+
+// Re-export individual UI components
+export { ActionButton, type ActionButtonProps } from './ActionButton'
+export { Badge, type BadgeProps } from './Badge'
+export { Card, type CardProps } from './Card'
+export { Divider, type DividerProps } from './Divider'
+export { Grid, type GridProps } from './Grid'
+export { List, type ListProps } from './List'
+export { Metric, type MetricProps } from './Metric'
+export { Progress, type ProgressProps } from './Progress'
+export { Stack, type StackProps } from './Stack'
+export { Table, type TableProps } from './Table'
+export { Text, type TextProps } from './Text'
