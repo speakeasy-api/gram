@@ -3,19 +3,20 @@ import { cn } from '@/lib/utils'
 
 export interface TextProps extends React.ComponentProps<'span'> {
   content?: string
-  variant?: 'default' | 'muted' | 'small' | 'large'
+  /** Matches LLM prompt variants: heading, body, caption, code */
+  variant?: 'heading' | 'body' | 'caption' | 'code'
 }
 
 const variantClasses = {
-  default: '',
-  muted: 'text-muted-foreground',
-  small: 'text-sm text-muted-foreground',
-  large: 'text-lg font-medium',
+  heading: 'text-lg font-semibold',
+  body: 'text-sm',
+  caption: 'text-xs text-muted-foreground',
+  code: 'font-mono text-sm bg-muted px-1 rounded',
 }
 
 export function Text({
   content,
-  variant = 'default',
+  variant = 'body',
   className,
   children,
   ...props

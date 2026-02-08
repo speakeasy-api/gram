@@ -10,13 +10,14 @@ export interface ActionButtonProps
     Omit<React.ComponentProps<'button'>, 'onClick'>,
     VariantProps<typeof buttonVariants> {
   label: string
-  toolName: string
+  /** Tool name to invoke when clicked (matches LLM prompt) */
+  action: string
   args?: Record<string, unknown>
 }
 
 export function ActionButton({
   label,
-  toolName,
+  action,
   args,
   variant = 'default',
   size = 'default',
@@ -27,10 +28,10 @@ export function ActionButton({
     // Dispatch a custom event that the chat system can listen to
     const event = new CustomEvent('generative-ui:action', {
       bubbles: true,
-      detail: { toolName, args },
+      detail: { toolName: action, args },
     })
     document.dispatchEvent(event)
-  }, [toolName, args])
+  }, [action, args])
 
   return (
     <Button

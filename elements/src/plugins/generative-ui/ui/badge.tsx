@@ -12,12 +12,18 @@ const badgeVariants = cva(
         default: 'bg-primary text-primary-foreground [a&]:hover:bg-primary/90',
         secondary:
           'bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90',
+        /** Matches LLM prompt variant */
+        success:
+          'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100',
+        /** Matches LLM prompt variant */
+        warning:
+          'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100',
+        /** Matches LLM prompt variant */
+        error: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100',
         destructive:
           'bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
         outline:
           'border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
-        ghost: '[a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
-        link: 'text-primary underline-offset-4 [a&]:hover:underline',
       },
     },
     defaultVariants: {
@@ -26,13 +32,21 @@ const badgeVariants = cva(
   }
 )
 
+interface BadgeProps
+  extends React.ComponentProps<'span'>, VariantProps<typeof badgeVariants> {
+  asChild?: boolean
+  /** Content text (matches LLM prompt) - rendered as children */
+  content?: string
+}
+
 function Badge({
   className,
   variant = 'default',
   asChild = false,
+  content,
+  children,
   ...props
-}: React.ComponentProps<'span'> &
-  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+}: BadgeProps) {
   const Comp = asChild ? Slot.Root : 'span'
 
   return (
@@ -41,7 +55,9 @@ function Badge({
       data-variant={variant}
       className={cn(badgeVariants({ variant }), className)}
       {...props}
-    />
+    >
+      {content ?? children}
+    </Comp>
   )
 }
 
