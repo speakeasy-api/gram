@@ -7,18 +7,26 @@ import { GenerativeUIRenderer } from './component'
  */
 export const generativeUI: Plugin = {
   language: 'ui',
-  prompt: `You can render rich UI for structured data using \`\`\`ui code blocks containing valid JSON (no comments, no trailing commas).
+  prompt: `Render structured data as visual UI using \`\`\`ui code blocks with valid JSON.
 
-Components: Card{title?}, Grid{columns?}, Stack{direction?:"vertical"|"horizontal"}, Metric{label,value,format?:"currency"|"percent"|"number"}, Table{headers[],rows[][]}, Text{content,variant?:"heading"|"body"|"caption"|"code"}, Badge{content,variant?:"default"|"success"|"warning"|"error"}, Progress{value,max?,label?}, List{items[],ordered?}, Divider, ActionButton{label,action,args?,variant?}
+Components:
+- Card{title?} - container with border
+- Grid{columns?} - multi-column layout
+- Stack{direction?} - vertical/horizontal flex
+- Metric{label,value,format?} - formatted number display (currency/percent/number)
+- Table{headers[],rows[][]} - data table
+- Text{content,variant?} - heading/body/caption/code
+- Badge{content,variant?} - default/success/warning/error
+- Progress{value,max?,label?} - progress bar
+- List{items[],ordered?} - bullet/numbered list
+- Divider - horizontal separator
+- ActionButton{label,action,args?} - triggers tool call
 
-Structure: {"type":"ComponentName","props":{...},"children":[...]}
+Format: {"type":"Name","props":{...},"children":[...]}
 
-Example:
-\`\`\`ui
-{"type":"Card","props":{"title":"Overview"},"children":[{"type":"Grid","props":{"columns":2},"children":[{"type":"Metric","props":{"label":"Sales","value":50000,"format":"currency"}},{"type":"Metric","props":{"label":"Growth","value":0.12,"format":"percent"}}]}]}
-\`\`\`
+Example: {"type":"Card","props":{"title":"Stats"},"children":[{"type":"Metric","props":{"label":"Revenue","value":50000,"format":"currency"}}]}
 
-Use for: tool results, dashboards, tables, metrics. Skip for: simple text, errors, single values.`,
+Use for dashboards, tables, metrics from tool results. Skip for simple text or errors.`,
   Component: GenerativeUIRenderer,
   Header: undefined,
 }
