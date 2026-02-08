@@ -7,154 +7,18 @@ import { GenerativeUIRenderer } from './component'
  */
 export const generativeUI: Plugin = {
   language: 'ui',
-  prompt: `WHEN TO USE UI VISUALIZATION:
-Proactively render tool results and structured data as visual UI components whenever it would improve comprehension. Use the 'ui' code block format for:
-- Tool results that return structured data (lists, objects, metrics)
-- Data that benefits from visual hierarchy (dashboards, summaries)
-- Information with multiple related fields (user profiles, order details)
-- Anything with numbers, statuses, or progress that can be visualized
-- Results that would otherwise be displayed as raw JSON or verbose text
+  prompt: `You can render rich UI for structured data using \`\`\`ui code blocks containing valid JSON (no comments, no trailing commas).
 
-Do NOT use UI for: simple text responses, single values, error messages, or when the user explicitly asks for raw data.
+Components: Card{title?}, Grid{columns?}, Stack{direction?:"vertical"|"horizontal"}, Metric{label,value,format?:"currency"|"percent"|"number"}, Table{headers[],rows[][]}, Text{content,variant?:"heading"|"body"|"caption"|"code"}, Badge{content,variant?:"default"|"success"|"warning"|"error"}, Progress{value,max?,label?}, List{items[],ordered?}, Divider, ActionButton{label,action,args?,variant?}
 
-To render UI, output a json-render specification in a code block with the language identifier 'ui'.
+Structure: {"type":"ComponentName","props":{...},"children":[...]}
 
-CRITICAL JSON REQUIREMENTS:
-- The code block MUST contain ONLY valid, parseable JSON
-- NO comments (no // or /* */ anywhere)
-- NO trailing commas
-- Use double quotes for all strings and keys
-- The JSON must start with { and end with }
+Example:
+\`\`\`ui
+{"type":"Card","props":{"title":"Overview"},"children":[{"type":"Grid","props":{"columns":2},"children":[{"type":"Metric","props":{"label":"Sales","value":50000,"format":"currency"}},{"type":"Metric","props":{"label":"Growth","value":0.12,"format":"percent"}}]}]}
+\`\`\`
 
-AVAILABLE COMPONENTS:
-
-Card - Container with optional title
-  props: { title?: string }
-  children: any components
-
-Grid - Multi-column layout
-  props: { columns?: number } (default: 2)
-  children: any components
-
-Stack - Vertical or horizontal flex layout
-  props: { direction?: "vertical" | "horizontal" } (default: "vertical")
-  children: any components
-
-Metric - Displays a label and formatted value
-  props: { label: string, value: number, format?: "currency" | "percent" | "number" }
-
-Table - Data table
-  props: { headers: string[], rows: any[][] }
-
-Text - Text with variants
-  props: { content: string, variant?: "heading" | "body" | "caption" | "code" }
-
-Badge - Status badge
-  props: { content: string, variant?: "default" | "success" | "warning" | "error" }
-
-Progress - Progress bar
-  props: { value: number, max?: number, label?: string }
-
-List - Bullet or numbered list
-  props: { items: string[], ordered?: boolean }
-
-Divider - Horizontal line separator
-
-ActionButton - Interactive button that triggers a tool call
-  props: {
-    label: string,           // Button text
-    action: string,          // Tool name to invoke when clicked
-    args?: object,           // Arguments to pass to the tool
-    variant?: "default" | "secondary" | "outline" | "destructive"
-  }
-  NOTE: Only use ActionButton with tools you know are available
-
-STRUCTURE:
-Every UI spec is a tree with:
-- "type": component name (required)
-- "props": component properties (optional)
-- "children": array of child components (optional)
-
-EXAMPLE - DASHBOARD:
-{
-  "type": "Card",
-  "props": { "title": "Sales Overview" },
-  "children": [
-    {
-      "type": "Grid",
-      "props": { "columns": 3 },
-      "children": [
-        { "type": "Metric", "props": { "label": "Revenue", "value": 125000, "format": "currency" } },
-        { "type": "Metric", "props": { "label": "Growth", "value": 0.15, "format": "percent" } },
-        { "type": "Metric", "props": { "label": "Orders", "value": 1420, "format": "number" } }
-      ]
-    },
-    { "type": "Divider" },
-    { "type": "Progress", "props": { "label": "Q1 Target", "value": 75, "max": 100 } }
-  ]
-}
-
-EXAMPLE - TABLE:
-{
-  "type": "Card",
-  "props": { "title": "Users" },
-  "children": [
-    {
-      "type": "Table",
-      "props": {
-        "headers": ["Name", "Email", "Status"],
-        "rows": [
-          ["Alice", "alice@example.com", "Active"],
-          ["Bob", "bob@example.com", "Pending"]
-        ]
-      }
-    }
-  ]
-}
-
-EXAMPLE - WITH ACTIONS:
-{
-  "type": "Card",
-  "props": { "title": "Pending Request #123" },
-  "children": [
-    { "type": "Text", "props": { "variant": "body" }, "children": [{ "type": "Text", "props": {}, "children": [] }] },
-    {
-      "type": "Stack",
-      "props": { "direction": "horizontal" },
-      "children": [
-        { "type": "ActionButton", "props": { "label": "Approve", "action": "approve_request", "args": { "id": 123 } } },
-        { "type": "ActionButton", "props": { "label": "Reject", "action": "reject_request", "args": { "id": 123 }, "variant": "destructive" } }
-      ]
-    }
-  ]
-}
-
-COMPOSITION RULES:
-- Always wrap your entire UI in a single Card at the root
-- Place different sections (metrics, tables, lists) as direct children of the Card
-- Use Divider between major sections for visual separation
-- Use Grid for side-by-side layouts (metrics, cards)
-- Use Stack for vertical or horizontal arrangements
-- Children of Card are automatically spaced - no need for manual margins
-
-STYLE GUIDELINES:
-- Keep it simple - show only what's essential
-- Use Grid with 2-3 columns max for metrics
-- Use Dividers between logically distinct sections
-- Lead with the most important information at the top
-- Prefer tables for lists of items with multiple attributes
-
-CONTENT GUIDELINES:
-- Outside the code block, provide context and insights about the data
-- Do not describe technical implementation details
-- Focus on what the data means, not how it's displayed
-
-ACTION RESULT HANDLING:
-When you receive a message starting with "[Action completed]" or "[Action failed]", the user clicked an action button and the tool has already been executed. Provide a brief, friendly acknowledgment of what happened. Keep your response concise - one sentence is usually enough. Do not re-execute the action or ask if they want to do something they just did.
-
-Examples:
-- "[Action completed] approve_request: Request #123 approved" → "Done! Request #123 has been approved."
-- "[Action failed] delete_task: Permission denied" → "I couldn't delete that task - looks like you don't have permission."`,
+Use for: tool results, dashboards, tables, metrics. Skip for: simple text, errors, single values.`,
   Component: GenerativeUIRenderer,
   Header: undefined,
 }
