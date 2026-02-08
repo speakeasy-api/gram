@@ -4,6 +4,7 @@ import * as React from 'react'
 import { Button, buttonVariants } from './button'
 import type { VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
+import { useToolExecution } from '@/contexts/ToolExecutionContext'
 
 export interface ActionButtonProps
   extends
@@ -18,20 +19,28 @@ export interface ActionButtonProps
 export function ActionButton({
   label,
   action,
-  args,
+  args = {},
   variant = 'default',
   size = 'default',
   className,
+  disabled,
   ...props
 }: ActionButtonProps) {
-  const handleClick = React.useCallback(() => {
-    // Dispatch a custom event that the chat system can listen to
-    const event = new CustomEvent('generative-ui:action', {
-      bubbles: true,
-      detail: { toolName: action, args },
-    })
-    document.dispatchEvent(event)
-  }, [action, args])
+  const { executeTool, isToolAvailable } = useToolExecution()
+  const [isLoading, setIsLoading] = React.useState(false)
+
+  const toolAvailable = isToolAvailable(action)
+
+  const handleClick = React.useCallback(async () => {
+    if (!toolAvailable || isLoading) return
+
+    setIsLoading(true)
+    try {
+      await executeTool(action, args)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [action, args, executeTool, isLoading, toolAvailable])
 
   return (
     <Button
@@ -39,9 +48,10 @@ export function ActionButton({
       size={size}
       className={cn(className)}
       onClick={handleClick}
+      disabled={disabled || isLoading || !toolAvailable}
       {...props}
     >
-      {label}
+      {isLoading ? 'Loading...' : label}
     </Button>
   )
 }
