@@ -44,6 +44,14 @@ export class CustomChatTransport {
       maxOutputTokens: this.config.maxGeneratedTokens,
       system: systemPrompt,
       experimental_transform: smoothStream({ delayInMs: 15 }),
+      providerOptions: {
+        anthropic: {
+          thinking: { type: "enabled", budgetTokens: 10000 },
+        },
+        openai: {
+          reasoningSummary: "detailed",
+        },
+      },
       onError: this.config.onError,
     });
 

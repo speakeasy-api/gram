@@ -371,6 +371,14 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             stopWhen: stepCountIs(10),
             experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
+            providerOptions: {
+              anthropic: {
+                thinking: { type: 'enabled', budgetTokens: 10000 },
+              },
+              openai: {
+                reasoningSummary: 'detailed',
+              },
+            },
             onError: ({ error }) => {
               console.error('Stream error in onError callback:', error)
               trackError(error, { source: 'streaming' })
