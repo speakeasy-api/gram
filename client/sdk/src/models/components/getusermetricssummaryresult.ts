@@ -6,7 +6,10 @@ import * as z from "zod/v3";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import { Metrics, Metrics$inboundSchema } from "./metrics.js";
+import {
+  ProjectSummary,
+  ProjectSummary$inboundSchema,
+} from "./projectsummary.js";
 
 /**
  * Result of user metrics summary query
@@ -19,7 +22,7 @@ export type GetUserMetricsSummaryResult = {
   /**
    * Aggregated metrics
    */
-  metrics: Metrics;
+  metrics: ProjectSummary;
 };
 
 /** @internal */
@@ -29,7 +32,7 @@ export const GetUserMetricsSummaryResult$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   enabled: z.boolean(),
-  metrics: Metrics$inboundSchema,
+  metrics: ProjectSummary$inboundSchema,
 });
 
 export function getUserMetricsSummaryResultFromJSON(

@@ -102,6 +102,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SearchChats", "type": "query"}`)
 	})
 
+	Method("searchUsers", func() {
+		Description("Search and list user usage summaries grouped by user_id or external_user_id")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(SearchUsersPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SearchUsersResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.searchUsers")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "searchUsers")
+		Meta("openapi:extension:x-speakeasy-name-override", "searchUsers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SearchUsers", "type": "query"}`)
+	})
+
 	Method("captureEvent", func() {
 		Description("Capture a telemetry event and forward it to PostHog")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -427,6 +456,99 @@ var ChatSummaryType = Type("ChatSummary", func() {
 	)
 })
 
+var SearchUsersFilter = Type("SearchUsersFilter", func() {
+	Description("Filter criteria for searching user usage summaries")
+
+	Attribute("from", String, "Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("deployment_id", String, "Deployment ID filter", func() {
+		Format(FormatUUID)
+	})
+
+	Required("from", "to")
+})
+
+var SearchUsersPayload = Type("SearchUsersPayload", func() {
+	Description("Payload for searching user usage summaries")
+
+	Attribute("filter", SearchUsersFilter, "Filter criteria for the search")
+	Attribute("user_type", String, "Type of user identifier to group by", func() {
+		Enum("internal", "external")
+	})
+	Attribute("cursor", String, "Cursor for pagination (user identifier from last item)")
+	Attribute("sort", String, "Sort order", func() {
+		Enum("asc", "desc")
+		Default("desc")
+	})
+	Attribute("limit", Int, "Number of items to return (1-1000)", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(50)
+	})
+
+	Required("filter", "user_type")
+})
+
+var SearchUsersResult = Type("SearchUsersResult", func() {
+	Description("Result of searching user usage summaries")
+
+	Attribute("users", ArrayOf(UserSummaryType), "List of user usage summaries")
+	Attribute("next_cursor", String, "Cursor for next page")
+	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
+
+	Required("users", "enabled")
+})
+
+var UserSummaryType = Type("UserSummary", func() {
+	Description("Aggregated usage summary for a single user")
+
+	Attribute("user_id", String, "User identifier (user_id or external_user_id depending on group_by)")
+
+	// Activity timestamps (string for JS int64 precision)
+	Attribute("first_seen_unix_nano", String, "Earliest activity timestamp in Unix nanoseconds")
+	Attribute("last_seen_unix_nano", String, "Latest activity timestamp in Unix nanoseconds")
+
+	// Chat metrics
+	Attribute("total_chats", Int64, "Number of unique chat sessions")
+	Attribute("total_chat_requests", Int64, "Total number of chat completion requests")
+
+	// Token usage
+	Attribute("total_input_tokens", Int64, "Sum of input tokens used")
+	Attribute("total_output_tokens", Int64, "Sum of output tokens used")
+	Attribute("total_tokens", Int64, "Sum of all tokens used")
+	Attribute("avg_tokens_per_request", Float64, "Average tokens per chat request")
+
+	// Tool calls
+	Attribute("total_tool_calls", Int64, "Total number of tool calls")
+	Attribute("tool_call_success", Int64, "Successful tool calls (2xx status)")
+	Attribute("tool_call_failure", Int64, "Failed tool calls (4xx/5xx status)")
+
+	// Per-tool breakdown
+	Attribute("tools", ArrayOf(ToolUsage), "Per-tool usage breakdown")
+
+	Required(
+		"user_id",
+		"first_seen_unix_nano",
+		"last_seen_unix_nano",
+		"total_chats",
+		"total_chat_requests",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"avg_tokens_per_request",
+		"total_tool_calls",
+		"tool_call_success",
+		"tool_call_failure",
+		"tools",
+	)
+})
+
 var CaptureEventPayload = Type("CaptureEventPayload", func() {
 	Description("Payload for capturing a telemetry event")
 
@@ -477,7 +599,7 @@ var ToolUsage = Type("ToolUsage", func() {
 	Required("urn", "count", "success_count", "failure_count")
 })
 
-var Metrics = Type("Metrics", func() {
+var ProjectSummaryType = Type("ProjectSummary", func() {
 	Description("Aggregated metrics")
 
 	// Activity timestamps (string for JS int64 precision)
@@ -566,7 +688,7 @@ var GetProjectMetricsSummaryPayload = Type("GetProjectMetricsSummaryPayload", fu
 var GetMetricsSummaryResult = Type("GetMetricsSummaryResult", func() {
 	Description("Result of metrics summary query")
 
-	Attribute("metrics", Metrics, "Aggregated metrics")
+	Attribute("metrics", ProjectSummaryType, "Aggregated metrics")
 	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
 	Required("metrics", "enabled")
@@ -594,7 +716,7 @@ var GetUserMetricsSummaryPayload = Type("GetUserMetricsSummaryPayload", func() {
 var GetUserMetricsSummaryResult = Type("GetUserMetricsSummaryResult", func() {
 	Description("Result of user metrics summary query")
 
-	Attribute("metrics", Metrics, "Aggregated metrics for the user")
+	Attribute("metrics", ProjectSummaryType, "Aggregated metrics for the user")
 	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
 	Required("metrics", "enabled")

@@ -13,6 +13,7 @@ import { authInfo } from "@gram/client/funcs/authInfo.js";
 import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
 import { keysCreate } from "@gram/client/funcs/keysCreate.js";
 import { keysList } from "@gram/client/funcs/keysList.js";
+import { keysRevokeById } from "@gram/client/funcs/keysRevokeById.js";
 import { keysValidate } from "@gram/client/funcs/keysValidate.js";
 import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
 import { projectsRead } from "@gram/client/funcs/projectsRead.js";
@@ -25,9 +26,8 @@ import { $ } from "zx";
 type Asset = {
   type: "openapi";
   slug: string;
-  filename: string;
   storybookDefault?: boolean;
-};
+} & ({ filename: string } | { url: string });
 
 const SEED_PROJECTS: {
   name: string;
@@ -37,15 +37,15 @@ const SEED_PROJECTS: {
   assets: Asset[];
 }[] = [
   {
-    name: "Kitchen Sink",
-    slug: "kitchen-sink",
-    summary: "An toy API to allow working with Gram Elements",
+    name: "E-Commerce API",
+    slug: "ecommerce-api",
+    summary: "A mock e-commerce API to allow working with Gram Elements",
     mcpPublic: true,
     assets: [
       {
         type: "openapi",
-        slug: "kitchen-sink",
-        filename: path.join("local", "openapi", "kitchen-sink.json"),
+        slug: "ecommerce-api",
+        url: "https://gram-mcp-storybook.vercel.app/openapi",
         storybookDefault: true,
       },
       {
@@ -184,29 +184,33 @@ async function initAPIKey(init: {
     log.warn(`Existing GRAM_API_KEY is invalid. Creating a new API key...`);
   }
 
+  // Revoke any existing seed-key before creating a new one
+  const listRes = await keysList(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
+  if (listRes.ok) {
+    const existingKey = listRes.value.keys.find((k) => k.name === "seed-key");
+    if (existingKey) {
+      log.info(`Revoking existing seed-key...`);
+      await keysRevokeById(
+        gram,
+        { id: existingKey.id },
+        { sessionHeaderGramSession: sessionId },
+      );
+    }
+  }
+
   const keyRes = await keysCreate(
     gram,
     {
-      createKeyForm: { name: "seed-key", scopes: ["producer"] },
+      createKeyForm: { name: "seed-key", scopes: ["producer", "chat"] },
     },
     {
       sessionHeaderGramSession: sessionId,
     },
   );
   if (!keyRes.ok) {
-    const listRes = await keysList(gram, undefined, {
-      sessionHeaderGramSession: sessionId,
-    });
-    if (!listRes.ok) {
-      abort("Failed to create or list API keys", keyRes.error, listRes.error);
-    }
-    const existingKey = listRes.value.keys.find((k) => k.name === "seed-key");
-    if (!existingKey) {
-      abort(`Failed to create API key 'seed-key'`, keyRes.error);
-    }
-
-    log.info(`Found existing API key. Continuing...`);
-    return;
+    abort(`Failed to create API key 'seed-key'`, keyRes.error);
   }
 
   const apiKey = keyRes.value.key;
@@ -276,17 +280,29 @@ async function deployAssets(init: {
   const oapi: Array<{ assetId: string; name: string; slug: string }> = [];
 
   for (const asset of assets) {
-    const spec = await fs.readFile(asset.filename, "utf-8");
-    let contentType = "application/json";
-    if (asset.filename.endsWith(".yaml")) {
-      contentType = "application/x-yaml";
+    let spec: string;
+    let contentType: string;
+
+    if ("url" in asset) {
+      const response = await fetch(asset.url);
+      if (!response.ok) {
+        abort(`Failed to fetch OpenAPI spec from ${asset.url}`, response.statusText);
+      }
+      spec = await response.text();
+      contentType = "application/json";
+    } else {
+      spec = await fs.readFile(asset.filename, "utf-8");
+      contentType = asset.filename.endsWith(".yaml")
+        ? "application/x-yaml"
+        : "application/json";
     }
 
+    const requestBody = new Blob([spec], { type: contentType });
     const res = await assetsUploadOpenAPIv3(
       init.gram,
       {
-        contentLength: spec.length,
-        requestBody: new Blob([spec], { type: contentType }),
+        contentLength: requestBody.size,
+        requestBody,
       },
       {
         option2: {
@@ -297,7 +313,8 @@ async function deployAssets(init: {
     );
 
     if (!res.ok) {
-      abort(`Failed to upload asset \`${asset.filename}\``, res.error);
+      const source = "url" in asset ? asset.url : asset.filename;
+      abort(`Failed to upload asset \`${source}\``, res.error);
     }
 
     const { id: assetId } = await res.value.asset;

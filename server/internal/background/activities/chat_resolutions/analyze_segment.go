@@ -39,11 +39,12 @@ func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient *openro
 }
 
 type AnalyzeSegmentArgs struct {
-	ChatID     uuid.UUID
-	ProjectID  uuid.UUID
-	OrgID      string
-	StartIndex int
-	EndIndex   int
+	ChatID       uuid.UUID
+	ProjectID    uuid.UUID
+	OrgID        string
+	StartIndex   int
+	EndIndex     int
+	UserFeedback []UserFeedback
 }
 
 type toolCallAnalysis struct {
@@ -74,10 +75,18 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("invalid segment indices: start=%d, end=%d, total=%d", args.StartIndex, args.EndIndex, len(allMessages))
 	}
 
+	// Check for existing user feedback
+	var applicableUserFeedback []UserFeedback
+	for _, feedback := range args.UserFeedback {
+		if feedback.MessageIndex >= args.StartIndex && feedback.MessageIndex <= args.EndIndex {
+			applicableUserFeedback = append(applicableUserFeedback, feedback)
+		}
+	}
+
 	segmentMessages := allMessages[args.StartIndex : args.EndIndex+1]
 	segmentText := a.formatSegment(segmentMessages)
 
-	result, err := a.analyzeWithLLM(ctx, args.OrgID, args.ProjectID, segmentText)
+	result, err := a.analyzeWithLLM(ctx, args.OrgID, args.ProjectID, segmentText, applicableUserFeedback)
 	if err != nil {
 		return fmt.Errorf("failed to analyze segment with LLM: %w", err)
 	}
@@ -143,6 +152,17 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		}
 	}
 
+	// Attach the resolution to the user feedback
+	for _, fb := range applicableUserFeedback {
+		err := txRepo.AddUserFeedbackChatResolution(ctx, repo.AddUserFeedbackChatResolutionParams{
+			ID:               fb.ID,
+			ChatResolutionID: uuid.NullUUID{UUID: resolutionID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to add user feedback to chat resolution: %w", err)
+		}
+	}
+
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
@@ -194,7 +214,14 @@ func (a *AnalyzeSegment) formatSegment(messages []repo.ChatMessage) string {
 	return formatChatMessages(messages)
 }
 
-func (a *AnalyzeSegment) analyzeWithLLM(ctx context.Context, orgID string, projectID uuid.UUID, segmentText string) (*segmentAnalysisResult, error) {
+func (a *AnalyzeSegment) analyzeWithLLM(
+	ctx context.Context,
+	orgID string,
+	projectID uuid.UUID,
+	segmentText string,
+	userFeedback []UserFeedback,
+) (*segmentAnalysisResult, error) {
+	userFeedbackText := a.formatUserFeedback(userFeedback)
 	systemPrompt := `Analyze this conversation segment comprehensively.
 
 1. Identify the user's goal/intent in this segment
@@ -209,10 +236,18 @@ func (a *AnalyzeSegment) analyzeWithLLM(ctx context.Context, orgID string, proje
 
 Return structured JSON.`
 
+	userPromptText := segmentText
+	if userFeedbackText != "" {
+		userPromptText = fmt.Sprintf(`%s
+
+USER FEEDBACK: The user gave feedback on this chat. Take this feedback into account when analyzing the resolution status and quality score.
+%s`, segmentText, userFeedbackText)
+	}
+
 	userPrompt := fmt.Sprintf(`%s
 
 Analyze this conversation segment.
-If there are no tool calls, return an empty array.`, segmentText)
+If there are no tool calls, return an empty array.`, userPromptText)
 
 	analysisCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
@@ -314,4 +349,15 @@ If there are no tool calls, return an empty array.`, segmentText)
 	}
 
 	return &result, nil
+}
+
+func (a *AnalyzeSegment) formatUserFeedback(userFeedback []UserFeedback) string {
+	feedbackText := ""
+	for _, fb := range userFeedback {
+		feedbackText += fmt.Sprintf(`User feedback at message index %d: %s\n`, fb.MessageIndex, fb.Resolution)
+		if fb.ResolutionNotes != "" {
+			feedbackText += fmt.Sprintf(`-- User feedback notes: %s\n`, fb.ResolutionNotes)
+		}
+	}
+	return feedbackText
 }

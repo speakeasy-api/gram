@@ -12,7 +12,7 @@ import { getServerURL } from "@/lib/utils";
 import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary";
-import { FeatureName, Metrics } from "@gram/client/models/components";
+import { FeatureName, ProjectSummary } from "@gram/client/models/components";
 import {
   useFeaturesSetMutation,
   useGramContext,
@@ -175,7 +175,7 @@ function MetricsContent({
   isPending: boolean;
   error: Error | null;
   isEnabled: boolean;
-  metrics: Metrics | undefined;
+  metrics: ProjectSummary | undefined;
   isMutatingLogs: boolean;
   logsMutationError: string | null;
   onEnableLogs: () => void;

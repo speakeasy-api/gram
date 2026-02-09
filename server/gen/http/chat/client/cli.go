@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
@@ -138,6 +139,52 @@ func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsage
 		}
 	}
 	v := &chat.CreditUsagePayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildSubmitFeedbackPayload builds the payload for the chat submitFeedback
+// endpoint from CLI flags.
+func BuildSubmitFeedbackPayload(chatSubmitFeedbackBody string, chatSubmitFeedbackSessionToken string, chatSubmitFeedbackProjectSlugInput string, chatSubmitFeedbackChatSessionsToken string) (*chat.SubmitFeedbackPayload, error) {
+	var err error
+	var body SubmitFeedbackRequestBody
+	{
+		err = json.Unmarshal([]byte(chatSubmitFeedbackBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"feedback\": \"failure\",\n      \"id\": \"abc123\"\n   }'")
+		}
+		if !(body.Feedback == "success" || body.Feedback == "failure") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feedback", body.Feedback, []any{"success", "failure"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatSubmitFeedbackSessionToken != "" {
+			sessionToken = &chatSubmitFeedbackSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatSubmitFeedbackProjectSlugInput != "" {
+			projectSlugInput = &chatSubmitFeedbackProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatSubmitFeedbackChatSessionsToken != "" {
+			chatSessionsToken = &chatSubmitFeedbackChatSessionsToken
+		}
+	}
+	v := &chat.SubmitFeedbackPayload{
+		ID:       body.ID,
+		Feedback: body.Feedback,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
