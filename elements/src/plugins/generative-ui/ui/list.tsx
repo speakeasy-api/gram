@@ -9,7 +9,7 @@ export interface ListProps {
 
 export function List({ items, ordered = false, className }: ListProps) {
   const listClasses = cn(
-    'space-y-1 pl-4',
+    'text-foreground space-y-1 pl-4',
     ordered ? 'list-decimal' : 'list-disc',
     className
   )

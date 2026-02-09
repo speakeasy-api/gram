@@ -9,7 +9,7 @@ const meta: Meta<typeof GenerativeUI> = {
   },
   decorators: [
     (Story) => (
-      <div className="max-w-2xl">
+      <div className="text-foreground max-w-2xl">
         <Story />
       </div>
     ),

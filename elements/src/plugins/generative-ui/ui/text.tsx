@@ -8,10 +8,10 @@ export interface TextProps extends React.ComponentProps<'span'> {
 }
 
 const variantClasses = {
-  heading: 'text-lg font-semibold',
-  body: 'text-sm',
-  caption: 'text-xs text-muted-foreground',
-  code: 'font-mono text-sm bg-muted px-1 rounded',
+  heading: 'text-foreground text-lg font-semibold',
+  body: 'text-foreground text-sm',
+  caption: 'text-muted-foreground text-xs',
+  code: 'text-foreground font-mono text-sm bg-muted px-1 rounded',
 }
 
 export function Text({

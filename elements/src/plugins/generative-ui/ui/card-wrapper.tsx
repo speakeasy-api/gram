@@ -26,7 +26,9 @@ export function CardWrapper({
       {...props}
     >
       {title && (
-        <div className="text-lg leading-none font-semibold">{title}</div>
+        <div className="text-foreground text-lg leading-none font-semibold">
+          {title}
+        </div>
       )}
       <div className="flex flex-col gap-6">{children}</div>
     </div>

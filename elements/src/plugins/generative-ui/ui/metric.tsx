@@ -45,7 +45,7 @@ export function Metric({
       {...props}
     >
       <span className="text-muted-foreground text-sm">{label}</span>
-      <span className="text-2xl font-semibold">
+      <span className="text-foreground text-2xl font-semibold">
         {formatValue(value, format)}
       </span>
     </div>
