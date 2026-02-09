@@ -299,11 +299,7 @@ export default function Settings() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-        >
+        <Stack direction="horizontal" justify="space-between" align="center">
           <Heading variant="h4">API Keys</Heading>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             New API Key
