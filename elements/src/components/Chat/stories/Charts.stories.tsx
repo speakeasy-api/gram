@@ -1,5 +1,7 @@
 import type { Meta, StoryFn } from '@storybook/react-vite'
+import z from 'zod'
 import { Chat } from '..'
+import { defineFrontendTool } from '../../../lib/tools'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Plugins/Charts',
@@ -13,8 +15,170 @@ export default meta
 
 type Story = StoryFn<typeof Chat>
 
+// Mock data generator for orders summary
+const generateOrdersSummary = (params: {
+  period?: string
+  groupBy?: string
+}) => {
+  const { period = 'last_30_days', groupBy = 'day' } = params
+
+  // Generate time-series data based on groupBy
+  const generateTimeSeries = () => {
+    if (groupBy === 'month') {
+      return [
+        {
+          date: '2024-07',
+          orders: 1247,
+          revenue: 125400,
+          avgOrderValue: 100.5,
+        },
+        {
+          date: '2024-08',
+          orders: 1389,
+          revenue: 142300,
+          avgOrderValue: 102.4,
+        },
+        {
+          date: '2024-09',
+          orders: 1456,
+          revenue: 151200,
+          avgOrderValue: 103.8,
+        },
+        {
+          date: '2024-10',
+          orders: 1523,
+          revenue: 162800,
+          avgOrderValue: 106.9,
+        },
+        {
+          date: '2024-11',
+          orders: 1834,
+          revenue: 198500,
+          avgOrderValue: 108.2,
+        },
+        {
+          date: '2024-12',
+          orders: 2156,
+          revenue: 245600,
+          avgOrderValue: 113.9,
+        },
+      ]
+    }
+    if (groupBy === 'week') {
+      return [
+        {
+          date: '2024-12-01',
+          orders: 423,
+          revenue: 48200,
+          avgOrderValue: 114.0,
+        },
+        {
+          date: '2024-12-08',
+          orders: 512,
+          revenue: 58900,
+          avgOrderValue: 115.0,
+        },
+        {
+          date: '2024-12-15',
+          orders: 489,
+          revenue: 55100,
+          avgOrderValue: 112.7,
+        },
+        {
+          date: '2024-12-22',
+          orders: 732,
+          revenue: 83400,
+          avgOrderValue: 113.9,
+        },
+      ]
+    }
+    // Default: daily
+    return [
+      { date: '2024-12-23', orders: 89, revenue: 10230, avgOrderValue: 114.9 },
+      { date: '2024-12-24', orders: 112, revenue: 12890, avgOrderValue: 115.1 },
+      { date: '2024-12-25', orders: 67, revenue: 7450, avgOrderValue: 111.2 },
+      { date: '2024-12-26', orders: 145, revenue: 16780, avgOrderValue: 115.7 },
+      { date: '2024-12-27', orders: 134, revenue: 15340, avgOrderValue: 114.5 },
+      { date: '2024-12-28', orders: 98, revenue: 11200, avgOrderValue: 114.3 },
+      { date: '2024-12-29', orders: 87, revenue: 9870, avgOrderValue: 113.4 },
+    ]
+  }
+
+  // Category breakdown
+  const categoryBreakdown = [
+    { category: 'Electronics', orders: 542, revenue: 89400, percentage: 32 },
+    { category: 'Clothing', orders: 423, revenue: 45200, percentage: 25 },
+    { category: 'Home & Garden', orders: 312, revenue: 38900, percentage: 18 },
+    { category: 'Sports', orders: 234, revenue: 28700, percentage: 14 },
+    { category: 'Other', orders: 189, revenue: 19300, percentage: 11 },
+  ]
+
+  // Status breakdown
+  const statusBreakdown = [
+    { status: 'Completed', count: 1423, percentage: 72 },
+    { status: 'Processing', count: 287, percentage: 15 },
+    { status: 'Shipped', count: 198, percentage: 10 },
+    { status: 'Cancelled', count: 59, percentage: 3 },
+  ]
+
+  // Regional data
+  const regionalData = [
+    { region: 'North America', orders: 823, revenue: 98400 },
+    { region: 'Europe', orders: 567, revenue: 72300 },
+    { region: 'Asia Pacific', orders: 412, revenue: 51200 },
+    { region: 'Latin America', orders: 156, revenue: 18900 },
+  ]
+
+  return {
+    period,
+    groupBy,
+    summary: {
+      totalOrders: 1967,
+      totalRevenue: 221500,
+      avgOrderValue: 112.6,
+      orderGrowth: 12.4,
+      revenueGrowth: 15.2,
+    },
+    timeSeries: generateTimeSeries(),
+    categoryBreakdown,
+    statusBreakdown,
+    regionalData,
+  }
+}
+
+// Define the GET /admin/orders/summary tool
+const getOrdersSummaryTool = defineFrontendTool<
+  { period?: string; groupBy?: string },
+  ReturnType<typeof generateOrdersSummary>
+>(
+  {
+    description:
+      'Get a summary of orders including totals, time-series data, category breakdown, and regional distribution. Use this data to create visualizations.',
+    parameters: z.object({
+      period: z
+        .enum(['last_7_days', 'last_30_days', 'last_90_days', 'last_year'])
+        .optional()
+        .describe('Time period for the summary'),
+      groupBy: z
+        .enum(['day', 'week', 'month'])
+        .optional()
+        .describe('How to group the time-series data'),
+    }),
+    execute: async (params) => {
+      // Simulate API latency
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      return generateOrdersSummary(params)
+    },
+  },
+  'admin_api_get_orders_summary'
+)
+
+const chartTools = {
+  admin_api_get_orders_summary: getOrdersSummaryTool,
+}
+
 /**
- * Bar chart demo - comparing categorical data
+ * Bar chart demo - comparing categorical data using orders summary
  */
 export const BarChart: Story = () => <Chat />
 BarChart.parameters = {
@@ -22,22 +186,25 @@ BarChart.parameters = {
     config: {
       variant: 'standalone',
       welcome: {
-        title: 'Chart Demo',
-        subtitle: 'Bar Chart Example',
+        title: 'Orders Analytics',
+        subtitle: 'Bar Chart Visualizations',
         suggestions: [
           {
-            title: 'Sales by Region',
+            title: 'Revenue by Category',
             label: 'Bar chart',
             prompt:
-              'Create a bar chart showing sales by region: North $120k, South $98k, East $145k, West $87k',
+              'Get the orders summary and show me a bar chart of revenue by product category',
           },
           {
-            title: 'Product Comparison',
-            label: 'Horizontal bars',
+            title: 'Orders by Region',
+            label: 'Regional comparison',
             prompt:
-              'Show me a horizontal bar chart comparing product ratings: Phone 4.5, Laptop 4.2, Tablet 3.9, Watch 4.7',
+              'Fetch the orders summary and create a horizontal bar chart comparing orders by region',
           },
         ],
+      },
+      tools: {
+        frontendTools: chartTools,
       },
     },
   },
@@ -52,22 +219,25 @@ LineChart.parameters = {
     config: {
       variant: 'standalone',
       welcome: {
-        title: 'Chart Demo',
-        subtitle: 'Line Chart Example',
+        title: 'Orders Analytics',
+        subtitle: 'Line Chart Visualizations',
         suggestions: [
           {
-            title: 'Monthly Revenue',
+            title: 'Daily Orders Trend',
             label: 'Line chart',
             prompt:
-              'Create a line chart showing monthly revenue: Jan $45k, Feb $52k, Mar $61k, Apr $58k, May $72k, Jun $68k',
+              'Get the orders summary grouped by day and show me a line chart of daily order counts',
           },
           {
-            title: 'Revenue vs Costs',
+            title: 'Revenue vs Orders',
             label: 'Multiple series',
             prompt:
-              'Show a line chart with revenue and costs over 6 months. Revenue: 45k, 52k, 61k, 58k, 72k, 68k. Costs: 32k, 35k, 38k, 36k, 42k, 40k',
+              'Fetch weekly orders data and create a line chart showing both revenue and order count trends',
           },
         ],
+      },
+      tools: {
+        frontendTools: chartTools,
       },
     },
   },
@@ -82,22 +252,25 @@ AreaChart.parameters = {
     config: {
       variant: 'standalone',
       welcome: {
-        title: 'Chart Demo',
-        subtitle: 'Area Chart Example',
+        title: 'Orders Analytics',
+        subtitle: 'Area Chart Visualizations',
         suggestions: [
           {
-            title: 'User Growth',
+            title: 'Monthly Revenue',
             label: 'Area chart',
             prompt:
-              'Create an area chart showing user growth over 6 months: Jan 1000, Feb 1500, Mar 2200, Apr 3100, May 4500, Jun 6000',
+              'Get the orders summary grouped by month and show me an area chart of revenue over time',
           },
           {
-            title: 'Traffic Sources',
-            label: 'Stacked area',
+            title: 'Order Growth',
+            label: 'Trend visualization',
             prompt:
-              'Show a stacked area chart with traffic sources. Organic: 500, 600, 800, 950, 1100. Paid: 200, 350, 500, 700, 900. Direct: 300, 320, 350, 380, 420',
+              'Fetch monthly orders data and create an area chart showing order volume growth',
           },
         ],
+      },
+      tools: {
+        frontendTools: chartTools,
       },
     },
   },
@@ -112,22 +285,25 @@ PieChart.parameters = {
     config: {
       variant: 'standalone',
       welcome: {
-        title: 'Chart Demo',
-        subtitle: 'Pie Chart Example',
+        title: 'Orders Analytics',
+        subtitle: 'Pie Chart Visualizations',
         suggestions: [
           {
-            title: 'Market Share',
+            title: 'Category Distribution',
             label: 'Pie chart',
             prompt:
-              'Create a pie chart showing market share: Company A 35%, Company B 28%, Company C 22%, Others 15%',
+              'Get the orders summary and show me a pie chart of order distribution by category',
           },
           {
-            title: 'Expense Breakdown',
-            label: 'Budget allocation',
+            title: 'Order Status',
+            label: 'Status breakdown',
             prompt:
-              'Show expense breakdown as a pie chart: Salaries 45%, Marketing 20%, Operations 18%, R&D 12%, Other 5%',
+              'Fetch the orders summary and create a pie chart showing the breakdown of order statuses',
           },
         ],
+      },
+      tools: {
+        frontendTools: chartTools,
       },
     },
   },
@@ -142,22 +318,25 @@ DonutChart.parameters = {
     config: {
       variant: 'standalone',
       welcome: {
-        title: 'Chart Demo',
-        subtitle: 'Donut Chart Example',
+        title: 'Orders Analytics',
+        subtitle: 'Donut Chart Visualizations',
         suggestions: [
           {
-            title: 'Budget Status',
+            title: 'Revenue Share',
             label: 'Donut with total',
             prompt:
-              'Create a donut chart showing budget allocation with total $1.2M in the center: Marketing 35%, Engineering 45%, Operations 20%',
+              'Get the orders summary and show a donut chart of revenue by category with the total revenue in the center',
           },
           {
-            title: 'Project Status',
-            label: 'Task completion',
+            title: 'Order Completion',
+            label: 'Status donut',
             prompt:
-              'Show project status as a donut chart with "75% Complete" in the center: Done 75%, In Progress 15%, Todo 10%',
+              'Fetch the orders summary and create a donut chart showing order status distribution with completion rate in the center',
           },
         ],
+      },
+      tools: {
+        frontendTools: chartTools,
       },
     },
   },
@@ -172,22 +351,25 @@ ScatterChart.parameters = {
     config: {
       variant: 'standalone',
       welcome: {
-        title: 'Chart Demo',
-        subtitle: 'Scatter Chart Example',
+        title: 'Orders Analytics',
+        subtitle: 'Scatter Chart Visualizations',
         suggestions: [
           {
-            title: 'Price vs Rating',
+            title: 'Orders vs Revenue',
             label: 'Correlation',
             prompt:
-              'Create a scatter chart showing price vs customer rating for products: (10, 3.5), (25, 4.0), (50, 4.2), (75, 4.5), (100, 4.8), (150, 4.3)',
+              'Get the orders summary and create a scatter chart showing the relationship between order count and revenue by region',
           },
           {
-            title: 'Sales Performance',
-            label: 'Calls vs Revenue',
+            title: 'Category Performance',
+            label: 'Orders vs AOV',
             prompt:
-              'Show a scatter plot of sales calls vs revenue closed: (20 calls, $5k), (35 calls, $12k), (50 calls, $18k), (45 calls, $15k), (60 calls, $25k)',
+              'Fetch the orders summary and show a scatter plot of order count vs average order value for each category',
           },
         ],
+      },
+      tools: {
+        frontendTools: chartTools,
       },
     },
   },
@@ -202,22 +384,25 @@ RadarChart.parameters = {
     config: {
       variant: 'standalone',
       welcome: {
-        title: 'Chart Demo',
-        subtitle: 'Radar Chart Example',
+        title: 'Orders Analytics',
+        subtitle: 'Radar Chart Visualizations',
         suggestions: [
           {
-            title: 'Skill Assessment',
+            title: 'Regional Performance',
             label: 'Radar chart',
             prompt:
-              'Create a radar chart for skill assessment: Communication 85, Technical 90, Leadership 75, Creativity 80, Problem Solving 88, Teamwork 92',
+              'Get the orders summary and create a radar chart comparing regions across orders, revenue, and average order value',
           },
           {
-            title: 'Product Comparison',
-            label: 'Feature scores',
+            title: 'Category Analysis',
+            label: 'Multi-metric',
             prompt:
-              'Show a radar chart comparing product features: Performance 85, Reliability 90, Usability 75, Support 80, Price 70, Features 88',
+              'Fetch the orders summary and show a radar chart comparing categories by order volume, revenue share, and growth',
           },
         ],
+      },
+      tools: {
+        frontendTools: chartTools,
       },
     },
   },
@@ -232,28 +417,31 @@ AllCharts.parameters = {
     config: {
       variant: 'standalone',
       welcome: {
-        title: 'Chart Gallery',
-        subtitle: 'Explore all chart types',
+        title: 'Orders Dashboard',
+        subtitle: 'Explore order analytics with different chart types',
         suggestions: [
           {
-            title: 'Bar Chart',
-            label: 'Compare categories',
+            title: 'Revenue Trend',
+            label: 'Line chart',
             prompt:
-              'Create a bar chart showing quarterly sales: Q1 $250k, Q2 $310k, Q3 $280k, Q4 $390k',
+              'Get the monthly orders summary and show me a line chart of revenue trends',
           },
           {
-            title: 'Line Chart',
-            label: 'Show trends',
+            title: 'Category Breakdown',
+            label: 'Bar chart',
             prompt:
-              'Create a line chart of monthly users: Jan 1000, Feb 1200, Mar 1800, Apr 2100, May 2500',
+              'Fetch the orders summary and create a bar chart of orders by category',
           },
           {
-            title: 'Pie Chart',
-            label: 'Show proportions',
+            title: 'Status Distribution',
+            label: 'Pie chart',
             prompt:
-              'Create a pie chart of traffic sources: Organic 45%, Direct 30%, Referral 15%, Social 10%',
+              'Get the orders summary and show a pie chart of order status distribution',
           },
         ],
+      },
+      tools: {
+        frontendTools: chartTools,
       },
     },
   },
