@@ -4,9 +4,18 @@ import { GenerativeUI } from '@/components/ui/generative-ui'
 import { SyntaxHighlighterProps } from '@assistant-ui/react-markdown'
 import { FC, useMemo } from 'react'
 import { MacOSWindowFrame } from '../components/MacOSWindowFrame'
+import { PluginLoadingState } from '../components/PluginLoadingState'
 
-// Debug mode - set to true to see streaming output
-const DEBUG_STREAMING = true
+const loadingMessages = [
+  'Preparing your data...',
+  'Building your view...',
+  'Generating results...',
+  'Loading content...',
+]
+
+function getRandomLoadingMessage() {
+  return loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
+}
 
 export const GenerativeUIRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
   // Parse JSON - returns null if invalid (still streaming)
@@ -27,31 +36,12 @@ export const GenerativeUIRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
     }
   }, [code])
 
-  // Show debug streaming view while JSON is incomplete
+  // Memoize the loading message so it doesn't change on every render
+  const loadingMessage = useMemo(() => getRandomLoadingMessage(), [])
+
+  // Show loading shimmer while JSON is incomplete/streaming
   if (!content) {
-    return (
-      <MacOSWindowFrame>
-        <div className="bg-card min-h-[200px] p-4">
-          {DEBUG_STREAMING ? (
-            <div className="space-y-2">
-              <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                <span className="inline-block size-2 animate-pulse rounded-full bg-amber-500" />
-                Streaming JSON ({code.length} chars)
-              </div>
-              <pre className="bg-muted text-foreground max-h-[300px] overflow-auto rounded p-2 font-mono text-xs">
-                {code || '(waiting for content...)'}
-              </pre>
-            </div>
-          ) : (
-            <div className="flex h-full min-h-[200px] items-center justify-center">
-              <span className="shimmer text-muted-foreground text-sm">
-                Building UI...
-              </span>
-            </div>
-          )}
-        </div>
-      </MacOSWindowFrame>
-    )
+    return <PluginLoadingState text={loadingMessage} />
   }
 
   // Render with macOS-style window frame
