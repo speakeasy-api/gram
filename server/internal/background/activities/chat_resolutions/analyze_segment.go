@@ -185,6 +185,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		attr.GenAIConversationIDKey:        args.ChatID.String(),
 		attr.ProjectIDKey:                  args.ProjectID.String(),
 		attr.OrganizationIDKey:             args.OrgID,
+		attr.APIKeyIDKey:                   args.APIKeyID,
 	}
 
 	chatInfo, err := a.repo.GetChat(ctx, args.ChatID)
