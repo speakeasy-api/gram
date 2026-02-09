@@ -48,6 +48,7 @@ const theme = create({
 addons.setConfig({
   theme,
   enableShortcuts: true,
+  showWhatsNewNotifications: false,
   sidebar: {
     showRoots: true,
     collapsedRoots: ['configuration'],
