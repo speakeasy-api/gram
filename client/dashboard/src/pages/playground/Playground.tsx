@@ -17,6 +17,7 @@ import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { Confirm } from "@gram/client/models/components";
 import {
+  invalidateAllToolset,
   invalidateTemplate,
   queryKeyInstance,
   queryKeyListToolsets,
@@ -345,18 +346,20 @@ export function ToolsetPanel({
       });
       invalidateTemplate(queryClient, [{ name: tool.name }]);
     } else {
+      const form = {
+        ...tool.variation,
+        confirm: tool.variation?.confirm as Confirm,
+        ...updates,
+        srcToolName: tool.canonicalName,
+        srcToolUrn: tool.toolUrn,
+      };
       await client.variations.upsertGlobal({
-        upsertGlobalToolVariationForm: {
-          ...tool.variation,
-          confirm: tool.variation?.confirm as Confirm,
-          ...updates,
-          srcToolName: tool.canonicalName,
-          srcToolUrn: tool.toolUrn,
-        },
+        upsertGlobalToolVariationForm: form,
       });
     }
 
     // Invalidate to refresh tool data in the sidebar
+    invalidateAllToolset(queryClient);
     if (selectedToolset) {
       queryClient.invalidateQueries({
         queryKey: queryKeyInstance({ toolsetSlug: selectedToolset }),
