@@ -905,11 +905,6 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			r.lineBuf.Reset()
 		}
 
-		// Generate a fallback messageID if upstream didn't provide one
-		if r.messageID == "" {
-			r.messageID = uuid.New().String()
-		}
-
 		// Convert accumulated tool calls to JSON for storage if needed
 		var toolCallsJSON []byte
 		if len(r.accumulatedToolCalls) > 0 {
