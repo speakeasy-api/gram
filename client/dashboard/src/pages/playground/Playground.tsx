@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
@@ -14,6 +15,7 @@ import {
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
+import { Confirm } from "@gram/client/models/components";
 import {
   queryKeyInstance,
   queryKeyListToolsets,
@@ -29,7 +31,7 @@ import { toast } from "sonner";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import { ChatProvider, useChatContext } from "./ChatContext";
 import { ChatConfig } from "./ChatWindow";
-import { EditToolDialog } from "./EditToolDialog";
+import { EditToolDialog, ToolUpdatePayload } from "./EditToolDialog";
 import { ManageToolsDialog } from "./ManageToolsDialog";
 import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
@@ -197,6 +199,7 @@ export function ToolsetPanel({
 
   const { data: toolsetsData } = useListToolsets();
   const routes = useRoutes();
+  const client = useSdkClient();
   const updateToolsetMutation = useUpdateToolsetMutation();
   const queryClient = useQueryClient();
 
@@ -331,6 +334,25 @@ export function ToolsetPanel({
     );
   };
 
+  const handleToolUpdate = async (tool: Tool, updates: ToolUpdatePayload) => {
+    await client.variations.upsertGlobal({
+      upsertGlobalToolVariationForm: {
+        ...tool.variation,
+        confirm: tool.variation?.confirm as Confirm,
+        ...updates,
+        srcToolName: tool.canonicalName,
+        srcToolUrn: tool.toolUrn,
+      },
+    });
+
+    // Invalidate to refresh tool data in the sidebar
+    if (selectedToolset) {
+      queryClient.invalidateQueries({
+        queryKey: queryKeyInstance({ toolsetSlug: selectedToolset }),
+      });
+    }
+  };
+
   // If listToolsets has completed and there's nothing there, show the onboarding panel
   if (toolsets !== undefined && !configRef.current.toolsetSlug) {
     return (
@@ -439,9 +461,14 @@ export function ToolsetPanel({
         tool={editingTool}
         documentIdToName={documentIdToName}
         functionIdToName={functionIdToName}
-        onSave={() => {
-          // TODO: Implement tool variation updates
-          toast.success("Tool updated");
+        onSave={async (updates) => {
+          if (!editingTool) return;
+          try {
+            await handleToolUpdate(editingTool, updates);
+            toast.success("Tool updated");
+          } catch {
+            toast.error("Failed to update tool");
+          }
           setEditingTool(null);
         }}
         onRemove={() => {

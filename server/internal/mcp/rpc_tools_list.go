@@ -29,10 +29,20 @@ type toolsListResult struct {
 }
 
 type toolListEntry struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema,omitempty,omitzero"`
-	Meta        map[string]any  `json:"_meta,omitempty"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	InputSchema json.RawMessage   `json:"inputSchema,omitempty,omitzero"`
+	Annotations *toolAnnotations  `json:"annotations,omitempty"`
+	Meta        map[string]any    `json:"_meta,omitempty"`
+}
+
+// toolAnnotations contains MCP tool behavior hints per the MCP specification.
+type toolAnnotations struct {
+	Title           string `json:"title,omitempty"`
+	ReadOnlyHint    *bool  `json:"readOnlyHint,omitempty"`
+	DestructiveHint *bool  `json:"destructiveHint,omitempty"`
+	IdempotentHint  *bool  `json:"idempotentHint,omitempty"`
+	OpenWorldHint   *bool  `json:"openWorldHint,omitempty"`
 }
 
 func handleToolsList(
@@ -158,6 +168,7 @@ func buildToolListEntries(
 				Name:        extTool.Name,
 				Description: extTool.Description,
 				InputSchema: extTool.Schema,
+				Annotations: convertExternalAnnotations(extTool.Annotations),
 				Meta:        nil,
 			})
 		}
@@ -191,6 +202,35 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 		Name:        toolEntry.Name,
 		Description: toolEntry.Description,
 		InputSchema: toolEntry.InputSchema,
+		Annotations: convertConvAnnotations(toolEntry.Annotations),
 		Meta:        toolEntry.Meta,
+	}
+}
+
+// convertExternalAnnotations converts external MCP annotations to toolAnnotations.
+func convertExternalAnnotations(ext *externalmcp.ToolAnnotations) *toolAnnotations {
+	if ext == nil {
+		return nil
+	}
+	return &toolAnnotations{
+		Title:           ext.Title,
+		ReadOnlyHint:    ext.ReadOnlyHint,
+		DestructiveHint: ext.DestructiveHint,
+		IdempotentHint:  ext.IdempotentHint,
+		OpenWorldHint:   ext.OpenWorldHint,
+	}
+}
+
+// convertConvAnnotations converts conv.ToolAnnotations to toolAnnotations.
+func convertConvAnnotations(c *conv.ToolAnnotations) *toolAnnotations {
+	if c == nil {
+		return nil
+	}
+	return &toolAnnotations{
+		Title:           c.Title,
+		ReadOnlyHint:    c.ReadOnlyHint,
+		DestructiveHint: c.DestructiveHint,
+		IdempotentHint:  c.IdempotentHint,
+		OpenWorldHint:   c.OpenWorldHint,
 	}
 }

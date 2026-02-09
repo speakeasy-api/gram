@@ -217,7 +217,12 @@ INSERT INTO tool_variations (
   summary,
   description,
   tags,
-  summarizer
+  summarizer,
+  title,
+  read_only_hint,
+  destructive_hint,
+  idempotent_hint,
+  open_world_hint
 ) VALUES (
   $1,
   $2,
@@ -228,7 +233,12 @@ INSERT INTO tool_variations (
   $7,
   $8,
   $9,
-  $10
+  $10,
+  $11,
+  $12,
+  $13,
+  $14,
+  $15
 ) ON CONFLICT (group_id, src_tool_urn) WHERE deleted IS FALSE DO UPDATE SET
   confirm = EXCLUDED.confirm,
   confirm_prompt = EXCLUDED.confirm_prompt,
@@ -237,21 +247,31 @@ INSERT INTO tool_variations (
   description = EXCLUDED.description,
   tags = EXCLUDED.tags,
   summarizer = EXCLUDED.summarizer,
+  title = EXCLUDED.title,
+  read_only_hint = EXCLUDED.read_only_hint,
+  destructive_hint = EXCLUDED.destructive_hint,
+  idempotent_hint = EXCLUDED.idempotent_hint,
+  open_world_hint = EXCLUDED.open_world_hint,
   updated_at = clock_timestamp()
 RETURNING id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertToolVariationParams struct {
-	GroupID       uuid.UUID
-	SrcToolUrn    urn.Tool
-	SrcToolName   string
-	Confirm       pgtype.Text
-	ConfirmPrompt pgtype.Text
-	Name          pgtype.Text
-	Summary       pgtype.Text
-	Description   pgtype.Text
-	Tags          []string
-	Summarizer    pgtype.Text
+	GroupID         uuid.UUID
+	SrcToolUrn      urn.Tool
+	SrcToolName     string
+	Confirm         pgtype.Text
+	ConfirmPrompt   pgtype.Text
+	Name            pgtype.Text
+	Summary         pgtype.Text
+	Description     pgtype.Text
+	Tags            []string
+	Summarizer      pgtype.Text
+	Title           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
 }
 
 func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariationParams) (ToolVariation, error) {
@@ -266,6 +286,11 @@ func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariati
 		arg.Description,
 		arg.Tags,
 		arg.Summarizer,
+		arg.Title,
+		arg.ReadOnlyHint,
+		arg.DestructiveHint,
+		arg.IdempotentHint,
+		arg.OpenWorldHint,
 	)
 	var i ToolVariation
 	err := row.Scan(

@@ -44,10 +44,10 @@ type FunctionToolDefinition struct {
 	Variables       []byte
 	AuthInput       []byte
 	Meta            []byte
-	ReadOnlyHint    pgtype.Bool
-	DestructiveHint pgtype.Bool
-	IdempotentHint  pgtype.Bool
-	OpenWorldHint   pgtype.Bool
+	ReadOnlyHint    bool
+	DestructiveHint bool
+	IdempotentHint  bool
+	OpenWorldHint   bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
@@ -85,10 +85,10 @@ type HttpToolDefinition struct {
 	PathSettings        []byte
 	RequestContentType  pgtype.Text
 	ResponseFilter      *models.ResponseFilter
-	ReadOnlyHint        pgtype.Bool
-	DestructiveHint     pgtype.Bool
-	IdempotentHint      pgtype.Bool
-	OpenWorldHint       pgtype.Bool
+	ReadOnlyHint        bool
+	DestructiveHint     bool
+	IdempotentHint      bool
+	OpenWorldHint       bool
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz

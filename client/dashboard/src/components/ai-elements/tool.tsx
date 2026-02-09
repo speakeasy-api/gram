@@ -29,11 +29,20 @@ export const Tool = ({ className, ...props }: ToolProps) => (
   />
 );
 
+export type ToolAnnotations = {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+};
+
 export type ToolHeaderProps = {
   title?: string;
   type: ToolUIPart["type"];
   state: ToolUIPart["state"];
   className?: string;
+  annotations?: ToolAnnotations;
 };
 
 const getStatusBadge = (status: ToolUIPart["state"]) => {
@@ -64,6 +73,7 @@ export const ToolHeader = ({
   title,
   type,
   state,
+  annotations,
   ...props
 }: ToolHeaderProps) => (
   <CollapsibleTrigger
@@ -73,12 +83,27 @@ export const ToolHeader = ({
     )}
     {...props}
   >
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
       <WrenchIcon className="size-4 text-muted-foreground" />
       <span className="font-medium text-sm">
         {title ?? type.split("-").slice(1).join("-")}
       </span>
       {getStatusBadge(state)}
+      {annotations?.readOnlyHint && (
+        <Badge className="gap-1 rounded-full text-xs" variant="outline">
+          Read-only
+        </Badge>
+      )}
+      {annotations?.destructiveHint && !annotations?.readOnlyHint && (
+        <Badge className="gap-1 rounded-full text-xs bg-amber-500/10 text-amber-600 border-amber-200">
+          Destructive
+        </Badge>
+      )}
+      {annotations?.idempotentHint && !annotations?.readOnlyHint && (
+        <Badge className="gap-1 rounded-full text-xs" variant="outline">
+          Idempotent
+        </Badge>
+      )}
     </div>
     <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
   </CollapsibleTrigger>

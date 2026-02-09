@@ -11638,6 +11638,8 @@ components:
         BaseToolAttributes:
             type: object
             properties:
+                annotations:
+                    $ref: '#/components/schemas/ToolAnnotations'
                 canonical:
                     $ref: '#/components/schemas/CanonicalToolAttributes'
                 canonical_name:
@@ -12911,6 +12913,8 @@ components:
         ExternalMCPToolDefinition:
             type: object
             properties:
+                annotations:
+                    $ref: '#/components/schemas/ToolAnnotations'
                 canonical:
                     $ref: '#/components/schemas/CanonicalToolAttributes'
                 canonical_name:
@@ -13173,6 +13177,8 @@ components:
         FunctionToolDefinition:
             type: object
             properties:
+                annotations:
+                    $ref: '#/components/schemas/ToolAnnotations'
                 asset_id:
                     type: string
                     description: The ID of the asset
@@ -13613,6 +13619,8 @@ components:
         HTTPToolDefinition:
             type: object
             properties:
+                annotations:
+                    $ref: '#/components/schemas/ToolAnnotations'
                 asset_id:
                     type: string
                     description: The ID of the asset
@@ -14780,6 +14788,8 @@ components:
         PromptTemplate:
             type: object
             properties:
+                annotations:
+                    $ref: '#/components/schemas/ToolAnnotations'
                 canonical:
                     $ref: '#/components/schemas/CanonicalToolAttributes'
                 canonical_name:
@@ -15838,6 +15848,25 @@ components:
                 prompt_template:
                     $ref: '#/components/schemas/PromptTemplate'
             description: A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy
+        ToolAnnotations:
+            type: object
+            properties:
+                destructive_hint:
+                    type: boolean
+                    description: If true, the tool may perform destructive updates (only meaningful when read_only_hint is false)
+                idempotent_hint:
+                    type: boolean
+                    description: If true, repeated calls with same arguments have no additional effect (only meaningful when read_only_hint is false)
+                open_world_hint:
+                    type: boolean
+                    description: If true, the tool interacts with external entities beyond its local environment
+                read_only_hint:
+                    type: boolean
+                    description: If true, the tool does not modify its environment
+                title:
+                    type: string
+                    description: Human-readable display name for the tool
+            description: Tool annotations providing behavioral hints about the tool
         ToolCallSummary:
             type: object
             properties:
@@ -15929,15 +15958,27 @@ components:
                 description:
                     type: string
                     description: The description of the tool variation
+                destructive_hint:
+                    type: boolean
+                    description: 'Override: if true, the tool may perform destructive updates'
                 group_id:
                     type: string
                     description: The ID of the tool variation group
                 id:
                     type: string
                     description: The ID of the tool variation
+                idempotent_hint:
+                    type: boolean
+                    description: 'Override: if true, repeated calls have no additional effect'
                 name:
                     type: string
                     description: The name of the tool variation
+                open_world_hint:
+                    type: boolean
+                    description: 'Override: if true, the tool interacts with external entities'
+                read_only_hint:
+                    type: boolean
+                    description: 'Override: if true, the tool does not modify its environment'
                 src_tool_name:
                     type: string
                     description: The name of the source tool
@@ -15947,6 +15988,9 @@ components:
                 summarizer:
                     type: string
                     description: The summarizer of the tool variation
+                title:
+                    type: string
+                    description: Display name override for the tool
                 updated_at:
                     type: string
                     description: The last update date of the tool variation
@@ -16634,9 +16678,21 @@ components:
                 description:
                     type: string
                     description: The description of the tool variation
+                destructive_hint:
+                    type: boolean
+                    description: 'Override: if true, the tool may perform destructive updates'
+                idempotent_hint:
+                    type: boolean
+                    description: 'Override: if true, repeated calls have no additional effect'
                 name:
                     type: string
                     description: The name of the tool variation
+                open_world_hint:
+                    type: boolean
+                    description: 'Override: if true, the tool interacts with external entities'
+                read_only_hint:
+                    type: boolean
+                    description: 'Override: if true, the tool does not modify its environment'
                 src_tool_name:
                     type: string
                     description: The name of the source tool
@@ -16654,6 +16710,9 @@ components:
                     items:
                         type: string
                     description: The tags of the tool variation
+                title:
+                    type: string
+                    description: Display name override for the tool
             required:
                 - src_tool_name
                 - src_tool_urn
