@@ -8,16 +8,27 @@ import { FC, useMemo } from 'react'
 
 // Import all components from the generative-ui plugin ui directory
 import {
+  AccordionWrapper,
+  AccordionItemWrapper,
   ActionButton,
+  AlertWrapper,
+  AvatarWrapper,
   Badge,
+  ButtonWrapper,
   CardWrapper,
+  CheckboxWrapper,
   DataTable,
   Grid,
+  InputWrapper,
   List,
   Metric,
   Progress,
+  SelectWrapper,
   Separator,
+  SkeletonWrapper,
   Stack,
+  TabsWrapper,
+  TabContentWrapper,
   Text,
 } from '@/plugins/generative-ui/ui'
 
@@ -34,18 +45,37 @@ interface GenerativeUIProps {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const components: Record<string, FC<any>> = {
+  // Layout
   Card: CardWrapper,
-  Metric,
   Grid,
   Stack,
+  // Typography
   Text,
+  // Data Display
+  Metric,
   Badge,
   Table: DataTable,
   List,
+  Progress,
+  Avatar: AvatarWrapper,
+  Skeleton: SkeletonWrapper,
+  // Feedback
+  Alert: AlertWrapper,
+  // Structure
   Divider: Separator,
   Separator,
-  Progress,
+  // Interactive
+  Accordion: AccordionWrapper,
+  AccordionItem: AccordionItemWrapper,
+  Tabs: TabsWrapper,
+  TabContent: TabContentWrapper,
+  // Actions
+  Button: ButtonWrapper,
   ActionButton,
+  // Form Elements
+  Input: InputWrapper,
+  Checkbox: CheckboxWrapper,
+  Select: SelectWrapper,
 }
 
 /**
