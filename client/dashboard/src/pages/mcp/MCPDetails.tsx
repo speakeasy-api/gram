@@ -30,6 +30,8 @@ import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
+import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
+import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { useRoutes } from "@/routes";
 import { Confirm, ToolsetEntry } from "@gram/client/models/components";
 import {
@@ -141,7 +143,7 @@ export function MCPDetailPage() {
   // Tab state controlled by URL hash - initialize directly from hash
   const [activeTab, setActiveTab] = useState<string>(() => {
     const hash = window.location.hash.slice(1); // Remove the '#'
-    const validTabs = ["overview", "tools", "settings", "authentication"];
+    const validTabs = ["overview", "tools", "resources", "prompts", "settings", "authentication"];
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
 
@@ -156,7 +158,7 @@ export function MCPDetailPage() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1);
-      const validTabs = ["overview", "tools", "settings", "authentication"];
+      const validTabs = ["overview", "tools", "resources", "prompts", "settings", "authentication"];
       if (hash && validTabs.includes(hash)) {
         setActiveTab(hash);
       }
@@ -324,6 +326,18 @@ export function MCPDetailPage() {
                   Tools
                 </TabsTrigger>
                 <TabsTrigger
+                  value="resources"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Resources
+                </TabsTrigger>
+                <TabsTrigger
+                  value="prompts"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Prompts
+                </TabsTrigger>
+                <TabsTrigger
                   value="authentication"
                   className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
                 >
@@ -352,6 +366,14 @@ export function MCPDetailPage() {
 
             <TabsContent value="tools" className="mt-0 w-full">
               <MCPToolsTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="resources" className="mt-0 w-full">
+              <MCPResourcesTab toolset={toolset} />
+            </TabsContent>
+
+            <TabsContent value="prompts" className="mt-0 w-full">
+              <MCPPromptsTab toolset={toolset} />
             </TabsContent>
 
             <TabsContent value="authentication" className="mt-0 w-full">
@@ -687,6 +709,54 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 }
 
 /**
+ * Resources Tab - Wraps the existing ResourcesTabContent for MCP page
+ */
+function MCPResourcesTab({ toolset }: { toolset: Toolset }) {
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
+  const { data: fullToolset } = useToolset(toolset.slug);
+
+  const updateToolsetMutation = useUpdateToolsetMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "toolset_updated" });
+      invalidateAllToolset(queryClient);
+    },
+  });
+
+  if (!fullToolset) return null;
+
+  return (
+    <ResourcesTabContent
+      toolset={fullToolset}
+      updateToolsetMutation={updateToolsetMutation}
+    />
+  );
+}
+
+/**
+ * Prompts Tab - Wraps the existing PromptsTabContent for MCP page
+ */
+function MCPPromptsTab({ toolset }: { toolset: Toolset }) {
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
+  const { data: fullToolset } = useToolset(toolset.slug);
+
+  const updateToolsetMutation = useUpdateToolsetMutation({
+    onSuccess: () => {
+      telemetry.capture("toolset_event", { action: "toolset_updated" });
+      invalidateAllToolset(queryClient);
+    },
+  });
+
+  if (!fullToolset) return null;
+
+  return (
+    <PromptsTabContent
+      toolset={fullToolset}
+      updateToolsetMutation={updateToolsetMutation}
+    />
+  );
+}
 
 /**
  * Settings Tab - Visibility, Slug, Custom Domain, Tool Selection Mode, Actions, Danger Zone
