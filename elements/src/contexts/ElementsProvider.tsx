@@ -371,8 +371,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             stopWhen: stepCountIs(10),
             experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
-            // Note: providerOptions for reasoning removed - was causing 20-30s delays
-            // Enable selectively for reasoning models only
             onError: ({ error }) => {
               console.error('Stream error in onError callback:', error)
               trackError(error, { source: 'streaming' })

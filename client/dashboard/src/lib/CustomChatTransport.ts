@@ -44,8 +44,6 @@ export class CustomChatTransport {
       maxOutputTokens: this.config.maxGeneratedTokens,
       system: systemPrompt,
       experimental_transform: smoothStream({ delayInMs: 15 }),
-      // Note: providerOptions for reasoning removed - was causing 20-30s delays
-      // Enable selectively for reasoning models only
       onError: this.config.onError,
     });
 
