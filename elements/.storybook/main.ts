@@ -4,6 +4,9 @@ const config: StorybookConfig = {
   stories: ['../src/**/*.mdx', '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
   addons: ['@storybook/addon-docs', '@storybook/addon-themes'],
   staticDirs: ['./public'],
+  core: {
+    disableWhatsNewNotifications: true,
+  },
   viteFinal: (config) => {
     config.server = {
       ...config.server,
