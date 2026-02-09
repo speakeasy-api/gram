@@ -63,23 +63,38 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 
 	var a *Activities
 
-	// Phase 1: Segment the chat into logical breakpoints
-	var segmentOutput activities.SegmentChatOutput
+	// Phase 0: Get user feedback message ID if it exists
+	var feedbackResult activities.GetUserFeedbackForChatResult
 	err := workflow.ExecuteActivity(
+		ctx,
+		a.GetUserFeedbackForChat,
+		activities.GetUserFeedbackForChatArgs{
+			ProjectID: params.ProjectID,
+			ChatID:    params.ChatID,
+		},
+	).Get(ctx, &feedbackResult)
+	if err != nil {
+		return fmt.Errorf("failed to get user feedback message ID: %w", err)
+	}
+
+	// Phase 1: Segment the chat into logical breakpoints
+	// Pass feedback message IDs as hints for segmentation
+	var segmentOutput activities.SegmentChatOutput
+	err = workflow.ExecuteActivity(
 		ctx,
 		a.SegmentChat,
 		activities.SegmentChatArgs{
-			ChatID:    params.ChatID,
-			ProjectID: params.ProjectID,
-			OrgID:     params.OrgID,
-			APIKeyID:  params.APIKeyID,
+			ChatID:       params.ChatID,
+			ProjectID:    params.ProjectID,
+			OrgID:        params.OrgID,
+			APIKeyID:     params.APIKeyID,
+			UserFeedback: feedbackResult.UserFeedback,
 		},
 	).Get(ctx, &segmentOutput)
 	if err != nil {
 		return fmt.Errorf("failed to segment chat: %w", err)
 	}
 
-	// Delete existing resolutions before analyzing segments
 	err = workflow.ExecuteActivity(
 		ctx,
 		a.DeleteChatResolutions,
@@ -97,12 +112,13 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 			ctx,
 			a.AnalyzeSegment,
 			activities.AnalyzeSegmentArgs{
-				ChatID:     params.ChatID,
-				ProjectID:  params.ProjectID,
-				OrgID:      params.OrgID,
-				StartIndex: segment.StartIndex,
-				EndIndex:   segment.EndIndex,
-				APIKeyID:   params.APIKeyID,
+				ChatID:       params.ChatID,
+				ProjectID:    params.ProjectID,
+				OrgID:        params.OrgID,
+				StartIndex:   segment.StartIndex,
+				EndIndex:     segment.EndIndex,
+				APIKeyID:     params.APIKeyID,
+				UserFeedback: feedbackResult.UserFeedback,
 			},
 		).Get(ctx, nil)
 		if err != nil {

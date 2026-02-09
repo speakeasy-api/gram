@@ -2680,6 +2680,108 @@ paths:
       x-speakeasy-name-override: load
       x-speakeasy-react-hook:
         name: LoadChat
+  /rpc/chat.submitFeedback:
+    post:
+      description: Submit user feedback for a chat (success/failure)
+      operationId: submitFeedback
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: Chat Sessions token header
+          in: header
+          name: Gram-Chat-Session
+          schema:
+            description: Chat Sessions token header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitFeedbackRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureEventResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - chat_sessions_token_header_Gram-Chat-Session: []
+        - {}
+      summary: submitFeedback chat
+      tags:
+        - chat
+      x-speakeasy-name-override: submitFeedback
   /rpc/chatSessions.create:
     post:
       description: Creates a new chat session token
@@ -8514,6 +8616,112 @@ paths:
       x-speakeasy-name-override: searchToolCalls
       x-speakeasy-react-hook:
         name: SearchToolCalls
+  /rpc/telemetry.searchUsers:
+    post:
+      description: Search and list user usage summaries grouped by user_id or external_user_id
+      operationId: searchUsers
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchUsersPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchUsersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: searchUsers telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: searchUsers
+      x-speakeasy-react-hook:
+        name: SearchUsers
+        type: query
   /rpc/templates.create:
     post:
       description: Create a new prompt template.
@@ -13406,7 +13614,7 @@ components:
           type: boolean
           description: Whether telemetry is enabled for the organization
         metrics:
-          $ref: '#/components/schemas/Metrics'
+          $ref: '#/components/schemas/ProjectSummary'
       description: Result of metrics summary query
       required:
         - metrics
@@ -13524,7 +13732,7 @@ components:
           type: boolean
           description: Whether telemetry is enabled for the organization
         metrics:
-          $ref: '#/components/schemas/Metrics'
+          $ref: '#/components/schemas/ProjectSummary'
       description: Result of user metrics summary query
       required:
         - metrics
@@ -14194,106 +14402,6 @@ components:
         - toolset_id
         - created_at
         - updated_at
-    Metrics:
-      type: object
-      properties:
-        avg_chat_duration_ms:
-          type: number
-          description: Average chat request duration in milliseconds
-          format: double
-        avg_tokens_per_request:
-          type: number
-          description: Average tokens per chat request
-          format: double
-        avg_tool_duration_ms:
-          type: number
-          description: Average tool call duration in milliseconds
-          format: double
-        distinct_models:
-          type: integer
-          description: Number of distinct models used (project scope only)
-          format: int64
-        distinct_providers:
-          type: integer
-          description: Number of distinct providers used (project scope only)
-          format: int64
-        finish_reason_stop:
-          type: integer
-          description: Requests that completed naturally
-          format: int64
-        finish_reason_tool_calls:
-          type: integer
-          description: Requests that resulted in tool calls
-          format: int64
-        first_seen_unix_nano:
-          type: string
-          description: Earliest activity timestamp in Unix nanoseconds
-        last_seen_unix_nano:
-          type: string
-          description: Latest activity timestamp in Unix nanoseconds
-        models:
-          type: array
-          items:
-            $ref: '#/components/schemas/ModelUsage'
-          description: List of models used with call counts
-        tool_call_failure:
-          type: integer
-          description: Failed tool calls (4xx/5xx status)
-          format: int64
-        tool_call_success:
-          type: integer
-          description: Successful tool calls (2xx status)
-          format: int64
-        tools:
-          type: array
-          items:
-            $ref: '#/components/schemas/ToolUsage'
-          description: List of tools used with success/failure counts
-        total_chat_requests:
-          type: integer
-          description: Total number of chat requests
-          format: int64
-        total_chats:
-          type: integer
-          description: Number of unique chat sessions (project scope only)
-          format: int64
-        total_input_tokens:
-          type: integer
-          description: Sum of input tokens used
-          format: int64
-        total_output_tokens:
-          type: integer
-          description: Sum of output tokens used
-          format: int64
-        total_tokens:
-          type: integer
-          description: Sum of all tokens used
-          format: int64
-        total_tool_calls:
-          type: integer
-          description: Total number of tool calls
-          format: int64
-      description: Aggregated metrics
-      required:
-        - first_seen_unix_nano
-        - last_seen_unix_nano
-        - total_input_tokens
-        - total_output_tokens
-        - total_tokens
-        - avg_tokens_per_request
-        - total_chat_requests
-        - avg_chat_duration_ms
-        - finish_reason_stop
-        - finish_reason_tool_calls
-        - total_tool_calls
-        - tool_call_success
-        - tool_call_failure
-        - avg_tool_duration_ms
-        - total_chats
-        - distinct_models
-        - distinct_providers
-        - models
-        - tools
     ModelUsage:
       type: object
       properties:
@@ -14671,6 +14779,131 @@ components:
         - id
         - name
         - slug
+    ProjectSummary:
+      type: object
+      properties:
+        avg_chat_duration_ms:
+          type: number
+          description: Average chat request duration in milliseconds
+          format: double
+        avg_chat_resolution_score:
+          type: number
+          description: Average chat resolution score (0-100)
+          format: double
+        avg_tokens_per_request:
+          type: number
+          description: Average tokens per chat request
+          format: double
+        avg_tool_duration_ms:
+          type: number
+          description: Average tool call duration in milliseconds
+          format: double
+        chat_resolution_abandoned:
+          type: integer
+          description: Chats abandoned by user
+          format: int64
+        chat_resolution_failure:
+          type: integer
+          description: Chats that failed to resolve
+          format: int64
+        chat_resolution_partial:
+          type: integer
+          description: Chats partially resolved
+          format: int64
+        chat_resolution_success:
+          type: integer
+          description: Chats resolved successfully
+          format: int64
+        distinct_models:
+          type: integer
+          description: Number of distinct models used (project scope only)
+          format: int64
+        distinct_providers:
+          type: integer
+          description: Number of distinct providers used (project scope only)
+          format: int64
+        finish_reason_stop:
+          type: integer
+          description: Requests that completed naturally
+          format: int64
+        finish_reason_tool_calls:
+          type: integer
+          description: Requests that resulted in tool calls
+          format: int64
+        first_seen_unix_nano:
+          type: string
+          description: Earliest activity timestamp in Unix nanoseconds
+        last_seen_unix_nano:
+          type: string
+          description: Latest activity timestamp in Unix nanoseconds
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelUsage'
+          description: List of models used with call counts
+        tool_call_failure:
+          type: integer
+          description: Failed tool calls (4xx/5xx status)
+          format: int64
+        tool_call_success:
+          type: integer
+          description: Successful tool calls (2xx status)
+          format: int64
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsage'
+          description: List of tools used with success/failure counts
+        total_chat_requests:
+          type: integer
+          description: Total number of chat requests
+          format: int64
+        total_chats:
+          type: integer
+          description: Number of unique chat sessions (project scope only)
+          format: int64
+        total_input_tokens:
+          type: integer
+          description: Sum of input tokens used
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Sum of output tokens used
+          format: int64
+        total_tokens:
+          type: integer
+          description: Sum of all tokens used
+          format: int64
+        total_tool_calls:
+          type: integer
+          description: Total number of tool calls
+          format: int64
+      description: Aggregated metrics
+      required:
+        - first_seen_unix_nano
+        - last_seen_unix_nano
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - avg_tokens_per_request
+        - total_chat_requests
+        - avg_chat_duration_ms
+        - finish_reason_stop
+        - finish_reason_tool_calls
+        - total_tool_calls
+        - tool_call_success
+        - tool_call_failure
+        - avg_tool_duration_ms
+        - chat_resolution_success
+        - chat_resolution_failure
+        - chat_resolution_partial
+        - chat_resolution_abandoned
+        - avg_chat_resolution_score
+        - total_chats
+        - distinct_models
+        - distinct_providers
+        - models
+        - tools
     PromptTemplate:
       type: object
       properties:
@@ -15181,6 +15414,77 @@ components:
       required:
         - tool_calls
         - enabled
+    SearchUsersFilter:
+      type: object
+      properties:
+        deployment_id:
+          type: string
+          description: Deployment ID filter
+          format: uuid
+        from:
+          type: string
+          description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        to:
+          type: string
+          description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Filter criteria for searching user usage summaries
+      required:
+        - from
+        - to
+    SearchUsersPayload:
+      type: object
+      properties:
+        cursor:
+          type: string
+          description: Cursor for pagination (user identifier from last item)
+        filter:
+          $ref: '#/components/schemas/SearchUsersFilter'
+        limit:
+          type: integer
+          description: Number of items to return (1-1000)
+          default: 50
+          format: int64
+          minimum: 1
+          maximum: 1000
+        sort:
+          type: string
+          description: Sort order
+          default: desc
+          enum:
+            - asc
+            - desc
+        user_type:
+          type: string
+          description: Type of user identifier to group by
+          enum:
+            - internal
+            - external
+      description: Payload for searching user usage summaries
+      required:
+        - filter
+        - user_type
+    SearchUsersResult:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether telemetry is enabled for the organization
+        next_cursor:
+          type: string
+          description: Cursor for next page
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSummary'
+          description: List of user usage summaries
+      description: Result of searching user usage summaries
+      required:
+        - users
+        - enabled
     SecurityVariable:
       type: object
       properties:
@@ -15516,6 +15820,21 @@ components:
         - source_kind
         - source_slug
         - environment_id
+    SubmitFeedbackRequestBody:
+      type: object
+      properties:
+        feedback:
+          type: string
+          description: 'User feedback: success or failure'
+          enum:
+            - success
+            - failure
+        id:
+          type: string
+          description: The ID of the chat
+      required:
+        - id
+        - feedback
     TelemetryFilter:
       type: object
       properties:
@@ -16485,6 +16804,74 @@ components:
         - free
         - pro
         - enterprise
+    UserSummary:
+      type: object
+      properties:
+        avg_tokens_per_request:
+          type: number
+          description: Average tokens per chat request
+          format: double
+        first_seen_unix_nano:
+          type: string
+          description: Earliest activity timestamp in Unix nanoseconds
+        last_seen_unix_nano:
+          type: string
+          description: Latest activity timestamp in Unix nanoseconds
+        tool_call_failure:
+          type: integer
+          description: Failed tool calls (4xx/5xx status)
+          format: int64
+        tool_call_success:
+          type: integer
+          description: Successful tool calls (2xx status)
+          format: int64
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsage'
+          description: Per-tool usage breakdown
+        total_chat_requests:
+          type: integer
+          description: Total number of chat completion requests
+          format: int64
+        total_chats:
+          type: integer
+          description: Number of unique chat sessions
+          format: int64
+        total_input_tokens:
+          type: integer
+          description: Sum of input tokens used
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Sum of output tokens used
+          format: int64
+        total_tokens:
+          type: integer
+          description: Sum of all tokens used
+          format: int64
+        total_tool_calls:
+          type: integer
+          description: Total number of tool calls
+          format: int64
+        user_id:
+          type: string
+          description: User identifier (user_id or external_user_id depending on group_by)
+      description: Aggregated usage summary for a single user
+      required:
+        - user_id
+        - first_seen_unix_nano
+        - last_seen_unix_nano
+        - total_chats
+        - total_chat_requests
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - avg_tokens_per_request
+        - total_tool_calls
+        - tool_call_success
+        - tool_call_failure
+        - tools
     ValidateKeyOrganization:
       type: object
       properties:

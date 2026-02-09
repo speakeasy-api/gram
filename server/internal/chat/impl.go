@@ -659,6 +659,86 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	return &gen.GenerateTitleResult{Title: title}, nil
 }
 
+func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbackPayload) (*gen.SubmitFeedbackResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+
+	// Load the chat to verify access
+	chat, err := s.repo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Validate feedback value
+	if payload.Feedback != "success" && payload.Feedback != "failure" {
+		return nil, oops.E(oops.CodeInvalid, nil, "feedback must be 'success' or 'failure'")
+	}
+
+	// Get the most recent message ID to track where user gave feedback
+	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list messages").Log(ctx, s.logger)
+	}
+
+	var lastMessageID uuid.NullUUID
+	if len(messages) > 0 {
+		lastMessageID = uuid.NullUUID{UUID: messages[len(messages)-1].ID, Valid: true}
+	} else {
+		return nil, oops.E(oops.CodeInvalid, nil, "no messages found for chat")
+	}
+
+	// Insert user feedback
+	_, err = s.repo.InsertUserFeedback(ctx, repo.InsertUserFeedbackParams{
+		ProjectID:           *authCtx.ProjectID,
+		ChatID:              chatID,
+		MessageID:           lastMessageID.UUID,
+		UserResolution:      payload.Feedback,
+		UserResolutionNotes: conv.ToPGTextEmpty(""),
+		ChatResolutionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to store feedback").Log(ctx, s.logger)
+	}
+
+	// Schedule chat resolution analysis to fill in the details
+	if s.chatResolutionAnalyzer != nil {
+		if err := s.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
+			context.WithoutCancel(ctx),
+			chatID,
+			*authCtx.ProjectID,
+			authCtx.ActiveOrganizationID,
+		); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
+			// Don't fail the request if analysis scheduling fails
+		}
+	}
+
+	s.logger.InfoContext(ctx, "user feedback submitted",
+		attr.SlogChatID(chatID.String()),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogOutcome(payload.Feedback),
+	)
+
+	return &gen.SubmitFeedbackResult{Success: true}, nil
+}
+
 // startOrResumeChatResult contains the result of starting or resuming a chat.
 type startOrResumeChatResult struct {
 	ChatID         uuid.UUID

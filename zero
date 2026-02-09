@@ -4,10 +4,15 @@ set -e
 
 # Parse command line arguments
 agent_mode=false
+auto_yes=false
 for arg in "$@"; do
     case $arg in
         --agent)
             agent_mode=true
+            shift
+            ;;
+        -y|--yes)
+            auto_yes=true
             shift
             ;;
     esac
@@ -101,6 +106,10 @@ mise run build:internal-sdk
 echo -e "\n⏳ Updating VS Code and Cursor editor settings"
 mise run install:vscode
 
+echo -e "\n⏳ Cleaning up stale processes and Temporal state"
+interactive_only mise run zero:cleanup
+echo "✅ Cleaned up stale state"
+
 echo -e "\n⏳ Starting infra"
 interactive_only mise infra:start
 
@@ -113,7 +122,9 @@ interactive_only mise zero:summary
 
 echo -e "\n✅ All set up!"
 
-if ! $agent_mode; then
+if $auto_yes; then
+    exec mise run start
+elif ! $agent_mode; then
     echo "Want me to start the server and dashboard (\`mise run start\`)?"
     echo -n "[y/N] "
     read -r answer

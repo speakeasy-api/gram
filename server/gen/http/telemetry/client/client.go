@@ -29,6 +29,10 @@ type Client struct {
 	// endpoint.
 	SearchChatsDoer goahttp.Doer
 
+	// SearchUsers Doer is the HTTP client used to make requests to the searchUsers
+	// endpoint.
+	SearchUsersDoer goahttp.Doer
+
 	// CaptureEvent Doer is the HTTP client used to make requests to the
 	// captureEvent endpoint.
 	CaptureEventDoer goahttp.Doer
@@ -64,6 +68,7 @@ func NewClient(
 		SearchLogsDoer:               doer,
 		SearchToolCallsDoer:          doer,
 		SearchChatsDoer:              doer,
+		SearchUsersDoer:              doer,
 		CaptureEventDoer:             doer,
 		GetProjectMetricsSummaryDoer: doer,
 		GetUserMetricsSummaryDoer:    doer,
@@ -142,6 +147,30 @@ func (c *Client) SearchChats() goa.Endpoint {
 		resp, err := c.SearchChatsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "searchChats", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SearchUsers returns an endpoint that makes HTTP requests to the telemetry
+// service searchUsers server.
+func (c *Client) SearchUsers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSearchUsersRequest(c.encoder)
+		decodeResponse = DecodeSearchUsersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSearchUsersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SearchUsersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "searchUsers", err)
 		}
 		return decodeResponse(resp)
 	}

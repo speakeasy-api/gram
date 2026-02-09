@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.27.1
+
+### Patch Changes
+
+- e08b45e: Adds support for forwarding and storing user feedback. Incorporates the stored user feedback into chat resolution analysis
+
 ## 0.26.18
 
 ### Patch Changes

@@ -59,6 +59,7 @@ type Activities struct {
 	segmentChat                   *resolution_activities.SegmentChat
 	deleteChatResolutions         *resolution_activities.DeleteChatResolutions
 	analyzeSegment                *resolution_activities.AnalyzeSegment
+	getUserFeedbackForChat        *resolution_activities.GetUserFeedbackForChat
 }
 
 func NewActivities(
@@ -115,6 +116,7 @@ func NewActivities(
 		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, openrouterChatClient),
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
 		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, openrouterChatClient, telemetryService),
+		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 	}
 }
 
@@ -238,4 +240,12 @@ func (a *Activities) AnalyzeSegment(ctx context.Context, input resolution_activi
 		return fmt.Errorf("analyze segment: %w", err)
 	}
 	return nil
+}
+
+func (a *Activities) GetUserFeedbackForChat(ctx context.Context, input resolution_activities.GetUserFeedbackForChatArgs) (*resolution_activities.GetUserFeedbackForChatResult, error) {
+	result, err := a.getUserFeedbackForChat.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("get user feedback for chat: %w", err)
+	}
+	return result, nil
 }
