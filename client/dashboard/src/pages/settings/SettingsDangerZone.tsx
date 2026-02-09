@@ -53,7 +53,7 @@ export function SettingsDangerZone() {
         <Type variant="subheading" className="text-destructive mb-1">
           Danger Zone
         </Type>
-        <Type muted small className="mb-4">
+        <Type muted small className="mb-6">
           Permanently delete this project and all its data. This action cannot
           be undone.
         </Type>
