@@ -36,95 +36,13 @@ import {
   LinearScale,
   PointElement,
   LineElement,
-  BarElement,
   Filler,
   Tooltip,
   Legend,
   type TooltipItem,
 } from "chart.js";
-import { Line, Bar } from "react-chartjs-2";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  Tooltip as UITooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { AreaChart, BarChart3, LineChart } from "lucide-react";
-
-type ChartType = "area" | "bar" | "line";
-
-function ChartTypeToggle({
-  value,
-  onChange,
-}: {
-  value: ChartType;
-  onChange: (value: ChartType) => void;
-}) {
-  return (
-    <TooltipProvider delayDuration={0}>
-      <ToggleGroup
-        type="single"
-        value={value}
-        onValueChange={(v) => v && onChange(v as ChartType)}
-        variant="outline"
-        size="sm"
-      >
-        <UITooltip>
-          <TooltipTrigger asChild>
-            <ToggleGroupItem
-              value="area"
-              aria-label="Area chart"
-              className={`px-2 ${value === "area" ? "bg-muted" : ""}`}
-            >
-              <AreaChart
-                className="size-4 text-muted-foreground"
-                strokeWidth={1.75}
-              />
-            </ToggleGroupItem>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={4}>
-            Area
-          </TooltipContent>
-        </UITooltip>
-        <UITooltip>
-          <TooltipTrigger asChild>
-            <ToggleGroupItem
-              value="bar"
-              aria-label="Bar chart"
-              className={`px-2 ${value === "bar" ? "bg-muted" : ""}`}
-            >
-              <BarChart3
-                className="size-4 text-muted-foreground"
-                strokeWidth={1.75}
-              />
-            </ToggleGroupItem>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={4}>
-            Bar
-          </TooltipContent>
-        </UITooltip>
-        <UITooltip>
-          <TooltipTrigger asChild>
-            <ToggleGroupItem
-              value="line"
-              aria-label="Line chart"
-              className={`px-2 ${value === "line" ? "bg-muted" : ""}`}
-            >
-              <LineChart
-                className="size-4 text-muted-foreground"
-                strokeWidth={1.75}
-              />
-            </ToggleGroupItem>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={4}>
-            Line
-          </TooltipContent>
-        </UITooltip>
-      </ToggleGroup>
-    </TooltipProvider>
-  );
-}
+import { Line } from "react-chartjs-2";
+import { ChevronRight } from "lucide-react";
 
 // Register Chart.js components
 ChartJS.register(
@@ -132,7 +50,6 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
-  BarElement,
   Filler,
   Tooltip,
   Legend,
@@ -984,8 +901,6 @@ function ToolCallsChart({
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
 }) {
-  const [chartType, setChartType] = useState<ChartType>("area");
-
   const labels = data.map((d) => {
     const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
     const date = new Date(timestamp);
@@ -997,49 +912,37 @@ function ToolCallsChart({
   );
   const rawErrorsData = data.map((d) => d.failedToolCalls ?? 0);
 
-  const isArea = chartType === "area";
-  const isBar = chartType === "bar";
+  const toolCallsData = smoothData(rawToolCallsData);
+  const errorsData = smoothData(rawErrorsData);
 
-  // Apply smoothing for line/area charts, use raw data for bar charts
-  const toolCallsData = isBar ? rawToolCallsData : smoothData(rawToolCallsData);
-  const errorsData = isBar ? rawErrorsData : smoothData(rawErrorsData);
-
-  const toolCallsDataset = {
-    label: " Tool Calls",
-    data: toolCallsData,
-    borderColor: "#3b82f6",
-    backgroundColor: isBar ? "#3b82f6" : "rgba(59, 130, 246, 0.1)",
-    pointBackgroundColor: "#3b82f6",
-    fill: isArea,
-    tension: 0.45,
-    borderWidth: 1.5,
-    pointRadius: 0,
-    pointHoverRadius: 4,
-    barPercentage: 1.0,
-    categoryPercentage: 1.0,
-  };
-
-  const errorsDataset = {
-    label: " Errors",
-    data: errorsData,
-    borderColor: "#ef4444",
-    backgroundColor: isBar ? "#ef4444" : "rgba(239, 68, 68, 0.1)",
-    pointBackgroundColor: "#ef4444",
-    fill: isArea,
-    tension: 0.45,
-    borderWidth: 1.5,
-    pointRadius: 0,
-    pointHoverRadius: 4,
-    barPercentage: 1.0,
-    categoryPercentage: 1.0,
-  };
-
-  // With grouped:false, first dataset draws on top
   const chartData = {
     labels,
-    datasets: isBar
-      ? [errorsDataset, toolCallsDataset]
-      : [toolCallsDataset, errorsDataset],
+    datasets: [
+      {
+        label: " Tool Calls",
+        data: toolCallsData,
+        borderColor: "#3b82f6",
+        backgroundColor: "rgba(59, 130, 246, 0.1)",
+        pointBackgroundColor: "#3b82f6",
+        fill: true,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      },
+      {
+        label: " Errors",
+        data: errorsData,
+        borderColor: "#ef4444",
+        backgroundColor: "rgba(239, 68, 68, 0.1)",
+        pointBackgroundColor: "#ef4444",
+        fill: true,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      },
+    ],
   };
 
   const options = {
@@ -1050,9 +953,6 @@ function ToolCallsChart({
       mode: "index" as const,
       intersect: false,
     },
-    ...(isBar && {
-      grouped: false,
-    }),
     plugins: {
       legend: {
         position: "top" as const,
@@ -1079,7 +979,7 @@ function ToolCallsChart({
         boxPadding: 4,
         usePointStyle: true,
         callbacks: {
-          label: (context: TooltipItem<"line"> | TooltipItem<"bar">) => {
+          label: (context: TooltipItem<"line">) => {
             const label = context.dataset.label || "";
             const value = context.parsed.y ?? 0;
             return `${label}: ${Math.round(value).toLocaleString()}`;
@@ -1109,7 +1009,13 @@ function ToolCallsChart({
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <ChartTypeToggle value={chartType} onChange={setChartType} />
+        <button
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          onClick={(e) => e.preventDefault()}
+        >
+          View chats
+          <ChevronRight className="size-4" />
+        </button>
       </div>
       <div className="relative">
         {isLoading && (
@@ -1118,11 +1024,7 @@ function ToolCallsChart({
           </div>
         )}
         <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
-          {isBar ? (
-            <Bar data={chartData} options={options} />
-          ) : (
-            <Line data={chartData} options={options} />
-          )}
+          <Line data={chartData} options={options} />
         </ChartWithSelection>
       </div>
     </div>
@@ -1147,8 +1049,6 @@ function ResolvedChatsChart({
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
 }) {
-  const [chartType, setChartType] = useState<ChartType>("area");
-
   const labels = data.map((d) => {
     const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
     const date = new Date(timestamp);
@@ -1162,19 +1062,13 @@ function ResolvedChatsChart({
     return ((d.resolvedChats ?? 0) / total) * 100;
   });
 
-  const isArea = chartType === "area";
-  const isBar = chartType === "bar";
-
-  // Apply smoothing for line/area charts, use raw data for bar charts
-  // Filter out nulls for smoothing, then restore
+  // Apply smoothing, preserving nulls
   const nonNullData = rawResolvedPct.filter((v) => v !== null) as number[];
   const smoothedNonNull = smoothData(nonNullData);
   let smoothIdx = 0;
-  const resolvedPctData = isBar
-    ? rawResolvedPct
-    : rawResolvedPct.map((v) =>
-        v === null ? null : smoothedNonNull[smoothIdx++],
-      );
+  const resolvedPctData = rawResolvedPct.map((v) =>
+    v === null ? null : smoothedNonNull[smoothIdx++],
+  );
 
   const chartData = {
     labels,
@@ -1183,11 +1077,9 @@ function ResolvedChatsChart({
         label: " Resolution Rate",
         data: resolvedPctData,
         borderColor: "#10b981",
-        backgroundColor: isBar ? "#10b981" : "rgba(16, 185, 129, 0.15)",
+        backgroundColor: "rgba(16, 185, 129, 0.15)",
         pointBackgroundColor: "#10b981",
-        fill: isArea,
-        barPercentage: 1.0,
-        categoryPercentage: 1.0,
+        fill: true,
         tension: 0.45,
         borderWidth: 2,
         pointRadius: 0,
@@ -1218,7 +1110,7 @@ function ResolvedChatsChart({
         boxPadding: 4,
         usePointStyle: true,
         callbacks: {
-          label: (context: TooltipItem<"line"> | TooltipItem<"bar">) => {
+          label: (context: TooltipItem<"line">) => {
             const value = context.parsed.y ?? 0;
             return ` Resolution Rate: ${value.toFixed(1)}%`;
           },
@@ -1251,7 +1143,13 @@ function ResolvedChatsChart({
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <ChartTypeToggle value={chartType} onChange={setChartType} />
+        <button
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          onClick={(e) => e.preventDefault()}
+        >
+          View chats
+          <ChevronRight className="size-4" />
+        </button>
       </div>
       <div className="relative">
         {isLoading && (
@@ -1260,25 +1158,12 @@ function ResolvedChatsChart({
           </div>
         )}
         <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
-          {isBar ? (
-            <Bar data={chartData} options={options} />
-          ) : (
-            <Line data={chartData} options={options} />
-          )}
+          <Line data={chartData} options={options} />
         </ChartWithSelection>
       </div>
-      <div className="flex items-center justify-between mt-3">
-        <p className="text-xs text-muted-foreground">
-          Percentage of chats successfully resolved per interval
-        </p>
-        <a
-          href="#"
-          className="text-xs text-primary hover:underline"
-          onClick={(e) => e.preventDefault()}
-        >
-          View individual sessions →
-        </a>
-      </div>
+      <p className="text-xs text-muted-foreground mt-3">
+        Percentage of chats successfully resolved per interval
+      </p>
     </div>
   );
 }
@@ -1302,8 +1187,6 @@ function ResolutionStatusChart({
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
 }) {
-  const [chartType, setChartType] = useState<ChartType>("area");
-
   const labels = data.map((d) => {
     const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
     const date = new Date(timestamp);
@@ -1315,14 +1198,10 @@ function ResolutionStatusChart({
   const rawPartialData = data.map((d) => d.partialChats ?? 0);
   const rawAbandonedData = data.map((d) => d.abandonedChats ?? 0);
 
-  const isArea = chartType === "area";
-  const isBar = chartType === "bar";
-
-  // Apply smoothing for line/area charts, use raw data for bar charts
-  const successData = isBar ? rawSuccessData : smoothData(rawSuccessData);
-  const failedData = isBar ? rawFailedData : smoothData(rawFailedData);
-  const partialData = isBar ? rawPartialData : smoothData(rawPartialData);
-  const abandonedData = isBar ? rawAbandonedData : smoothData(rawAbandonedData);
+  const successData = smoothData(rawSuccessData);
+  const failedData = smoothData(rawFailedData);
+  const partialData = smoothData(rawPartialData);
+  const abandonedData = smoothData(rawAbandonedData);
 
   const chartData = {
     labels,
@@ -1331,57 +1210,49 @@ function ResolutionStatusChart({
         label: " Success",
         data: successData,
         borderColor: "#10b981",
-        backgroundColor: isBar ? "#10b981" : "rgba(16, 185, 129, 0.1)",
+        backgroundColor: "rgba(16, 185, 129, 0.1)",
         pointBackgroundColor: "#10b981",
-        fill: isArea,
+        fill: true,
         tension: 0.45,
         borderWidth: 1.5,
         pointRadius: 0,
         pointHoverRadius: 4,
-        barPercentage: 0.8,
-        categoryPercentage: 0.9,
       },
       {
         label: " Failed",
         data: failedData,
         borderColor: "#ef4444",
-        backgroundColor: isBar ? "#ef4444" : "rgba(239, 68, 68, 0.1)",
+        backgroundColor: "rgba(239, 68, 68, 0.1)",
         pointBackgroundColor: "#ef4444",
-        fill: isArea,
+        fill: true,
         tension: 0.45,
         borderWidth: 1.5,
         pointRadius: 0,
         pointHoverRadius: 4,
-        barPercentage: 0.8,
-        categoryPercentage: 0.9,
       },
       {
         label: " Partial",
         data: partialData,
         borderColor: "#f59e0b",
-        backgroundColor: isBar ? "#f59e0b" : "rgba(245, 158, 11, 0.1)",
+        backgroundColor: "rgba(245, 158, 11, 0.1)",
         pointBackgroundColor: "#f59e0b",
-        fill: isArea,
+        fill: true,
         tension: 0.45,
         borderWidth: 1.5,
         pointRadius: 0,
         pointHoverRadius: 4,
-        barPercentage: 0.8,
-        categoryPercentage: 0.9,
       },
       {
         label: " Abandoned",
         data: abandonedData,
         borderColor: "#6b7280",
-        backgroundColor: isBar ? "#6b7280" : "rgba(107, 114, 128, 0.1)",
+        backgroundColor: "rgba(107, 114, 128, 0.1)",
         pointBackgroundColor: "#6b7280",
-        fill: isArea,
+        fill: true,
         tension: 0.45,
         borderWidth: 1.5,
         pointRadius: 0,
         pointHoverRadius: 4,
-        barPercentage: 0.8,
-        categoryPercentage: 0.9,
       },
     ],
   };
@@ -1419,7 +1290,7 @@ function ResolutionStatusChart({
         boxPadding: 4,
         usePointStyle: true,
         callbacks: {
-          label: (context: TooltipItem<"line"> | TooltipItem<"bar">) => {
+          label: (context: TooltipItem<"line">) => {
             const label = context.dataset.label || "";
             const value = context.parsed.y ?? 0;
             return `${label}: ${Math.round(value).toLocaleString()} chats`;
@@ -1455,7 +1326,13 @@ function ResolutionStatusChart({
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <ChartTypeToggle value={chartType} onChange={setChartType} />
+        <button
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          onClick={(e) => e.preventDefault()}
+        >
+          View chats
+          <ChevronRight className="size-4" />
+        </button>
       </div>
       <div className="relative">
         {isLoading && (
@@ -1464,11 +1341,7 @@ function ResolutionStatusChart({
           </div>
         )}
         <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
-          {isBar ? (
-            <Bar data={chartData} options={options} />
-          ) : (
-            <Line data={chartData} options={options} />
-          )}
+          <Line data={chartData} options={options} />
         </ChartWithSelection>
       </div>
       <p className="text-xs text-muted-foreground mt-3">
@@ -1494,8 +1367,6 @@ function SessionDurationChart({
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
 }) {
-  const [chartType, setChartType] = useState<ChartType>("area");
-
   const labels = data.map((d) => {
     const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
     const date = new Date(timestamp);
@@ -1504,12 +1375,7 @@ function SessionDurationChart({
 
   // Convert ms to seconds for display
   const rawData = data.map((d) => (d.avgSessionDurationMs ?? 0) / 1000);
-
-  const isArea = chartType === "area";
-  const isBar = chartType === "bar";
-
-  // Apply smoothing for line/area charts, use raw data for bar charts
-  const durationData = isBar ? rawData : smoothData(rawData);
+  const durationData = smoothData(rawData);
 
   const chartData = {
     labels,
@@ -1518,11 +1384,9 @@ function SessionDurationChart({
         label: " Avg Duration",
         data: durationData,
         borderColor: "#8b5cf6",
-        backgroundColor: isBar ? "#8b5cf6" : "rgba(139, 92, 246, 0.1)",
+        backgroundColor: "rgba(139, 92, 246, 0.1)",
         pointBackgroundColor: "#8b5cf6",
-        fill: isArea,
-        barPercentage: 1.0,
-        categoryPercentage: 1.0,
+        fill: true,
         tension: 0.45,
         borderWidth: 1.5,
         pointRadius: 0,
@@ -1561,7 +1425,7 @@ function SessionDurationChart({
         boxPadding: 4,
         usePointStyle: true,
         callbacks: {
-          label: (context: TooltipItem<"line"> | TooltipItem<"bar">) => {
+          label: (context: TooltipItem<"line">) => {
             const value = context.parsed.y ?? 0;
             return ` Avg Duration: ${formatDuration(value)}`;
           },
@@ -1596,7 +1460,13 @@ function SessionDurationChart({
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <ChartTypeToggle value={chartType} onChange={setChartType} />
+        <button
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          onClick={(e) => e.preventDefault()}
+        >
+          View chats
+          <ChevronRight className="size-4" />
+        </button>
       </div>
       <div className="relative">
         {isLoading && (
@@ -1605,11 +1475,7 @@ function SessionDurationChart({
           </div>
         )}
         <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
-          {isBar ? (
-            <Bar data={chartData} options={options} />
-          ) : (
-            <Line data={chartData} options={options} />
-          )}
+          <Line data={chartData} options={options} />
         </ChartWithSelection>
       </div>
       <p className="text-xs text-muted-foreground mt-3">
