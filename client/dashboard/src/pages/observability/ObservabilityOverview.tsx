@@ -14,6 +14,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
 import { FilterType } from "@gram/client/models/components/listfilteroptionspayload";
 import { useState, useRef, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router";
 import { Icon, IconName } from "@speakeasy-api/moonshine";
 import {
   Popover,
@@ -279,21 +280,111 @@ function smoothData(data: number[], windowSize?: number): number[] {
   });
 }
 
+// Valid date range presets
+const validPresets: DateRangePreset[] = ["24h", "7d", "30d", "90d"];
+
+function isValidPreset(value: string | null): value is DateRangePreset {
+  return value !== null && validPresets.includes(value as DateRangePreset);
+}
+
 export default function ObservabilityOverview() {
-  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
-  const [customRange, setCustomRange] = useState<{
-    from: Date;
-    to: Date;
-  } | null>(null);
-  const [filterDimension, setFilterDimension] =
-    useState<FilterDimension>("all");
-  const [selectedFilterValue, setSelectedFilterValue] = useState<string | null>(
-    null,
+  const [searchParams, setSearchParams] = useSearchParams();
+  const client = useGramContext();
+
+  // Parse URL params
+  const urlRange = searchParams.get("range");
+  const urlFrom = searchParams.get("from");
+  const urlTo = searchParams.get("to");
+  const urlFilter = searchParams.get("filter");
+  const urlFilterId = searchParams.get("filterId");
+
+  // Derive state from URL
+  const dateRange: DateRangePreset = isValidPreset(urlRange) ? urlRange : "30d";
+
+  const customRange = useMemo(() => {
+    if (urlFrom && urlTo) {
+      const from = new Date(urlFrom);
+      const to = new Date(urlTo);
+      if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+        return { from, to };
+      }
+    }
+    return null;
+  }, [urlFrom, urlTo]);
+
+  const filterDimension: FilterDimension =
+    urlFilter === "api_key" || urlFilter === "user" ? urlFilter : "all";
+
+  const selectedFilterValue = urlFilterId ?? null;
+
+  // Update URL helpers
+  const updateSearchParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [key, value] of Object.entries(updates)) {
+          if (value === null) {
+            next.delete(key);
+          } else {
+            next.set(key, value);
+          }
+        }
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
+  const setDateRangeParam = useCallback(
+    (preset: DateRangePreset) => {
+      updateSearchParams({
+        range: preset,
+        from: null,
+        to: null,
+      });
+    },
+    [updateSearchParams],
+  );
+
+  const setCustomRangeParam = useCallback(
+    (from: Date, to: Date) => {
+      updateSearchParams({
+        range: null,
+        from: from.toISOString(),
+        to: to.toISOString(),
+      });
+    },
+    [updateSearchParams],
+  );
+
+  const clearCustomRange = useCallback(() => {
+    updateSearchParams({
+      from: null,
+      to: null,
+    });
+  }, [updateSearchParams]);
+
+  const setFilterDimensionParam = useCallback(
+    (dimension: FilterDimension) => {
+      updateSearchParams({
+        filter: dimension === "all" ? null : dimension,
+        filterId: null, // Reset filter value when dimension changes
+      });
+    },
+    [updateSearchParams],
+  );
+
+  const setSelectedFilterValueParam = useCallback(
+    (value: string | null) => {
+      updateSearchParams({
+        filterId: value,
+      });
+    },
+    [updateSearchParams],
   );
 
   // Use custom range if set, otherwise use preset
   const { from, to } = customRange ?? getDateRange(dateRange);
-  const client = useGramContext();
 
   // Fetch filter options for the selected dimension (only when not "all")
   const { data: filterOptions } = useQuery({
@@ -351,28 +442,6 @@ export default function ObservabilityOverview() {
     placeholderData: keepPreviousData,
   });
 
-  // Reset selected filter value when dimension changes
-  const handleFilterDimensionChange = useCallback(
-    (dimension: FilterDimension) => {
-      setFilterDimension(dimension);
-      setSelectedFilterValue(null);
-    },
-    [],
-  );
-
-  const handleTimeRangeSelect = useCallback((newFrom: Date, newTo: Date) => {
-    setCustomRange({ from: newFrom, to: newTo });
-  }, []);
-
-  const handleClearCustomRange = useCallback(() => {
-    setCustomRange(null);
-  }, []);
-
-  const handlePresetChange = useCallback((preset: DateRangePreset) => {
-    setDateRange(preset);
-    setCustomRange(null);
-  }, []);
-
   return (
     <Page>
       <Page.Header>
@@ -395,16 +464,16 @@ export default function ObservabilityOverview() {
           <div className="flex items-center gap-3">
             <FilterBar
               dimension={filterDimension}
-              onDimensionChange={handleFilterDimensionChange}
+              onDimensionChange={setFilterDimensionParam}
               selectedValue={selectedFilterValue}
-              onValueChange={setSelectedFilterValue}
+              onValueChange={setSelectedFilterValueParam}
               options={filterOptions?.options ?? []}
             />
             <DateRangeSelect
               value={dateRange}
-              onValueChange={handlePresetChange}
+              onValueChange={setDateRangeParam}
               customRange={customRange}
-              onClearCustomRange={handleClearCustomRange}
+              onClearCustomRange={clearCustomRange}
             />
           </div>
         </div>
@@ -416,7 +485,7 @@ export default function ObservabilityOverview() {
           data={data}
           dateRange={dateRange}
           customRange={customRange}
-          onTimeRangeSelect={handleTimeRangeSelect}
+          onTimeRangeSelect={setCustomRangeParam}
         />
       </Page.Body>
     </Page>
