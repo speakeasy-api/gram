@@ -20,8 +20,5 @@ Chart plugin and generative UI overhaul
 - Fix catalog schema toolName → action mismatch
 - Fix setTimeout cleanup in CyclingLoadingMessage
 
-**Performance**
-- Remove reasoning providerOptions that caused 20-30s delays
-
 **Storybook**
 - Fix theme toggle causing full component remount
