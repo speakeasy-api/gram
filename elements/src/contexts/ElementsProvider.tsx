@@ -369,7 +369,8 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             messages: modelMessages,
             tools,
             stopWhen: stepCountIs(10),
-            experimental_transform: smoothStream({ delayInMs: 15 }),
+            // Removed smoothStream - was causing 15ms delay per chunk, adding up to 20+ seconds
+            // experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
             providerOptions: {
               anthropic: {
