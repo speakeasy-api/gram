@@ -90,7 +90,7 @@ jobs:
 
       - name: Run Chromatic
         if: ${{ needs.changes.outputs.elements == 'true' }}
-        uses: chromaui/action@07791f8243f4cb2698bf4d00426baf4b2d1cb7e0 # v13.3.5
+        uses: chromaui/action@f1f9e3277eb1eaa8cba4c6bcebc9809291ee29ea # v15.0.0
         with:
           workingDir: elements
           storybookBuildDir: storybook-static
