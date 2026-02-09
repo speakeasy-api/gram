@@ -5,12 +5,14 @@ const meta: Meta<typeof GenerativeUI> = {
   title: 'Generative UI/Components',
   component: GenerativeUI,
   parameters: {
-    layout: 'padded',
+    layout: 'fullscreen',
   },
   decorators: [
     (Story) => (
-      <div className="text-foreground max-w-2xl">
-        <Story />
+      <div className="bg-background text-foreground min-h-screen p-6">
+        <div className="max-w-2xl">
+          <Story />
+        </div>
       </div>
     ),
   ],
