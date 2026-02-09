@@ -192,7 +192,7 @@ export const catalog = createCatalog({
     ActionButton: {
       props: z.object({
         label: z.string(),
-        toolName: z.string(),
+        action: z.string(),
         args: z.record(z.string(), z.unknown()).optional(),
         variant: z
           .enum(['default', 'secondary', 'destructive', 'outline', 'ghost'])

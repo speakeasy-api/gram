@@ -76,18 +76,22 @@ const CyclingLoadingMessage: FC = () => {
   const [isVisible, setIsVisible] = useState(true)
 
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
     const interval = setInterval(() => {
       // Fade out
       setIsVisible(false)
 
       // After fade out, change message and fade in
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         setIndex((prev) => (prev + 1) % loadingMessages.length)
         setIsVisible(true)
       }, 200)
     }, 2000)
 
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      if (timeoutId) clearTimeout(timeoutId)
+    }
   }, [])
 
   return (

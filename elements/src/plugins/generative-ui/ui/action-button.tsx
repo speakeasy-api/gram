@@ -19,7 +19,7 @@ export interface ActionButtonProps
 export function ActionButton({
   label,
   action,
-  args = {},
+  args,
   variant = 'default',
   size = 'default',
   className,
@@ -36,7 +36,7 @@ export function ActionButton({
 
     setIsLoading(true)
     try {
-      await executeTool(action, args)
+      await executeTool(action, args ?? {})
     } finally {
       setIsLoading(false)
     }
