@@ -1233,9 +1233,17 @@ jobs:
     needs: [docker-build-server]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
+      - name: Generate GitHub App Token
+        id: generate-token
+        uses: actions/create-github-app-token@b96fde71c0080358ed6e2d162f11c612c92a97d1 # v2.1.4
+        with:
+          app-id: ${{ vars.GRAM_BOT_APP_ID }}
+          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          owner: speakeasy-api
+          repositories: gram-infra
       - name: Dispatch prepare-release
         env:
-          GH_TOKEN: ${{ secrets.GRAM_INFRA_SPEAKEASYBOT_TOKEN }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           gh workflow run "Prepare Release" \
             -R speakeasy-api/gram-infra \
