@@ -192,7 +192,12 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
 				Variation:           nil, // Applied later
 				Canonical:           nil,
-				Annotations:         nil,
+				Annotations: conv.AnnotationsFromColumns(
+					tool.ReadOnlyHint,
+					tool.DestructiveHint,
+					tool.IdempotentHint,
+					tool.OpenWorldHint,
+				),
 			},
 		})
 	}
@@ -228,7 +233,12 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				UpdatedAt:     tool.UpdatedAt.Time.Format(time.RFC3339),
 				Canonical:     nil,
 				Variation:     nil,
-				Annotations:   nil,
+				Annotations: conv.AnnotationsFromColumns(
+					tool.ReadOnlyHint,
+					tool.DestructiveHint,
+					tool.IdempotentHint,
+					tool.OpenWorldHint,
+				),
 			},
 		})
 	}

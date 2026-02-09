@@ -1498,6 +1498,16 @@ type ToolVariationResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The summarizer of the tool variation
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// Display name override for the tool
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Override: if true, the tool does not modify its environment
+	ReadOnlyHint *bool `form:"read_only_hint,omitempty" json:"read_only_hint,omitempty" xml:"read_only_hint,omitempty"`
+	// Override: if true, the tool may perform destructive updates
+	DestructiveHint *bool `form:"destructive_hint,omitempty" json:"destructive_hint,omitempty" xml:"destructive_hint,omitempty"`
+	// Override: if true, repeated calls have no additional effect
+	IdempotentHint *bool `form:"idempotent_hint,omitempty" json:"idempotent_hint,omitempty" xml:"idempotent_hint,omitempty"`
+	// Override: if true, the tool interacts with external entities
+	OpenWorldHint *bool `form:"open_world_hint,omitempty" json:"open_world_hint,omitempty" xml:"open_world_hint,omitempty"`
 	// The creation date of the tool variation
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool variation
@@ -1509,16 +1519,16 @@ type ToolAnnotationsResponseBody struct {
 	// Human-readable display name for the tool
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// If true, the tool does not modify its environment
-	ReadOnlyHint bool `form:"read_only_hint" json:"read_only_hint" xml:"read_only_hint"`
+	ReadOnlyHint *bool `form:"read_only_hint,omitempty" json:"read_only_hint,omitempty" xml:"read_only_hint,omitempty"`
 	// If true, the tool may perform destructive updates (only meaningful when
 	// read_only_hint is false)
-	DestructiveHint bool `form:"destructive_hint" json:"destructive_hint" xml:"destructive_hint"`
+	DestructiveHint *bool `form:"destructive_hint,omitempty" json:"destructive_hint,omitempty" xml:"destructive_hint,omitempty"`
 	// If true, repeated calls with same arguments have no additional effect (only
 	// meaningful when read_only_hint is false)
-	IdempotentHint bool `form:"idempotent_hint" json:"idempotent_hint" xml:"idempotent_hint"`
+	IdempotentHint *bool `form:"idempotent_hint,omitempty" json:"idempotent_hint,omitempty" xml:"idempotent_hint,omitempty"`
 	// If true, the tool interacts with external entities beyond its local
 	// environment
-	OpenWorldHint bool `form:"open_world_hint" json:"open_world_hint" xml:"open_world_hint"`
+	OpenWorldHint *bool `form:"open_world_hint,omitempty" json:"open_world_hint,omitempty" xml:"open_world_hint,omitempty"`
 }
 
 // NewCreateTemplateResponseBody builds the HTTP response body from the result

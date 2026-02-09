@@ -23,25 +23,13 @@ var ResponseFilter = Type("ResponseFilter", func() {
 var ToolAnnotations = Type("ToolAnnotations", func() {
 	Meta("struct:pkg:path", "types")
 
-	Description("MCP tool annotations providing hints about tool behavior")
+	Description("Tool annotations providing behavioral hints about the tool")
 
 	Attribute("title", String, "Human-readable display name for the tool")
-	Attribute("read_only_hint", Boolean, func() {
-		Description("If true, the tool does not modify its environment")
-		Default(false)
-	})
-	Attribute("destructive_hint", Boolean, func() {
-		Description("If true, the tool may perform destructive updates (only meaningful when read_only_hint is false)")
-		Default(true)
-	})
-	Attribute("idempotent_hint", Boolean, func() {
-		Description("If true, repeated calls with same arguments have no additional effect (only meaningful when read_only_hint is false)")
-		Default(false)
-	})
-	Attribute("open_world_hint", Boolean, func() {
-		Description("If true, the tool interacts with external entities beyond its local environment")
-		Default(true)
-	})
+	Attribute("read_only_hint", Boolean, "If true, the tool does not modify its environment")
+	Attribute("destructive_hint", Boolean, "If true, the tool may perform destructive updates (only meaningful when read_only_hint is false)")
+	Attribute("idempotent_hint", Boolean, "If true, repeated calls with same arguments have no additional effect (only meaningful when read_only_hint is false)")
+	Attribute("open_world_hint", Boolean, "If true, the tool interacts with external entities beyond its local environment")
 })
 
 // BaseToolAttributes contains common fields shared by all tool types

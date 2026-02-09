@@ -1,6 +1,6 @@
 # ToolAnnotations
 
-MCP tool annotations providing hints about tool behavior
+Tool annotations providing behavioral hints about the tool
 
 ## Example Usage
 

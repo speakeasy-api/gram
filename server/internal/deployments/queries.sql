@@ -290,7 +290,10 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , input_schema
-  , annotations
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 )
 SELECT
   @clone_deployment_id
@@ -303,7 +306,10 @@ SELECT
   , current.variables
   , current.auth_input
   , current.input_schema
-  , current.annotations
+  , current.read_only_hint
+  , current.destructive_hint
+  , current.idempotent_hint
+  , current.open_world_hint
 FROM function_tool_definitions as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.name <> ALL (@excluded_names::text[])
@@ -446,7 +452,10 @@ INSERT INTO http_tool_definitions (
   , default_server_url
   , request_content_type
   , response_filter
-  , annotations
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 ) VALUES (
     @project_id
   , @deployment_id
@@ -476,7 +485,10 @@ INSERT INTO http_tool_definitions (
   , @default_server_url
   , @request_content_type
   , @response_filter
-  , @annotations
+  , @read_only_hint
+  , @destructive_hint
+  , @idempotent_hint
+  , @open_world_hint
 )
 RETURNING *;
 
@@ -523,7 +535,10 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , meta
-  , annotations
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 ) VALUES (
     @deployment_id
   , @function_id
@@ -536,7 +551,10 @@ INSERT INTO function_tool_definitions (
   , @variables
   , @auth_input
   , @meta
-  , @annotations
+  , @read_only_hint
+  , @destructive_hint
+  , @idempotent_hint
+  , @open_world_hint
 )
 RETURNING *;
 

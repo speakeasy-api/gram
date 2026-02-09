@@ -754,7 +754,10 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		PathSettings:        pathSettings,
 		RequestContentType:  conv.PtrToPGText(requestContentType),
 		ResponseFilter:      responseFilter,
-		Annotations:         inferAnnotationsJSON(method),
+		ReadOnlyHint:    inferReadOnlyHint(method),
+		DestructiveHint: inferDestructiveHint(method),
+		IdempotentHint:  inferIdempotentHint(method),
+		OpenWorldHint:   true,
 	}, deploymentEvents, nil
 }
 
@@ -979,31 +982,29 @@ func mergeDefs(ctx context.Context, logger *slog.Logger, a, b Defs) Defs {
 	return a
 }
 
-// inferAnnotationsJSON returns JSON-encoded tool annotations inferred from an HTTP method.
-func inferAnnotationsJSON(method string) []byte {
-	type annotations struct {
-		ReadOnlyHint    bool `json:"readOnlyHint"`
-		DestructiveHint bool `json:"destructiveHint"`
-		IdempotentHint  bool `json:"idempotentHint"`
-		OpenWorldHint   bool `json:"openWorldHint"`
-	}
-
-	var a annotations
+// inferReadOnlyHint returns true for read-only HTTP methods (GET, HEAD, OPTIONS).
+func inferReadOnlyHint(method string) bool {
 	switch strings.ToUpper(method) {
 	case "GET", "HEAD", "OPTIONS":
-		a = annotations{ReadOnlyHint: true, DestructiveHint: false, IdempotentHint: true, OpenWorldHint: true}
-	case "PUT":
-		a = annotations{ReadOnlyHint: false, DestructiveHint: false, IdempotentHint: true, OpenWorldHint: true}
-	case "DELETE":
-		a = annotations{ReadOnlyHint: false, DestructiveHint: true, IdempotentHint: true, OpenWorldHint: true}
-	case "POST", "PATCH":
-		a = annotations{ReadOnlyHint: false, DestructiveHint: false, IdempotentHint: false, OpenWorldHint: true}
+		return true
 	default:
-		return nil
+		return false
 	}
+}
 
-	b, _ := json.Marshal(a)
-	return b
+// inferDestructiveHint returns true for destructive HTTP methods (DELETE).
+func inferDestructiveHint(method string) bool {
+	return strings.EqualFold(method, "DELETE")
+}
+
+// inferIdempotentHint returns true for idempotent HTTP methods (GET, HEAD, OPTIONS, PUT, DELETE).
+func inferIdempotentHint(method string) bool {
+	switch strings.ToUpper(method) {
+	case "GET", "HEAD", "OPTIONS", "PUT", "DELETE":
+		return true
+	default:
+		return false
+	}
 }
 
 func createEmptyObjectSchema() *oas3.Schema {

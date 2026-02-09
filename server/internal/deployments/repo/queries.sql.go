@@ -273,7 +273,10 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , input_schema
-  , annotations
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 )
 SELECT
   $1
@@ -286,7 +289,10 @@ SELECT
   , current.variables
   , current.auth_input
   , current.input_schema
-  , current.annotations
+  , current.read_only_hint
+  , current.destructive_hint
+  , current.idempotent_hint
+  , current.open_world_hint
 FROM function_tool_definitions as current
 WHERE current.deployment_id = $2
   AND current.name <> ALL ($3::text[])
@@ -505,7 +511,10 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , meta
-  , annotations
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 ) VALUES (
     $1
   , $2
@@ -519,23 +528,29 @@ INSERT INTO function_tool_definitions (
   , $10
   , $11
   , $12
+  , $13
+  , $14
+  , $15
 )
-RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, annotations, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateFunctionsToolParams struct {
-	DeploymentID uuid.UUID
-	FunctionID   uuid.UUID
-	ToolUrn      urn.Tool
-	ProjectID    uuid.UUID
-	Runtime      string
-	Name         string
-	Description  string
-	InputSchema  []byte
-	Variables    []byte
-	AuthInput    []byte
-	Meta         []byte
-	Annotations  []byte
+	DeploymentID    uuid.UUID
+	FunctionID      uuid.UUID
+	ToolUrn         urn.Tool
+	ProjectID       uuid.UUID
+	Runtime         string
+	Name            string
+	Description     string
+	InputSchema     []byte
+	Variables       []byte
+	AuthInput       []byte
+	Meta            []byte
+	ReadOnlyHint    bool
+	DestructiveHint bool
+	IdempotentHint  bool
+	OpenWorldHint   bool
 }
 
 func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsToolParams) (FunctionToolDefinition, error) {
@@ -551,7 +566,10 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		arg.Variables,
 		arg.AuthInput,
 		arg.Meta,
-		arg.Annotations,
+		arg.ReadOnlyHint,
+		arg.DestructiveHint,
+		arg.IdempotentHint,
+		arg.OpenWorldHint,
 	)
 	var i FunctionToolDefinition
 	err := row.Scan(
@@ -567,7 +585,10 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		&i.Variables,
 		&i.AuthInput,
 		&i.Meta,
-		&i.Annotations,
+		&i.ReadOnlyHint,
+		&i.DestructiveHint,
+		&i.IdempotentHint,
+		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -690,7 +711,10 @@ INSERT INTO http_tool_definitions (
   , default_server_url
   , request_content_type
   , response_filter
-  , annotations
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
 ) VALUES (
     $1
   , $2
@@ -721,8 +745,11 @@ INSERT INTO http_tool_definitions (
   , $27
   , $28
   , $29
+  , $30
+  , $31
+  , $32
 )
-RETURNING id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, annotations, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenAPIv3ToolDefinitionParams struct {
@@ -754,7 +781,10 @@ type CreateOpenAPIv3ToolDefinitionParams struct {
 	DefaultServerUrl    pgtype.Text
 	RequestContentType  pgtype.Text
 	ResponseFilter      *models.ResponseFilter
-	Annotations         []byte
+	ReadOnlyHint        bool
+	DestructiveHint     bool
+	IdempotentHint      bool
+	OpenWorldHint       bool
 }
 
 func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateOpenAPIv3ToolDefinitionParams) (HttpToolDefinition, error) {
@@ -787,7 +817,10 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		arg.DefaultServerUrl,
 		arg.RequestContentType,
 		arg.ResponseFilter,
-		arg.Annotations,
+		arg.ReadOnlyHint,
+		arg.DestructiveHint,
+		arg.IdempotentHint,
+		arg.OpenWorldHint,
 	)
 	var i HttpToolDefinition
 	err := row.Scan(
@@ -821,7 +854,10 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		&i.PathSettings,
 		&i.RequestContentType,
 		&i.ResponseFilter,
-		&i.Annotations,
+		&i.ReadOnlyHint,
+		&i.DestructiveHint,
+		&i.IdempotentHint,
+		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

@@ -9,25 +9,25 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * MCP tool annotations providing hints about tool behavior
+ * Tool annotations providing behavioral hints about the tool
  */
 export type ToolAnnotations = {
   /**
    * If true, the tool may perform destructive updates (only meaningful when read_only_hint is false)
    */
-  destructiveHint: boolean;
+  destructiveHint?: boolean | undefined;
   /**
    * If true, repeated calls with same arguments have no additional effect (only meaningful when read_only_hint is false)
    */
-  idempotentHint: boolean;
+  idempotentHint?: boolean | undefined;
   /**
    * If true, the tool interacts with external entities beyond its local environment
    */
-  openWorldHint: boolean;
+  openWorldHint?: boolean | undefined;
   /**
    * If true, the tool does not modify its environment
    */
-  readOnlyHint: boolean;
+  readOnlyHint?: boolean | undefined;
   /**
    * Human-readable display name for the tool
    */
@@ -40,10 +40,10 @@ export const ToolAnnotations$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  destructive_hint: z.boolean().default(true),
-  idempotent_hint: z.boolean().default(false),
-  open_world_hint: z.boolean().default(true),
-  read_only_hint: z.boolean().default(false),
+  destructive_hint: z.boolean().optional(),
+  idempotent_hint: z.boolean().optional(),
+  open_world_hint: z.boolean().optional(),
+  read_only_hint: z.boolean().optional(),
   title: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {

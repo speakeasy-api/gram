@@ -26,6 +26,10 @@ export type ToolVariation = {
    */
   description?: string | undefined;
   /**
+   * Override: if true, the tool may perform destructive updates
+   */
+  destructiveHint?: boolean | undefined;
+  /**
    * The ID of the tool variation group
    */
   groupId: string;
@@ -34,9 +38,21 @@ export type ToolVariation = {
    */
   id: string;
   /**
+   * Override: if true, repeated calls have no additional effect
+   */
+  idempotentHint?: boolean | undefined;
+  /**
    * The name of the tool variation
    */
   name?: string | undefined;
+  /**
+   * Override: if true, the tool interacts with external entities
+   */
+  openWorldHint?: boolean | undefined;
+  /**
+   * Override: if true, the tool does not modify its environment
+   */
+  readOnlyHint?: boolean | undefined;
   /**
    * The name of the source tool
    */
@@ -49,6 +65,10 @@ export type ToolVariation = {
    * The summarizer of the tool variation
    */
   summarizer?: string | undefined;
+  /**
+   * Display name override for the tool
+   */
+  title?: string | undefined;
   /**
    * The last update date of the tool variation
    */
@@ -65,18 +85,27 @@ export const ToolVariation$inboundSchema: z.ZodType<
   confirm_prompt: z.string().optional(),
   created_at: z.string(),
   description: z.string().optional(),
+  destructive_hint: z.boolean().optional(),
   group_id: z.string(),
   id: z.string(),
+  idempotent_hint: z.boolean().optional(),
   name: z.string().optional(),
+  open_world_hint: z.boolean().optional(),
+  read_only_hint: z.boolean().optional(),
   src_tool_name: z.string(),
   src_tool_urn: z.string(),
   summarizer: z.string().optional(),
+  title: z.string().optional(),
   updated_at: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "confirm_prompt": "confirmPrompt",
     "created_at": "createdAt",
+    "destructive_hint": "destructiveHint",
     "group_id": "groupId",
+    "idempotent_hint": "idempotentHint",
+    "open_world_hint": "openWorldHint",
+    "read_only_hint": "readOnlyHint",
     "src_tool_name": "srcToolName",
     "src_tool_urn": "srcToolUrn",
     "updated_at": "updatedAt",

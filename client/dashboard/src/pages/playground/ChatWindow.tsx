@@ -288,6 +288,7 @@ function ChatInner({
 
           return res.prompt;
         },
+        annotations: pt.annotations,
       };
     });
 
@@ -301,6 +302,7 @@ function ChatInner({
           { toolUrn: ft.toolUrn },
           configRef.current.toolsetSlug || "",
         ),
+        annotations: ft.annotations,
       };
     });
 

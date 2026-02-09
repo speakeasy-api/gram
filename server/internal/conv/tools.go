@@ -3,7 +3,6 @@ package conv
 import (
 	"encoding/json"
 	"errors"
-	"strings"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -168,12 +167,16 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 		Summarizer:    baseTool.Summarizer,
 	}
 
+	// Apply annotation overrides from the variation
+	annotationOverrides := applyAnnotationVariation(baseTool.Annotations, variation)
+
 	if tool.HTTPToolDefinition != nil {
 		tool.HTTPToolDefinition.Name = PtrValOrEmpty(variation.Name, tool.HTTPToolDefinition.Name)
 		tool.HTTPToolDefinition.Description = PtrValOrEmpty(variation.Description, tool.HTTPToolDefinition.Description)
 		tool.HTTPToolDefinition.Confirm = Default(variation.Confirm, tool.HTTPToolDefinition.Confirm)
 		tool.HTTPToolDefinition.ConfirmPrompt = Default(variation.ConfirmPrompt, tool.HTTPToolDefinition.ConfirmPrompt)
 		tool.HTTPToolDefinition.Summarizer = Default(variation.Summarizer, tool.HTTPToolDefinition.Summarizer)
+		tool.HTTPToolDefinition.Annotations = annotationOverrides
 
 		tool.HTTPToolDefinition.Canonical = &canonicalAttributes
 		tool.HTTPToolDefinition.Variation = &variation
@@ -189,6 +192,7 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 		tool.PromptTemplate.Confirm = Default(variation.Confirm, tool.PromptTemplate.Confirm)
 		tool.PromptTemplate.ConfirmPrompt = Default(variation.ConfirmPrompt, tool.PromptTemplate.ConfirmPrompt)
 		tool.PromptTemplate.Summarizer = Default(variation.Summarizer, tool.PromptTemplate.Summarizer)
+		tool.PromptTemplate.Annotations = annotationOverrides
 
 		tool.PromptTemplate.Canonical = &canonicalAttributes
 		tool.PromptTemplate.Variation = &variation
@@ -204,6 +208,7 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 		tool.FunctionToolDefinition.Confirm = Default(variation.Confirm, tool.FunctionToolDefinition.Confirm)
 		tool.FunctionToolDefinition.ConfirmPrompt = Default(variation.ConfirmPrompt, tool.FunctionToolDefinition.ConfirmPrompt)
 		tool.FunctionToolDefinition.Summarizer = Default(variation.Summarizer, tool.FunctionToolDefinition.Summarizer)
+		tool.FunctionToolDefinition.Annotations = annotationOverrides
 
 		tool.FunctionToolDefinition.Canonical = &canonicalAttributes
 		tool.FunctionToolDefinition.Variation = &variation
@@ -212,6 +217,53 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 			tool.FunctionToolDefinition.Schema = newSchema
 		}
 	}
+
+	if tool.ExternalMcpToolDefinition != nil {
+		tool.ExternalMcpToolDefinition.Name = PtrValOrEmpty(variation.Name, tool.ExternalMcpToolDefinition.Name)
+		tool.ExternalMcpToolDefinition.Description = PtrValOrEmpty(variation.Description, tool.ExternalMcpToolDefinition.Description)
+		tool.ExternalMcpToolDefinition.Confirm = Default(variation.Confirm, tool.ExternalMcpToolDefinition.Confirm)
+		tool.ExternalMcpToolDefinition.ConfirmPrompt = Default(variation.ConfirmPrompt, tool.ExternalMcpToolDefinition.ConfirmPrompt)
+		tool.ExternalMcpToolDefinition.Summarizer = Default(variation.Summarizer, tool.ExternalMcpToolDefinition.Summarizer)
+		tool.ExternalMcpToolDefinition.Annotations = annotationOverrides
+
+		tool.ExternalMcpToolDefinition.Canonical = &canonicalAttributes
+		tool.ExternalMcpToolDefinition.Variation = &variation
+	}
+}
+
+// applyAnnotationVariation merges variation overrides into the base tool's annotations.
+// Variation fields that are nil are inherited from the base; non-nil values override.
+func applyAnnotationVariation(base *types.ToolAnnotations, variation types.ToolVariation) *types.ToolAnnotations {
+	// Start with existing annotations or an empty struct
+	result := &types.ToolAnnotations{}
+	if base != nil {
+		result = &types.ToolAnnotations{
+			Title:           base.Title,
+			ReadOnlyHint:    base.ReadOnlyHint,
+			DestructiveHint: base.DestructiveHint,
+			IdempotentHint:  base.IdempotentHint,
+			OpenWorldHint:   base.OpenWorldHint,
+		}
+	}
+
+	// Apply variation overrides (nil = inherit from base)
+	if variation.Title != nil {
+		result.Title = variation.Title
+	}
+	if variation.ReadOnlyHint != nil {
+		result.ReadOnlyHint = variation.ReadOnlyHint
+	}
+	if variation.DestructiveHint != nil {
+		result.DestructiveHint = variation.DestructiveHint
+	}
+	if variation.IdempotentHint != nil {
+		result.IdempotentHint = variation.IdempotentHint
+	}
+	if variation.OpenWorldHint != nil {
+		result.OpenWorldHint = variation.OpenWorldHint
+	}
+
+	return result
 }
 
 func variedToolSchema(baseSchema string, summarizer *string) (string, error) {
@@ -255,13 +307,23 @@ func variedToolSchema(baseSchema string, summarizer *string) (string, error) {
 	return schema, nil
 }
 
-// ToolAnnotations contains MCP tool behavior hints.
+// ToolAnnotations contains tool behavior hints.
 type ToolAnnotations struct {
 	Title           string `json:"title,omitempty"`
 	ReadOnlyHint    *bool  `json:"readOnlyHint,omitempty"`
 	DestructiveHint *bool  `json:"destructiveHint,omitempty"`
 	IdempotentHint  *bool  `json:"idempotentHint,omitempty"`
 	OpenWorldHint   *bool  `json:"openWorldHint,omitempty"`
+}
+
+// AnnotationsFromColumns builds a *types.ToolAnnotations from individual DB boolean columns.
+func AnnotationsFromColumns(readOnly, destructive, idempotent, openWorld bool) *types.ToolAnnotations {
+	return &types.ToolAnnotations{
+		ReadOnlyHint:    &readOnly,
+		DestructiveHint: &destructive,
+		IdempotentHint:  &idempotent,
+		OpenWorldHint:   &openWorld,
+	}
 }
 
 // ToToolListEntry converts a Tool to basic list entry fields.
@@ -309,26 +371,21 @@ func ToToolListEntry(tool *types.Tool) (ToolListEntry, error) {
 	}, nil
 }
 
-// getToolAnnotations extracts or infers annotations for a tool.
-// For HTTP tools without explicit annotations, infers from HTTP method.
+// getToolAnnotations extracts annotations from a tool's stored data.
+// Annotations come from typed DB columns on the tool definition, with optional
+// variation overrides applied via tool_variations (title lives on variations only).
 func getToolAnnotations(tool *types.Tool) *ToolAnnotations {
-	// Check for stored annotations first
-	if tool.HTTPToolDefinition != nil && tool.HTTPToolDefinition.Annotations != nil {
-		return convertStoredAnnotations(tool.HTTPToolDefinition.Annotations)
+	baseTool, err := ToBaseTool(tool)
+	if err != nil {
+		return nil
 	}
-	if tool.FunctionToolDefinition != nil && tool.FunctionToolDefinition.Annotations != nil {
-		return convertStoredAnnotations(tool.FunctionToolDefinition.Annotations)
+	if baseTool.Annotations == nil {
+		return nil
 	}
-
-	// For HTTP tools without explicit annotations, infer from HTTP method
-	if tool.HTTPToolDefinition != nil && tool.HTTPToolDefinition.HTTPMethod != "" {
-		return inferAnnotationsFromHTTPMethod(tool.HTTPToolDefinition.HTTPMethod)
-	}
-
-	return nil
+	return convertStoredAnnotations(baseTool.Annotations)
 }
 
-// convertStoredAnnotations converts stored types.ToolAnnotations to conv.ToolAnnotations.
+// convertStoredAnnotations converts Goa types.ToolAnnotations to conv.ToolAnnotations.
 func convertStoredAnnotations(stored *types.ToolAnnotations) *ToolAnnotations {
 	if stored == nil {
 		return nil
@@ -339,57 +396,10 @@ func convertStoredAnnotations(stored *types.ToolAnnotations) *ToolAnnotations {
 	}
 	return &ToolAnnotations{
 		Title:           title,
-		ReadOnlyHint:    &stored.ReadOnlyHint,
-		DestructiveHint: &stored.DestructiveHint,
-		IdempotentHint:  &stored.IdempotentHint,
-		OpenWorldHint:   &stored.OpenWorldHint,
-	}
-}
-
-// inferAnnotationsFromHTTPMethod returns inferred annotations based on HTTP method semantics.
-func inferAnnotationsFromHTTPMethod(method string) *ToolAnnotations {
-	t := true
-	f := false
-
-	switch strings.ToUpper(method) {
-	case "GET", "HEAD", "OPTIONS":
-		// Read-only methods
-		return &ToolAnnotations{
-			Title:           "",
-			ReadOnlyHint:    &t,
-			DestructiveHint: &f,
-			IdempotentHint:  &t,
-			OpenWorldHint:   nil,
-		}
-	case "PUT":
-		// Idempotent write
-		return &ToolAnnotations{
-			Title:           "",
-			ReadOnlyHint:    &f,
-			DestructiveHint: &f,
-			IdempotentHint:  &t,
-			OpenWorldHint:   nil,
-		}
-	case "DELETE":
-		// Destructive and idempotent
-		return &ToolAnnotations{
-			Title:           "",
-			ReadOnlyHint:    &f,
-			DestructiveHint: &t,
-			IdempotentHint:  &t,
-			OpenWorldHint:   nil,
-		}
-	case "POST", "PATCH":
-		// Non-idempotent writes
-		return &ToolAnnotations{
-			Title:           "",
-			ReadOnlyHint:    &f,
-			DestructiveHint: &f,
-			IdempotentHint:  &f,
-			OpenWorldHint:   nil,
-		}
-	default:
-		return nil
+		ReadOnlyHint:    stored.ReadOnlyHint,
+		DestructiveHint: stored.DestructiveHint,
+		IdempotentHint:  stored.IdempotentHint,
+		OpenWorldHint:   stored.OpenWorldHint,
 	}
 }
 

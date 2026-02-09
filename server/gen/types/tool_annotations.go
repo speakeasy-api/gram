@@ -7,19 +7,19 @@
 
 package types
 
-// MCP tool annotations providing hints about tool behavior
+// Tool annotations providing behavioral hints about the tool
 type ToolAnnotations struct {
 	// Human-readable display name for the tool
 	Title *string
 	// If true, the tool does not modify its environment
-	ReadOnlyHint bool
+	ReadOnlyHint *bool
 	// If true, the tool may perform destructive updates (only meaningful when
 	// read_only_hint is false)
-	DestructiveHint bool
+	DestructiveHint *bool
 	// If true, repeated calls with same arguments have no additional effect (only
 	// meaningful when read_only_hint is false)
-	IdempotentHint bool
+	IdempotentHint *bool
 	// If true, the tool interacts with external entities beyond its local
 	// environment
-	OpenWorldHint bool
+	OpenWorldHint *bool
 }

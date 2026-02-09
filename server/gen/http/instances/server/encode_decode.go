@@ -392,17 +392,22 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 		return nil
 	}
 	res := &ToolVariationResponseBody{
-		ID:            v.ID,
-		GroupID:       v.GroupID,
-		SrcToolUrn:    v.SrcToolUrn,
-		SrcToolName:   v.SrcToolName,
-		Confirm:       v.Confirm,
-		ConfirmPrompt: v.ConfirmPrompt,
-		Name:          v.Name,
-		Description:   v.Description,
-		Summarizer:    v.Summarizer,
-		CreatedAt:     v.CreatedAt,
-		UpdatedAt:     v.UpdatedAt,
+		ID:              v.ID,
+		GroupID:         v.GroupID,
+		SrcToolUrn:      v.SrcToolUrn,
+		SrcToolName:     v.SrcToolName,
+		Confirm:         v.Confirm,
+		ConfirmPrompt:   v.ConfirmPrompt,
+		Name:            v.Name,
+		Description:     v.Description,
+		Summarizer:      v.Summarizer,
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
+		CreatedAt:       v.CreatedAt,
+		UpdatedAt:       v.UpdatedAt,
 	}
 
 	return res
@@ -421,30 +426,6 @@ func marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v *types.ToolAnnot
 		DestructiveHint: v.DestructiveHint,
 		IdempotentHint:  v.IdempotentHint,
 		OpenWorldHint:   v.OpenWorldHint,
-	}
-	{
-		var zero bool
-		if res.ReadOnlyHint == zero {
-			res.ReadOnlyHint = false
-		}
-	}
-	{
-		var zero bool
-		if res.DestructiveHint == zero {
-			res.DestructiveHint = true
-		}
-	}
-	{
-		var zero bool
-		if res.IdempotentHint == zero {
-			res.IdempotentHint = false
-		}
-	}
-	{
-		var zero bool
-		if res.OpenWorldHint == zero {
-			res.OpenWorldHint = true
-		}
 	}
 
 	return res

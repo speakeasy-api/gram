@@ -22,7 +22,7 @@ import { ToolVariation, ToolVariation$inboundSchema } from "./toolvariation.js";
  */
 export type FunctionToolDefinition = {
   /**
-   * MCP tool annotations providing hints about tool behavior
+   * Tool annotations providing behavioral hints about the tool
    */
   annotations?: ToolAnnotations | undefined;
   /**

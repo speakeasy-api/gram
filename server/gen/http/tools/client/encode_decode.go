@@ -387,17 +387,22 @@ func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResp
 		return nil
 	}
 	res := &types.ToolVariation{
-		ID:            *v.ID,
-		GroupID:       *v.GroupID,
-		SrcToolUrn:    *v.SrcToolUrn,
-		SrcToolName:   *v.SrcToolName,
-		Confirm:       v.Confirm,
-		ConfirmPrompt: v.ConfirmPrompt,
-		Name:          v.Name,
-		Description:   v.Description,
-		Summarizer:    v.Summarizer,
-		CreatedAt:     *v.CreatedAt,
-		UpdatedAt:     *v.UpdatedAt,
+		ID:              *v.ID,
+		GroupID:         *v.GroupID,
+		SrcToolUrn:      *v.SrcToolUrn,
+		SrcToolName:     *v.SrcToolName,
+		Confirm:         v.Confirm,
+		ConfirmPrompt:   v.ConfirmPrompt,
+		Name:            v.Name,
+		Description:     v.Description,
+		Summarizer:      v.Summarizer,
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
+		CreatedAt:       *v.CreatedAt,
+		UpdatedAt:       *v.UpdatedAt,
 	}
 
 	return res
@@ -411,31 +416,11 @@ func unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v *ToolAnnotatio
 		return nil
 	}
 	res := &types.ToolAnnotations{
-		Title: v.Title,
-	}
-	if v.ReadOnlyHint != nil {
-		res.ReadOnlyHint = *v.ReadOnlyHint
-	}
-	if v.DestructiveHint != nil {
-		res.DestructiveHint = *v.DestructiveHint
-	}
-	if v.IdempotentHint != nil {
-		res.IdempotentHint = *v.IdempotentHint
-	}
-	if v.OpenWorldHint != nil {
-		res.OpenWorldHint = *v.OpenWorldHint
-	}
-	if v.ReadOnlyHint == nil {
-		res.ReadOnlyHint = false
-	}
-	if v.DestructiveHint == nil {
-		res.DestructiveHint = true
-	}
-	if v.IdempotentHint == nil {
-		res.IdempotentHint = false
-	}
-	if v.OpenWorldHint == nil {
-		res.OpenWorldHint = true
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
 	}
 
 	return res

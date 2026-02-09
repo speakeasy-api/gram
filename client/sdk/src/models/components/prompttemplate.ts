@@ -46,7 +46,7 @@ export type PromptTemplateKind = ClosedEnum<typeof PromptTemplateKind>;
  */
 export type PromptTemplate = {
   /**
-   * MCP tool annotations providing hints about tool behavior
+   * Tool annotations providing behavioral hints about the tool
    */
   annotations?: ToolAnnotations | undefined;
   /**
