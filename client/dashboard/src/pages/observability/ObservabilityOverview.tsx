@@ -1007,16 +1007,7 @@ function ToolCallsChart({
 
   return (
     <div className="rounded-lg border border-border bg-card p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <button
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          onClick={(e) => e.preventDefault()}
-        >
-          View chats
-          <ChevronRight className="size-4" />
-        </button>
-      </div>
+      <h3 className="text-sm font-semibold mb-4">{title}</h3>
       <div className="relative">
         {isLoading && (
           <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded">
@@ -1147,7 +1138,7 @@ function ResolvedChatsChart({
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           onClick={(e) => e.preventDefault()}
         >
-          View chats
+          Explore
           <ChevronRight className="size-4" />
         </button>
       </div>
@@ -1330,7 +1321,7 @@ function ResolutionStatusChart({
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           onClick={(e) => e.preventDefault()}
         >
-          View chats
+          Explore
           <ChevronRight className="size-4" />
         </button>
       </div>
@@ -1464,7 +1455,7 @@ function SessionDurationChart({
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           onClick={(e) => e.preventDefault()}
         >
-          View chats
+          Explore
           <ChevronRight className="size-4" />
         </button>
       </div>
