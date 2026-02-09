@@ -10,12 +10,14 @@ const meta: Meta<typeof ToolUI> = {
   title: 'Components/Tool UI',
   component: ToolUI,
   parameters: {
-    layout: 'centered',
+    layout: 'fullscreen',
   },
   decorators: [
     (Story) => (
-      <div className="w-[400px] p-4">
-        <Story />
+      <div className="bg-background text-foreground flex min-h-screen items-start justify-center p-6">
+        <div className="w-[400px]">
+          <Story />
+        </div>
       </div>
     ),
   ],
