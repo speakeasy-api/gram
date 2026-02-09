@@ -39,9 +39,9 @@ const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
     subtitle: 'How can I help you today?',
     suggestions: [
       {
-        title: 'Discover available tools',
-        label: 'Find out what tools are available',
-        prompt: 'Call all tools available',
+        title: 'Browse Products',
+        label: 'See what\'s available',
+        prompt: 'What products do you have?',
       },
     ],
   },

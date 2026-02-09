@@ -1,3 +1,4 @@
+import { useReplayContext } from '@/contexts/ReplayContext'
 import { hasExplicitSessionAuth, isStaticSessionAuth } from '@/lib/auth'
 import { useMemo } from 'react'
 import { ApiConfig } from '../types'
@@ -40,14 +41,21 @@ export const useAuth = ({
   auth?: ApiConfig
   projectSlug: string
 }): Auth => {
+  const replayCtx = useReplayContext()
+  const isReplay = replayCtx?.isReplay ?? false
+
   const getSession = useMemo(() => {
+    // In replay mode, skip session fetching entirely
+    if (isReplay) {
+      return null
+    }
     if (isStaticSessionAuth(auth)) {
       return () => Promise.resolve(auth.sessionToken)
     }
     return !isStaticSessionAuth(auth) && hasExplicitSessionAuth(auth)
       ? auth.sessionFn
       : defaultGetSession
-  }, [auth])
+  }, [auth, isReplay])
 
   // The session request is only neccessary if we are not using static session auth
   // configuration. If a custom session fetcher is provided, we use it,
@@ -56,6 +64,14 @@ export const useAuth = ({
     getSession,
     projectSlug,
   })
+
+  // In replay mode, return immediately without waiting for session
+  if (isReplay) {
+    return {
+      headers: {},
+      isLoading: false,
+    }
+  }
 
   return !session
     ? {
