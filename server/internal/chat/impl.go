@@ -66,7 +66,7 @@ type ChatTitleGenerator interface {
 
 // ChatResolutionAnalyzer schedules async chat resolution analysis.
 type ChatResolutionAnalyzer interface {
-	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID string) error
+	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
 }
 
 type Service struct {
@@ -508,6 +508,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			externalUserID:   authCtx.ExternalUserID,
 			startTime:        time.Now(),
 			httpMetadata:     metadata,
+			apiKeyID:         authCtx.APIKeyID,
 		}
 	}
 
@@ -723,6 +724,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 			chatID,
 			*authCtx.ProjectID,
 			authCtx.ActiveOrganizationID,
+			authCtx.APIKeyID,
 		); err != nil {
 			s.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
 			// Don't fail the request if analysis scheduling fails
@@ -850,6 +852,7 @@ type responseCaptor struct {
 	externalUserID   string
 	startTime        time.Time // Track request start time for duration calculation
 	httpMetadata     httpMetadata
+	apiKeyID         string
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -963,6 +966,7 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 				r.chatID,
 				r.projectID,
 				r.orgID,
+				r.apiKeyID,
 			); err != nil {
 				r.logger.WarnContext(r.ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
 			}
@@ -1077,6 +1081,7 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 		attr.GenAIUsageTotalTokensKey:  r.usage.TotalTokens,
 		attr.GenAIConversationIDKey:    r.chatID.String(),
 		attr.GenAIConversationDuration: duration,
+		attr.APIKeyIDKey:               r.apiKeyID,
 	}
 
 	if r.messageID != "" {
