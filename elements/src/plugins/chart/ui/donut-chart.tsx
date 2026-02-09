@@ -147,7 +147,7 @@ export const DonutChart: FC<DonutChartProps> = ({
           </RechartsPieChart>
         </ResponsiveContainer>
         {/* Center label - positioned at 45% from top to match pie cy */}
-        {(innerLabel || innerValue) && (
+        {(innerLabel !== undefined || innerValue !== undefined) && (
           <div className="pointer-events-none absolute inset-x-0 top-[45%] flex -translate-y-1/2 flex-col items-center">
             {innerValue !== undefined && (
               <span className="text-foreground text-2xl font-bold">

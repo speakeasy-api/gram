@@ -31,27 +31,38 @@ export function ActionButton({
 
   const toolAvailable = isToolAvailable(action)
 
+  const [error, setError] = React.useState<string | null>(null)
+
   const handleClick = React.useCallback(async () => {
     if (!toolAvailable || isLoading) return
 
     setIsLoading(true)
+    setError(null)
     try {
-      await executeTool(action, args ?? {})
+      const result = await executeTool(action, args ?? {})
+      if (!result.success && result.error) {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setIsLoading(false)
     }
   }, [action, args, executeTool, isLoading, toolAvailable])
 
   return (
-    <Button
-      variant={variant}
-      size={size}
-      className={cn(className)}
-      onClick={handleClick}
-      disabled={disabled || isLoading || !toolAvailable}
-      {...props}
-    >
-      {isLoading ? 'Loading...' : label}
-    </Button>
+    <div className="inline-flex flex-col gap-1">
+      <Button
+        variant={error ? 'destructive' : variant}
+        size={size}
+        className={cn(className)}
+        onClick={handleClick}
+        disabled={disabled || isLoading || !toolAvailable}
+        {...props}
+      >
+        {isLoading ? 'Loading...' : label}
+      </Button>
+      {error && <span className="text-destructive text-xs">{error}</span>}
+    </div>
   )
 }

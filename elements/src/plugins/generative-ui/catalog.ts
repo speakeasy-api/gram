@@ -48,7 +48,7 @@ export const catalog = createCatalog({
     Text: {
       props: z.object({
         content: z.string(),
-        variant: z.enum(['default', 'muted', 'small', 'large']).optional(),
+        variant: z.enum(['heading', 'body', 'caption', 'code']).optional(),
         className: z.string().optional(),
       }),
       description: 'Text content with styling variants',
@@ -68,9 +68,16 @@ export const catalog = createCatalog({
 
     Badge: {
       props: z.object({
-        text: z.string().optional(),
+        content: z.string().optional(),
         variant: z
-          .enum(['default', 'secondary', 'destructive', 'outline'])
+          .enum([
+            'default',
+            'secondary',
+            'destructive',
+            'outline',
+            'success',
+            'warning',
+          ])
           .optional(),
         className: z.string().optional(),
       }),
