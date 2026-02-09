@@ -6,6 +6,7 @@ import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { chatList } from "../funcs/chatList.js";
 import { chatLoad } from "../funcs/chatLoad.js";
+import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -81,6 +82,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Chat> {
     return unwrapAsync(chatLoad(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * submitFeedback chat
+   *
+   * @remarks
+   * Submit user feedback for a chat (success/failure)
+   */
+  async submitFeedback(
+    request: operations.SubmitFeedbackRequest,
+    security?: operations.SubmitFeedbackSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.CaptureEventResult> {
+    return unwrapAsync(chatSubmitFeedback(
       this,
       request,
       security,

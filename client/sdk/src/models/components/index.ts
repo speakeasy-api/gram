@@ -160,6 +160,7 @@ export * from "./setprojectlogoresult.js";
 export * from "./setsourceenvironmentlinkrequestbody.js";
 export * from "./settoolsetenvironmentlinkrequestbody.js";
 export * from "./sourceenvironmentlink.js";
+export * from "./submitfeedbackrequestbody.js";
 export * from "./telemetrylogrecord.js";
 export * from "./tierlimits.js";
 export * from "./tool.js";

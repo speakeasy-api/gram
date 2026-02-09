@@ -63,3 +63,14 @@ type ChatResolution struct {
 	Score           int32
 	CreatedAt       pgtype.Timestamptz
 }
+
+type ChatUserFeedback struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	ChatID              uuid.UUID
+	MessageID           uuid.UUID
+	UserResolution      string
+	UserResolutionNotes pgtype.Text
+	ChatResolutionID    uuid.NullUUID
+	CreatedAt           pgtype.Timestamptz
+}

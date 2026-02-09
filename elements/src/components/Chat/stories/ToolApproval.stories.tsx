@@ -24,13 +24,13 @@ SingleTool.parameters = {
         suggestions: [
           {
             title: 'Call a tool requiring approval',
-            label: 'Get a salutation',
-            prompt: 'Get a salutation',
+            label: 'Add to cart',
+            prompt: 'List products and add the first one to my cart',
           },
         ],
       },
       tools: {
-        toolsRequiringApproval: ['kitchen_sink_get_salutation'],
+        toolsRequiringApproval: ['ecommerce_api_add_to_cart'],
       },
     },
   },
@@ -45,14 +45,14 @@ SingleToolWithFunction.parameters = {
       variant: 'standalone',
       tools: {
         toolsRequiringApproval: ({ toolName }: { toolName: string }) =>
-          toolName.endsWith('salutation'),
+          toolName.includes('order') || toolName.includes('cart'),
       },
       welcome: {
         suggestions: [
           {
             title: 'Call a tool requiring approval',
-            label: 'Get a salutation',
-            prompt: 'Get a salutation',
+            label: 'Create an order',
+            prompt: 'List products and create an order for the first one',
           },
         ],
       },
@@ -70,16 +70,16 @@ MultipleGroupedTools.parameters = {
         suggestions: [
           {
             title: 'Call both tools requiring approval',
-            label: 'Call both tools requiring approval',
+            label: 'Add to cart and create order',
             prompt:
-              'Call both kitchen_sink_get_salutation and kitchen_sink_get_get_card_details',
+              'List products, add the first one to my cart, and then create an order',
           },
         ],
       },
       tools: {
         toolsRequiringApproval: [
-          'kitchen_sink_get_salutation',
-          'kitchen_sink_get_get_card_details',
+          'ecommerce_api_add_to_cart',
+          'ecommerce_api_create_order',
         ],
       },
     },

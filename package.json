@@ -17,6 +17,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.28.2",
   "devDependencies": {
+    "react-is": "19.2.3",
     "@changesets/cli": "^2.29.7",
     "@clack/prompts": "1.0.0-alpha.6",
     "@gram/client": "workspace:*",
@@ -29,7 +30,10 @@
     "zx": "^8.8.5"
   },
   "pnpm": {
-    "overrides": {},
+    "overrides": {
+      "react-is": "$react-is",
+      "recharts": "2.15.4"
+    },
     "patchedDependencies": {
       "zod@3.25.76": "patches/zod@3.25.76.patch"
     }

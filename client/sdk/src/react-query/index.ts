@@ -14,6 +14,7 @@ export * from "./agentsGet.js";
 export * from "./chatGenerateTitle.js";
 export * from "./chatSessionsCreate.js";
 export * from "./chatSessionsRevoke.js";
+export * from "./chatSubmitFeedback.js";
 export * from "./checkMCPSlugAvailability.js";
 export * from "./cloneToolset.js";
 export * from "./createAPIKey.js";
