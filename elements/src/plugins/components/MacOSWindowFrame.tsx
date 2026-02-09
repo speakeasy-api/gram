@@ -23,7 +23,7 @@ export const MacOSWindowFrame: FC<MacOSWindowFrameProps> = ({
   const r = useRadius()
 
   return (
-    <div className="@container w-full">
+    <div className="@container my-4 w-full first:mt-0">
       <div
         className={cn(
           // after:hidden prevents assistant-ui from showing its default code block loading indicator
