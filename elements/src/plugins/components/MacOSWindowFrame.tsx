@@ -33,7 +33,7 @@ export const MacOSWindowFrame: FC<MacOSWindowFrameProps> = ({
         )}
       >
         {/* Title bar */}
-        <div className="bg-muted/50 flex h-8 items-center gap-2 px-3">
+        <div className="border-border bg-muted/50 flex h-8 items-center gap-2 border-b px-3">
           {/* Traffic lights */}
           <div className="flex items-center gap-1.5">
             <div className="size-3 rounded-full bg-[#FF5F57]" />
