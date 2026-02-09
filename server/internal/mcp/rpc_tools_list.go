@@ -32,18 +32,10 @@ type toolListEntry struct {
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
 	InputSchema json.RawMessage   `json:"inputSchema,omitempty,omitzero"`
-	Annotations *toolAnnotations  `json:"annotations,omitempty"`
+	Annotations *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
 	Meta        map[string]any    `json:"_meta,omitempty"`
 }
 
-// toolAnnotations contains MCP tool behavior hints per the MCP specification.
-type toolAnnotations struct {
-	Title           string `json:"title,omitempty"`
-	ReadOnlyHint    *bool  `json:"readOnlyHint,omitempty"`
-	DestructiveHint *bool  `json:"destructiveHint,omitempty"`
-	IdempotentHint  *bool  `json:"idempotentHint,omitempty"`
-	OpenWorldHint   *bool  `json:"openWorldHint,omitempty"`
-}
 
 func handleToolsList(
 	ctx context.Context,
@@ -168,7 +160,7 @@ func buildToolListEntries(
 				Name:        extTool.Name,
 				Description: extTool.Description,
 				InputSchema: extTool.Schema,
-				Annotations: convertExternalAnnotations(extTool.Annotations),
+				Annotations: extTool.Annotations,
 				Meta:        nil,
 			})
 		}
@@ -207,26 +199,12 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 	}
 }
 
-// convertExternalAnnotations converts external MCP annotations to toolAnnotations.
-func convertExternalAnnotations(ext *externalmcp.ToolAnnotations) *toolAnnotations {
-	if ext == nil {
-		return nil
-	}
-	return &toolAnnotations{
-		Title:           ext.Title,
-		ReadOnlyHint:    ext.ReadOnlyHint,
-		DestructiveHint: ext.DestructiveHint,
-		IdempotentHint:  ext.IdempotentHint,
-		OpenWorldHint:   ext.OpenWorldHint,
-	}
-}
-
-// convertConvAnnotations converts conv.ToolAnnotations to toolAnnotations.
-func convertConvAnnotations(c *conv.ToolAnnotations) *toolAnnotations {
+// convertConvAnnotations converts conv.ToolAnnotations to externalmcp.ToolAnnotations.
+func convertConvAnnotations(c *conv.ToolAnnotations) *externalmcp.ToolAnnotations {
 	if c == nil {
 		return nil
 	}
-	return &toolAnnotations{
+	return &externalmcp.ToolAnnotations{
 		Title:           c.Title,
 		ReadOnlyHint:    c.ReadOnlyHint,
 		DestructiveHint: c.DestructiveHint,

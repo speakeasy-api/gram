@@ -563,7 +563,7 @@ func TestE2E_ExternalMCP_Proxy_Annotations(t *testing.T) {
 			Annotations: &mcp.ToolAnnotations{
 				ReadOnlyHint:    false,
 				DestructiveHint: boolPtr(true),
-				IdempotentHint:  false,
+				IdempotentHint:  true,
 				OpenWorldHint:   boolPtr(true),
 			},
 			Response: mockToolResponse{
@@ -644,5 +644,6 @@ func TestE2E_ExternalMCP_Proxy_Annotations(t *testing.T) {
 	require.True(t, ok, "expected annotations on delete_record tool, got: %v", deleteTool)
 
 	require.Equal(t, true, deleteAnnotations["destructiveHint"], "destructiveHint should be true")
+	require.Equal(t, true, deleteAnnotations["idempotentHint"], "deleting same record twice has no additional effect")
 	require.Equal(t, true, deleteAnnotations["openWorldHint"], "openWorldHint should be true")
 }

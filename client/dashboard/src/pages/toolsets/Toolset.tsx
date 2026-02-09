@@ -402,6 +402,7 @@ export function ToolsetView({
     updates: {
       name?: string;
       description?: string;
+      title?: string;
       readOnlyHint?: boolean;
       destructiveHint?: boolean;
       idempotentHint?: boolean;
