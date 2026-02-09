@@ -4,6 +4,36 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@ai-sdk/openai':
+      specifier: ^2.0.0
+      version: 2.0.74
+    '@ai-sdk/react':
+      specifier: ^2.0.118
+      version: 2.0.118
+    '@ai-sdk/ui-utils':
+      specifier: ^1.2.0
+      version: 1.2.11
+    '@modelcontextprotocol/sdk':
+      specifier: ^1.20.1
+      version: 1.25.1
+    '@tanstack/react-query':
+      specifier: 5.90.10
+      version: 5.90.10
+    '@types/react':
+      specifier: ^19.2.7
+      version: 19.2.7
+    '@types/react-dom':
+      specifier: ^19.2.3
+      version: 19.2.3
+    ai:
+      specifier: 5.0.66
+      version: 5.0.66
+    typescript:
+      specifier: 5.9.3
+      version: 5.9.3
+
 overrides:
   react-is: 19.2.3
   recharts: 2.15.4
