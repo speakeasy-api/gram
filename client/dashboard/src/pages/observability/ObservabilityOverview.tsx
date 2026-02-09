@@ -16,12 +16,19 @@ import { FilterType } from "@gram/client/models/components/listfilteroptionspayl
 import { useState, useRef, useCallback, useMemo } from "react";
 import { Icon, IconName } from "@speakeasy-api/moonshine";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Check, ChevronDown } from "lucide-react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -145,6 +152,13 @@ function FilterBar({
   onValueChange: (value: string | null) => void;
   options: Array<{ id: string; label: string; count: number }>;
 }) {
+  const [open, setOpen] = useState(false);
+
+  const selectedOption = options.find((o) => o.id === selectedValue);
+  const displayLabel = selectedOption
+    ? selectedOption.label || selectedOption.id
+    : `All ${dimension === "api_key" ? "API Keys" : "Users"}`;
+
   return (
     <div className="flex items-center gap-2">
       <span className="text-sm text-muted-foreground font-medium">
@@ -175,39 +189,69 @@ function FilterBar({
           );
         })}
 
-        {/* Integrated dropdown - appears as part of the control */}
+        {/* Integrated searchable dropdown - appears as part of the control */}
         {dimension !== "all" && (
           <>
             <div className="w-px h-5 bg-border/50 mx-1" />
-            <Select
-              value={selectedValue ?? "all"}
-              onValueChange={(v) => onValueChange(v === "all" ? null : v)}
-            >
-              <SelectTrigger className="h-7 min-w-[140px] border-0 bg-transparent shadow-none text-sm px-2 focus:ring-0 focus:ring-offset-0">
-                <SelectValue placeholder="All" />
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem value="all" className="text-sm">
-                  All {dimension === "api_key" ? "API Keys" : "Users"}
-                </SelectItem>
-                {options.map((option) => (
-                  <SelectItem
-                    key={option.id}
-                    value={option.id}
-                    className="text-sm"
-                  >
-                    <div className="flex items-center justify-between w-full gap-3">
-                      <span className="truncate max-w-[120px]">
-                        {option.label || option.id}
-                      </span>
-                      <span className="text-muted-foreground text-xs tabular-nums">
-                        {option.count.toLocaleString()}
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={open} onOpenChange={setOpen}>
+              <PopoverTrigger asChild>
+                <button className="h-7 min-w-[140px] flex items-center justify-between gap-2 text-sm px-2 hover:bg-muted/50 rounded transition-colors">
+                  <span className="truncate max-w-[120px]">{displayLabel}</span>
+                  <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[220px] p-0" align="end">
+                <Command>
+                  <CommandInput
+                    placeholder={`Search ${dimension === "api_key" ? "API keys" : "users"}...`}
+                    className="h-9"
+                  />
+                  <CommandList>
+                    <CommandEmpty>No results found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="__all__"
+                        onSelect={() => {
+                          onValueChange(null);
+                          setOpen(false);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <Check
+                          className={`mr-2 size-4 ${selectedValue === null ? "opacity-100" : "opacity-0"}`}
+                        />
+                        <span>
+                          All {dimension === "api_key" ? "API Keys" : "Users"}
+                        </span>
+                      </CommandItem>
+                      {options.map((option) => (
+                        <CommandItem
+                          key={option.id}
+                          value={option.label || option.id}
+                          onSelect={() => {
+                            onValueChange(option.id);
+                            setOpen(false);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <Check
+                            className={`mr-2 size-4 ${selectedValue === option.id ? "opacity-100" : "opacity-0"}`}
+                          />
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <span className="truncate">
+                              {option.label || option.id}
+                            </span>
+                            <span className="text-muted-foreground text-xs tabular-nums shrink-0">
+                              {option.count.toLocaleString()}
+                            </span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </>
         )}
       </div>
