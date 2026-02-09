@@ -372,14 +372,8 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             // Removed smoothStream - was causing 15ms delay per chunk, adding up to 20+ seconds
             // experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
-            providerOptions: {
-              anthropic: {
-                thinking: { type: 'enabled', budgetTokens: 10000 },
-              },
-              openai: {
-                reasoningSummary: 'detailed',
-              },
-            },
+            // Note: providerOptions for reasoning removed - was causing 20-30s delays
+            // Enable selectively for reasoning models only
             onError: ({ error }) => {
               console.error('Stream error in onError callback:', error)
               trackError(error, { source: 'streaming' })

@@ -44,14 +44,8 @@ export class CustomChatTransport {
       maxOutputTokens: this.config.maxGeneratedTokens,
       system: systemPrompt,
       experimental_transform: smoothStream({ delayInMs: 15 }),
-      providerOptions: {
-        anthropic: {
-          thinking: { type: "enabled", budgetTokens: 10000 },
-        },
-        openai: {
-          reasoningSummary: "detailed",
-        },
-      },
+      // Note: providerOptions for reasoning removed - was causing 20-30s delays
+      // Enable selectively for reasoning models only
       onError: this.config.onError,
     });
 
