@@ -302,10 +302,10 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   response_filter JSONB NULL,
 
   -- Tool behavior hints (aligned with MCP annotations spec)
-  read_only_hint boolean DEFAULT false,
-  destructive_hint boolean DEFAULT true,
-  idempotent_hint boolean DEFAULT false,
-  open_world_hint boolean DEFAULT true,
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -380,10 +380,10 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   meta JSONB,
 
   -- Tool behavior hints (aligned with MCP annotations spec)
-  read_only_hint boolean DEFAULT false,
-  destructive_hint boolean DEFAULT true,
-  idempotent_hint boolean DEFAULT false,
-  open_world_hint boolean DEFAULT true,
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
