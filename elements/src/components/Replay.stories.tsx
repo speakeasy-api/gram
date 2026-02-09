@@ -5,7 +5,7 @@ import type { Cassette } from '@/lib/cassette'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const meta: any = {
-  title: 'Replay',
+  title: 'Misc/Replay',
   component: Replay,
   parameters: {
     layout: 'fullscreen',
