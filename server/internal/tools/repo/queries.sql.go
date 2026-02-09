@@ -541,10 +541,10 @@ type ListFunctionToolsRow struct {
 	Runtime         string
 	FunctionID      uuid.UUID
 	Meta            []byte
-	ReadOnlyHint    bool
-	DestructiveHint bool
-	IdempotentHint  bool
-	OpenWorldHint   bool
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
 	AssetID         uuid.NullUUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -695,10 +695,10 @@ type ListHttpToolsRow struct {
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	Tags                []string
-	ReadOnlyHint        bool
-	DestructiveHint     bool
-	IdempotentHint      bool
-	OpenWorldHint       bool
+	ReadOnlyHint        pgtype.Bool
+	DestructiveHint     pgtype.Bool
+	IdempotentHint      pgtype.Bool
+	OpenWorldHint       pgtype.Bool
 	PackageName         string
 }
 

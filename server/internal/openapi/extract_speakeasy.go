@@ -754,10 +754,10 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		PathSettings:        pathSettings,
 		RequestContentType:  conv.PtrToPGText(requestContentType),
 		ResponseFilter:      responseFilter,
-		ReadOnlyHint:    inferReadOnlyHint(method),
-		DestructiveHint: inferDestructiveHint(method),
-		IdempotentHint:  inferIdempotentHint(method),
-		OpenWorldHint:   true,
+		ReadOnlyHint:    pgtype.Bool{Bool: inferReadOnlyHint(method), Valid: true},
+		DestructiveHint: pgtype.Bool{Bool: inferDestructiveHint(method), Valid: true},
+		IdempotentHint:  pgtype.Bool{Bool: inferIdempotentHint(method), Valid: true},
+		OpenWorldHint:   pgtype.Bool{Bool: true, Valid: true},
 	}, deploymentEvents, nil
 }
 

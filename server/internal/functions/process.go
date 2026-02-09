@@ -343,10 +343,10 @@ func processManifestToolV0(
 		Variables:    varBs,
 		AuthInput:    authInput,
 		Meta:            metaBs,
-		ReadOnlyHint:    false,
-		DestructiveHint: true,
-		IdempotentHint:  false,
-		OpenWorldHint:   true,
+		ReadOnlyHint:    pgtype.Bool{Bool: false, Valid: true},
+		DestructiveHint: pgtype.Bool{Bool: true, Valid: true},
+		IdempotentHint:  pgtype.Bool{Bool: false, Valid: true},
+		OpenWorldHint:   pgtype.Bool{Bool: true, Valid: true},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("save tool: %w", err)

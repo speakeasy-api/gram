@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -317,12 +318,13 @@ type ToolAnnotations struct {
 }
 
 // AnnotationsFromColumns builds a *types.ToolAnnotations from individual DB boolean columns.
-func AnnotationsFromColumns(readOnly, destructive, idempotent, openWorld bool) *types.ToolAnnotations {
+// Columns are nullable (pgtype.Bool) — invalid values are omitted from the result.
+func AnnotationsFromColumns(readOnly, destructive, idempotent, openWorld pgtype.Bool) *types.ToolAnnotations {
 	return &types.ToolAnnotations{
-		ReadOnlyHint:    &readOnly,
-		DestructiveHint: &destructive,
-		IdempotentHint:  &idempotent,
-		OpenWorldHint:   &openWorld,
+		ReadOnlyHint:    FromPGBool[bool](readOnly),
+		DestructiveHint: FromPGBool[bool](destructive),
+		IdempotentHint:  FromPGBool[bool](idempotent),
+		OpenWorldHint:   FromPGBool[bool](openWorld),
 	}
 }
 

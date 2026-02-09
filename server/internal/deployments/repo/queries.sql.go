@@ -547,10 +547,10 @@ type CreateFunctionsToolParams struct {
 	Variables       []byte
 	AuthInput       []byte
 	Meta            []byte
-	ReadOnlyHint    bool
-	DestructiveHint bool
-	IdempotentHint  bool
-	OpenWorldHint   bool
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
 }
 
 func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsToolParams) (FunctionToolDefinition, error) {
@@ -781,10 +781,10 @@ type CreateOpenAPIv3ToolDefinitionParams struct {
 	DefaultServerUrl    pgtype.Text
 	RequestContentType  pgtype.Text
 	ResponseFilter      *models.ResponseFilter
-	ReadOnlyHint        bool
-	DestructiveHint     bool
-	IdempotentHint      bool
-	OpenWorldHint       bool
+	ReadOnlyHint        pgtype.Bool
+	DestructiveHint     pgtype.Bool
+	IdempotentHint      pgtype.Bool
+	OpenWorldHint       pgtype.Bool
 }
 
 func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateOpenAPIv3ToolDefinitionParams) (HttpToolDefinition, error) {
