@@ -516,7 +516,7 @@ INSERT INTO function_tool_definitions (
   , $10
   , $11
 )
-RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateFunctionsToolParams struct {
@@ -561,6 +561,10 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		&i.Variables,
 		&i.AuthInput,
 		&i.Meta,
+		&i.ReadOnlyHint,
+		&i.DestructiveHint,
+		&i.IdempotentHint,
+		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -713,7 +717,7 @@ INSERT INTO http_tool_definitions (
   , $27
   , $28
 )
-RETURNING id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenAPIv3ToolDefinitionParams struct {
@@ -810,6 +814,10 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		&i.PathSettings,
 		&i.RequestContentType,
 		&i.ResponseFilter,
+		&i.ReadOnlyHint,
+		&i.DestructiveHint,
+		&i.IdempotentHint,
+		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
