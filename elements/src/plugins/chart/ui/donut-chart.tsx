@@ -71,13 +71,15 @@ export const DonutChart: FC<DonutChartProps> = ({
       {title && (
         <h3 className="text-foreground text-sm font-medium">{title}</h3>
       )}
-      <div className="relative h-[300px] w-full">
+      <div className="relative h-[320px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <RechartsPieChart>
+          <RechartsPieChart
+            margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+          >
             <Pie
               data={chartData}
               cx="50%"
-              cy="40%"
+              cy="45%"
               innerRadius={50}
               outerRadius={80}
               paddingAngle={2}
@@ -144,9 +146,9 @@ export const DonutChart: FC<DonutChartProps> = ({
             )}
           </RechartsPieChart>
         </ResponsiveContainer>
-        {/* Center label - positioned at 40% from top to match pie cy */}
+        {/* Center label - positioned at 45% from top to match pie cy */}
         {(innerLabel || innerValue) && (
-          <div className="pointer-events-none absolute inset-x-0 top-[40%] flex -translate-y-1/2 flex-col items-center">
+          <div className="pointer-events-none absolute inset-x-0 top-[45%] flex -translate-y-1/2 flex-col items-center">
             {innerValue !== undefined && (
               <span className="text-foreground text-2xl font-bold">
                 {innerValue}

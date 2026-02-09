@@ -67,13 +67,15 @@ export const PieChart: FC<PieChartProps> = ({
       {title && (
         <h3 className="text-foreground text-sm font-medium">{title}</h3>
       )}
-      <div className="h-[300px] w-full">
+      <div className="h-[320px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <RechartsPieChart>
+          <RechartsPieChart
+            margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+          >
             <Pie
               data={chartData}
               cx="50%"
-              cy="40%"
+              cy="45%"
               innerRadius={0}
               outerRadius={80}
               paddingAngle={2}
