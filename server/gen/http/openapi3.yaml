@@ -16678,9 +16678,21 @@ components:
                 description:
                     type: string
                     description: The description of the tool variation
+                destructive_hint:
+                    type: boolean
+                    description: 'Override: if true, the tool may perform destructive updates'
+                idempotent_hint:
+                    type: boolean
+                    description: 'Override: if true, repeated calls have no additional effect'
                 name:
                     type: string
                     description: The name of the tool variation
+                open_world_hint:
+                    type: boolean
+                    description: 'Override: if true, the tool interacts with external entities'
+                read_only_hint:
+                    type: boolean
+                    description: 'Override: if true, the tool does not modify its environment'
                 src_tool_name:
                     type: string
                     description: The name of the source tool
@@ -16698,6 +16710,9 @@ components:
                     items:
                         type: string
                     description: The tags of the tool variation
+                title:
+                    type: string
+                    description: Display name override for the tool
             required:
                 - src_tool_name
                 - src_tool_urn

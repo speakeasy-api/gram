@@ -399,7 +399,14 @@ export function ToolsetView({
 
   const handleToolUpdate = async (
     tool: Tool,
-    updates: { name?: string; description?: string },
+    updates: {
+      name?: string;
+      description?: string;
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    },
   ) => {
     if (tool.type === "prompt") {
       // Prompt templates are only sometimes updated via variation under the hood. We use this endpoint instead to ensure it mirrors editing from the ToolBuilder page itself.
