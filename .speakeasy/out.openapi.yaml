@@ -8406,6 +8406,112 @@ paths:
       x-speakeasy-react-hook:
         name: GetUserMetricsSummary
         type: query
+  /rpc/telemetry.listFilterOptions:
+    post:
+      description: List available filter options (API keys or users) for the observability overview
+      operationId: listFilterOptions
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListFilterOptionsPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFilterOptionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listFilterOptions telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: listFilterOptions
+      x-speakeasy-react-hook:
+        name: ListFilterOptions
+        type: query
   /rpc/telemetry.searchChats:
     post:
       description: Search and list chat session summaries that match a search filter
@@ -13326,6 +13432,24 @@ components:
           description: The URL to fetch the OpenAPI document from
       required:
         - url
+    FilterOption:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Number of events for this option
+          format: int64
+        id:
+          type: string
+          description: Unique identifier for the option
+        label:
+          type: string
+          description: Display label for the option
+      description: A single filter option (API key or user)
+      required:
+        - id
+        - label
+        - count
     FunctionEnvironmentVariable:
       type: object
       properties:
@@ -13728,6 +13852,9 @@ components:
     GetObservabilityOverviewPayload:
       type: object
       properties:
+        api_key_id:
+          type: string
+          description: Optional API key ID filter
         external_user_id:
           type: string
           description: Optional external user ID filter
@@ -14253,6 +14380,45 @@ components:
       description: Result type for listing environments
       required:
         - environments
+    ListFilterOptionsPayload:
+      type: object
+      properties:
+        filter_type:
+          type: string
+          description: Type of filter to list options for
+          enum:
+            - api_key
+            - user
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Payload for listing filter options
+      required:
+        - from
+        - to
+        - filter_type
+    ListFilterOptionsResult:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether telemetry is enabled for the organization
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/FilterOption'
+          description: List of filter options
+      description: Result of listing filter options
+      required:
+        - options
+        - enabled
     ListIntegrationsForm:
       type: object
       properties:
@@ -16139,6 +16305,10 @@ components:
     TimeSeriesBucket:
       type: object
       properties:
+        abandoned_chats:
+          type: integer
+          description: Abandoned chat sessions in this bucket
+          format: int64
         avg_session_duration_ms:
           type: number
           description: Average session duration in milliseconds
@@ -16158,6 +16328,10 @@ components:
           type: integer
           description: Failed tool calls in this bucket
           format: int64
+        partial_chats:
+          type: integer
+          description: Partially resolved chat sessions in this bucket
+          format: int64
         resolved_chats:
           type: integer
           description: Resolved chat sessions in this bucket
@@ -16176,6 +16350,8 @@ components:
         - total_chats
         - resolved_chats
         - failed_chats
+        - partial_chats
+        - abandoned_chats
         - total_tool_calls
         - failed_tool_calls
         - avg_tool_latency_ms

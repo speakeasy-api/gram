@@ -22,10 +22,11 @@ type Client struct {
 	GetProjectMetricsSummaryEndpoint goa.Endpoint
 	GetUserMetricsSummaryEndpoint    goa.Endpoint
 	GetObservabilityOverviewEndpoint goa.Endpoint
+	ListFilterOptionsEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getObservabilityOverview goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getObservabilityOverview, listFilterOptions goa.Endpoint) *Client {
 	return &Client{
 		SearchLogsEndpoint:               searchLogs,
 		SearchToolCallsEndpoint:          searchToolCalls,
@@ -34,6 +35,7 @@ func NewClient(searchLogs, searchToolCalls, searchChats, captureEvent, getProjec
 		GetProjectMetricsSummaryEndpoint: getProjectMetricsSummary,
 		GetUserMetricsSummaryEndpoint:    getUserMetricsSummary,
 		GetObservabilityOverviewEndpoint: getObservabilityOverview,
+		ListFilterOptionsEndpoint:        listFilterOptions,
 	}
 }
 
@@ -193,4 +195,27 @@ func (c *Client) GetObservabilityOverview(ctx context.Context, p *GetObservabili
 		return
 	}
 	return ires.(*GetObservabilityOverviewResult), nil
+}
+
+// ListFilterOptions calls the "listFilterOptions" endpoint of the "telemetry"
+// service.
+// ListFilterOptions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListFilterOptions(ctx context.Context, p *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error) {
+	var ires any
+	ires, err = c.ListFilterOptionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListFilterOptionsResult), nil
 }

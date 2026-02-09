@@ -7,12 +7,21 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
+import { telemetryListFilterOptions } from "@gram/client/funcs/telemetryListFilterOptions";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
-import { useState, useRef, useCallback } from "react";
+import { FilterType } from "@gram/client/models/components/listfilteroptionspayload";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { Icon, IconName } from "@speakeasy-api/moonshine";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -121,6 +130,91 @@ ChartJS.register(
   Legend,
 );
 
+type FilterDimension = "all" | "api_key" | "user";
+
+function FilterBar({
+  dimension,
+  onDimensionChange,
+  selectedValue,
+  onValueChange,
+  options,
+}: {
+  dimension: FilterDimension;
+  onDimensionChange: (dimension: FilterDimension) => void;
+  selectedValue: string | null;
+  onValueChange: (value: string | null) => void;
+  options: Array<{ id: string; label: string; count: number }>;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm text-muted-foreground font-medium">
+        Filter by
+      </span>
+      {/* Integrated segmented control with dropdown */}
+      <div className="flex items-center h-9 bg-muted/50 rounded-md p-1 border border-border/50">
+        {(["all", "api_key", "user"] as const).map((value) => {
+          const isSelected = dimension === value;
+          const label =
+            value === "all" ? "All" : value === "api_key" ? "API Key" : "User";
+          return (
+            <button
+              key={value}
+              onClick={() => onDimensionChange(value)}
+              className={`
+                h-7 px-3 text-sm font-medium rounded-l transition-all duration-150
+                ${value === "all" ? "rounded" : "rounded-l"}
+                ${
+                  isSelected
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }
+              `}
+            >
+              {label}
+            </button>
+          );
+        })}
+
+        {/* Integrated dropdown - appears as part of the control */}
+        {dimension !== "all" && (
+          <>
+            <div className="w-px h-5 bg-border/50 mx-1" />
+            <Select
+              value={selectedValue ?? "all"}
+              onValueChange={(v) => onValueChange(v === "all" ? null : v)}
+            >
+              <SelectTrigger className="h-7 min-w-[140px] border-0 bg-transparent shadow-none text-sm px-2 focus:ring-0 focus:ring-offset-0">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="all" className="text-sm">
+                  All {dimension === "api_key" ? "API Keys" : "Users"}
+                </SelectItem>
+                {options.map((option) => (
+                  <SelectItem
+                    key={option.id}
+                    value={option.id}
+                    className="text-sm"
+                  >
+                    <div className="flex items-center justify-between w-full gap-3">
+                      <span className="truncate max-w-[120px]">
+                        {option.label || option.id}
+                      </span>
+                      <span className="text-muted-foreground text-xs tabular-nums">
+                        {option.count.toLocaleString()}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Apply a centered moving average to smooth data (like Datadog).
  * Window size auto-scales based on data length for consistent smoothing.
@@ -128,8 +222,8 @@ ChartJS.register(
 function smoothData(data: number[], windowSize?: number): number[] {
   if (data.length < 3) return data;
 
-  // Auto-scale window: ~3% of data points, min 3, max 9
-  const autoWindow = Math.max(3, Math.min(9, Math.floor(data.length * 0.03)));
+  // Auto-scale window: ~8% of data points, min 5, max 21 for heavy smoothing
+  const autoWindow = Math.max(5, Math.min(21, Math.floor(data.length * 0.08)));
   const window = windowSize ?? autoWindow;
   const halfWindow = Math.floor(window / 2);
 
@@ -147,13 +241,58 @@ export default function ObservabilityOverview() {
     from: Date;
     to: Date;
   } | null>(null);
+  const [filterDimension, setFilterDimension] =
+    useState<FilterDimension>("all");
+  const [selectedFilterValue, setSelectedFilterValue] = useState<string | null>(
+    null,
+  );
 
   // Use custom range if set, otherwise use preset
   const { from, to } = customRange ?? getDateRange(dateRange);
   const client = useGramContext();
 
+  // Fetch filter options for the selected dimension (only when not "all")
+  const { data: filterOptions } = useQuery({
+    queryKey: [
+      "observability",
+      "filterOptions",
+      filterDimension,
+      customRange ?? dateRange,
+    ],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryListFilterOptions(client, {
+          listFilterOptionsPayload: {
+            from,
+            to,
+            filterType:
+              filterDimension === "api_key"
+                ? FilterType.ApiKey
+                : FilterType.User,
+          },
+        }),
+      ),
+    placeholderData: keepPreviousData,
+    enabled: filterDimension !== "all",
+  });
+
+  // Build filter params based on selected dimension and value
+  const filterParams = useMemo(() => {
+    if (filterDimension === "all" || !selectedFilterValue) return {};
+    if (filterDimension === "api_key") {
+      return { apiKeyId: selectedFilterValue };
+    } else {
+      return { externalUserId: selectedFilterValue };
+    }
+  }, [filterDimension, selectedFilterValue]);
+
   const { data, isPending, isFetching, error } = useQuery({
-    queryKey: ["observability", "overview", customRange ?? dateRange],
+    queryKey: [
+      "observability",
+      "overview",
+      customRange ?? dateRange,
+      filterParams,
+    ],
     queryFn: () =>
       unwrapAsync(
         telemetryGetObservabilityOverview(client, {
@@ -161,11 +300,21 @@ export default function ObservabilityOverview() {
             from,
             to,
             includeTimeSeries: true,
+            ...filterParams,
           },
         }),
       ),
     placeholderData: keepPreviousData,
   });
+
+  // Reset selected filter value when dimension changes
+  const handleFilterDimensionChange = useCallback(
+    (dimension: FilterDimension) => {
+      setFilterDimension(dimension);
+      setSelectedFilterValue(null);
+    },
+    [],
+  );
 
   const handleTimeRangeSelect = useCallback((newFrom: Date, newTo: Date) => {
     setCustomRange({ from: newFrom, to: newTo });
@@ -199,12 +348,21 @@ export default function ObservabilityOverview() {
               Monitor chat sessions, tool performance, and system health
             </p>
           </div>
-          <DateRangeSelect
-            value={dateRange}
-            onValueChange={handlePresetChange}
-            customRange={customRange}
-            onClearCustomRange={handleClearCustomRange}
-          />
+          <div className="flex items-center gap-3">
+            <FilterBar
+              dimension={filterDimension}
+              onDimensionChange={handleFilterDimensionChange}
+              selectedValue={selectedFilterValue}
+              onValueChange={setSelectedFilterValue}
+              options={filterOptions?.options ?? []}
+            />
+            <DateRangeSelect
+              value={dateRange}
+              onValueChange={handlePresetChange}
+              customRange={customRange}
+              onClearCustomRange={handleClearCustomRange}
+            />
+          </div>
         </div>
 
         <ObservabilityContent
@@ -360,18 +518,25 @@ function ObservabilityContent({
             <ResolvedChatsChart
               data={timeSeries ?? []}
               timeRangeMs={timeRangeMs}
-              title="Active vs Resolved Chats"
+              title="Resolution Rate Over Time"
               onTimeRangeSelect={onTimeRangeSelect}
               isLoading={isRefetching}
             />
-            <SessionDurationChart
+            <ResolutionStatusChart
               data={timeSeries ?? []}
               timeRangeMs={timeRangeMs}
-              title="Avg Session Duration Over Time"
+              title="Chats by Resolution Status"
               onTimeRangeSelect={onTimeRangeSelect}
               isLoading={isRefetching}
             />
           </div>
+          <SessionDurationChart
+            data={timeSeries ?? []}
+            timeRangeMs={timeRangeMs}
+            title="Avg Session Duration Over Time"
+            onTimeRangeSelect={onTimeRangeSelect}
+            isLoading={isRefetching}
+          />
         </div>
       </section>
 
@@ -733,7 +898,7 @@ function ToolCallsChart({
     backgroundColor: isBar ? "#3b82f6" : "rgba(59, 130, 246, 0.1)",
     pointBackgroundColor: "#3b82f6",
     fill: isArea,
-    tension: 0.3,
+    tension: 0.45,
     borderWidth: 1.5,
     pointRadius: 0,
     pointHoverRadius: 4,
@@ -748,7 +913,7 @@ function ToolCallsChart({
     backgroundColor: isBar ? "#ef4444" : "rgba(239, 68, 68, 0.1)",
     pointBackgroundColor: "#ef4444",
     fill: isArea,
-    tension: 0.3,
+    tension: 0.45,
     borderWidth: 1.5,
     pointRadius: 0,
     pointHoverRadius: 4,
@@ -862,6 +1027,7 @@ function ResolvedChatsChart({
     bucketTimeUnixNano?: string;
     totalChats?: number;
     resolvedChats?: number;
+    failedChats?: number;
   }>;
   timeRangeMs: number;
   title: string;
@@ -876,48 +1042,44 @@ function ResolvedChatsChart({
     return formatChartLabel(date, timeRangeMs);
   });
 
-  const rawTotalData = data.map((d) => d.totalChats ?? 0);
-  const rawResolvedData = data.map((d) => d.resolvedChats ?? 0);
+  // Calculate resolution rate %
+  const rawResolvedPct = data.map((d) => {
+    const total = d.totalChats ?? 0;
+    if (total === 0) return null; // Return null for gaps (no data)
+    return ((d.resolvedChats ?? 0) / total) * 100;
+  });
 
   const isArea = chartType === "area";
   const isBar = chartType === "bar";
 
   // Apply smoothing for line/area charts, use raw data for bar charts
-  const totalChatsData = isBar ? rawTotalData : smoothData(rawTotalData);
-  const resolvedChatsData = isBar
-    ? rawResolvedData
-    : smoothData(rawResolvedData);
+  // Filter out nulls for smoothing, then restore
+  const nonNullData = rawResolvedPct.filter((v) => v !== null) as number[];
+  const smoothedNonNull = smoothData(nonNullData);
+  let smoothIdx = 0;
+  const resolvedPctData = isBar
+    ? rawResolvedPct
+    : rawResolvedPct.map((v) =>
+        v === null ? null : smoothedNonNull[smoothIdx++],
+      );
 
   const chartData = {
     labels,
     datasets: [
       {
-        label: " Active",
-        data: totalChatsData,
-        borderColor: "#6b7280",
-        backgroundColor: isBar ? "#6b7280" : "rgba(107, 114, 128, 0.1)",
-        pointBackgroundColor: "#6b7280",
-        fill: isArea,
-        barPercentage: 1.0,
-        categoryPercentage: 1.0,
-        tension: 0.3,
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      },
-      {
-        label: " Resolved",
-        data: resolvedChatsData,
+        label: " Resolution Rate",
+        data: resolvedPctData,
         borderColor: "#10b981",
-        backgroundColor: isBar ? "#10b981" : "rgba(16, 185, 129, 0.1)",
+        backgroundColor: isBar ? "#10b981" : "rgba(16, 185, 129, 0.15)",
         pointBackgroundColor: "#10b981",
         fill: isArea,
         barPercentage: 1.0,
         categoryPercentage: 1.0,
-        tension: 0.3,
-        borderWidth: 1.5,
+        tension: 0.45,
+        borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 4,
+        spanGaps: true,
       },
     ],
   };
@@ -931,18 +1093,7 @@ function ResolvedChatsChart({
     },
     plugins: {
       legend: {
-        display: true,
-        position: "top" as const,
-        align: "end" as const,
-        labels: {
-          boxWidth: 12,
-          boxHeight: 12,
-          useBorderRadius: true,
-          borderRadius: 2,
-          padding: 16,
-          color: "#9ca3af",
-          font: { size: 12 },
-        },
+        display: false,
       },
       tooltip: {
         backgroundColor: "rgba(0, 0, 0, 0.85)",
@@ -956,8 +1107,7 @@ function ResolvedChatsChart({
         callbacks: {
           label: (context: TooltipItem<"line"> | TooltipItem<"bar">) => {
             const value = context.parsed.y ?? 0;
-            const label = context.dataset.label?.trim() ?? "";
-            return ` ${label}: ${Math.round(value).toLocaleString()}`;
+            return ` Resolution Rate: ${value.toFixed(1)}%`;
           },
         },
       },
@@ -973,8 +1123,12 @@ function ResolvedChatsChart({
       },
       y: {
         beginAtZero: true,
+        max: 100,
         grid: {
           color: "rgba(128, 128, 128, 0.2)",
+        },
+        ticks: {
+          callback: (value: number | string) => `${value}%`,
         },
       },
     },
@@ -1002,8 +1156,7 @@ function ResolvedChatsChart({
       </div>
       <div className="flex items-center justify-between mt-3">
         <p className="text-xs text-muted-foreground">
-          Active = chats with events in interval; Resolved = chats that
-          completed
+          Percentage of chats successfully resolved per interval
         </p>
         <a
           href="#"
@@ -1013,6 +1166,201 @@ function ResolvedChatsChart({
           View individual sessions →
         </a>
       </div>
+    </div>
+  );
+}
+
+function ResolutionStatusChart({
+  data,
+  timeRangeMs,
+  title,
+  onTimeRangeSelect,
+  isLoading,
+}: {
+  data: Array<{
+    bucketTimeUnixNano?: string;
+    resolvedChats?: number;
+    failedChats?: number;
+    partialChats?: number;
+    abandonedChats?: number;
+  }>;
+  timeRangeMs: number;
+  title: string;
+  onTimeRangeSelect?: (from: Date, to: Date) => void;
+  isLoading?: boolean;
+}) {
+  const [chartType, setChartType] = useState<ChartType>("area");
+
+  const labels = data.map((d) => {
+    const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
+    const date = new Date(timestamp);
+    return formatChartLabel(date, timeRangeMs);
+  });
+
+  const rawSuccessData = data.map((d) => d.resolvedChats ?? 0);
+  const rawFailedData = data.map((d) => d.failedChats ?? 0);
+  const rawPartialData = data.map((d) => d.partialChats ?? 0);
+  const rawAbandonedData = data.map((d) => d.abandonedChats ?? 0);
+
+  const isArea = chartType === "area";
+  const isBar = chartType === "bar";
+
+  // Apply smoothing for line/area charts, use raw data for bar charts
+  const successData = isBar ? rawSuccessData : smoothData(rawSuccessData);
+  const failedData = isBar ? rawFailedData : smoothData(rawFailedData);
+  const partialData = isBar ? rawPartialData : smoothData(rawPartialData);
+  const abandonedData = isBar ? rawAbandonedData : smoothData(rawAbandonedData);
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        label: " Success",
+        data: successData,
+        borderColor: "#10b981",
+        backgroundColor: isBar ? "#10b981" : "rgba(16, 185, 129, 0.1)",
+        pointBackgroundColor: "#10b981",
+        fill: isArea,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        barPercentage: 0.8,
+        categoryPercentage: 0.9,
+      },
+      {
+        label: " Failed",
+        data: failedData,
+        borderColor: "#ef4444",
+        backgroundColor: isBar ? "#ef4444" : "rgba(239, 68, 68, 0.1)",
+        pointBackgroundColor: "#ef4444",
+        fill: isArea,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        barPercentage: 0.8,
+        categoryPercentage: 0.9,
+      },
+      {
+        label: " Partial",
+        data: partialData,
+        borderColor: "#f59e0b",
+        backgroundColor: isBar ? "#f59e0b" : "rgba(245, 158, 11, 0.1)",
+        pointBackgroundColor: "#f59e0b",
+        fill: isArea,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        barPercentage: 0.8,
+        categoryPercentage: 0.9,
+      },
+      {
+        label: " Abandoned",
+        data: abandonedData,
+        borderColor: "#6b7280",
+        backgroundColor: isBar ? "#6b7280" : "rgba(107, 114, 128, 0.1)",
+        pointBackgroundColor: "#6b7280",
+        fill: isArea,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        barPercentage: 0.8,
+        categoryPercentage: 0.9,
+      },
+    ],
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: "index" as const,
+      intersect: false,
+    },
+    plugins: {
+      legend: {
+        position: "top" as const,
+        align: "end" as const,
+        labels: {
+          boxWidth: 12,
+          boxHeight: 12,
+          useBorderRadius: true,
+          borderRadius: 2,
+          padding: 16,
+          color: "#9ca3af",
+          font: {
+            size: 12,
+          },
+        },
+      },
+      tooltip: {
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        borderWidth: 1,
+        padding: 12,
+        boxPadding: 4,
+        usePointStyle: true,
+        callbacks: {
+          label: (context: TooltipItem<"line"> | TooltipItem<"bar">) => {
+            const label = context.dataset.label || "";
+            const value = context.parsed.y ?? 0;
+            return `${label}: ${Math.round(value).toLocaleString()} chats`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+        ticks: {
+          maxTicksLimit: 8,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        grid: {
+          color: "rgba(128, 128, 128, 0.2)",
+        },
+        ticks: {
+          callback: (value: number | string) => {
+            const num = typeof value === "string" ? parseFloat(value) : value;
+            return num.toLocaleString();
+          },
+        },
+      },
+    },
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <ChartTypeToggle value={chartType} onChange={setChartType} />
+      </div>
+      <div className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded">
+            <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+        <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
+          {isBar ? (
+            <Bar data={chartData} options={options} />
+          ) : (
+            <Line data={chartData} options={options} />
+          )}
+        </ChartWithSelection>
+      </div>
+      <p className="text-xs text-muted-foreground mt-3">
+        Chat counts by resolution status over time
+      </p>
     </div>
   );
 }
@@ -1062,7 +1410,7 @@ function SessionDurationChart({
         fill: isArea,
         barPercentage: 1.0,
         categoryPercentage: 1.0,
-        tension: 0.3,
+        tension: 0.45,
         borderWidth: 1.5,
         pointRadius: 0,
         pointHoverRadius: 4,

@@ -248,6 +248,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getObservabilityOverview")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetObservabilityOverview", "type": "query"}`)
 	})
+
+	Method("listFilterOptions", func() {
+		Description("List available filter options (API keys or users) for the observability overview")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListFilterOptionsPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListFilterOptionsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.listFilterOptions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listFilterOptions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listFilterOptions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListFilterOptions", "type": "query"}`)
+	})
 })
 
 var TelemetryFilter = Type("TelemetryFilter", func() {
@@ -753,6 +782,7 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 		Example("2025-12-19T11:00:00Z")
 	})
 	Attribute("external_user_id", String, "Optional external user ID filter")
+	Attribute("api_key_id", String, "Optional API key ID filter")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
 		Default(true)
 	})
@@ -807,6 +837,8 @@ var TimeSeriesBucketType = Type("TimeSeriesBucket", func() {
 	Attribute("total_chats", Int64, "Total chat sessions in this bucket")
 	Attribute("resolved_chats", Int64, "Resolved chat sessions in this bucket")
 	Attribute("failed_chats", Int64, "Failed chat sessions in this bucket")
+	Attribute("partial_chats", Int64, "Partially resolved chat sessions in this bucket")
+	Attribute("abandoned_chats", Int64, "Abandoned chat sessions in this bucket")
 	Attribute("total_tool_calls", Int64, "Total tool calls in this bucket")
 	Attribute("failed_tool_calls", Int64, "Failed tool calls in this bucket")
 	Attribute("avg_tool_latency_ms", Float64, "Average tool latency in milliseconds")
@@ -817,6 +849,8 @@ var TimeSeriesBucketType = Type("TimeSeriesBucket", func() {
 		"total_chats",
 		"resolved_chats",
 		"failed_chats",
+		"partial_chats",
+		"abandoned_chats",
 		"total_tool_calls",
 		"failed_tool_calls",
 		"avg_tool_latency_ms",
@@ -835,4 +869,43 @@ var ToolMetricType = Type("ToolMetric", func() {
 	Attribute("failure_rate", Float64, "Failure rate (0.0 to 1.0)")
 
 	Required("gram_urn", "call_count", "success_count", "failure_count", "avg_latency_ms", "failure_rate")
+})
+
+// Filter options types
+
+var ListFilterOptionsPayload = Type("ListFilterOptionsPayload", func() {
+	Description("Payload for listing filter options")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("filter_type", String, "Type of filter to list options for", func() {
+		Enum("api_key", "user")
+	})
+
+	Required("from", "to", "filter_type")
+})
+
+var ListFilterOptionsResult = Type("ListFilterOptionsResult", func() {
+	Description("Result of listing filter options")
+
+	Attribute("options", ArrayOf(FilterOptionType), "List of filter options")
+	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
+
+	Required("options", "enabled")
+})
+
+var FilterOptionType = Type("FilterOption", func() {
+	Description("A single filter option (API key or user)")
+
+	Attribute("id", String, "Unique identifier for the option")
+	Attribute("label", String, "Display label for the option")
+	Attribute("count", Int64, "Number of events for this option")
+
+	Required("id", "label", "count")
 })

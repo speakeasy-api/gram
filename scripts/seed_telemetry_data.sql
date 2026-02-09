@@ -58,8 +58,8 @@ FROM (
             )
         )) as time_unix_nano,
 
-        -- Chat IDs - about 15000 unique chats over 3 months
-        rand() % 15000 as chat_id,
+        -- chat_id comes from inner subquery (consistent per chat for api_key_id and ext_user_id)
+        chat_id,
 
         -- User distribution - some users more active than others (power law)
         multiIf(
@@ -107,9 +107,17 @@ FROM (
     FROM (
         SELECT
             number,
-            rand() % 80 as ext_user_id,
-            rand() % 5 as api_key_id
-        FROM numbers(180000)
+            chat_id,
+            -- External user is consistent per chat (derived from chat_id)
+            chat_id % 80 as ext_user_id,
+            -- API key is consistent per chat (derived from chat_id)
+            chat_id % 5 as api_key_id
+        FROM (
+            SELECT
+                number,
+                rand() % 15000 as chat_id
+            FROM numbers(180000)
+        )
     )
     -- Skip ~35% randomly to create natural variation (not perfectly uniform)
     WHERE rand() % 100 < 65
@@ -139,8 +147,9 @@ SELECT
         ', "gen_ai.conversation.duration": ', toString(duration_sec),
         ', "gram.resource.urn": "agents:chat:completion"',
         ', "gram.project.id": "019c2935-5fab-7614-b757-3e0be85fbee3"',
-        ', "user.id": "user-', toString(rand() % 200), '"',
-        ', "gram.external_user.id": "ext-user-', toString(rand() % 80), '"',
+        ', "user.id": "user-', toString(chat_id % 200), '"',
+        ', "gram.external_user.id": "ext-user-', toString(chat_id % 80), '"',
+        ', "gram.api_key.id": "key-', toString(chat_id % 5), '"',
         ', "http.response.status_code": ', toString(status_code),
         '}'
     ) as attributes,
@@ -176,6 +185,80 @@ FROM (
         if(rand() % 100 < 92, 200, arrayElement([400, 500, 502, 504], (rand() % 4) + 1)) as status_code
     FROM numbers(25000)
     WHERE rand() % 100 < 80  -- Create some natural gaps
+);
+
+-- Insert chat resolution analysis events (these contain the evaluation_score_label)
+-- ~70% of chats get a resolution analysis (the rest are abandoned/ongoing)
+INSERT INTO telemetry_logs (
+    time_unix_nano,
+    observed_time_unix_nano,
+    severity_text,
+    body,
+    attributes,
+    resource_attributes,
+    gram_project_id,
+    gram_urn,
+    service_name,
+    gram_chat_id
+)
+SELECT
+    time_unix_nano,
+    time_unix_nano as observed_time_unix_nano,
+    'INFO' as severity_text,
+    concat('Chat resolution: ', resolution) as body,
+    concat(
+        '{"gen_ai.evaluation.name": "chat_resolution"',
+        ', "gen_ai.evaluation.score.label": "', resolution, '"',
+        ', "gen_ai.evaluation.score.value": ', toString(score),
+        ', "gen_ai.conversation.id": "chat-', toString(chat_id), '"',
+        ', "gen_ai.conversation.duration": ', toString(duration_sec),
+        ', "gram.project.id": "019c2935-5fab-7614-b757-3e0be85fbee3"',
+        ', "user.id": "user-', toString(chat_id % 200), '"',
+        ', "gram.external_user.id": "ext-user-', toString(chat_id % 80), '"',
+        ', "gram.api_key.id": "key-', toString(chat_id % 5), '"',
+        '}'
+    ) as attributes,
+    '{"gram.deployment.id": "deployment-1"}' as resource_attributes,
+    toUUID('019c2935-5fab-7614-b757-3e0be85fbee3') as gram_project_id,
+    'chat_resolution' as gram_urn,
+    'gram-resolution-analyzer' as service_name,
+    concat('chat-', toString(chat_id)) as gram_chat_id
+FROM (
+    SELECT
+        number,
+        number % 15000 as chat_id,
+        -- Resolution happens a few seconds after chat completion
+        toInt64(toUnixTimestamp64Nano(
+            now64(9)
+            - toIntervalSecond(
+                (number * 310) + (rand() % 600) - 5  -- Slightly after chat completion
+            )
+        )) as time_unix_nano,
+        -- Use a single random value for resolution distribution
+        rand() % 100 as resolution_rand,
+        -- Resolution distribution: 65% success, 15% partial, 12% failure, 8% abandoned
+        multiIf(
+            resolution_rand < 65, 'success',
+            resolution_rand < 80, 'partial',
+            resolution_rand < 92, 'failure',
+            'abandoned'
+        ) as resolution,
+        -- Score correlates with resolution
+        multiIf(
+            resolution = 'success', 80 + (rand() % 21),    -- 80-100
+            resolution = 'partial', 40 + (rand() % 31),    -- 40-70
+            resolution = 'failure', rand() % 30,           -- 0-29
+            rand() % 20                                     -- abandoned: 0-19
+        ) as score,
+        -- Duration: same logic as chat completion
+        rand() % 100 as duration_rand,
+        multiIf(
+            duration_rand < 60, 30 + (rand() % 150),
+            duration_rand < 90, 10 + (rand() % 300),
+            180 + (rand() % 420)
+        ) as duration_sec
+    FROM numbers(25000)
+    WHERE rand() % 100 < 70  -- 70% of chats get resolution analysis
 );
 
 SELECT 'Inserted sample data', count(*) as total_rows FROM telemetry_logs WHERE gram_project_id = toUUID('019c2935-5fab-7614-b757-3e0be85fbee3');

@@ -13,6 +13,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type TimeSeriesBucket = {
   /**
+   * Abandoned chat sessions in this bucket
+   */
+  abandonedChats: number;
+  /**
    * Average session duration in milliseconds
    */
   avgSessionDurationMs: number;
@@ -33,6 +37,10 @@ export type TimeSeriesBucket = {
    */
   failedToolCalls: number;
   /**
+   * Partially resolved chat sessions in this bucket
+   */
+  partialChats: number;
+  /**
    * Resolved chat sessions in this bucket
    */
   resolvedChats: number;
@@ -52,21 +60,25 @@ export const TimeSeriesBucket$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  abandoned_chats: z.number().int(),
   avg_session_duration_ms: z.number(),
   avg_tool_latency_ms: z.number(),
   bucket_time_unix_nano: z.string(),
   failed_chats: z.number().int(),
   failed_tool_calls: z.number().int(),
+  partial_chats: z.number().int(),
   resolved_chats: z.number().int(),
   total_chats: z.number().int(),
   total_tool_calls: z.number().int(),
 }).transform((v) => {
   return remap$(v, {
+    "abandoned_chats": "abandonedChats",
     "avg_session_duration_ms": "avgSessionDurationMs",
     "avg_tool_latency_ms": "avgToolLatencyMs",
     "bucket_time_unix_nano": "bucketTimeUnixNano",
     "failed_chats": "failedChats",
     "failed_tool_calls": "failedToolCalls",
+    "partial_chats": "partialChats",
     "resolved_chats": "resolvedChats",
     "total_chats": "totalChats",
     "total_tool_calls": "totalToolCalls",

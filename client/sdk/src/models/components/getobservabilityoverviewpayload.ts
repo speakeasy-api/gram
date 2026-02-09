@@ -10,6 +10,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
  */
 export type GetObservabilityOverviewPayload = {
   /**
+   * Optional API key ID filter
+   */
+  apiKeyId?: string | undefined;
+  /**
    * Optional external user ID filter
    */
   externalUserId?: string | undefined;
@@ -29,6 +33,7 @@ export type GetObservabilityOverviewPayload = {
 
 /** @internal */
 export type GetObservabilityOverviewPayload$Outbound = {
+  api_key_id?: string | undefined;
   external_user_id?: string | undefined;
   from: string;
   include_time_series: boolean;
@@ -41,12 +46,14 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   GetObservabilityOverviewPayload
 > = z.object({
+  apiKeyId: z.string().optional(),
   externalUserId: z.string().optional(),
   from: z.date().transform(v => v.toISOString()),
   includeTimeSeries: z.boolean().default(true),
   to: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
+    apiKeyId: "api_key_id",
     externalUserId: "external_user_id",
     includeTimeSeries: "include_time_series",
   });

@@ -31,6 +31,9 @@ type Service interface {
 	// Get observability overview metrics including time series, tool breakdowns,
 	// and summary stats
 	GetObservabilityOverview(context.Context, *GetObservabilityOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// List available filter options (API keys or users) for the observability
+	// overview
+	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -55,7 +58,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"searchLogs", "searchToolCalls", "searchChats", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview"}
+var MethodNames = [8]string{"searchLogs", "searchToolCalls", "searchChats", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -110,6 +113,16 @@ type ChatSummary struct {
 	TotalTokens int64
 }
 
+// A single filter option (API key or user)
+type FilterOption struct {
+	// Unique identifier for the option
+	ID string
+	// Display label for the option
+	Label string
+	// Number of events for this option
+	Count int64
+}
+
 // GetMetricsSummaryResult is the result type of the telemetry service
 // getProjectMetricsSummary method.
 type GetMetricsSummaryResult struct {
@@ -131,6 +144,8 @@ type GetObservabilityOverviewPayload struct {
 	To string
 	// Optional external user ID filter
 	ExternalUserID *string
+	// Optional API key ID filter
+	APIKeyID *string
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool
 }
@@ -185,6 +200,29 @@ type GetUserMetricsSummaryPayload struct {
 type GetUserMetricsSummaryResult struct {
 	// Aggregated metrics for the user
 	Metrics *Metrics
+	// Whether telemetry is enabled for the organization
+	Enabled bool
+}
+
+// ListFilterOptionsPayload is the payload type of the telemetry service
+// listFilterOptions method.
+type ListFilterOptionsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Type of filter to list options for
+	FilterType string
+}
+
+// ListFilterOptionsResult is the result type of the telemetry service
+// listFilterOptions method.
+type ListFilterOptionsResult struct {
+	// List of filter options
+	Options []*FilterOption
 	// Whether telemetry is enabled for the organization
 	Enabled bool
 }
@@ -446,6 +484,10 @@ type TimeSeriesBucket struct {
 	ResolvedChats int64
 	// Failed chat sessions in this bucket
 	FailedChats int64
+	// Partially resolved chat sessions in this bucket
+	PartialChats int64
+	// Abandoned chat sessions in this bucket
+	AbandonedChats int64
 	// Total tool calls in this bucket
 	TotalToolCalls int64
 	// Failed tool calls in this bucket

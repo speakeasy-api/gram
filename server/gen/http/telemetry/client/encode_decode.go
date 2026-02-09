@@ -1719,6 +1719,248 @@ func DecodeGetObservabilityOverviewResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildListFilterOptionsRequest instantiates a HTTP request object with method
+// and path set to call the "telemetry" service "listFilterOptions" endpoint
+func (c *Client) BuildListFilterOptionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListFilterOptionsTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "listFilterOptions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListFilterOptionsRequest returns an encoder for requests sent to the
+// telemetry listFilterOptions server.
+func EncodeListFilterOptionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.ListFilterOptionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "listFilterOptions", "*telemetry.ListFilterOptionsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewListFilterOptionsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "listFilterOptions", err)
+		}
+		return nil
+	}
+}
+
+// DecodeListFilterOptionsResponse returns a decoder for responses returned by
+// the telemetry listFilterOptions endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListFilterOptionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListFilterOptionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListFilterOptionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+			}
+			err = ValidateListFilterOptionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+			}
+			res := NewListFilterOptionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListFilterOptionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+			}
+			err = ValidateListFilterOptionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+			}
+			return nil, NewListFilterOptionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListFilterOptionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+			}
+			err = ValidateListFilterOptionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+			}
+			return nil, NewListFilterOptionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListFilterOptionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+			}
+			err = ValidateListFilterOptionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+			}
+			return nil, NewListFilterOptionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListFilterOptionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+			}
+			err = ValidateListFilterOptionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+			}
+			return nil, NewListFilterOptionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListFilterOptionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+			}
+			err = ValidateListFilterOptionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+			}
+			return nil, NewListFilterOptionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListFilterOptionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+			}
+			err = ValidateListFilterOptionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+			}
+			return nil, NewListFilterOptionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListFilterOptionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+			}
+			err = ValidateListFilterOptionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+			}
+			return nil, NewListFilterOptionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListFilterOptionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+				}
+				err = ValidateListFilterOptionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+				}
+				return nil, NewListFilterOptionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListFilterOptionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+				}
+				err = ValidateListFilterOptionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+				}
+				return nil, NewListFilterOptionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "listFilterOptions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListFilterOptionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listFilterOptions", err)
+			}
+			err = ValidateListFilterOptionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listFilterOptions", err)
+			}
+			return nil, NewListFilterOptionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "listFilterOptions", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalTelemetrySearchLogsFilterToSearchLogsFilterRequestBody builds a value
 // of type *SearchLogsFilterRequestBody from a value of type
 // *telemetry.SearchLogsFilter.
@@ -2020,6 +2262,8 @@ func unmarshalTimeSeriesBucketResponseBodyToTelemetryTimeSeriesBucket(v *TimeSer
 		TotalChats:           *v.TotalChats,
 		ResolvedChats:        *v.ResolvedChats,
 		FailedChats:          *v.FailedChats,
+		PartialChats:         *v.PartialChats,
+		AbandonedChats:       *v.AbandonedChats,
 		TotalToolCalls:       *v.TotalToolCalls,
 		FailedToolCalls:      *v.FailedToolCalls,
 		AvgToolLatencyMs:     *v.AvgToolLatencyMs,
@@ -2039,6 +2283,18 @@ func unmarshalToolMetricResponseBodyToTelemetryToolMetric(v *ToolMetricResponseB
 		FailureCount: *v.FailureCount,
 		AvgLatencyMs: *v.AvgLatencyMs,
 		FailureRate:  *v.FailureRate,
+	}
+
+	return res
+}
+
+// unmarshalFilterOptionResponseBodyToTelemetryFilterOption builds a value of
+// type *telemetry.FilterOption from a value of type *FilterOptionResponseBody.
+func unmarshalFilterOptionResponseBodyToTelemetryFilterOption(v *FilterOptionResponseBody) *telemetry.FilterOption {
+	res := &telemetry.FilterOption{
+		ID:    *v.ID,
+		Label: *v.Label,
+		Count: *v.Count,
 	}
 
 	return res

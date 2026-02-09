@@ -174,6 +174,8 @@ type TimeSeriesBucket struct {
 	TotalChats           uint64  `ch:"total_chats"`
 	ResolvedChats        uint64  `ch:"resolved_chats"`
 	FailedChats          uint64  `ch:"failed_chats"`
+	PartialChats         uint64  `ch:"partial_chats"`
+	AbandonedChats       uint64  `ch:"abandoned_chats"`
 	TotalToolCalls       uint64  `ch:"total_tool_calls"`
 	FailedToolCalls      uint64  `ch:"failed_tool_calls"`
 	AvgToolLatencyMs     float64 `ch:"avg_tool_latency_ms"`
@@ -205,4 +207,11 @@ type OverviewSummary struct {
 	TotalToolCalls  uint64  `ch:"total_tool_calls"`
 	FailedToolCalls uint64  `ch:"failed_tool_calls"`
 	AvgLatencyMs    float64 `ch:"avg_latency_ms"`
+}
+
+// FilterOption represents a single option for filtering (API key or user).
+type FilterOption struct {
+	ID    string `ch:"id"`
+	Label string `ch:"label"` // Display label (may be same as ID or a friendly name)
+	Count uint64 `ch:"count"` // Number of events for this option
 }

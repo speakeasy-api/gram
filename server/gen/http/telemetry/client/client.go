@@ -49,6 +49,10 @@ type Client struct {
 	// the getObservabilityOverview endpoint.
 	GetObservabilityOverviewDoer goahttp.Doer
 
+	// ListFilterOptions Doer is the HTTP client used to make requests to the
+	// listFilterOptions endpoint.
+	ListFilterOptionsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -77,6 +81,7 @@ func NewClient(
 		GetProjectMetricsSummaryDoer: doer,
 		GetUserMetricsSummaryDoer:    doer,
 		GetObservabilityOverviewDoer: doer,
+		ListFilterOptionsDoer:        doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -272,6 +277,30 @@ func (c *Client) GetObservabilityOverview() goa.Endpoint {
 		resp, err := c.GetObservabilityOverviewDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getObservabilityOverview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListFilterOptions returns an endpoint that makes HTTP requests to the
+// telemetry service listFilterOptions server.
+func (c *Client) ListFilterOptions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListFilterOptionsRequest(c.encoder)
+		decodeResponse = DecodeListFilterOptionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListFilterOptionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListFilterOptionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "listFilterOptions", err)
 		}
 		return decodeResponse(resp)
 	}

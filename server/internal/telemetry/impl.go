@@ -736,6 +736,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 
 	projectID := authCtx.ProjectID.String()
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
 
 	// Calculate interval for time series based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
@@ -751,6 +752,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
+		APIKeyID:       apiKeyID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
@@ -761,6 +763,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:      comparisonStart,
 		TimeEnd:        comparisonEnd,
 		ExternalUserID: externalUserID,
+		APIKeyID:       apiKeyID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -774,6 +777,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			TimeEnd:         timeEnd,
 			IntervalSeconds: intervalSeconds,
 			ExternalUserID:  externalUserID,
+			APIKeyID:        apiKeyID,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -785,6 +789,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
+		APIKeyID:       apiKeyID,
 		Limit:          10,
 		SortBy:         "count",
 	})
@@ -797,6 +802,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
+		APIKeyID:       apiKeyID,
 		Limit:          10,
 		SortBy:         "failure_rate",
 	})
@@ -873,6 +879,8 @@ func toTimeSeriesBuckets(buckets []repo.TimeSeriesBucket) []*telem_gen.TimeSerie
 			TotalChats:           int64(b.TotalChats),
 			ResolvedChats:        int64(b.ResolvedChats),
 			FailedChats:          int64(b.FailedChats),
+			PartialChats:         int64(b.PartialChats),
+			AbandonedChats:       int64(b.AbandonedChats),
 			TotalToolCalls:       int64(b.TotalToolCalls),
 			FailedToolCalls:      int64(b.FailedToolCalls),
 			AvgToolLatencyMs:     sanitizeFloat64(b.AvgToolLatencyMs),
@@ -900,4 +908,53 @@ func toToolMetrics(tools []repo.ToolMetric) []*telem_gen.ToolMetric {
 		}
 	}
 	return result
+}
+
+// ListFilterOptions retrieves available filter options (API keys or users) for the observability dashboard.
+func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.ListFilterOptionsPayload) (res *telem_gen.ListFilterOptionsResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	options, err := s.chRepo.ListFilterOptions(ctx, repo.ListFilterOptionsParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		FilterType:    payload.FilterType,
+		Limit:         100,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing filter options")
+	}
+
+	// Convert to API types
+	result := make([]*telem_gen.FilterOption, len(options))
+	for i, opt := range options {
+		//nolint:gosec // Values are bounded counts that won't overflow int64
+		result[i] = &telem_gen.FilterOption{
+			ID:    opt.ID,
+			Label: opt.Label,
+			Count: int64(opt.Count),
+		}
+	}
+
+	return &telem_gen.ListFilterOptionsResult{
+		Options: result,
+		Enabled: true,
+	}, nil
 }

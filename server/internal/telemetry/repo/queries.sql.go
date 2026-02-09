@@ -407,6 +407,7 @@ type GetTimeSeriesMetricsParams struct {
 	TimeEnd         int64
 	IntervalSeconds int64  // Bucket interval in seconds
 	ExternalUserID  string // Optional filter
+	APIKeyID        string // Optional filter
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -417,12 +418,17 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 		// Time bucket
 		"toInt64(toStartOfInterval(fromUnixTimestamp64Nano(time_unix_nano), INTERVAL "+fmt.Sprintf("%d", arg.IntervalSeconds)+" SECOND)) * 1000000000 as bucket_time_unix_nano",
 
-		// Chat metrics (count distinct chat sessions per bucket)
-		"uniqExactIf(gram_chat_id, gram_chat_id != '') as total_chats",
-		// Resolved: finish_reason contains 'stop' and no HTTP errors in the chat
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) as resolved_chats",
-		// Failed: any HTTP 4xx/5xx error in the chat
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_chats",
+		// Chat metrics - count chats with resolution events in this bucket
+		// total_chats = chats with any resolution analysis (success, failure, partial, abandoned)
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label != '') as total_chats",
+		// Resolved: chats with evaluation_score_label = 'success' (from resolution analysis)
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
+		// Failed: chats with evaluation_score_label = 'failure' (from resolution analysis)
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
+		// Partial: chats with evaluation_score_label = 'partial'
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'partial') as partial_chats",
+		// Abandoned: chats with evaluation_score_label = 'abandoned'
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'abandoned') as abandoned_chats",
 
 		// Tool metrics
 		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
@@ -437,9 +443,12 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
-	// Optional external user filter
+	// Optional filters
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+	if arg.APIKeyID != "" {
+		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
 
 	sb = sb.GroupBy("bucket_time_unix_nano").
@@ -478,6 +487,7 @@ type GetToolMetricsBreakdownParams struct {
 	TimeStart      int64
 	TimeEnd        int64
 	ExternalUserID string // Optional filter
+	APIKeyID       string // Optional filter
 	Limit          int
 	SortBy         string // "count" or "failure_rate"
 }
@@ -500,9 +510,12 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		Where("startsWith(gram_urn, 'tools:')")
 
-	// Optional external user filter
+	// Optional filters
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+	if arg.APIKeyID != "" {
+		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
 
 	sb = sb.GroupBy("gram_urn")
@@ -549,6 +562,7 @@ type GetOverviewSummaryParams struct {
 	TimeStart      int64
 	TimeEnd        int64
 	ExternalUserID string // Optional filter
+	APIKeyID       string // Optional filter
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -556,13 +570,16 @@ type GetOverviewSummaryParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
 	sb := sq.Select(
-		// Chat metrics
-		"uniqExactIf(gram_chat_id, gram_chat_id != '') as total_chats",
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) as resolved_chats",
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_chats",
+		// Chat metrics - count only chats with resolution analysis for accurate resolution rate
+		// total_chats = chats with any resolution event (success, failure, partial, abandoned)
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label != '') as total_chats",
+		// Resolved: chats with evaluation_score_label = 'success' (from resolution analysis)
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
+		// Failed: chats with evaluation_score_label = 'failure' (from resolution analysis)
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
-		// Resolution time: average duration for resolved chats
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) as avg_resolution_time_ms",
+		// Resolution time: average duration from resolution analysis events (gen_ai.conversation.duration is set in resolution events)
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms",
 
 		// Tool metrics
 		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
@@ -574,9 +591,12 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
-	// Optional external user filter
+	// Optional filters
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+	if arg.APIKeyID != "" {
+		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
 
 	query, args, err := sb.ToSql()
@@ -946,4 +966,69 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	}
 
 	return &metrics, nil
+}
+
+// ListFilterOptionsParams contains the parameters for listing filter options.
+type ListFilterOptionsParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+	FilterType    string // "api_key" or "user"
+	Limit         int
+}
+
+// ListFilterOptions retrieves distinct filter values (API keys or users) for a time period.
+// Results are sorted by event count descending.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListFilterOptions(ctx context.Context, arg ListFilterOptionsParams) ([]FilterOption, error) {
+	var groupCol string
+	switch arg.FilterType {
+	case "api_key":
+		groupCol = "api_key_id"
+	case "user":
+		groupCol = "external_user_id"
+	default:
+		return nil, fmt.Errorf("invalid filter type: %s", arg.FilterType)
+	}
+
+	sb := sq.Select(
+		groupCol+" AS id",
+		groupCol+" AS label",               // For now, label is same as ID
+		"uniqExact(gram_chat_id) AS count", // Count unique chat sessions, not log rows
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(groupCol + " != ''").
+		GroupBy(groupCol).
+		OrderBy("count DESC").
+		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list filter options query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var options []FilterOption
+	for rows.Next() {
+		var opt FilterOption
+		if err = rows.ScanStruct(&opt); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		options = append(options, opt)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return options, nil
 }

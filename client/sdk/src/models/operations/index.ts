@@ -61,6 +61,7 @@ export * from "./listassets.js";
 export * from "./listchats.js";
 export * from "./listdeployments.js";
 export * from "./listenvironments.js";
+export * from "./listfilteroptions.js";
 export * from "./listglobalvariations.js";
 export * from "./listintegrations.js";
 export * from "./listmcpcatalog.js";

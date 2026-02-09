@@ -428,7 +428,7 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 	{
 		err = json.Unmarshal([]byte(telemetryGetObservabilityOverviewBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_time_series\": false,\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_time_series\": false,\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -458,6 +458,7 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 		From:              body.From,
 		To:                body.To,
 		ExternalUserID:    body.ExternalUserID,
+		APIKeyID:          body.APIKeyID,
 		IncludeTimeSeries: body.IncludeTimeSeries,
 	}
 	{
@@ -465,6 +466,55 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 		if v.IncludeTimeSeries == zero {
 			v.IncludeTimeSeries = true
 		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListFilterOptionsPayload builds the payload for the telemetry
+// listFilterOptions endpoint from CLI flags.
+func BuildListFilterOptionsPayload(telemetryListFilterOptionsBody string, telemetryListFilterOptionsApikeyToken string, telemetryListFilterOptionsSessionToken string, telemetryListFilterOptionsProjectSlugInput string) (*telemetry.ListFilterOptionsPayload, error) {
+	var err error
+	var body ListFilterOptionsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryListFilterOptionsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"filter_type\": \"user\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if !(body.FilterType == "api_key" || body.FilterType == "user") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.filter_type", body.FilterType, []any{"api_key", "user"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryListFilterOptionsApikeyToken != "" {
+			apikeyToken = &telemetryListFilterOptionsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryListFilterOptionsSessionToken != "" {
+			sessionToken = &telemetryListFilterOptionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryListFilterOptionsProjectSlugInput != "" {
+			projectSlugInput = &telemetryListFilterOptionsProjectSlugInput
+		}
+	}
+	v := &telemetry.ListFilterOptionsPayload{
+		From:       body.From,
+		To:         body.To,
+		FilterType: body.FilterType,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
