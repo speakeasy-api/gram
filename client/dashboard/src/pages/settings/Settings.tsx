@@ -82,8 +82,8 @@ export default function Settings() {
 
   const filteredKeys = useMemo(() => {
     const keys = keysData?.keys ?? [];
-    if (!apiKeySearch) return keys;
-    const search = apiKeySearch.toLowerCase();
+    const search = apiKeySearch.trim().toLowerCase();
+    if (!search) return keys;
     return keys.filter((key) => key.name.toLowerCase().includes(search));
   }, [keysData?.keys, apiKeySearch]);
 
