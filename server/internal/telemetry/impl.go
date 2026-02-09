@@ -371,9 +371,9 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 		for urn, count := range item.ToolCounts {
 			tools = append(tools, &telem_gen.ToolUsage{
 				Urn:          urn,
-				Count:        int64(count),                          //nolint:gosec // Bounded count
-				SuccessCount: int64(item.ToolSuccessCounts[urn]),    //nolint:gosec // Bounded count
-				FailureCount: int64(item.ToolFailureCounts[urn]),    //nolint:gosec // Bounded count
+				Count:        int64(count),                       //nolint:gosec // Bounded count
+				SuccessCount: int64(item.ToolSuccessCounts[urn]), //nolint:gosec // Bounded count
+				FailureCount: int64(item.ToolFailureCounts[urn]), //nolint:gosec // Bounded count
 			})
 		}
 
@@ -459,7 +459,7 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 
 	//nolint:gosec // Values are bounded counts that won't overflow int64
 	return &telem_gen.GetMetricsSummaryResult{
-		Metrics: &telem_gen.Metrics{
+		Metrics: &telem_gen.ProjectSummary{
 			FirstSeenUnixNano:     strconv.FormatInt(metrics.FirstSeenUnixNano, 10),
 			LastSeenUnixNano:      strconv.FormatInt(metrics.LastSeenUnixNano, 10),
 			TotalInputTokens:      metrics.TotalInputTokens,

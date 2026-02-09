@@ -599,7 +599,7 @@ var ToolUsage = Type("ToolUsage", func() {
 	Required("urn", "count", "success_count", "failure_count")
 })
 
-var Metrics = Type("Metrics", func() {
+var ProjectSummaryType = Type("ProjectSummary", func() {
 	Description("Aggregated metrics")
 
 	// Activity timestamps (string for JS int64 precision)
@@ -676,7 +676,7 @@ var GetProjectMetricsSummaryPayload = Type("GetProjectMetricsSummaryPayload", fu
 var GetMetricsSummaryResult = Type("GetMetricsSummaryResult", func() {
 	Description("Result of metrics summary query")
 
-	Attribute("metrics", Metrics, "Aggregated metrics")
+	Attribute("metrics", ProjectSummaryType, "Aggregated metrics")
 	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
 	Required("metrics", "enabled")
@@ -704,7 +704,7 @@ var GetUserMetricsSummaryPayload = Type("GetUserMetricsSummaryPayload", func() {
 var GetUserMetricsSummaryResult = Type("GetUserMetricsSummaryResult", func() {
 	Description("Result of user metrics summary query")
 
-	Attribute("metrics", Metrics, "Aggregated metrics for the user")
+	Attribute("metrics", ProjectSummaryType, "Aggregated metrics for the user")
 	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
 	Required("metrics", "enabled")

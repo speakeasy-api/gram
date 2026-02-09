@@ -155,7 +155,7 @@ type CaptureEventResponseBody struct {
 // "getProjectMetricsSummary" endpoint HTTP response body.
 type GetProjectMetricsSummaryResponseBody struct {
 	// Aggregated metrics
-	Metrics *MetricsResponseBody `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
+	Metrics *ProjectSummaryResponseBody `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
 	// Whether telemetry is enabled for the organization
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
@@ -164,7 +164,7 @@ type GetProjectMetricsSummaryResponseBody struct {
 // "getUserMetricsSummary" endpoint HTTP response body.
 type GetUserMetricsSummaryResponseBody struct {
 	// Aggregated metrics for the user
-	Metrics *MetricsResponseBody `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
+	Metrics *ProjectSummaryResponseBody `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
 	// Whether telemetry is enabled for the organization
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
@@ -1655,8 +1655,8 @@ type ToolUsageResponseBody struct {
 	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
 }
 
-// MetricsResponseBody is used to define fields on response body types.
-type MetricsResponseBody struct {
+// ProjectSummaryResponseBody is used to define fields on response body types.
+type ProjectSummaryResponseBody struct {
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano *string `form:"first_seen_unix_nano,omitempty" json:"first_seen_unix_nano,omitempty" xml:"first_seen_unix_nano,omitempty"`
 	// Latest activity timestamp in Unix nanoseconds
@@ -2693,7 +2693,7 @@ func NewGetProjectMetricsSummaryGetMetricsSummaryResultOK(body *GetProjectMetric
 	v := &telemetry.GetMetricsSummaryResult{
 		Enabled: *body.Enabled,
 	}
-	v.Metrics = unmarshalMetricsResponseBodyToTelemetryMetrics(body.Metrics)
+	v.Metrics = unmarshalProjectSummaryResponseBodyToTelemetryProjectSummary(body.Metrics)
 
 	return v
 }
@@ -2854,7 +2854,7 @@ func NewGetUserMetricsSummaryResultOK(body *GetUserMetricsSummaryResponseBody) *
 	v := &telemetry.GetUserMetricsSummaryResult{
 		Enabled: *body.Enabled,
 	}
-	v.Metrics = unmarshalMetricsResponseBodyToTelemetryMetrics(body.Metrics)
+	v.Metrics = unmarshalProjectSummaryResponseBodyToTelemetryProjectSummary(body.Metrics)
 
 	return v
 }
@@ -3104,7 +3104,7 @@ func ValidateGetProjectMetricsSummaryResponseBody(body *GetProjectMetricsSummary
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.Metrics != nil {
-		if err2 := ValidateMetricsResponseBody(body.Metrics); err2 != nil {
+		if err2 := ValidateProjectSummaryResponseBody(body.Metrics); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -3121,7 +3121,7 @@ func ValidateGetUserMetricsSummaryResponseBody(body *GetUserMetricsSummaryRespon
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.Metrics != nil {
-		if err2 := ValidateMetricsResponseBody(body.Metrics); err2 != nil {
+		if err2 := ValidateProjectSummaryResponseBody(body.Metrics); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -5065,9 +5065,9 @@ func ValidateToolUsageResponseBody(body *ToolUsageResponseBody) (err error) {
 	return
 }
 
-// ValidateMetricsResponseBody runs the validations defined on
-// MetricsResponseBody
-func ValidateMetricsResponseBody(body *MetricsResponseBody) (err error) {
+// ValidateProjectSummaryResponseBody runs the validations defined on
+// ProjectSummaryResponseBody
+func ValidateProjectSummaryResponseBody(body *ProjectSummaryResponseBody) (err error) {
 	if body.FirstSeenUnixNano == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("first_seen_unix_nano", "body"))
 	}

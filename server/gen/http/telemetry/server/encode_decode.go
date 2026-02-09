@@ -1882,10 +1882,11 @@ func marshalTelemetryToolUsageToToolUsageResponseBody(v *telemetry.ToolUsage) *T
 	return res
 }
 
-// marshalTelemetryMetricsToMetricsResponseBody builds a value of type
-// *MetricsResponseBody from a value of type *telemetry.Metrics.
-func marshalTelemetryMetricsToMetricsResponseBody(v *telemetry.Metrics) *MetricsResponseBody {
-	res := &MetricsResponseBody{
+// marshalTelemetryProjectSummaryToProjectSummaryResponseBody builds a value of
+// type *ProjectSummaryResponseBody from a value of type
+// *telemetry.ProjectSummary.
+func marshalTelemetryProjectSummaryToProjectSummaryResponseBody(v *telemetry.ProjectSummary) *ProjectSummaryResponseBody {
+	res := &ProjectSummaryResponseBody{
 		FirstSeenUnixNano:     v.FirstSeenUnixNano,
 		LastSeenUnixNano:      v.LastSeenUnixNano,
 		TotalInputTokens:      v.TotalInputTokens,

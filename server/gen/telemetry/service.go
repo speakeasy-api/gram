@@ -113,7 +113,7 @@ type ChatSummary struct {
 // getProjectMetricsSummary method.
 type GetMetricsSummaryResult struct {
 	// Aggregated metrics
-	Metrics *Metrics
+	Metrics *ProjectSummary
 	// Whether telemetry is enabled for the organization
 	Enabled bool
 }
@@ -150,13 +150,21 @@ type GetUserMetricsSummaryPayload struct {
 // getUserMetricsSummary method.
 type GetUserMetricsSummaryResult struct {
 	// Aggregated metrics for the user
-	Metrics *Metrics
+	Metrics *ProjectSummary
 	// Whether telemetry is enabled for the organization
 	Enabled bool
 }
 
+// Model usage statistics
+type ModelUsage struct {
+	// Model name
+	Name string
+	// Number of times used
+	Count int64
+}
+
 // Aggregated metrics
-type Metrics struct {
+type ProjectSummary struct {
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string
 	// Latest activity timestamp in Unix nanoseconds
@@ -195,14 +203,6 @@ type Metrics struct {
 	Models []*ModelUsage
 	// List of tools used with success/failure counts
 	Tools []*ToolUsage
-}
-
-// Model usage statistics
-type ModelUsage struct {
-	// Model name
-	Name string
-	// Number of times used
-	Count int64
 }
 
 // Filter criteria for searching chat sessions

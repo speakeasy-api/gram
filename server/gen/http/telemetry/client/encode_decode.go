@@ -1994,10 +1994,11 @@ func unmarshalToolUsageResponseBodyToTelemetryToolUsage(v *ToolUsageResponseBody
 	return res
 }
 
-// unmarshalMetricsResponseBodyToTelemetryMetrics builds a value of type
-// *telemetry.Metrics from a value of type *MetricsResponseBody.
-func unmarshalMetricsResponseBodyToTelemetryMetrics(v *MetricsResponseBody) *telemetry.Metrics {
-	res := &telemetry.Metrics{
+// unmarshalProjectSummaryResponseBodyToTelemetryProjectSummary builds a value
+// of type *telemetry.ProjectSummary from a value of type
+// *ProjectSummaryResponseBody.
+func unmarshalProjectSummaryResponseBodyToTelemetryProjectSummary(v *ProjectSummaryResponseBody) *telemetry.ProjectSummary {
+	res := &telemetry.ProjectSummary{
 		FirstSeenUnixNano:     *v.FirstSeenUnixNano,
 		LastSeenUnixNano:      *v.LastSeenUnixNano,
 		TotalInputTokens:      *v.TotalInputTokens,

@@ -157,7 +157,7 @@ type CaptureEventResponseBody struct {
 // "getProjectMetricsSummary" endpoint HTTP response body.
 type GetProjectMetricsSummaryResponseBody struct {
 	// Aggregated metrics
-	Metrics *MetricsResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
+	Metrics *ProjectSummaryResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
 	// Whether telemetry is enabled for the organization
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
@@ -166,7 +166,7 @@ type GetProjectMetricsSummaryResponseBody struct {
 // "getUserMetricsSummary" endpoint HTTP response body.
 type GetUserMetricsSummaryResponseBody struct {
 	// Aggregated metrics for the user
-	Metrics *MetricsResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
+	Metrics *ProjectSummaryResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
 	// Whether telemetry is enabled for the organization
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
@@ -1582,8 +1582,8 @@ type ToolUsageResponseBody struct {
 	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
 }
 
-// MetricsResponseBody is used to define fields on response body types.
-type MetricsResponseBody struct {
+// ProjectSummaryResponseBody is used to define fields on response body types.
+type ProjectSummaryResponseBody struct {
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string `form:"first_seen_unix_nano" json:"first_seen_unix_nano" xml:"first_seen_unix_nano"`
 	// Latest activity timestamp in Unix nanoseconds
@@ -1812,7 +1812,7 @@ func NewGetProjectMetricsSummaryResponseBody(res *telemetry.GetMetricsSummaryRes
 		Enabled: res.Enabled,
 	}
 	if res.Metrics != nil {
-		body.Metrics = marshalTelemetryMetricsToMetricsResponseBody(res.Metrics)
+		body.Metrics = marshalTelemetryProjectSummaryToProjectSummaryResponseBody(res.Metrics)
 	}
 	return body
 }
@@ -1824,7 +1824,7 @@ func NewGetUserMetricsSummaryResponseBody(res *telemetry.GetUserMetricsSummaryRe
 		Enabled: res.Enabled,
 	}
 	if res.Metrics != nil {
-		body.Metrics = marshalTelemetryMetricsToMetricsResponseBody(res.Metrics)
+		body.Metrics = marshalTelemetryProjectSummaryToProjectSummaryResponseBody(res.Metrics)
 	}
 	return body
 }
