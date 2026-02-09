@@ -724,6 +724,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 			chatID,
 			*authCtx.ProjectID,
 			authCtx.ActiveOrganizationID,
+			authCtx.APIKeyID,
 		); err != nil {
 			s.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
 			// Don't fail the request if analysis scheduling fails
