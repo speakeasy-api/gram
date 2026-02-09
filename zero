@@ -106,6 +106,10 @@ mise run build:internal-sdk
 echo -e "\n⏳ Updating VS Code and Cursor editor settings"
 mise run install:vscode
 
+echo -e "\n⏳ Cleaning up stale processes and Temporal state"
+interactive_only mise run zero:cleanup
+echo "✅ Cleaned up stale state"
+
 echo -e "\n⏳ Starting infra"
 interactive_only mise infra:start
 
