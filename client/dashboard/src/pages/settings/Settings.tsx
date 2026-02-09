@@ -42,7 +42,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { SettingsProjectsTable } from "./SettingsProjectsTable";
+import { SettingsDangerZone } from "./SettingsDangerZone";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -299,14 +299,7 @@ export default function Settings() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <SettingsProjectsTable />
-
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-          className="mt-8"
-        >
+        <Stack direction="horizontal" justify="space-between" align="center">
           <Heading variant="h4">API Keys</Heading>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             New API Key
@@ -717,6 +710,8 @@ export default function Settings() {
           icon={Globe}
           accountUpgrade
         />
+
+        <SettingsDangerZone />
 
         {isAdmin && (
           <div className="mt-12 p-4 rounded-lg bg-red-500/5 border border-red-500/20">
