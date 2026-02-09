@@ -1685,6 +1685,16 @@ type ProjectSummaryResponseBody struct {
 	ToolCallFailure *int64 `form:"tool_call_failure,omitempty" json:"tool_call_failure,omitempty" xml:"tool_call_failure,omitempty"`
 	// Average tool call duration in milliseconds
 	AvgToolDurationMs *float64 `form:"avg_tool_duration_ms,omitempty" json:"avg_tool_duration_ms,omitempty" xml:"avg_tool_duration_ms,omitempty"`
+	// Chats resolved successfully
+	ChatResolutionSuccess *int64 `form:"chat_resolution_success,omitempty" json:"chat_resolution_success,omitempty" xml:"chat_resolution_success,omitempty"`
+	// Chats that failed to resolve
+	ChatResolutionFailure *int64 `form:"chat_resolution_failure,omitempty" json:"chat_resolution_failure,omitempty" xml:"chat_resolution_failure,omitempty"`
+	// Chats partially resolved
+	ChatResolutionPartial *int64 `form:"chat_resolution_partial,omitempty" json:"chat_resolution_partial,omitempty" xml:"chat_resolution_partial,omitempty"`
+	// Chats abandoned by user
+	ChatResolutionAbandoned *int64 `form:"chat_resolution_abandoned,omitempty" json:"chat_resolution_abandoned,omitempty" xml:"chat_resolution_abandoned,omitempty"`
+	// Average chat resolution score (0-100)
+	AvgChatResolutionScore *float64 `form:"avg_chat_resolution_score,omitempty" json:"avg_chat_resolution_score,omitempty" xml:"avg_chat_resolution_score,omitempty"`
 	// Number of unique chat sessions (project scope only)
 	TotalChats *int64 `form:"total_chats,omitempty" json:"total_chats,omitempty" xml:"total_chats,omitempty"`
 	// Number of distinct models used (project scope only)
@@ -5109,6 +5119,21 @@ func ValidateProjectSummaryResponseBody(body *ProjectSummaryResponseBody) (err e
 	}
 	if body.AvgToolDurationMs == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("avg_tool_duration_ms", "body"))
+	}
+	if body.ChatResolutionSuccess == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("chat_resolution_success", "body"))
+	}
+	if body.ChatResolutionFailure == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("chat_resolution_failure", "body"))
+	}
+	if body.ChatResolutionPartial == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("chat_resolution_partial", "body"))
+	}
+	if body.ChatResolutionAbandoned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("chat_resolution_abandoned", "body"))
+	}
+	if body.AvgChatResolutionScore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("avg_chat_resolution_score", "body"))
 	}
 	if body.TotalChats == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_chats", "body"))

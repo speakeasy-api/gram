@@ -1612,6 +1612,16 @@ type ProjectSummaryResponseBody struct {
 	ToolCallFailure int64 `form:"tool_call_failure" json:"tool_call_failure" xml:"tool_call_failure"`
 	// Average tool call duration in milliseconds
 	AvgToolDurationMs float64 `form:"avg_tool_duration_ms" json:"avg_tool_duration_ms" xml:"avg_tool_duration_ms"`
+	// Chats resolved successfully
+	ChatResolutionSuccess int64 `form:"chat_resolution_success" json:"chat_resolution_success" xml:"chat_resolution_success"`
+	// Chats that failed to resolve
+	ChatResolutionFailure int64 `form:"chat_resolution_failure" json:"chat_resolution_failure" xml:"chat_resolution_failure"`
+	// Chats partially resolved
+	ChatResolutionPartial int64 `form:"chat_resolution_partial" json:"chat_resolution_partial" xml:"chat_resolution_partial"`
+	// Chats abandoned by user
+	ChatResolutionAbandoned int64 `form:"chat_resolution_abandoned" json:"chat_resolution_abandoned" xml:"chat_resolution_abandoned"`
+	// Average chat resolution score (0-100)
+	AvgChatResolutionScore float64 `form:"avg_chat_resolution_score" json:"avg_chat_resolution_score" xml:"avg_chat_resolution_score"`
 	// Number of unique chat sessions (project scope only)
 	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
 	// Number of distinct models used (project scope only)
