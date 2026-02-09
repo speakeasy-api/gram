@@ -7,6 +7,7 @@ import { ToolUI } from './tool-ui'
 // However, to use this design variant, we'd have to add lots of metadata to the tool parts
 
 const meta: Meta<typeof ToolUI> = {
+  title: 'Components/Tool UI',
   component: ToolUI,
   parameters: {
     layout: 'centered',

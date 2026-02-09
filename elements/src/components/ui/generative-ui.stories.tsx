@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { GenerativeUI } from './generative-ui'
 
 const meta: Meta<typeof GenerativeUI> = {
-  title: 'Generative UI/Components',
+  title: 'Components/Generative UI',
   component: GenerativeUI,
   parameters: {
     layout: 'fullscreen',
