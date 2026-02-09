@@ -2,6 +2,16 @@
 
 //MISE dir="{{ config_root }}"
 //MISE hide=true
+//MISE description="Finds available ports for any environment variables ending with `_PORT` in the `mise.toml` file and writes them to a new `mise.worktree.local.toml` file."
+
+/**
+ * This script is responsible for finding available ports for any environment
+ * variables ending with `_PORT` in the `mise.toml` file and writing them to a
+ * new `mise.worktree.local.toml` file. Any environment variables that depend on
+ * the `_PORT` variables will also need to be picked up and redeclared in the
+ * same file since env var declarations are sensitive to config loading
+ * precedence and order dependent within each config file.
+ */
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { parseTOML } from "confbox";
