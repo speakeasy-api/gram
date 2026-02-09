@@ -67,13 +67,13 @@ export const PieChart: FC<PieChartProps> = ({
       {title && (
         <h3 className="text-foreground text-sm font-medium">{title}</h3>
       )}
-      <div className="h-[250px] w-full">
+      <div className="h-[300px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <RechartsPieChart>
             <Pie
               data={chartData}
               cx="50%"
-              cy="50%"
+              cy="40%"
               innerRadius={0}
               outerRadius={80}
               paddingAngle={2}
@@ -131,7 +131,8 @@ export const PieChart: FC<PieChartProps> = ({
             <Tooltip content={<CustomTooltip />} />
             {showLegend && (
               <Legend
-                wrapperStyle={{ color: 'var(--foreground)' }}
+                verticalAlign="bottom"
+                wrapperStyle={{ color: 'var(--foreground)', paddingTop: 20 }}
                 formatter={(value) => (
                   <span style={{ color: 'var(--foreground)' }}>{value}</span>
                 )}

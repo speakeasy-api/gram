@@ -71,13 +71,13 @@ export const DonutChart: FC<DonutChartProps> = ({
       {title && (
         <h3 className="text-foreground text-sm font-medium">{title}</h3>
       )}
-      <div className="relative h-[250px] w-full">
+      <div className="relative h-[300px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <RechartsPieChart>
             <Pie
               data={chartData}
               cx="50%"
-              cy="50%"
+              cy="40%"
               innerRadius={50}
               outerRadius={80}
               paddingAngle={2}
@@ -135,7 +135,8 @@ export const DonutChart: FC<DonutChartProps> = ({
             <Tooltip content={<CustomTooltip />} />
             {showLegend && (
               <Legend
-                wrapperStyle={{ color: 'var(--foreground)' }}
+                verticalAlign="bottom"
+                wrapperStyle={{ color: 'var(--foreground)', paddingTop: 20 }}
                 formatter={(value) => (
                   <span style={{ color: 'var(--foreground)' }}>{value}</span>
                 )}
@@ -143,9 +144,9 @@ export const DonutChart: FC<DonutChartProps> = ({
             )}
           </RechartsPieChart>
         </ResponsiveContainer>
-        {/* Center label */}
+        {/* Center label - positioned at 40% from top to match pie cy */}
         {(innerLabel || innerValue) && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <div className="pointer-events-none absolute inset-x-0 top-[40%] flex -translate-y-1/2 flex-col items-center">
             {innerValue !== undefined && (
               <span className="text-foreground text-2xl font-bold">
                 {innerValue}
