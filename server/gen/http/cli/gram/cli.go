@@ -68,7 +68,7 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
 		"resources list-resources",
 		"slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-connection)",
-		"telemetry (search-logs|search-tool-calls|search-chats|capture-event|get-project-metrics-summary|get-user-metrics-summary)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server)",
@@ -587,6 +587,12 @@ func ParseEndpoint(
 		telemetrySearchChatsSessionTokenFlag     = telemetrySearchChatsFlags.String("session-token", "", "")
 		telemetrySearchChatsProjectSlugInputFlag = telemetrySearchChatsFlags.String("project-slug-input", "", "")
 
+		telemetrySearchUsersFlags                = flag.NewFlagSet("search-users", flag.ExitOnError)
+		telemetrySearchUsersBodyFlag             = telemetrySearchUsersFlags.String("body", "REQUIRED", "")
+		telemetrySearchUsersApikeyTokenFlag      = telemetrySearchUsersFlags.String("apikey-token", "", "")
+		telemetrySearchUsersSessionTokenFlag     = telemetrySearchUsersFlags.String("session-token", "", "")
+		telemetrySearchUsersProjectSlugInputFlag = telemetrySearchUsersFlags.String("project-slug-input", "", "")
+
 		telemetryCaptureEventFlags                 = flag.NewFlagSet("capture-event", flag.ExitOnError)
 		telemetryCaptureEventBodyFlag              = telemetryCaptureEventFlags.String("body", "REQUIRED", "")
 		telemetryCaptureEventApikeyTokenFlag       = telemetryCaptureEventFlags.String("apikey-token", "", "")
@@ -886,6 +892,7 @@ func ParseEndpoint(
 	telemetrySearchLogsFlags.Usage = telemetrySearchLogsUsage
 	telemetrySearchToolCallsFlags.Usage = telemetrySearchToolCallsUsage
 	telemetrySearchChatsFlags.Usage = telemetrySearchChatsUsage
+	telemetrySearchUsersFlags.Usage = telemetrySearchUsersUsage
 	telemetryCaptureEventFlags.Usage = telemetryCaptureEventUsage
 	telemetryGetProjectMetricsSummaryFlags.Usage = telemetryGetProjectMetricsSummaryUsage
 	telemetryGetUserMetricsSummaryFlags.Usage = telemetryGetUserMetricsSummaryUsage
@@ -1340,6 +1347,9 @@ func ParseEndpoint(
 
 			case "search-chats":
 				epf = telemetrySearchChatsFlags
+
+			case "search-users":
+				epf = telemetrySearchUsersFlags
 
 			case "capture-event":
 				epf = telemetryCaptureEventFlags
@@ -1813,6 +1823,9 @@ func ParseEndpoint(
 			case "search-chats":
 				endpoint = c.SearchChats()
 				data, err = telemetryc.BuildSearchChatsPayload(*telemetrySearchChatsBodyFlag, *telemetrySearchChatsApikeyTokenFlag, *telemetrySearchChatsSessionTokenFlag, *telemetrySearchChatsProjectSlugInputFlag)
+			case "search-users":
+				endpoint = c.SearchUsers()
+				data, err = telemetryc.BuildSearchUsersPayload(*telemetrySearchUsersBodyFlag, *telemetrySearchUsersApikeyTokenFlag, *telemetrySearchUsersSessionTokenFlag, *telemetrySearchUsersProjectSlugInputFlag)
 			case "capture-event":
 				endpoint = c.CaptureEvent()
 				data, err = telemetryc.BuildCaptureEventPayload(*telemetryCaptureEventBodyFlag, *telemetryCaptureEventApikeyTokenFlag, *telemetryCaptureEventSessionTokenFlag, *telemetryCaptureEventProjectSlugInputFlag, *telemetryCaptureEventChatSessionsTokenFlag)
@@ -4037,6 +4050,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    search-logs: Search and list telemetry logs that match a search filter`)
 	fmt.Fprintln(os.Stderr, `    search-tool-calls: Search and list tool calls that match a search filter`)
 	fmt.Fprintln(os.Stderr, `    search-chats: Search and list chat session summaries that match a search filter`)
+	fmt.Fprintln(os.Stderr, `    search-users: Search and list user usage summaries grouped by user_id or external_user_id`)
 	fmt.Fprintln(os.Stderr, `    capture-event: Capture a telemetry event and forward it to PostHog`)
 	fmt.Fprintln(os.Stderr, `    get-project-metrics-summary: Get aggregated metrics summary for an entire project`)
 	fmt.Fprintln(os.Stderr, `    get-user-metrics-summary: Get aggregated metrics summary grouped by user`)
@@ -4114,6 +4128,30 @@ func telemetrySearchChatsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-chats --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"gram_urn\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_id\": \"abc123\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetrySearchUsersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry search-users", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Search and list user usage summaries grouped by user_id or external_user_id`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-users --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryCaptureEventUsage() {

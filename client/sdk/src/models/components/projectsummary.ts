@@ -13,7 +13,7 @@ import { ToolUsage, ToolUsage$inboundSchema } from "./toolusage.js";
 /**
  * Aggregated metrics
  */
-export type Metrics = {
+export type ProjectSummary = {
   /**
    * Average chat request duration in milliseconds
    */
@@ -93,55 +93,58 @@ export type Metrics = {
 };
 
 /** @internal */
-export const Metrics$inboundSchema: z.ZodType<Metrics, z.ZodTypeDef, unknown> =
-  z.object({
-    avg_chat_duration_ms: z.number(),
-    avg_tokens_per_request: z.number(),
-    avg_tool_duration_ms: z.number(),
-    distinct_models: z.number().int(),
-    distinct_providers: z.number().int(),
-    finish_reason_stop: z.number().int(),
-    finish_reason_tool_calls: z.number().int(),
-    first_seen_unix_nano: z.string(),
-    last_seen_unix_nano: z.string(),
-    models: z.array(ModelUsage$inboundSchema),
-    tool_call_failure: z.number().int(),
-    tool_call_success: z.number().int(),
-    tools: z.array(ToolUsage$inboundSchema),
-    total_chat_requests: z.number().int(),
-    total_chats: z.number().int(),
-    total_input_tokens: z.number().int(),
-    total_output_tokens: z.number().int(),
-    total_tokens: z.number().int(),
-    total_tool_calls: z.number().int(),
-  }).transform((v) => {
-    return remap$(v, {
-      "avg_chat_duration_ms": "avgChatDurationMs",
-      "avg_tokens_per_request": "avgTokensPerRequest",
-      "avg_tool_duration_ms": "avgToolDurationMs",
-      "distinct_models": "distinctModels",
-      "distinct_providers": "distinctProviders",
-      "finish_reason_stop": "finishReasonStop",
-      "finish_reason_tool_calls": "finishReasonToolCalls",
-      "first_seen_unix_nano": "firstSeenUnixNano",
-      "last_seen_unix_nano": "lastSeenUnixNano",
-      "tool_call_failure": "toolCallFailure",
-      "tool_call_success": "toolCallSuccess",
-      "total_chat_requests": "totalChatRequests",
-      "total_chats": "totalChats",
-      "total_input_tokens": "totalInputTokens",
-      "total_output_tokens": "totalOutputTokens",
-      "total_tokens": "totalTokens",
-      "total_tool_calls": "totalToolCalls",
-    });
+export const ProjectSummary$inboundSchema: z.ZodType<
+  ProjectSummary,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  avg_chat_duration_ms: z.number(),
+  avg_tokens_per_request: z.number(),
+  avg_tool_duration_ms: z.number(),
+  distinct_models: z.number().int(),
+  distinct_providers: z.number().int(),
+  finish_reason_stop: z.number().int(),
+  finish_reason_tool_calls: z.number().int(),
+  first_seen_unix_nano: z.string(),
+  last_seen_unix_nano: z.string(),
+  models: z.array(ModelUsage$inboundSchema),
+  tool_call_failure: z.number().int(),
+  tool_call_success: z.number().int(),
+  tools: z.array(ToolUsage$inboundSchema),
+  total_chat_requests: z.number().int(),
+  total_chats: z.number().int(),
+  total_input_tokens: z.number().int(),
+  total_output_tokens: z.number().int(),
+  total_tokens: z.number().int(),
+  total_tool_calls: z.number().int(),
+}).transform((v) => {
+  return remap$(v, {
+    "avg_chat_duration_ms": "avgChatDurationMs",
+    "avg_tokens_per_request": "avgTokensPerRequest",
+    "avg_tool_duration_ms": "avgToolDurationMs",
+    "distinct_models": "distinctModels",
+    "distinct_providers": "distinctProviders",
+    "finish_reason_stop": "finishReasonStop",
+    "finish_reason_tool_calls": "finishReasonToolCalls",
+    "first_seen_unix_nano": "firstSeenUnixNano",
+    "last_seen_unix_nano": "lastSeenUnixNano",
+    "tool_call_failure": "toolCallFailure",
+    "tool_call_success": "toolCallSuccess",
+    "total_chat_requests": "totalChatRequests",
+    "total_chats": "totalChats",
+    "total_input_tokens": "totalInputTokens",
+    "total_output_tokens": "totalOutputTokens",
+    "total_tokens": "totalTokens",
+    "total_tool_calls": "totalToolCalls",
   });
+});
 
-export function metricsFromJSON(
+export function projectSummaryFromJSON(
   jsonString: string,
-): SafeParseResult<Metrics, SDKValidationError> {
+): SafeParseResult<ProjectSummary, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => Metrics$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'Metrics' from JSON`,
+    (x) => ProjectSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ProjectSummary' from JSON`,
   );
 }

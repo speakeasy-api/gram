@@ -84,6 +84,7 @@ export * from "./revokechatsession.js";
 export * from "./searchchats.js";
 export * from "./searchlogs.js";
 export * from "./searchtoolcalls.js";
+export * from "./searchusers.js";
 export * from "./servechatattachment.js";
 export * from "./servechatattachmentsigned.js";
 export * from "./servefunction.js";

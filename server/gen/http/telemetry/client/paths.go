@@ -22,6 +22,11 @@ func SearchChatsTelemetryPath() string {
 	return "/rpc/telemetry.searchChats"
 }
 
+// SearchUsersTelemetryPath returns the URL path to the telemetry service searchUsers HTTP endpoint.
+func SearchUsersTelemetryPath() string {
+	return "/rpc/telemetry.searchUsers"
+}
+
 // CaptureEventTelemetryPath returns the URL path to the telemetry service captureEvent HTTP endpoint.
 func CaptureEventTelemetryPath() string {
 	return "/rpc/telemetry.captureEvent"

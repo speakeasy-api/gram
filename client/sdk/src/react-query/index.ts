@@ -85,6 +85,7 @@ export * from "./revokeAPIKey.js";
 export * from "./searchChats.js";
 export * from "./searchLogs.js";
 export * from "./searchToolCalls.js";
+export * from "./searchUsers.js";
 export * from "./serveChatAttachment.js";
 export * from "./serveChatAttachmentSigned.js";
 export * from "./serveFunction.js";
