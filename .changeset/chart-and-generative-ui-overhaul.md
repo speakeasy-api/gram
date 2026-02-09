@@ -7,7 +7,7 @@ Chart plugin and generative UI overhaul
 **Chart Plugin**
 - Replace Vega-Lite with Recharts for React 19 compatibility
 - Add themed tooltips using CSS variables (oklch colors)
-- Add orders summary tool to chart stories for demo visualizations
+- Update chart stories to use MCP orders summary tool
 
 **Generative UI**
 - Add macOS-style window frames with traffic light buttons

@@ -1,7 +1,5 @@
 import type { Meta, StoryFn } from '@storybook/react-vite'
-import z from 'zod'
 import { Chat } from '..'
-import { defineFrontendTool } from '../../../lib/tools'
 
 const meta: Meta<typeof Chat> = {
   title: 'Chat/Plugins/Charts',
@@ -14,168 +12,6 @@ const meta: Meta<typeof Chat> = {
 export default meta
 
 type Story = StoryFn<typeof Chat>
-
-// Mock data generator for orders summary
-const generateOrdersSummary = (params: {
-  period?: string
-  groupBy?: string
-}) => {
-  const { period = 'last_30_days', groupBy = 'day' } = params
-
-  // Generate time-series data based on groupBy
-  const generateTimeSeries = () => {
-    if (groupBy === 'month') {
-      return [
-        {
-          date: '2024-07',
-          orders: 1247,
-          revenue: 125400,
-          avgOrderValue: 100.5,
-        },
-        {
-          date: '2024-08',
-          orders: 1389,
-          revenue: 142300,
-          avgOrderValue: 102.4,
-        },
-        {
-          date: '2024-09',
-          orders: 1456,
-          revenue: 151200,
-          avgOrderValue: 103.8,
-        },
-        {
-          date: '2024-10',
-          orders: 1523,
-          revenue: 162800,
-          avgOrderValue: 106.9,
-        },
-        {
-          date: '2024-11',
-          orders: 1834,
-          revenue: 198500,
-          avgOrderValue: 108.2,
-        },
-        {
-          date: '2024-12',
-          orders: 2156,
-          revenue: 245600,
-          avgOrderValue: 113.9,
-        },
-      ]
-    }
-    if (groupBy === 'week') {
-      return [
-        {
-          date: '2024-12-01',
-          orders: 423,
-          revenue: 48200,
-          avgOrderValue: 114.0,
-        },
-        {
-          date: '2024-12-08',
-          orders: 512,
-          revenue: 58900,
-          avgOrderValue: 115.0,
-        },
-        {
-          date: '2024-12-15',
-          orders: 489,
-          revenue: 55100,
-          avgOrderValue: 112.7,
-        },
-        {
-          date: '2024-12-22',
-          orders: 732,
-          revenue: 83400,
-          avgOrderValue: 113.9,
-        },
-      ]
-    }
-    // Default: daily
-    return [
-      { date: '2024-12-23', orders: 89, revenue: 10230, avgOrderValue: 114.9 },
-      { date: '2024-12-24', orders: 112, revenue: 12890, avgOrderValue: 115.1 },
-      { date: '2024-12-25', orders: 67, revenue: 7450, avgOrderValue: 111.2 },
-      { date: '2024-12-26', orders: 145, revenue: 16780, avgOrderValue: 115.7 },
-      { date: '2024-12-27', orders: 134, revenue: 15340, avgOrderValue: 114.5 },
-      { date: '2024-12-28', orders: 98, revenue: 11200, avgOrderValue: 114.3 },
-      { date: '2024-12-29', orders: 87, revenue: 9870, avgOrderValue: 113.4 },
-    ]
-  }
-
-  // Category breakdown
-  const categoryBreakdown = [
-    { category: 'Electronics', orders: 542, revenue: 89400, percentage: 32 },
-    { category: 'Clothing', orders: 423, revenue: 45200, percentage: 25 },
-    { category: 'Home & Garden', orders: 312, revenue: 38900, percentage: 18 },
-    { category: 'Sports', orders: 234, revenue: 28700, percentage: 14 },
-    { category: 'Other', orders: 189, revenue: 19300, percentage: 11 },
-  ]
-
-  // Status breakdown
-  const statusBreakdown = [
-    { status: 'Completed', count: 1423, percentage: 72 },
-    { status: 'Processing', count: 287, percentage: 15 },
-    { status: 'Shipped', count: 198, percentage: 10 },
-    { status: 'Cancelled', count: 59, percentage: 3 },
-  ]
-
-  // Regional data
-  const regionalData = [
-    { region: 'North America', orders: 823, revenue: 98400 },
-    { region: 'Europe', orders: 567, revenue: 72300 },
-    { region: 'Asia Pacific', orders: 412, revenue: 51200 },
-    { region: 'Latin America', orders: 156, revenue: 18900 },
-  ]
-
-  return {
-    period,
-    groupBy,
-    summary: {
-      totalOrders: 1967,
-      totalRevenue: 221500,
-      avgOrderValue: 112.6,
-      orderGrowth: 12.4,
-      revenueGrowth: 15.2,
-    },
-    timeSeries: generateTimeSeries(),
-    categoryBreakdown,
-    statusBreakdown,
-    regionalData,
-  }
-}
-
-// Define the GET /admin/orders/summary tool
-const getOrdersSummaryTool = defineFrontendTool<
-  { period?: string; groupBy?: string },
-  ReturnType<typeof generateOrdersSummary>
->(
-  {
-    description:
-      'Get a summary of orders including totals, time-series data, category breakdown, and regional distribution. Use this data to create visualizations.',
-    parameters: z.object({
-      period: z
-        .enum(['last_7_days', 'last_30_days', 'last_90_days', 'last_year'])
-        .optional()
-        .describe('Time period for the summary'),
-      groupBy: z
-        .enum(['day', 'week', 'month'])
-        .optional()
-        .describe('How to group the time-series data'),
-    }),
-    execute: async (params) => {
-      // Simulate API latency
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      return generateOrdersSummary(params)
-    },
-  },
-  'admin_api_get_orders_summary'
-)
-
-const chartTools = {
-  admin_api_get_orders_summary: getOrdersSummaryTool,
-}
 
 /**
  * Bar chart demo - comparing categorical data using orders summary
@@ -202,9 +38,6 @@ BarChart.parameters = {
               'Fetch the orders summary and create a horizontal bar chart comparing orders by region',
           },
         ],
-      },
-      tools: {
-        frontendTools: chartTools,
       },
     },
   },
@@ -236,9 +69,6 @@ LineChart.parameters = {
           },
         ],
       },
-      tools: {
-        frontendTools: chartTools,
-      },
     },
   },
 }
@@ -268,9 +98,6 @@ AreaChart.parameters = {
               'Fetch monthly orders data and create an area chart showing order volume growth',
           },
         ],
-      },
-      tools: {
-        frontendTools: chartTools,
       },
     },
   },
@@ -302,9 +129,6 @@ PieChart.parameters = {
           },
         ],
       },
-      tools: {
-        frontendTools: chartTools,
-      },
     },
   },
 }
@@ -334,9 +158,6 @@ DonutChart.parameters = {
               'Fetch the orders summary and create a donut chart showing order status distribution with completion rate in the center',
           },
         ],
-      },
-      tools: {
-        frontendTools: chartTools,
       },
     },
   },
@@ -368,9 +189,6 @@ ScatterChart.parameters = {
           },
         ],
       },
-      tools: {
-        frontendTools: chartTools,
-      },
     },
   },
 }
@@ -400,9 +218,6 @@ RadarChart.parameters = {
               'Fetch the orders summary and show a radar chart comparing categories by order volume, revenue share, and growth',
           },
         ],
-      },
-      tools: {
-        frontendTools: chartTools,
       },
     },
   },
@@ -439,9 +254,6 @@ AllCharts.parameters = {
               'Get the orders summary and show a pie chart of order status distribution',
           },
         ],
-      },
-      tools: {
-        frontendTools: chartTools,
       },
     },
   },
