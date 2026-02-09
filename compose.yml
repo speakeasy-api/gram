@@ -25,7 +25,7 @@ services:
     volumes:
       - cache_data:/var/lib/gram-cache/data
     ports:
-      - "${GRAM_REDIS_CACHE_ADDR}:35299"
+      - "${GRAM_REDIS_CACHE_PORT}:35299"
     command: redis-server --port 35299 --requirepass xi9XILbY
 
   gram-temporal:
@@ -62,15 +62,13 @@ services:
     stdin_open: true
     tty: true
     ports:
-      - "4317:4317"
+      - "${OTLP_GRPC_PORT}:4317"
 
   clickhouse:
     image: clickhouse/clickhouse-server:25.8.3
     restart: unless-stopped
     ports:
-      - "8123:8123"
-      - "9000:9000"
-      - "9440:9440"
+      - "${CLICKHOUSE_NATIVE_PORT}:9440"
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: gram

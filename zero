@@ -40,6 +40,11 @@ EOF
     echo "✅ Created mise.local.toml file"
 fi
 
+if [ -f "mise.worktree.local.toml" ]; then
+    echo "ℹ️ Found mise.worktree.local.toml. Running zero with MISE_ENV=worktree."
+    export MISE_ENV=worktree
+fi
+
 check_command() {
     local cmd=$1
     local instructions=$2

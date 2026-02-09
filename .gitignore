@@ -1,4 +1,5 @@
 mise.local.toml
+mise.*.local.toml
 flags.local.csv
 *.tsbuildinfo
 node_modules
