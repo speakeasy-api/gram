@@ -369,8 +369,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             messages: modelMessages,
             tools,
             stopWhen: stepCountIs(10),
-            // Removed smoothStream - was causing 15ms delay per chunk, adding up to 20+ seconds
-            // experimental_transform: smoothStream({ delayInMs: 15 }),
+            experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
             // Note: providerOptions for reasoning removed - was causing 20-30s delays
             // Enable selectively for reasoning models only
