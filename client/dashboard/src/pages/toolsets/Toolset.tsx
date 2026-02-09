@@ -435,6 +435,7 @@ export function ToolsetView({
       overridden_fields: Object.keys(updates).join(", "),
     });
 
+    toast.success("Tool updated");
     onUpdate();
   };
 

@@ -57,6 +57,7 @@ function getAnnotationValue(
 export type ToolUpdatePayload = {
   name: string;
   description: string;
+  title?: string;
   readOnlyHint?: boolean;
   destructiveHint?: boolean;
   idempotentHint?: boolean;
@@ -69,7 +70,7 @@ interface EditToolDialogProps {
   tool: Tool | null;
   documentIdToName?: Record<string, string>;
   functionIdToName?: Record<string, string>;
-  onSave: (updates: ToolUpdatePayload) => void;
+  onSave: (updates: ToolUpdatePayload) => void | Promise<void>;
   onRemove: () => void;
 }
 
@@ -83,11 +84,13 @@ export function EditToolDialog({
   onRemove,
 }: EditToolDialogProps) {
   const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [readOnlyHint, setReadOnlyHint] = useState<boolean | undefined>();
   const [destructiveHint, setDestructiveHint] = useState<boolean | undefined>();
   const [idempotentHint, setIdempotentHint] = useState<boolean | undefined>();
   const [openWorldHint, setOpenWorldHint] = useState<boolean | undefined>();
+  const [saving, setSaving] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const hasAnnotations = tool?.type === "http" || tool?.type === "function";
@@ -96,6 +99,7 @@ export function EditToolDialog({
   useEffect(() => {
     if (tool) {
       setName(tool.name);
+      setTitle(tool.variation?.title ?? tool.annotations?.title ?? "");
       setDescription(tool.description || "");
       setReadOnlyHint(getAnnotationValue(tool, "readOnlyHint"));
       setDestructiveHint(getAnnotationValue(tool, "destructiveHint"));
@@ -128,21 +132,27 @@ export function EditToolDialog({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, name, description, readOnlyHint, destructiveHint, idempotentHint, openWorldHint]);
+  }, [open, name, title, description, readOnlyHint, destructiveHint, idempotentHint, openWorldHint]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!tool) return;
-    onSave({
-      name,
-      description,
-      ...(hasAnnotations && {
-        readOnlyHint,
-        destructiveHint,
-        idempotentHint,
-        openWorldHint,
-      }),
-    });
-    onOpenChange(false);
+    setSaving(true);
+    try {
+      await onSave({
+        name,
+        description,
+        ...(hasAnnotations && {
+          title: title || undefined,
+          readOnlyHint,
+          destructiveHint,
+          idempotentHint,
+          openWorldHint,
+        }),
+      });
+      onOpenChange(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleRemove = () => {
@@ -160,6 +170,7 @@ export function EditToolDialog({
   const source = getToolSource(tool, documentIdToName, functionIdToName);
   const typeLabel = getToolTypeLabel(tool);
 
+  const origTitle = tool.variation?.title ?? tool.annotations?.title ?? "";
   const origReadOnly = getAnnotationValue(tool, "readOnlyHint");
   const origDestructive = getAnnotationValue(tool, "destructiveHint");
   const origIdempotent = getAnnotationValue(tool, "idempotentHint");
@@ -167,6 +178,7 @@ export function EditToolDialog({
 
   const hasChanges =
     name !== tool.name ||
+    title !== origTitle ||
     description !== (tool.description || "") ||
     readOnlyHint !== origReadOnly ||
     destructiveHint !== origDestructive ||
@@ -200,6 +212,20 @@ export function EditToolDialog({
               placeholder="Tool name"
             />
           </div>
+
+          {hasAnnotations && (
+            <div className="space-y-2">
+              <Label htmlFor="tool-title" className="text-sm font-medium">
+                Title
+              </Label>
+              <Input
+                id="tool-title"
+                value={title}
+                onChange={(value) => setTitle(value)}
+                placeholder="Display name override"
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="tool-description" className="text-sm font-medium">
@@ -289,9 +315,9 @@ export function EditToolDialog({
             <Button variant="secondary" onClick={handleClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={!hasChanges}>
-              Save
-              {hasChanges && (
+            <Button onClick={handleSave} disabled={!hasChanges || saving}>
+              {saving ? "Saving..." : "Save"}
+              {hasChanges && !saving && (
                 <span className="ml-2 text-xs opacity-60">⌘⏎</span>
               )}
             </Button>

@@ -17,6 +17,7 @@ import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { Confirm } from "@gram/client/models/components";
 import {
+  invalidateTemplate,
   queryKeyInstance,
   queryKeyListToolsets,
   useListToolsets,
@@ -335,15 +336,25 @@ export function ToolsetPanel({
   };
 
   const handleToolUpdate = async (tool: Tool, updates: ToolUpdatePayload) => {
-    await client.variations.upsertGlobal({
-      upsertGlobalToolVariationForm: {
-        ...tool.variation,
-        confirm: tool.variation?.confirm as Confirm,
-        ...updates,
-        srcToolName: tool.canonicalName,
-        srcToolUrn: tool.toolUrn,
-      },
-    });
+    if (tool.type === "prompt") {
+      await client.templates.update({
+        updatePromptTemplateForm: {
+          ...tool,
+          ...updates,
+        },
+      });
+      invalidateTemplate(queryClient, [{ name: tool.name }]);
+    } else {
+      await client.variations.upsertGlobal({
+        upsertGlobalToolVariationForm: {
+          ...tool.variation,
+          confirm: tool.variation?.confirm as Confirm,
+          ...updates,
+          srcToolName: tool.canonicalName,
+          srcToolUrn: tool.toolUrn,
+        },
+      });
+    }
 
     // Invalidate to refresh tool data in the sidebar
     if (selectedToolset) {
@@ -466,10 +477,10 @@ export function ToolsetPanel({
           try {
             await handleToolUpdate(editingTool, updates);
             toast.success("Tool updated");
-          } catch {
+          } catch (err) {
             toast.error("Failed to update tool");
+            throw err;
           }
-          setEditingTool(null);
         }}
         onRemove={() => {
           if (editingTool?.toolUrn) {

@@ -317,10 +317,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	return resp, nil
 }
 
-// ptrBool converts a bool to *bool, returning nil for zero values.
+// ptrBool converts a bool to *bool.
 func ptrBool(b bool) *bool {
-	if !b {
-		return nil
-	}
 	return &b
 }
