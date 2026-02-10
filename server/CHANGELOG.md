@@ -1,5 +1,13 @@
 # server
 
+## 0.22.4
+
+### Patch Changes
+
+- b2347fc: Adds a new telemetry endpoint to fetch user usage data
+- cd7a003: feat: record api key id in telemetry logs
+- a34d18a: Adds chat resolution stats in telemetry metrics
+
 ## 0.22.3
 
 ### Patch Changes
