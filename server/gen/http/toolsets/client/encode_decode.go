@@ -499,6 +499,245 @@ func DecodeListToolsetsResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildInferSkillsFromToolsetRequest instantiates a HTTP request object with
+// method and path set to call the "toolsets" service "inferSkillsFromToolset"
+// endpoint
+func (c *Client) BuildInferSkillsFromToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: InferSkillsFromToolsetToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "inferSkillsFromToolset", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeInferSkillsFromToolsetRequest returns an encoder for requests sent to
+// the toolsets inferSkillsFromToolset server.
+func EncodeInferSkillsFromToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.InferSkillsFromToolsetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "inferSkillsFromToolset", "*toolsets.InferSkillsFromToolsetPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeInferSkillsFromToolsetResponse returns a decoder for responses
+// returned by the toolsets inferSkillsFromToolset endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeInferSkillsFromToolsetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeInferSkillsFromToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body InferSkillsFromToolsetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+			}
+			err = ValidateInferSkillsFromToolsetResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+			}
+			res := NewInferSkillsFromToolsetInferSkillsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body InferSkillsFromToolsetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+			}
+			err = ValidateInferSkillsFromToolsetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+			}
+			return nil, NewInferSkillsFromToolsetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body InferSkillsFromToolsetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+			}
+			err = ValidateInferSkillsFromToolsetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+			}
+			return nil, NewInferSkillsFromToolsetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body InferSkillsFromToolsetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+			}
+			err = ValidateInferSkillsFromToolsetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+			}
+			return nil, NewInferSkillsFromToolsetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body InferSkillsFromToolsetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+			}
+			err = ValidateInferSkillsFromToolsetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+			}
+			return nil, NewInferSkillsFromToolsetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body InferSkillsFromToolsetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+			}
+			err = ValidateInferSkillsFromToolsetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+			}
+			return nil, NewInferSkillsFromToolsetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body InferSkillsFromToolsetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+			}
+			err = ValidateInferSkillsFromToolsetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+			}
+			return nil, NewInferSkillsFromToolsetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body InferSkillsFromToolsetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+			}
+			err = ValidateInferSkillsFromToolsetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+			}
+			return nil, NewInferSkillsFromToolsetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body InferSkillsFromToolsetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+				}
+				err = ValidateInferSkillsFromToolsetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+				}
+				return nil, NewInferSkillsFromToolsetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body InferSkillsFromToolsetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+				}
+				err = ValidateInferSkillsFromToolsetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+				}
+				return nil, NewInferSkillsFromToolsetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "inferSkillsFromToolset", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body InferSkillsFromToolsetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "inferSkillsFromToolset", err)
+			}
+			err = ValidateInferSkillsFromToolsetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "inferSkillsFromToolset", err)
+			}
+			return nil, NewInferSkillsFromToolsetGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "inferSkillsFromToolset", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildUpdateToolsetRequest instantiates a HTTP request object with method and
 // path set to call the "toolsets" service "updateToolset" endpoint
 func (c *Client) BuildUpdateToolsetRequest(ctx context.Context, v any) (*http.Request, error) {

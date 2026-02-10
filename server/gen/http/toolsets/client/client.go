@@ -25,6 +25,10 @@ type Client struct {
 	// listToolsets endpoint.
 	ListToolsetsDoer goahttp.Doer
 
+	// InferSkillsFromToolset Doer is the HTTP client used to make requests to the
+	// inferSkillsFromToolset endpoint.
+	InferSkillsFromToolsetDoer goahttp.Doer
+
 	// UpdateToolset Doer is the HTTP client used to make requests to the
 	// updateToolset endpoint.
 	UpdateToolsetDoer goahttp.Doer
@@ -79,6 +83,7 @@ func NewClient(
 	return &Client{
 		CreateToolsetDoer:            doer,
 		ListToolsetsDoer:             doer,
+		InferSkillsFromToolsetDoer:   doer,
 		UpdateToolsetDoer:            doer,
 		DeleteToolsetDoer:            doer,
 		GetToolsetDoer:               doer,
@@ -138,6 +143,30 @@ func (c *Client) ListToolsets() goa.Endpoint {
 		resp, err := c.ListToolsetsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "listToolsets", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// InferSkillsFromToolset returns an endpoint that makes HTTP requests to the
+// toolsets service inferSkillsFromToolset server.
+func (c *Client) InferSkillsFromToolset() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeInferSkillsFromToolsetRequest(c.encoder)
+		decodeResponse = DecodeInferSkillsFromToolsetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildInferSkillsFromToolsetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.InferSkillsFromToolsetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "inferSkillsFromToolset", err)
 		}
 		return decodeResponse(resp)
 	}

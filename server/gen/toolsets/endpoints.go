@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	CreateToolset            goa.Endpoint
 	ListToolsets             goa.Endpoint
+	InferSkillsFromToolset   goa.Endpoint
 	UpdateToolset            goa.Endpoint
 	DeleteToolset            goa.Endpoint
 	GetToolset               goa.Endpoint
@@ -35,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		CreateToolset:            NewCreateToolsetEndpoint(s, a.APIKeyAuth),
 		ListToolsets:             NewListToolsetsEndpoint(s, a.APIKeyAuth),
+		InferSkillsFromToolset:   NewInferSkillsFromToolsetEndpoint(s, a.APIKeyAuth),
 		UpdateToolset:            NewUpdateToolsetEndpoint(s, a.APIKeyAuth),
 		DeleteToolset:            NewDeleteToolsetEndpoint(s, a.APIKeyAuth),
 		GetToolset:               NewGetToolsetEndpoint(s, a.APIKeyAuth),
@@ -50,6 +52,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateToolset = m(e.CreateToolset)
 	e.ListToolsets = m(e.ListToolsets)
+	e.InferSkillsFromToolset = m(e.InferSkillsFromToolset)
 	e.UpdateToolset = m(e.UpdateToolset)
 	e.DeleteToolset = m(e.DeleteToolset)
 	e.GetToolset = m(e.GetToolset)
@@ -175,6 +178,65 @@ func NewListToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.ListToolsets(ctx, p)
+	}
+}
+
+// NewInferSkillsFromToolsetEndpoint returns an endpoint function that calls
+// the method "inferSkillsFromToolset" of service "toolsets".
+func NewInferSkillsFromToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*InferSkillsFromToolsetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.InferSkillsFromToolset(ctx, p)
 	}
 }
 

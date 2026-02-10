@@ -22,6 +22,7 @@ type Server struct {
 	Mounts                   []*MountPoint
 	CreateToolset            http.Handler
 	ListToolsets             http.Handler
+	InferSkillsFromToolset   http.Handler
 	UpdateToolset            http.Handler
 	DeleteToolset            http.Handler
 	GetToolset               http.Handler
@@ -61,6 +62,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"CreateToolset", "POST", "/rpc/toolsets.create"},
 			{"ListToolsets", "GET", "/rpc/toolsets.list"},
+			{"InferSkillsFromToolset", "POST", "/rpc/toolsets.inferskillsfromtoolset"},
 			{"UpdateToolset", "POST", "/rpc/toolsets.update"},
 			{"DeleteToolset", "DELETE", "/rpc/toolsets.delete"},
 			{"GetToolset", "GET", "/rpc/toolsets.get"},
@@ -72,6 +74,7 @@ func New(
 		},
 		CreateToolset:            NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
 		ListToolsets:             NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
+		InferSkillsFromToolset:   NewInferSkillsFromToolsetHandler(e.InferSkillsFromToolset, mux, decoder, encoder, errhandler, formatter),
 		UpdateToolset:            NewUpdateToolsetHandler(e.UpdateToolset, mux, decoder, encoder, errhandler, formatter),
 		DeleteToolset:            NewDeleteToolsetHandler(e.DeleteToolset, mux, decoder, encoder, errhandler, formatter),
 		GetToolset:               NewGetToolsetHandler(e.GetToolset, mux, decoder, encoder, errhandler, formatter),
@@ -90,6 +93,7 @@ func (s *Server) Service() string { return "toolsets" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateToolset = m(s.CreateToolset)
 	s.ListToolsets = m(s.ListToolsets)
+	s.InferSkillsFromToolset = m(s.InferSkillsFromToolset)
 	s.UpdateToolset = m(s.UpdateToolset)
 	s.DeleteToolset = m(s.DeleteToolset)
 	s.GetToolset = m(s.GetToolset)
@@ -107,6 +111,7 @@ func (s *Server) MethodNames() []string { return toolsets.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateToolsetHandler(mux, h.CreateToolset)
 	MountListToolsetsHandler(mux, h.ListToolsets)
+	MountInferSkillsFromToolsetHandler(mux, h.InferSkillsFromToolset)
 	MountUpdateToolsetHandler(mux, h.UpdateToolset)
 	MountDeleteToolsetHandler(mux, h.DeleteToolset)
 	MountGetToolsetHandler(mux, h.GetToolset)
@@ -205,6 +210,59 @@ func NewListToolsetsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listToolsets")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountInferSkillsFromToolsetHandler configures the mux to serve the
+// "toolsets" service "inferSkillsFromToolset" endpoint.
+func MountInferSkillsFromToolsetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.inferskillsfromtoolset", otelhttp.WithRouteTag("/rpc/toolsets.inferskillsfromtoolset", f).ServeHTTP)
+}
+
+// NewInferSkillsFromToolsetHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "inferSkillsFromToolset" endpoint.
+func NewInferSkillsFromToolsetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeInferSkillsFromToolsetRequest(mux, decoder)
+		encodeResponse = EncodeInferSkillsFromToolsetResponse(encoder)
+		encodeError    = EncodeInferSkillsFromToolsetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "inferSkillsFromToolset")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {

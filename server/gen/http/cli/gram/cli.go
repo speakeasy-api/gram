@@ -71,7 +71,7 @@ func UsageCommands() []string {
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server)",
+		"toolsets (create-toolset|list-toolsets|infer-skills-from-toolset|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server)",
 		"usage (get-period-usage|get-usage-tiers|create-customer-session|create-checkout)",
 		"variations (upsert-global|delete-global|list-global)",
 	}
@@ -681,6 +681,11 @@ func ParseEndpoint(
 		toolsetsListToolsetsApikeyTokenFlag      = toolsetsListToolsetsFlags.String("apikey-token", "", "")
 		toolsetsListToolsetsProjectSlugInputFlag = toolsetsListToolsetsFlags.String("project-slug-input", "", "")
 
+		toolsetsInferSkillsFromToolsetFlags                = flag.NewFlagSet("infer-skills-from-toolset", flag.ExitOnError)
+		toolsetsInferSkillsFromToolsetSessionTokenFlag     = toolsetsInferSkillsFromToolsetFlags.String("session-token", "", "")
+		toolsetsInferSkillsFromToolsetApikeyTokenFlag      = toolsetsInferSkillsFromToolsetFlags.String("apikey-token", "", "")
+		toolsetsInferSkillsFromToolsetProjectSlugInputFlag = toolsetsInferSkillsFromToolsetFlags.String("project-slug-input", "", "")
+
 		toolsetsUpdateToolsetFlags                = flag.NewFlagSet("update-toolset", flag.ExitOnError)
 		toolsetsUpdateToolsetBodyFlag             = toolsetsUpdateToolsetFlags.String("body", "REQUIRED", "")
 		toolsetsUpdateToolsetSlugFlag             = toolsetsUpdateToolsetFlags.String("slug", "REQUIRED", "")
@@ -912,6 +917,7 @@ func ParseEndpoint(
 	toolsetsFlags.Usage = toolsetsUsage
 	toolsetsCreateToolsetFlags.Usage = toolsetsCreateToolsetUsage
 	toolsetsListToolsetsFlags.Usage = toolsetsListToolsetsUsage
+	toolsetsInferSkillsFromToolsetFlags.Usage = toolsetsInferSkillsFromToolsetUsage
 	toolsetsUpdateToolsetFlags.Usage = toolsetsUpdateToolsetUsage
 	toolsetsDeleteToolsetFlags.Usage = toolsetsDeleteToolsetUsage
 	toolsetsGetToolsetFlags.Usage = toolsetsGetToolsetUsage
@@ -1402,6 +1408,9 @@ func ParseEndpoint(
 			case "list-toolsets":
 				epf = toolsetsListToolsetsFlags
 
+			case "infer-skills-from-toolset":
+				epf = toolsetsInferSkillsFromToolsetFlags
+
 			case "update-toolset":
 				epf = toolsetsUpdateToolsetFlags
 
@@ -1877,6 +1886,9 @@ func ParseEndpoint(
 			case "list-toolsets":
 				endpoint = c.ListToolsets()
 				data, err = toolsetsc.BuildListToolsetsPayload(*toolsetsListToolsetsSessionTokenFlag, *toolsetsListToolsetsApikeyTokenFlag, *toolsetsListToolsetsProjectSlugInputFlag)
+			case "infer-skills-from-toolset":
+				endpoint = c.InferSkillsFromToolset()
+				data, err = toolsetsc.BuildInferSkillsFromToolsetPayload(*toolsetsInferSkillsFromToolsetSessionTokenFlag, *toolsetsInferSkillsFromToolsetApikeyTokenFlag, *toolsetsInferSkillsFromToolsetProjectSlugInputFlag)
 			case "update-toolset":
 				endpoint = c.UpdateToolset()
 				data, err = toolsetsc.BuildUpdateToolsetPayload(*toolsetsUpdateToolsetBodyFlag, *toolsetsUpdateToolsetSlugFlag, *toolsetsUpdateToolsetSessionTokenFlag, *toolsetsUpdateToolsetApikeyTokenFlag, *toolsetsUpdateToolsetProjectSlugInputFlag)
@@ -4462,6 +4474,7 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-toolset: Create a new toolset with associated tools`)
 	fmt.Fprintln(os.Stderr, `    list-toolsets: List all toolsets for a project`)
+	fmt.Fprintln(os.Stderr, `    infer-skills-from-toolset: arst`)
 	fmt.Fprintln(os.Stderr, `    update-toolset: Update a toolset's properties including name, description, and HTTP tools`)
 	fmt.Fprintln(os.Stderr, `    delete-toolset: Delete a toolset by its ID`)
 	fmt.Fprintln(os.Stderr, `    get-toolset: Get detailed information about a toolset including full HTTP tool definitions`)
@@ -4518,6 +4531,28 @@ func toolsetsListToolsetsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets list-toolsets --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func toolsetsInferSkillsFromToolsetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] toolsets infer-skills-from-toolset", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `arst`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets infer-skills-from-toolset --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func toolsetsUpdateToolsetUsage() {

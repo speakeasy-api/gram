@@ -21,6 +21,8 @@ type Service interface {
 	CreateToolset(context.Context, *CreateToolsetPayload) (res *types.Toolset, err error)
 	// List all toolsets for a project
 	ListToolsets(context.Context, *ListToolsetsPayload) (res *ListToolsetsResult, err error)
+	// arst
+	InferSkillsFromToolset(context.Context, *InferSkillsFromToolsetPayload) (res *InferSkillsResult, err error)
 	// Update a toolset's properties including name, description, and HTTP tools
 	UpdateToolset(context.Context, *UpdateToolsetPayload) (res *types.Toolset, err error)
 	// Delete a toolset by its ID
@@ -59,7 +61,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer"}
+var MethodNames = [11]string{"createToolset", "listToolsets", "inferSkillsFromToolset", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -141,6 +143,21 @@ type GetToolsetPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// InferSkillsFromToolsetPayload is the payload type of the toolsets service
+// inferSkillsFromToolset method.
+type InferSkillsFromToolsetPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// InferSkillsResult is the result type of the toolsets service
+// inferSkillsFromToolset method.
+type InferSkillsResult struct {
+	// The inferred skills
+	Skills map[*types.ToolEntry]string
 }
 
 // ListToolsetsPayload is the payload type of the toolsets service listToolsets

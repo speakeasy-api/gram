@@ -113,6 +113,35 @@ func BuildListToolsetsPayload(toolsetsListToolsetsSessionToken string, toolsetsL
 	return v, nil
 }
 
+// BuildInferSkillsFromToolsetPayload builds the payload for the toolsets
+// inferSkillsFromToolset endpoint from CLI flags.
+func BuildInferSkillsFromToolsetPayload(toolsetsInferSkillsFromToolsetSessionToken string, toolsetsInferSkillsFromToolsetApikeyToken string, toolsetsInferSkillsFromToolsetProjectSlugInput string) (*toolsets.InferSkillsFromToolsetPayload, error) {
+	var sessionToken *string
+	{
+		if toolsetsInferSkillsFromToolsetSessionToken != "" {
+			sessionToken = &toolsetsInferSkillsFromToolsetSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsInferSkillsFromToolsetApikeyToken != "" {
+			apikeyToken = &toolsetsInferSkillsFromToolsetApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsInferSkillsFromToolsetProjectSlugInput != "" {
+			projectSlugInput = &toolsetsInferSkillsFromToolsetProjectSlugInput
+		}
+	}
+	v := &toolsets.InferSkillsFromToolsetPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildUpdateToolsetPayload builds the payload for the toolsets updateToolset
 // endpoint from CLI flags.
 func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateToolsetSlug string, toolsetsUpdateToolsetSessionToken string, toolsetsUpdateToolsetApikeyToken string, toolsetsUpdateToolsetProjectSlugInput string) (*toolsets.UpdateToolsetPayload, error) {

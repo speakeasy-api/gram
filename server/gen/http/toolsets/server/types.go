@@ -141,6 +141,13 @@ type ListToolsetsResponseBody struct {
 	Toolsets []*ToolsetEntryResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
 }
 
+// InferSkillsFromToolsetResponseBody is the type of the "toolsets" service
+// "inferSkillsFromToolset" endpoint HTTP response body.
+type InferSkillsFromToolsetResponseBody struct {
+	// The inferred skills
+	Skills map[*ToolEntryResponseBody]string `form:"skills" json:"skills" xml:"skills"`
+}
+
 // UpdateToolsetResponseBody is the type of the "toolsets" service
 // "updateToolset" endpoint HTTP response body.
 type UpdateToolsetResponseBody struct {
@@ -862,6 +869,196 @@ type ListToolsetsUnexpectedResponseBody struct {
 // ListToolsetsGatewayErrorResponseBody is the type of the "toolsets" service
 // "listToolsets" endpoint HTTP response body for the "gateway_error" error.
 type ListToolsetsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferSkillsFromToolsetUnauthorizedResponseBody is the type of the "toolsets"
+// service "inferSkillsFromToolset" endpoint HTTP response body for the
+// "unauthorized" error.
+type InferSkillsFromToolsetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferSkillsFromToolsetForbiddenResponseBody is the type of the "toolsets"
+// service "inferSkillsFromToolset" endpoint HTTP response body for the
+// "forbidden" error.
+type InferSkillsFromToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferSkillsFromToolsetBadRequestResponseBody is the type of the "toolsets"
+// service "inferSkillsFromToolset" endpoint HTTP response body for the
+// "bad_request" error.
+type InferSkillsFromToolsetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferSkillsFromToolsetNotFoundResponseBody is the type of the "toolsets"
+// service "inferSkillsFromToolset" endpoint HTTP response body for the
+// "not_found" error.
+type InferSkillsFromToolsetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferSkillsFromToolsetConflictResponseBody is the type of the "toolsets"
+// service "inferSkillsFromToolset" endpoint HTTP response body for the
+// "conflict" error.
+type InferSkillsFromToolsetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferSkillsFromToolsetUnsupportedMediaResponseBody is the type of the
+// "toolsets" service "inferSkillsFromToolset" endpoint HTTP response body for
+// the "unsupported_media" error.
+type InferSkillsFromToolsetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferSkillsFromToolsetInvalidResponseBody is the type of the "toolsets"
+// service "inferSkillsFromToolset" endpoint HTTP response body for the
+// "invalid" error.
+type InferSkillsFromToolsetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferSkillsFromToolsetInvariantViolationResponseBody is the type of the
+// "toolsets" service "inferSkillsFromToolset" endpoint HTTP response body for
+// the "invariant_violation" error.
+type InferSkillsFromToolsetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferSkillsFromToolsetUnexpectedResponseBody is the type of the "toolsets"
+// service "inferSkillsFromToolset" endpoint HTTP response body for the
+// "unexpected" error.
+type InferSkillsFromToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferSkillsFromToolsetGatewayErrorResponseBody is the type of the "toolsets"
+// service "inferSkillsFromToolset" endpoint HTTP response body for the
+// "gateway_error" error.
+type InferSkillsFromToolsetGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3081,6 +3278,21 @@ func NewListToolsetsResponseBody(res *toolsets.ListToolsetsResult) *ListToolsets
 	return body
 }
 
+// NewInferSkillsFromToolsetResponseBody builds the HTTP response body from the
+// result of the "inferSkillsFromToolset" endpoint of the "toolsets" service.
+func NewInferSkillsFromToolsetResponseBody(res *toolsets.InferSkillsResult) *InferSkillsFromToolsetResponseBody {
+	body := &InferSkillsFromToolsetResponseBody{}
+	if res.Skills != nil {
+		body.Skills = make(map[*ToolEntryResponseBody]string, len(res.Skills))
+		for key, val := range res.Skills {
+			tk := marshalTypesToolEntryToToolEntryResponseBody(val)
+			tv := val
+			body.Skills[tk] = tv
+		}
+	}
+	return body
+}
+
 // NewUpdateToolsetResponseBody builds the HTTP response body from the result
 // of the "updateToolset" endpoint of the "toolsets" service.
 func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody {
@@ -4137,6 +4349,156 @@ func NewListToolsetsUnexpectedResponseBody(res *goa.ServiceError) *ListToolsetsU
 // the result of the "listToolsets" endpoint of the "toolsets" service.
 func NewListToolsetsGatewayErrorResponseBody(res *goa.ServiceError) *ListToolsetsGatewayErrorResponseBody {
 	body := &ListToolsetsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferSkillsFromToolsetUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "inferSkillsFromToolset" endpoint of the
+// "toolsets" service.
+func NewInferSkillsFromToolsetUnauthorizedResponseBody(res *goa.ServiceError) *InferSkillsFromToolsetUnauthorizedResponseBody {
+	body := &InferSkillsFromToolsetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferSkillsFromToolsetForbiddenResponseBody builds the HTTP response body
+// from the result of the "inferSkillsFromToolset" endpoint of the "toolsets"
+// service.
+func NewInferSkillsFromToolsetForbiddenResponseBody(res *goa.ServiceError) *InferSkillsFromToolsetForbiddenResponseBody {
+	body := &InferSkillsFromToolsetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferSkillsFromToolsetBadRequestResponseBody builds the HTTP response
+// body from the result of the "inferSkillsFromToolset" endpoint of the
+// "toolsets" service.
+func NewInferSkillsFromToolsetBadRequestResponseBody(res *goa.ServiceError) *InferSkillsFromToolsetBadRequestResponseBody {
+	body := &InferSkillsFromToolsetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferSkillsFromToolsetNotFoundResponseBody builds the HTTP response body
+// from the result of the "inferSkillsFromToolset" endpoint of the "toolsets"
+// service.
+func NewInferSkillsFromToolsetNotFoundResponseBody(res *goa.ServiceError) *InferSkillsFromToolsetNotFoundResponseBody {
+	body := &InferSkillsFromToolsetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferSkillsFromToolsetConflictResponseBody builds the HTTP response body
+// from the result of the "inferSkillsFromToolset" endpoint of the "toolsets"
+// service.
+func NewInferSkillsFromToolsetConflictResponseBody(res *goa.ServiceError) *InferSkillsFromToolsetConflictResponseBody {
+	body := &InferSkillsFromToolsetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferSkillsFromToolsetUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "inferSkillsFromToolset" endpoint of
+// the "toolsets" service.
+func NewInferSkillsFromToolsetUnsupportedMediaResponseBody(res *goa.ServiceError) *InferSkillsFromToolsetUnsupportedMediaResponseBody {
+	body := &InferSkillsFromToolsetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferSkillsFromToolsetInvalidResponseBody builds the HTTP response body
+// from the result of the "inferSkillsFromToolset" endpoint of the "toolsets"
+// service.
+func NewInferSkillsFromToolsetInvalidResponseBody(res *goa.ServiceError) *InferSkillsFromToolsetInvalidResponseBody {
+	body := &InferSkillsFromToolsetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferSkillsFromToolsetInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "inferSkillsFromToolset" endpoint of
+// the "toolsets" service.
+func NewInferSkillsFromToolsetInvariantViolationResponseBody(res *goa.ServiceError) *InferSkillsFromToolsetInvariantViolationResponseBody {
+	body := &InferSkillsFromToolsetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferSkillsFromToolsetUnexpectedResponseBody builds the HTTP response
+// body from the result of the "inferSkillsFromToolset" endpoint of the
+// "toolsets" service.
+func NewInferSkillsFromToolsetUnexpectedResponseBody(res *goa.ServiceError) *InferSkillsFromToolsetUnexpectedResponseBody {
+	body := &InferSkillsFromToolsetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferSkillsFromToolsetGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "inferSkillsFromToolset" endpoint of the
+// "toolsets" service.
+func NewInferSkillsFromToolsetGatewayErrorResponseBody(res *goa.ServiceError) *InferSkillsFromToolsetGatewayErrorResponseBody {
+	body := &InferSkillsFromToolsetGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5336,6 +5698,17 @@ func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *strin
 // payload.
 func NewListToolsetsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.ListToolsetsPayload {
 	v := &toolsets.ListToolsetsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewInferSkillsFromToolsetPayload builds a toolsets service
+// inferSkillsFromToolset endpoint payload.
+func NewInferSkillsFromToolsetPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.InferSkillsFromToolsetPayload {
+	v := &toolsets.InferSkillsFromToolsetPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

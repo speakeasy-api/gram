@@ -17,6 +17,11 @@ func ListToolsetsToolsetsPath() string {
 	return "/rpc/toolsets.list"
 }
 
+// InferSkillsFromToolsetToolsetsPath returns the URL path to the toolsets service inferSkillsFromToolset HTTP endpoint.
+func InferSkillsFromToolsetToolsetsPath() string {
+	return "/rpc/toolsets.inferskillsfromtoolset"
+}
+
 // UpdateToolsetToolsetsPath returns the URL path to the toolsets service updateToolset HTTP endpoint.
 func UpdateToolsetToolsetsPath() string {
 	return "/rpc/toolsets.update"
