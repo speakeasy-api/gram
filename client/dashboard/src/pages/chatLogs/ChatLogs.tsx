@@ -331,7 +331,10 @@ function ChatLogsContent({
             >
               Previous
             </Button>
-            <Button onClick={() => setOffset(offset + limit)} disabled={!hasMore}>
+            <Button
+              onClick={() => setOffset(offset + limit)}
+              disabled={!hasMore}
+            >
               Next
             </Button>
           </div>

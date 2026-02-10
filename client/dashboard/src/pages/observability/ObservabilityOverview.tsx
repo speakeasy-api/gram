@@ -51,13 +51,13 @@ import { cn } from "@/lib/utils";
 function ViewChatsLink({ from, to }: { from: Date; to: Date }) {
   const routes = useRoutes();
   return (
-    <routes.chatLogs.Link
+    <routes.chatSessions.Link
       queryParams={{ from: from.toISOString(), to: to.toISOString() }}
       className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors no-underline hover:no-underline"
     >
       View chats
       <ChevronRight className="size-4" />
-    </routes.chatLogs.Link>
+    </routes.chatSessions.Link>
   );
 }
 

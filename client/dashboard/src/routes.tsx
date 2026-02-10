@@ -19,7 +19,8 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import ChatLogs from "./pages/chatLogs/ChatLogs";
+import ChatSessions from "./pages/chatLogs/ChatLogs";
+import Logs from "./pages/logs/Logs";
 import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
@@ -251,11 +252,17 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  chatLogs: {
+  chatSessions: {
+    title: "Chat Sessions",
+    url: "chat-sessions",
+    icon: "messages-square",
+    component: ChatSessions,
+  },
+  logs: {
     title: "Logs",
     url: "logs",
-    icon: "messages-square",
-    component: ChatLogs,
+    icon: "scroll-text",
+    component: Logs,
   },
   observability: {
     title: "Insights",
