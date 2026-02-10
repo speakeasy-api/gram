@@ -71,13 +71,13 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred measured by the origin clock.' CODEC(Delta, ZSTD),
     observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system.' CODEC(Delta, ZSTD),
     observed_timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(observed_time_unix_nano) COMMENT 'Human-readable timestamp derived from observed_time_unix_nano.',
-    
+
     -- OTel Severity
     severity_text LowCardinality(Nullable(String)) COMMENT 'Text representation of severity (DEBUG, INFO, WARN, ERROR, FATAL).',
-    
+
     -- OTel Body (the actual log content/message)
     body String COMMENT 'The primary log message extracted from the log record. For structured logs, this is the human-readable message component.' CODEC(ZSTD),
-    
+
     -- OTel Trace Context (for distributed tracing)
     trace_id Nullable(FixedString(32)) COMMENT 'W3C trace ID linking related logs across services.',
     span_id Nullable(FixedString(16)) COMMENT 'W3C span ID for specific operation within a trace.',
@@ -120,7 +120,7 @@ SETTINGS index_granularity = 8192
 COMMENT 'Unified OTel-compatible telemetry logs from all Gram sources (HTTP requests, function logs, etc.)';
 
 -- Note: gram_project_id is already first in ORDER BY, so no bloom filter index needed for it
--- Primary query patterns 
+-- Primary query patterns
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_gram_urn ON telemetry_logs (gram_urn) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_trace_id ON telemetry_logs (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_deployment_id ON telemetry_logs (gram_deployment_id) TYPE bloom_filter(0.01) GRANULARITY 1;
@@ -137,3 +137,42 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_user_id ON telemetry_logs (use
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_user_id ON telemetry_logs (external_user_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_api_key_id ON telemetry_logs (api_key_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_evaluation_score_label ON telemetry_logs (evaluation_score_label) TYPE bloom_filter(0.01) GRANULARITY 1;
+
+CREATE TABLE IF NOT EXISTS trace_summaries (
+    -- Key cols
+    trace_id FixedString(32),
+    gram_project_id UUID,
+
+    -- Filter cols. Plain vailes, filterable using WHERE
+    gram_deployment_id SimpleAggregateFunction(any, Nullable(UUID)),
+    gram_function_id SimpleAggregateFunction(any, Nullable(UUID)),
+    gram_urn SimpleAggregateFunction(any, String),
+
+    -- Aggregates
+    start_time_unix_nano SimpleAggregateFunction(min, Int64),
+    log_count SimpleAggregateFunction(sum, UInt64),
+
+    http_status_code AggregateFunction(anyIf, Nullable(Int32), UInt8)
+) ENGINE = AggregatingMergeTree
+PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(start_time_unix_nano))
+ORDER BY (gram_project_id, trace_id)
+TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Pre-aggregated trace summaries for fast trace-level queries without needing to scan all logs';
+
+create MATERIALIZED VIEW IF NOT EXISTS trace_summaries_mv TO trace_summaries AS
+SELECT
+    trace_id,
+    gram_project_id,
+    any(gram_deployment_id) AS gram_deployment_id,
+    any(gram_function_id) AS gram_function_id,
+    any(gram_urn) AS gram_urn,
+    min(time_unix_nano) AS start_time_unix_nano,
+    toUInt64(count(*)) AS log_count,
+    anyIfState(
+        toInt32OrNull(toString(attributes.http.response.status_code)),
+        toString(attributes.http.response.status_code) != ''
+    ) AS http_status_code
+FROM telemetry_logs
+WHERE trace_id IS NOT NULL AND trace_id != ''
+GROUP BY trace_id, gram_project_id;
