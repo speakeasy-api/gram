@@ -743,9 +743,13 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
 
-	// Always calculate interval based on the current time range to ensure
-	// consistent bucket sizes when zooming
-	intervalSeconds := calculateInterval(timeStart, timeEnd)
+	// Use user-provided interval if specified, otherwise auto-calculate
+	var intervalSeconds int64
+	if payload.IntervalSeconds != nil && *payload.IntervalSeconds > 0 {
+		intervalSeconds = *payload.IntervalSeconds
+	} else {
+		intervalSeconds = calculateInterval(timeStart, timeEnd)
+	}
 
 	// Calculate comparison period (same duration, immediately before)
 	duration := timeEnd - timeStart

@@ -325,6 +325,19 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		}
 	}
 
+	// Get total count (before pagination)
+	totalCount, err := s.repo.CountChatsWithResolutions(ctx, repo.CountChatsWithResolutionsParams{
+		ProjectID:        *authCtx.ProjectID,
+		Search:           search,
+		ExternalUserID:   externalUserID,
+		FromTime:         fromTime,
+		ToTime:           toTime,
+		ResolutionStatus: resolutionStatus,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to count chats").Log(ctx, s.logger)
+	}
+
 	// Query database - returns denormalized rows (one row per chat+resolution combination)
 	rows, err := s.repo.ListChatsWithResolutions(ctx, repo.ListChatsWithResolutionsParams{
 		ProjectID:        *authCtx.ProjectID,
@@ -399,7 +412,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 
 	return &gen.ListChatsWithResolutionsResult{
 		Chats: chats,
-		Total: len(chats),
+		Total: int(totalCount),
 	}, nil
 }
 

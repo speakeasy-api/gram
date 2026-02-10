@@ -39,6 +39,58 @@ func (q *Queries) CountChatMessages(ctx context.Context, chatID uuid.UUID) (int6
 	return count, err
 }
 
+const countChatsWithResolutions = `-- name: CountChatsWithResolutions :one
+SELECT COUNT(DISTINCT c.id) as total
+FROM chats c
+WHERE c.project_id = $1
+  AND c.deleted IS FALSE
+  AND ($2 = '' OR c.external_user_id = $2)
+  AND ($3::timestamptz IS NULL OR c.created_at >= $3)
+  AND ($4::timestamptz IS NULL OR c.created_at <= $4)
+  AND (
+    $5 = ''
+    OR c.id::text ILIKE '%' || $5 || '%'
+    OR c.external_user_id ILIKE '%' || $5 || '%'
+    OR c.title ILIKE '%' || $5 || '%'
+  )
+  AND (
+    $6 = ''
+    OR (
+      $6 = 'unresolved' AND NOT EXISTS (
+        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
+      )
+    )
+    OR (
+      $6 != 'unresolved' AND EXISTS (
+        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $6
+      )
+    )
+  )
+`
+
+type CountChatsWithResolutionsParams struct {
+	ProjectID        uuid.UUID
+	ExternalUserID   interface{}
+	FromTime         pgtype.Timestamptz
+	ToTime           pgtype.Timestamptz
+	Search           interface{}
+	ResolutionStatus interface{}
+}
+
+func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsWithResolutionsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countChatsWithResolutions,
+		arg.ProjectID,
+		arg.ExternalUserID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.Search,
+		arg.ResolutionStatus,
+	)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
+}
+
 type CreateChatMessageParams struct {
 	ChatID           uuid.UUID
 	Role             string

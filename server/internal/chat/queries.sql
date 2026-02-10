@@ -199,6 +199,34 @@ SELECT * FROM chat_resolutions
 WHERE chat_id = @chat_id
 ORDER BY created_at DESC;
 
+-- name: CountChatsWithResolutions :one
+SELECT COUNT(DISTINCT c.id) as total
+FROM chats c
+WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
+  AND (@from_time::timestamptz IS NULL OR c.created_at >= @from_time)
+  AND (@to_time::timestamptz IS NULL OR c.created_at <= @to_time)
+  AND (
+    @search = ''
+    OR c.id::text ILIKE '%' || @search || '%'
+    OR c.external_user_id ILIKE '%' || @search || '%'
+    OR c.title ILIKE '%' || @search || '%'
+  )
+  AND (
+    @resolution_status = ''
+    OR (
+      @resolution_status = 'unresolved' AND NOT EXISTS (
+        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
+      )
+    )
+    OR (
+      @resolution_status != 'unresolved' AND EXISTS (
+        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = @resolution_status
+      )
+    )
+  );
+
 -- name: ListChatsWithResolutions :many
 WITH limited_chats AS (
   SELECT c.id, c.title, c.user_id, c.external_user_id, c.created_at, c.updated_at
