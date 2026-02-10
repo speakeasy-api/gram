@@ -102,6 +102,16 @@ type UpsertGlobalPayload struct {
 	Tags []string
 	// The summarizer of the tool variation
 	Summarizer *string
+	// Display name override for the tool
+	Title *string
+	// Override: if true, the tool does not modify its environment
+	ReadOnlyHint *bool
+	// Override: if true, the tool may perform destructive updates
+	DestructiveHint *bool
+	// Override: if true, repeated calls have no additional effect
+	IdempotentHint *bool
+	// Override: if true, the tool interacts with external entities
+	OpenWorldHint *bool
 }
 
 // UpsertGlobalToolVariationResult is the result type of the variations service

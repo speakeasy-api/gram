@@ -33,6 +33,16 @@ type UpsertGlobalRequestBody struct {
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The summarizer of the tool variation
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// Display name override for the tool
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Override: if true, the tool does not modify its environment
+	ReadOnlyHint *bool `form:"read_only_hint,omitempty" json:"read_only_hint,omitempty" xml:"read_only_hint,omitempty"`
+	// Override: if true, the tool may perform destructive updates
+	DestructiveHint *bool `form:"destructive_hint,omitempty" json:"destructive_hint,omitempty" xml:"destructive_hint,omitempty"`
+	// Override: if true, repeated calls have no additional effect
+	IdempotentHint *bool `form:"idempotent_hint,omitempty" json:"idempotent_hint,omitempty" xml:"idempotent_hint,omitempty"`
+	// Override: if true, the tool interacts with external entities
+	OpenWorldHint *bool `form:"open_world_hint,omitempty" json:"open_world_hint,omitempty" xml:"open_world_hint,omitempty"`
 }
 
 // UpsertGlobalResponseBody is the type of the "variations" service
@@ -620,6 +630,16 @@ type ToolVariationResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The summarizer of the tool variation
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// Display name override for the tool
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Override: if true, the tool does not modify its environment
+	ReadOnlyHint *bool `form:"read_only_hint,omitempty" json:"read_only_hint,omitempty" xml:"read_only_hint,omitempty"`
+	// Override: if true, the tool may perform destructive updates
+	DestructiveHint *bool `form:"destructive_hint,omitempty" json:"destructive_hint,omitempty" xml:"destructive_hint,omitempty"`
+	// Override: if true, repeated calls have no additional effect
+	IdempotentHint *bool `form:"idempotent_hint,omitempty" json:"idempotent_hint,omitempty" xml:"idempotent_hint,omitempty"`
+	// Override: if true, the tool interacts with external entities
+	OpenWorldHint *bool `form:"open_world_hint,omitempty" json:"open_world_hint,omitempty" xml:"open_world_hint,omitempty"`
 	// The creation date of the tool variation
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool variation
@@ -1088,14 +1108,19 @@ func NewListGlobalGatewayErrorResponseBody(res *goa.ServiceError) *ListGlobalGat
 // payload.
 func NewUpsertGlobalPayload(body *UpsertGlobalRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *variations.UpsertGlobalPayload {
 	v := &variations.UpsertGlobalPayload{
-		SrcToolUrn:    *body.SrcToolUrn,
-		SrcToolName:   *body.SrcToolName,
-		Confirm:       body.Confirm,
-		ConfirmPrompt: body.ConfirmPrompt,
-		Name:          body.Name,
-		Summary:       body.Summary,
-		Description:   body.Description,
-		Summarizer:    body.Summarizer,
+		SrcToolUrn:      *body.SrcToolUrn,
+		SrcToolName:     *body.SrcToolName,
+		Confirm:         body.Confirm,
+		ConfirmPrompt:   body.ConfirmPrompt,
+		Name:            body.Name,
+		Summary:         body.Summary,
+		Description:     body.Description,
+		Summarizer:      body.Summarizer,
+		Title:           body.Title,
+		ReadOnlyHint:    body.ReadOnlyHint,
+		DestructiveHint: body.DestructiveHint,
+		IdempotentHint:  body.IdempotentHint,
+		OpenWorldHint:   body.OpenWorldHint,
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))

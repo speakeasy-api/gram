@@ -23,7 +23,7 @@ func BuildUpsertGlobalPayload(variationsUpsertGlobalBody string, variationsUpser
 	{
 		err = json.Unmarshal([]byte(variationsUpsertGlobalBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"never\",\n      \"confirm_prompt\": \"abc123\",\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"src_tool_name\": \"abc123\",\n      \"src_tool_urn\": \"abc123\",\n      \"summarizer\": \"abc123\",\n      \"summary\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirm\": \"never\",\n      \"confirm_prompt\": \"abc123\",\n      \"description\": \"abc123\",\n      \"destructive_hint\": false,\n      \"idempotent_hint\": false,\n      \"name\": \"abc123\",\n      \"open_world_hint\": false,\n      \"read_only_hint\": false,\n      \"src_tool_name\": \"abc123\",\n      \"src_tool_urn\": \"abc123\",\n      \"summarizer\": \"abc123\",\n      \"summary\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ],\n      \"title\": \"abc123\"\n   }'")
 		}
 		if body.Confirm != nil {
 			if !(*body.Confirm == "always" || *body.Confirm == "never" || *body.Confirm == "session") {
@@ -53,14 +53,19 @@ func BuildUpsertGlobalPayload(variationsUpsertGlobalBody string, variationsUpser
 		}
 	}
 	v := &variations.UpsertGlobalPayload{
-		SrcToolUrn:    body.SrcToolUrn,
-		SrcToolName:   body.SrcToolName,
-		Confirm:       body.Confirm,
-		ConfirmPrompt: body.ConfirmPrompt,
-		Name:          body.Name,
-		Summary:       body.Summary,
-		Description:   body.Description,
-		Summarizer:    body.Summarizer,
+		SrcToolUrn:      body.SrcToolUrn,
+		SrcToolName:     body.SrcToolName,
+		Confirm:         body.Confirm,
+		ConfirmPrompt:   body.ConfirmPrompt,
+		Name:            body.Name,
+		Summary:         body.Summary,
+		Description:     body.Description,
+		Summarizer:      body.Summarizer,
+		Title:           body.Title,
+		ReadOnlyHint:    body.ReadOnlyHint,
+		DestructiveHint: body.DestructiveHint,
+		IdempotentHint:  body.IdempotentHint,
+		OpenWorldHint:   body.OpenWorldHint,
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))

@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
 import { Tool } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
@@ -42,13 +43,38 @@ function getToolTypeLabel(tool: Tool): string {
   return "Unknown";
 }
 
+/** Get the effective annotation value: variation override > base annotation > undefined */
+function getAnnotationValue(
+  tool: Tool,
+  field:
+    | "readOnlyHint"
+    | "destructiveHint"
+    | "idempotentHint"
+    | "openWorldHint",
+): boolean | undefined {
+  if (tool.type === "prompt" || tool.type === "external-mcp") return undefined;
+  const variationVal = tool.variation?.[field];
+  if (variationVal !== undefined) return variationVal;
+  return tool.annotations?.[field];
+}
+
+export type ToolUpdatePayload = {
+  name: string;
+  description: string;
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+};
+
 interface EditToolDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tool: Tool | null;
   documentIdToName?: Record<string, string>;
   functionIdToName?: Record<string, string>;
-  onSave: (updates: { name: string; description: string }) => void;
+  onSave: (updates: ToolUpdatePayload) => void | Promise<void>;
   onRemove: () => void;
 }
 
@@ -62,14 +88,27 @@ export function EditToolDialog({
   onRemove,
 }: EditToolDialogProps) {
   const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [readOnlyHint, setReadOnlyHint] = useState<boolean | undefined>();
+  const [destructiveHint, setDestructiveHint] = useState<boolean | undefined>();
+  const [idempotentHint, setIdempotentHint] = useState<boolean | undefined>();
+  const [openWorldHint, setOpenWorldHint] = useState<boolean | undefined>();
+  const [saving, setSaving] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const hasAnnotations = tool?.type === "http" || tool?.type === "function";
 
   // Reset form when tool changes
   useEffect(() => {
     if (tool) {
       setName(tool.name);
+      setTitle(tool.variation?.title ?? tool.annotations?.title ?? "");
       setDescription(tool.description || "");
+      setReadOnlyHint(getAnnotationValue(tool, "readOnlyHint"));
+      setDestructiveHint(getAnnotationValue(tool, "destructiveHint"));
+      setIdempotentHint(getAnnotationValue(tool, "idempotentHint"));
+      setOpenWorldHint(getAnnotationValue(tool, "openWorldHint"));
     }
   }, [tool]);
 
@@ -97,12 +136,36 @@ export function EditToolDialog({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, name, description]);
+  }, [
+    open,
+    name,
+    title,
+    description,
+    readOnlyHint,
+    destructiveHint,
+    idempotentHint,
+    openWorldHint,
+  ]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!tool) return;
-    onSave({ name, description });
-    onOpenChange(false);
+    setSaving(true);
+    try {
+      await onSave({
+        name,
+        description,
+        ...(hasAnnotations && {
+          title: title || undefined,
+          readOnlyHint,
+          destructiveHint,
+          idempotentHint,
+          openWorldHint,
+        }),
+      });
+      onOpenChange(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleRemove = () => {
@@ -119,8 +182,21 @@ export function EditToolDialog({
   const ToolIcon = getToolIcon(tool);
   const source = getToolSource(tool, documentIdToName, functionIdToName);
   const typeLabel = getToolTypeLabel(tool);
+
+  const origTitle = tool.variation?.title ?? tool.annotations?.title ?? "";
+  const origReadOnly = getAnnotationValue(tool, "readOnlyHint");
+  const origDestructive = getAnnotationValue(tool, "destructiveHint");
+  const origIdempotent = getAnnotationValue(tool, "idempotentHint");
+  const origOpenWorld = getAnnotationValue(tool, "openWorldHint");
+
   const hasChanges =
-    name !== tool.name || description !== (tool.description || "");
+    name !== tool.name ||
+    title !== origTitle ||
+    description !== (tool.description || "") ||
+    readOnlyHint !== origReadOnly ||
+    destructiveHint !== origDestructive ||
+    idempotentHint !== origIdempotent ||
+    openWorldHint !== origOpenWorld;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -150,6 +226,20 @@ export function EditToolDialog({
             />
           </div>
 
+          {hasAnnotations && (
+            <div className="space-y-2">
+              <Label htmlFor="tool-title" className="text-sm font-medium">
+                Title
+              </Label>
+              <Input
+                id="tool-title"
+                value={title}
+                onChange={(value) => setTitle(value)}
+                placeholder="Display name override"
+              />
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="tool-description" className="text-sm font-medium">
               Description
@@ -162,6 +252,71 @@ export function EditToolDialog({
               rows={4}
             />
           </div>
+
+          {/* Behavior Hints */}
+          {hasAnnotations && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Behavior Hints</Label>
+              <p className="text-xs text-muted-foreground">
+                Override how this tool is presented to AI models.
+              </p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm">Read-only</p>
+                    <p className="text-xs text-muted-foreground">
+                      Tool does not modify its environment
+                    </p>
+                  </div>
+                  <Switch
+                    checked={readOnlyHint ?? false}
+                    onCheckedChange={setReadOnlyHint}
+                    aria-label="Read-only hint"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm">Destructive</p>
+                    <p className="text-xs text-muted-foreground">
+                      Tool may perform destructive updates
+                    </p>
+                  </div>
+                  <Switch
+                    checked={destructiveHint ?? false}
+                    onCheckedChange={setDestructiveHint}
+                    aria-label="Destructive hint"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm">Idempotent</p>
+                    <p className="text-xs text-muted-foreground">
+                      Repeated calls with same arguments have no additional
+                      effect
+                    </p>
+                  </div>
+                  <Switch
+                    checked={idempotentHint ?? false}
+                    onCheckedChange={setIdempotentHint}
+                    aria-label="Idempotent hint"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm">Open-world</p>
+                    <p className="text-xs text-muted-foreground">
+                      Tool interacts with external entities
+                    </p>
+                  </div>
+                  <Switch
+                    checked={openWorldHint ?? false}
+                    onCheckedChange={setOpenWorldHint}
+                    aria-label="Open-world hint"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -173,9 +328,9 @@ export function EditToolDialog({
             <Button variant="secondary" onClick={handleClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={!hasChanges}>
-              Save
-              {hasChanges && (
+            <Button onClick={handleSave} disabled={!hasChanges || saving}>
+              {saving ? "Saving..." : "Save"}
+              {hasChanges && !saving && (
                 <span className="ml-2 text-xs opacity-60">⌘⏎</span>
               )}
             </Button>

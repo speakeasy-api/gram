@@ -293,6 +293,16 @@ type ProjectSummary struct {
 	ToolCallFailure int64
 	// Average tool call duration in milliseconds
 	AvgToolDurationMs float64
+	// Chats resolved successfully
+	ChatResolutionSuccess int64
+	// Chats that failed to resolve
+	ChatResolutionFailure int64
+	// Chats partially resolved
+	ChatResolutionPartial int64
+	// Chats abandoned by user
+	ChatResolutionAbandoned int64
+	// Average chat resolution score (0-100)
+	AvgChatResolutionScore float64
 	// Number of unique chat sessions (project scope only)
 	TotalChats int64
 	// Number of distinct models used (project scope only)

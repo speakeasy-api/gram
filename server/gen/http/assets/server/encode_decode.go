@@ -1169,6 +1169,7 @@ func EncodeFetchOpenAPIv3FromURLError(encoder func(context.Context, http.Respons
 func EncodeServeOpenAPIv3Response(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*assets.ServeOpenAPIv3Result)
+		ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "*/*")
 		w.Header().Set("Content-Type", res.ContentType)
 		{
 			val := res.ContentLength

@@ -4973,7 +4973,7 @@ func variationsUpsertGlobalUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations upsert-global --body '{\n      \"confirm\": \"never\",\n      \"confirm_prompt\": \"abc123\",\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"src_tool_name\": \"abc123\",\n      \"src_tool_urn\": \"abc123\",\n      \"summarizer\": \"abc123\",\n      \"summary\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations upsert-global --body '{\n      \"confirm\": \"never\",\n      \"confirm_prompt\": \"abc123\",\n      \"description\": \"abc123\",\n      \"destructive_hint\": false,\n      \"idempotent_hint\": false,\n      \"name\": \"abc123\",\n      \"open_world_hint\": false,\n      \"read_only_hint\": false,\n      \"src_tool_name\": \"abc123\",\n      \"src_tool_urn\": \"abc123\",\n      \"summarizer\": \"abc123\",\n      \"summary\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ],\n      \"title\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func variationsDeleteGlobalUsage() {
