@@ -1,44 +1,34 @@
 package testenv
 
 import (
-	"context"
 	"fmt"
-	"net/url"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/testcontainers/testcontainers-go"
-	tcr "github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
+// RedisClientFunc creates a new Redis client connected to the test Redis instance.
 type RedisClientFunc func(t *testing.T, db int) (*redis.Client, error)
 
-func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, error) {
-	container, err := tcr.Run(ctx, "redis:6.2-alpine", testcontainers.WithLogger(NewTestcontainersLogger()))
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to start redis container: %w", err)
+// newRedisClientFactory creates a RedisClientFunc that connects to the test Redis
+// instance. Connection details are read from TEST_REDIS_HOST and TEST_REDIS_PORT.
+func newRedisClientFactory() (RedisClientFunc, error) {
+	host := os.Getenv("TEST_REDIS_HOST")
+	port := os.Getenv("TEST_REDIS_PORT")
+
+	if host == "" || port == "" {
+		return nil, fmt.Errorf("TEST_REDIS_HOST and TEST_REDIS_PORT environment variables must be set")
 	}
 
-	return container, newRedisClientFunc(container), nil
-}
+	addr := fmt.Sprintf("%s:%s", host, port)
 
-func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 	return func(t *testing.T, db int) (*redis.Client, error) {
 		t.Helper()
 
-		cstr, err := container.ConnectionString(t.Context())
-		if err != nil {
-			return nil, fmt.Errorf("failed to get redis connection string: %w", err)
-		}
-
-		uri, err := url.Parse(cstr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse redis connection string: %w", err)
-		}
-
 		client := redis.NewClient(&redis.Options{
-			Addr:         uri.Host,
+			Addr:         addr,
 			DB:           db,
 			DialTimeout:  1 * time.Second,
 			ReadTimeout:  300 * time.Millisecond,
@@ -47,10 +37,10 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 
 		t.Cleanup(func() {
 			if err := client.Close(); err != nil {
-				t.Fatalf("failed to close redis client: %v", err)
+				t.Logf("failed to close redis client: %v", err)
 			}
 		})
 
 		return client, nil
-	}
+	}, nil
 }

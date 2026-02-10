@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/testsuite"
 
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agentsapi"
@@ -51,7 +50,6 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	temporalClient client.Client
-	temporalServer *testsuite.DevServer
 }
 
 func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
@@ -107,7 +105,7 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 	)
 
 	// Start temporal client and worker
-	temporalClient, devserver := infra.NewTemporalClient(t)
+	temporalClient := infra.NewTemporalClient(t)
 	worker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 		DB:               conn,
 		EncryptionClient: enc,
@@ -116,7 +114,6 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 	t.Cleanup(func() {
 		worker.Stop()
 		temporalClient.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
@@ -142,6 +139,5 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 		temporalClient: temporalClient,
-		temporalServer: devserver,
 	}
 }

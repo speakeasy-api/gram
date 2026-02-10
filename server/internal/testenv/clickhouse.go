@@ -1,58 +1,54 @@
 package testenv
 
 import (
-	"context"
 	"fmt"
-	"path/filepath"
+	"os"
 	"testing"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/testcontainers/testcontainers-go"
-	clickhousecontainer "github.com/testcontainers/testcontainers-go/modules/clickhouse"
 )
 
+// ClickhouseClientFunc creates a new ClickHouse connection for tests.
 type ClickhouseClientFunc func(t *testing.T) (clickhouse.Conn, error)
 
-// NewTestClickhouse creates a new ClickHouse container with the schema initialized
-// from migration files. Returns a container reference and a function to create
-// test connections. The container is automatically cleaned up when the test ends.
-func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseContainer, ClickhouseClientFunc, error) {
-	schemaPath := filepath.Join("..", "..", "clickhouse", "schema.sql")
+// newClickhouseClientFactory creates a ClickhouseClientFunc that connects to the
+// test ClickHouse instance. Connection details are read from TEST_CLICKHOUSE_*
+// environment variables.
+func newClickhouseClientFactory() (ClickhouseClientFunc, error) {
+	host := os.Getenv("TEST_CLICKHOUSE_HOST")
+	port := os.Getenv("TEST_CLICKHOUSE_NATIVE_PORT")
+	user := os.Getenv("TEST_CLICKHOUSE_USER")
+	password := os.Getenv("TEST_CLICKHOUSE_PASSWORD")
+	database := os.Getenv("TEST_CLICKHOUSE_DB")
 
-	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:25.8.3",
-		clickhousecontainer.WithUsername("gram"),
-		clickhousecontainer.WithPassword("gram"),
-		clickhousecontainer.WithInitScripts(schemaPath),
-		testcontainers.WithLogger(NewTestcontainersLogger()),
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to start clickhouse container: %w", err)
+	if host == "" || port == "" {
+		return nil, fmt.Errorf("TEST_CLICKHOUSE_HOST and TEST_CLICKHOUSE_NATIVE_PORT environment variables must be set")
 	}
 
-	return container, newClickhouseClientFunc(container), nil
-}
+	// Use defaults matching the mise task if not specified
+	if user == "" {
+		user = "gram"
+	}
+	if password == "" {
+		password = "gram"
+	}
+	if database == "" {
+		database = "default"
+	}
 
-func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer) ClickhouseClientFunc {
+	addr := fmt.Sprintf("%s:%s", host, port)
+
 	return func(t *testing.T) (clickhouse.Conn, error) {
 		t.Helper()
 
 		ctx := t.Context()
-		host, err := container.Host(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get clickhouse host: %w", err)
-		}
-
-		port, err := container.MappedPort(ctx, "9000/tcp")
-		if err != nil {
-			return nil, fmt.Errorf("failed to get clickhouse port: %w", err)
-		}
 
 		conn, err := clickhouse.Open(&clickhouse.Options{
-			Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
+			Addr: []string{addr},
 			Auth: clickhouse.Auth{
-				Database: "default",
-				Username: "gram",
-				Password: "gram",
+				Database: database,
+				Username: user,
+				Password: password,
 			},
 			Settings: clickhouse.Settings{
 				"async_insert":          0, // Forces inserts to be synchronous
@@ -60,11 +56,11 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 			},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to connect to clickhouse: %w", err)
+			return nil, fmt.Errorf("open clickhouse connection: %w", err)
 		}
 
 		if err = conn.Ping(ctx); err != nil {
-			return nil, fmt.Errorf("failed to ping clickhouse: %w", err)
+			return nil, fmt.Errorf("ping clickhouse: %w", err)
 		}
 
 		t.Cleanup(func() {
@@ -74,5 +70,5 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 		})
 
 		return conn, nil
-	}
+	}, nil
 }
