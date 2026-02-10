@@ -677,22 +677,24 @@ WITH limited_chats AS (
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
     AND ($2 = '' OR c.external_user_id = $2)
+    AND ($3::timestamptz IS NULL OR c.created_at >= $3)
+    AND ($4::timestamptz IS NULL OR c.created_at <= $4)
     AND (
-      $3 = ''
+      $5 = ''
       OR (
-        $3 = 'unresolved' AND NOT EXISTS (
+        $5 = 'unresolved' AND NOT EXISTS (
           SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
         )
       )
       OR (
-        $3 != 'unresolved' AND EXISTS (
-          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $3
+        $5 != 'unresolved' AND EXISTS (
+          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $5
         )
       )
     )
   ORDER BY c.updated_at DESC
-  LIMIT $5
-  OFFSET $4
+  LIMIT $7
+  OFFSET $6
 )
 SELECT
     lc.id as chat_id,
@@ -729,6 +731,8 @@ ORDER BY lc.updated_at DESC, cr.created_at DESC
 type ListChatsWithResolutionsParams struct {
 	ProjectID        uuid.UUID
 	ExternalUserID   interface{}
+	FromTime         pgtype.Timestamptz
+	ToTime           pgtype.Timestamptz
 	ResolutionStatus interface{}
 	PageOffset       int32
 	PageLimit        int32
@@ -755,6 +759,8 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 	rows, err := q.db.Query(ctx, listChatsWithResolutions,
 		arg.ProjectID,
 		arg.ExternalUserID,
+		arg.FromTime,
+		arg.ToTime,
 		arg.ResolutionStatus,
 		arg.PageOffset,
 		arg.PageLimit,

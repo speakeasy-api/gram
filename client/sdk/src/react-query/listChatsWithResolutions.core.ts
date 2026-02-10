@@ -49,6 +49,8 @@ export function buildListChatsWithResolutionsQuery(
     queryKey: queryKeyListChatsWithResolutions({
       externalUserId: request?.externalUserId,
       resolutionStatus: request?.resolutionStatus,
+      from: request?.from,
+      to: request?.to,
       limit: request?.limit,
       offset: request?.offset,
       gramSession: request?.gramSession,
@@ -83,6 +85,8 @@ export function queryKeyListChatsWithResolutions(
   parameters: {
     externalUserId?: string | undefined;
     resolutionStatus?: string | undefined;
+    from?: Date | undefined;
+    to?: Date | undefined;
     limit?: number | undefined;
     offset?: number | undefined;
     gramSession?: string | undefined;

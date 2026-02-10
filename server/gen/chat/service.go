@@ -209,6 +209,10 @@ type ListChatsWithResolutionsPayload struct {
 	ExternalUserID *string
 	// Filter by resolution status
 	ResolutionStatus *string
+	// Filter chats created after this timestamp (ISO 8601)
+	From *string
+	// Filter chats created before this timestamp (ISO 8601)
+	To *string
 	// Number of results per page
 	Limit int
 	// Pagination offset

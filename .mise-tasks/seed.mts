@@ -3,6 +3,7 @@
 //MISE description="Seed the local database with data"
 
 import assert from "node:assert";
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -161,6 +162,15 @@ async function seed() {
         VITE_GRAM_ELEMENTS_STORYBOOK_MCP_URL=${toolset.mcpURL}`;
       }
     }
+  }
+
+  // Seed observability data for the first project
+  const firstProject = Object.values(projects)[0];
+  if (firstProject) {
+    await seedObservabilityData({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+    });
   }
 
   success = true;
@@ -483,6 +493,265 @@ async function upsertToolset(init: {
   log.info(`${toolset.mcpURL} visibility was changed to public`);
 
   return toolset;
+}
+
+// Namespace UUID for generating deterministic chat IDs
+const CHAT_UUID_NAMESPACE = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"; // DNS namespace
+
+function generateChatUUID(chatNumber: number): string {
+  // Generate a deterministic UUID v5 from the chat number
+  const hash = crypto
+    .createHash("sha1")
+    .update(CHAT_UUID_NAMESPACE)
+    .update(`chat-${chatNumber}`)
+    .digest();
+
+  // Set version (5) and variant bits
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+
+  const hex = hash.toString("hex").slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+async function seedObservabilityData(init: {
+  projectId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { projectId, organizationId } = init;
+
+  log.info("Seeding observability data...");
+
+  const NUM_CHATS = 500; // Reduced for faster seeding
+  const DAYS_BACK = 30;
+
+  // Tool names for generating realistic data
+  const TOOLS = [
+    "github:list-repos",
+    "slack:send-message",
+    "postgres:query",
+    "openai:chat",
+    "jira:get-ticket",
+    "stripe:create-payment",
+    "notion:create-page",
+  ];
+
+  const RESOLUTIONS = ["success", "partial", "failure"] as const;
+  const RESOLUTION_WEIGHTS = [65, 15, 20]; // success: 65%, partial: 15%, failure: 20%
+
+  // Sample user messages for chat content
+  const USER_MESSAGES = [
+    "Can you help me list all my GitHub repositories?",
+    "Send a message to the #general channel on Slack",
+    "Query the database for recent orders",
+    "Generate a summary of this document",
+    "Create a new Jira ticket for this bug",
+    "Process a payment for this order",
+    "Create a new page in Notion with these notes",
+    "What's the status of my last deployment?",
+    "Help me debug this API integration",
+    "Summarize the customer feedback from last week",
+  ];
+
+  const ASSISTANT_RESPONSES = [
+    "I'll help you with that. Let me check...",
+    "Sure, I'm processing your request now.",
+    "I've completed the task. Here are the results:",
+    "I found the following information for you:",
+    "The operation was successful. Here's what happened:",
+  ];
+
+  // Generate chat data
+  const now = Date.now();
+  const msPerDay = 24 * 60 * 60 * 1000;
+
+  // Build PostgreSQL insert statements
+  let chatsSQL = `
+    DELETE FROM chats WHERE project_id = '${projectId}';
+    INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at) VALUES
+  `;
+
+  let messagesSQL = `
+    INSERT INTO chat_messages (chat_id, project_id, role, content, model, created_at) VALUES
+  `;
+
+  let resolutionsSQL = `
+    INSERT INTO chat_resolutions (project_id, chat_id, user_goal, resolution, resolution_notes, score, created_at) VALUES
+  `;
+
+  const chatValues: string[] = [];
+  const messageValues: string[] = [];
+  const resolutionValues: string[] = [];
+
+  for (let i = 0; i < NUM_CHATS; i++) {
+    const chatId = generateChatUUID(i);
+    const extUserId = `ext-user-${i % 80}`;
+    const userId = `user-${i % 200}`;
+
+    // Random time within the past DAYS_BACK days
+    const daysAgo = Math.random() * DAYS_BACK;
+    const chatTime = new Date(now - daysAgo * msPerDay);
+    const updatedTime = new Date(
+      chatTime.getTime() + Math.random() * 10 * 60 * 1000,
+    ); // 0-10 minutes later
+
+    // Generate a title from the first user message
+    const userMsg =
+      USER_MESSAGES[Math.floor(Math.random() * USER_MESSAGES.length)];
+    const title = userMsg.slice(0, 50) + (userMsg.length > 50 ? "..." : "");
+
+    chatValues.push(
+      `('${chatId}', '${projectId}', '${organizationId}', '${userId}', '${extUserId}', '${title.replace(/'/g, "''")}', '${chatTime.toISOString()}', '${updatedTime.toISOString()}')`,
+    );
+
+    // Generate 2-6 messages per chat
+    const numMessages = 2 + Math.floor(Math.random() * 5);
+    let msgTime = chatTime;
+
+    for (let j = 0; j < numMessages; j++) {
+      const role = j % 2 === 0 ? "user" : "assistant";
+      const content =
+        role === "user"
+          ? USER_MESSAGES[Math.floor(Math.random() * USER_MESSAGES.length)]
+          : ASSISTANT_RESPONSES[
+              Math.floor(Math.random() * ASSISTANT_RESPONSES.length)
+            ];
+
+      msgTime = new Date(msgTime.getTime() + Math.random() * 30 * 1000); // 0-30 seconds later
+
+      messageValues.push(
+        `('${chatId}', '${projectId}', '${role}', '${content.replace(/'/g, "''")}', 'gpt-4', '${msgTime.toISOString()}')`,
+      );
+    }
+
+    // Generate resolution (70% of chats have resolutions)
+    if (Math.random() < 0.7) {
+      const rand = Math.random() * 100;
+      let resolution: (typeof RESOLUTIONS)[number];
+      let score: number;
+
+      if (rand < RESOLUTION_WEIGHTS[0]) {
+        resolution = "success";
+        score = 80 + Math.floor(Math.random() * 21); // 80-100
+      } else if (rand < RESOLUTION_WEIGHTS[0] + RESOLUTION_WEIGHTS[1]) {
+        resolution = "partial";
+        score = 40 + Math.floor(Math.random() * 31); // 40-70
+      } else {
+        resolution = "failure";
+        score = Math.floor(Math.random() * 30); // 0-29
+      }
+
+      const resolutionNotes =
+        resolution === "success"
+          ? "User goal was fully achieved"
+          : resolution === "partial"
+            ? "User goal was partially achieved"
+            : "User goal could not be completed";
+
+      resolutionValues.push(
+        `('${projectId}', '${chatId}', '${userMsg.replace(/'/g, "''")}', '${resolution}', '${resolutionNotes}', ${score}, '${updatedTime.toISOString()}')`,
+      );
+    }
+  }
+
+  chatsSQL += chatValues.join(",\n") + ";";
+  messagesSQL += messageValues.join(",\n") + ";";
+
+  if (resolutionValues.length > 0) {
+    resolutionsSQL += resolutionValues.join(",\n") + ";";
+  }
+
+  // Execute PostgreSQL inserts
+  const pgSQL = `
+    BEGIN;
+    ${chatsSQL}
+    ${messagesSQL}
+    ${resolutionValues.length > 0 ? resolutionsSQL : ""}
+    COMMIT;
+  `;
+
+  try {
+    await $`psql $GRAM_DATABASE_URL -c ${pgSQL}`.quiet();
+    log.info(`Inserted ${NUM_CHATS} chats with messages into PostgreSQL`);
+  } catch (e) {
+    log.warn(`Failed to seed PostgreSQL: ${e}`);
+  }
+
+  // Build ClickHouse insert for telemetry logs
+  // We'll create a simpler inline insert using clickhouse-client
+  const chInserts: string[] = [];
+
+  for (let i = 0; i < NUM_CHATS; i++) {
+    const chatId = generateChatUUID(i);
+    const extUserId = `ext-user-${i % 80}`;
+    const userId = `user-${i % 200}`;
+    const apiKeyId = `key-${i % 5}`;
+
+    const daysAgo = Math.random() * DAYS_BACK;
+    const eventTime = new Date(now - daysAgo * msPerDay);
+    const timeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
+
+    // Tool call event
+    const tool = TOOLS[Math.floor(Math.random() * TOOLS.length)];
+    const statusCode = Math.random() < 0.92 ? 200 : [400, 500, 502][Math.floor(Math.random() * 3)];
+    const latency = (0.05 + Math.random() * 2).toFixed(3);
+
+    chInserts.push(
+      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${tool}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "tools:${tool}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'tools:${tool}', 'gram-mcp-gateway', '${chatId}')`,
+    );
+
+    // Chat completion event
+    const finishReason = Math.random() < 0.65 ? "stop" : Math.random() < 0.9 ? "length" : "error";
+    const duration = 30 + Math.floor(Math.random() * 150);
+    const completionStatus = Math.random() < 0.92 ? 200 : 500;
+
+    chInserts.push(
+      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+    );
+
+    // Resolution event (70% of chats)
+    if (Math.random() < 0.7) {
+      const rand = Math.random() * 100;
+      let resolution: string;
+      let score: number;
+
+      if (rand < 65) {
+        resolution = "success";
+        score = 80 + Math.floor(Math.random() * 21);
+      } else if (rand < 80) {
+        resolution = "partial";
+        score = 40 + Math.floor(Math.random() * 31);
+      } else {
+        resolution = "failure";
+        score = Math.floor(Math.random() * 30);
+      }
+
+      chInserts.push(
+        `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
+      );
+    }
+  }
+
+  const chSQL = `
+    ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}';
+    INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
+    ${chInserts.join(",\n")};
+  `;
+
+  try {
+    // Write to temp file and execute (handles large inserts better)
+    const tmpFile = `/tmp/seed_clickhouse_${Date.now()}.sql`;
+    await fs.writeFile(tmpFile, chSQL);
+    await $`clickhouse-client --host $CLICKHOUSE_HOST --port $CLICKHOUSE_NATIVE_PORT --user $CLICKHOUSE_USERNAME --password $CLICKHOUSE_PASSWORD --secure --query "$(cat ${tmpFile})"`.quiet();
+    await fs.unlink(tmpFile);
+    log.info(
+      `Inserted ${chInserts.length} telemetry events into ClickHouse`,
+    );
+  } catch (e) {
+    log.warn(`Failed to seed ClickHouse: ${e}`);
+  }
+
+  log.info("Observability data seeding complete");
 }
 
 function abort(message: string, ...values: unknown[]): never {

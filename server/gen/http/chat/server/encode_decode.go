@@ -932,6 +932,8 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		var (
 			externalUserID    *string
 			resolutionStatus  *string
+			from              *string
+			to                *string
 			limit             int
 			offset            int
 			sessionToken      *string
@@ -947,6 +949,20 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		resolutionStatusRaw := qp.Get("resolution_status")
 		if resolutionStatusRaw != "" {
 			resolutionStatus = &resolutionStatusRaw
+		}
+		fromRaw := qp.Get("from")
+		if fromRaw != "" {
+			from = &fromRaw
+		}
+		if from != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+		}
+		toRaw := qp.Get("to")
+		if toRaw != "" {
+			to = &toRaw
+		}
+		if to != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -994,7 +1010,7 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListChatsWithResolutionsPayload(externalUserID, resolutionStatus, limit, offset, sessionToken, projectSlugInput, chatSessionsToken)
+		payload := NewListChatsWithResolutionsPayload(externalUserID, resolutionStatus, from, to, limit, offset, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

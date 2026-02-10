@@ -2552,6 +2552,22 @@ paths:
                     description: Filter by resolution status
                     type: string
                 - allowEmptyValue: true
+                  description: Filter chats created after this timestamp (ISO 8601)
+                  in: query
+                  name: from
+                  schema:
+                    description: Filter chats created after this timestamp (ISO 8601)
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter chats created before this timestamp (ISO 8601)
+                  in: query
+                  name: to
+                  schema:
+                    description: Filter chats created before this timestamp (ISO 8601)
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
                   description: Number of results per page
                   in: query
                   name: limit

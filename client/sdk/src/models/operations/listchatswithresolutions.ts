@@ -29,6 +29,14 @@ export type ListChatsWithResolutionsRequest = {
    */
   resolutionStatus?: string | undefined;
   /**
+   * Filter chats created after this timestamp (ISO 8601)
+   */
+  from?: Date | undefined;
+  /**
+   * Filter chats created before this timestamp (ISO 8601)
+   */
+  to?: Date | undefined;
+  /**
    * Number of results per page
    */
   limit?: number | undefined;
@@ -149,6 +157,8 @@ export function listChatsWithResolutionsSecurityToJSON(
 export type ListChatsWithResolutionsRequest$Outbound = {
   external_user_id?: string | undefined;
   resolution_status?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
   limit: number;
   offset: number;
   "Gram-Session"?: string | undefined;
@@ -164,6 +174,8 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodType<
 > = z.object({
   externalUserId: z.string().optional(),
   resolutionStatus: z.string().optional(),
+  from: z.date().transform(v => v.toISOString()).optional(),
+  to: z.date().transform(v => v.toISOString()).optional(),
   limit: z.number().int().default(50),
   offset: z.number().int().default(0),
   gramSession: z.string().optional(),

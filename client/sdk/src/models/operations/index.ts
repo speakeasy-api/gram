@@ -101,6 +101,7 @@ export * from "./setsourceenvironmentlink.js";
 export * from "./settoolsetenvironmentlink.js";
 export * from "./slackcallback.js";
 export * from "./slacklogin.js";
+export * from "./submitfeedback.js";
 export * from "./switchauthscopes.js";
 export * from "./updateenvironment.js";
 export * from "./updatepackage.js";

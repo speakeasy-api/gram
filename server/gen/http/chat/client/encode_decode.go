@@ -1021,6 +1021,12 @@ func EncodeListChatsWithResolutionsRequest(encoder func(*http.Request) goahttp.E
 		if p.ResolutionStatus != nil {
 			values.Add("resolution_status", *p.ResolutionStatus)
 		}
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		values.Add("offset", fmt.Sprintf("%v", p.Offset))
 		req.URL.RawQuery = values.Encode()

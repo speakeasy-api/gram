@@ -309,10 +309,27 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	resolutionStatus := conv.PtrValOr(payload.ResolutionStatus, "")
 
+	// Parse time filters
+	var fromTime, toTime pgtype.Timestamptz
+	if payload.From != nil {
+		t, err := time.Parse(time.RFC3339, *payload.From)
+		if err == nil {
+			fromTime = pgtype.Timestamptz{Time: t, Valid: true}
+		}
+	}
+	if payload.To != nil {
+		t, err := time.Parse(time.RFC3339, *payload.To)
+		if err == nil {
+			toTime = pgtype.Timestamptz{Time: t, Valid: true}
+		}
+	}
+
 	// Query database - returns denormalized rows (one row per chat+resolution combination)
 	rows, err := s.repo.ListChatsWithResolutions(ctx, repo.ListChatsWithResolutionsParams{
 		ProjectID:        *authCtx.ProjectID,
 		ExternalUserID:   externalUserID,
+		FromTime:         fromTime,
+		ToTime:           toTime,
 		ResolutionStatus: resolutionStatus,
 		PageLimit:        int32(limit),  //nolint:gosec // limit is bounded by validation above
 		PageOffset:       int32(offset), //nolint:gosec // offset is controlled by client pagination

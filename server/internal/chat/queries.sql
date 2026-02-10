@@ -206,6 +206,8 @@ WITH limited_chats AS (
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
+    AND (@from_time::timestamptz IS NULL OR c.created_at >= @from_time)
+    AND (@to_time::timestamptz IS NULL OR c.created_at <= @to_time)
     AND (
       @resolution_status = ''
       OR (

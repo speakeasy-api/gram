@@ -116,6 +116,8 @@ export function setListChatsWithResolutionsData(
     parameters: {
       externalUserId?: string | undefined;
       resolutionStatus?: string | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
       gramSession?: string | undefined;
@@ -136,6 +138,8 @@ export function invalidateListChatsWithResolutions(
     [parameters: {
       externalUserId?: string | undefined;
       resolutionStatus?: string | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
       gramSession?: string | undefined;

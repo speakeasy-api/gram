@@ -253,7 +253,7 @@ const ROUTE_STRUCTURE = {
   },
   chatLogs: {
     title: "Logs",
-    url: "chat-logs",
+    url: "logs",
     icon: "messages-square",
     component: ChatLogs,
   },

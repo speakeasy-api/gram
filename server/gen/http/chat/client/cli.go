@@ -149,7 +149,7 @@ func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsage
 
 // BuildListChatsWithResolutionsPayload builds the payload for the chat
 // listChatsWithResolutions endpoint from CLI flags.
-func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
+func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
 	var err error
 	var externalUserID *string
 	{
@@ -161,6 +161,26 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsExternalUs
 	{
 		if chatListChatsWithResolutionsResolutionStatus != "" {
 			resolutionStatus = &chatListChatsWithResolutionsResolutionStatus
+		}
+	}
+	var from *string
+	{
+		if chatListChatsWithResolutionsFrom != "" {
+			from = &chatListChatsWithResolutionsFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if chatListChatsWithResolutionsTo != "" {
+			to = &chatListChatsWithResolutionsTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var limit int
@@ -221,6 +241,8 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsExternalUs
 	v := &chat.ListChatsWithResolutionsPayload{}
 	v.ExternalUserID = externalUserID
 	v.ResolutionStatus = resolutionStatus
+	v.From = from
+	v.To = to
 	v.Limit = limit
 	v.Offset = offset
 	v.SessionToken = sessionToken

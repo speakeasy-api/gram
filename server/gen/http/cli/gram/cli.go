@@ -247,6 +247,8 @@ func ParseEndpoint(
 		chatListChatsWithResolutionsFlags                 = flag.NewFlagSet("list-chats-with-resolutions", flag.ExitOnError)
 		chatListChatsWithResolutionsExternalUserIDFlag    = chatListChatsWithResolutionsFlags.String("external-user-id", "", "")
 		chatListChatsWithResolutionsResolutionStatusFlag  = chatListChatsWithResolutionsFlags.String("resolution-status", "", "")
+		chatListChatsWithResolutionsFromFlag              = chatListChatsWithResolutionsFlags.String("from", "", "")
+		chatListChatsWithResolutionsToFlag                = chatListChatsWithResolutionsFlags.String("to", "", "")
 		chatListChatsWithResolutionsLimitFlag             = chatListChatsWithResolutionsFlags.String("limit", "50", "")
 		chatListChatsWithResolutionsOffsetFlag            = chatListChatsWithResolutionsFlags.String("offset", "", "")
 		chatListChatsWithResolutionsSessionTokenFlag      = chatListChatsWithResolutionsFlags.String("session-token", "", "")
@@ -1620,7 +1622,7 @@ func ParseEndpoint(
 				data, err = chatc.BuildCreditUsagePayload(*chatCreditUsageSessionTokenFlag, *chatCreditUsageProjectSlugInputFlag, *chatCreditUsageChatSessionsTokenFlag)
 			case "list-chats-with-resolutions":
 				endpoint = c.ListChatsWithResolutions()
-				data, err = chatc.BuildListChatsWithResolutionsPayload(*chatListChatsWithResolutionsExternalUserIDFlag, *chatListChatsWithResolutionsResolutionStatusFlag, *chatListChatsWithResolutionsLimitFlag, *chatListChatsWithResolutionsOffsetFlag, *chatListChatsWithResolutionsSessionTokenFlag, *chatListChatsWithResolutionsProjectSlugInputFlag, *chatListChatsWithResolutionsChatSessionsTokenFlag)
+				data, err = chatc.BuildListChatsWithResolutionsPayload(*chatListChatsWithResolutionsExternalUserIDFlag, *chatListChatsWithResolutionsResolutionStatusFlag, *chatListChatsWithResolutionsFromFlag, *chatListChatsWithResolutionsToFlag, *chatListChatsWithResolutionsLimitFlag, *chatListChatsWithResolutionsOffsetFlag, *chatListChatsWithResolutionsSessionTokenFlag, *chatListChatsWithResolutionsProjectSlugInputFlag, *chatListChatsWithResolutionsChatSessionsTokenFlag)
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
@@ -2645,6 +2647,8 @@ func chatListChatsWithResolutionsUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] chat list-chats-with-resolutions", os.Args[0])
 	fmt.Fprint(os.Stderr, " -external-user-id STRING")
 	fmt.Fprint(os.Stderr, " -resolution-status STRING")
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -offset INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -2659,6 +2663,8 @@ func chatListChatsWithResolutionsUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -external-user-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -resolution-status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -offset INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -2667,7 +2673,7 @@ func chatListChatsWithResolutionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats-with-resolutions --external-user-id \"abc123\" --resolution-status \"abc123\" --limit 2 --offset 1 --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats-with-resolutions --external-user-id \"abc123\" --resolution-status \"abc123\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatSubmitFeedbackUsage() {

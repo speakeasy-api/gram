@@ -131,6 +131,12 @@ var _ = Service("chat", func() {
 
 			Attribute("external_user_id", String, "Filter by external user ID")
 			Attribute("resolution_status", String, "Filter by resolution status")
+			Attribute("from", String, "Filter chats created after this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Filter chats created before this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, "Number of results per page", func() {
 				Default(50)
 				Minimum(1)
@@ -148,6 +154,8 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.listChatsWithResolutions")
 			Param("external_user_id")
 			Param("resolution_status")
+			Param("from")
+			Param("to")
 			Param("limit")
 			Param("offset")
 			security.SessionHeader()
