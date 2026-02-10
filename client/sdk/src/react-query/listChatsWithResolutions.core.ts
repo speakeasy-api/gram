@@ -47,6 +47,7 @@ export function buildListChatsWithResolutionsQuery(
 } {
   return {
     queryKey: queryKeyListChatsWithResolutions({
+      search: request?.search,
       externalUserId: request?.externalUserId,
       resolutionStatus: request?.resolutionStatus,
       from: request?.from,
@@ -83,6 +84,7 @@ export function buildListChatsWithResolutionsQuery(
 
 export function queryKeyListChatsWithResolutions(
   parameters: {
+    search?: string | undefined;
     externalUserId?: string | undefined;
     resolutionStatus?: string | undefined;
     from?: Date | undefined;

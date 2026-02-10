@@ -21,6 +21,10 @@ export type ListChatsWithResolutionsSecurity = {
 
 export type ListChatsWithResolutionsRequest = {
   /**
+   * Search query (searches chat ID, user ID, and title)
+   */
+  search?: string | undefined;
+  /**
    * Filter by external user ID
    */
   externalUserId?: string | undefined;
@@ -155,6 +159,7 @@ export function listChatsWithResolutionsSecurityToJSON(
 
 /** @internal */
 export type ListChatsWithResolutionsRequest$Outbound = {
+  search?: string | undefined;
   external_user_id?: string | undefined;
   resolution_status?: string | undefined;
   from?: string | undefined;
@@ -172,6 +177,7 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListChatsWithResolutionsRequest
 > = z.object({
+  search: z.string().optional(),
   externalUserId: z.string().optional(),
   resolutionStatus: z.string().optional(),
   from: z.date().transform(v => v.toISOString()).optional(),

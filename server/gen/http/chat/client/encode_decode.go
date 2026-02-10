@@ -1015,6 +1015,9 @@ func EncodeListChatsWithResolutionsRequest(encoder func(*http.Request) goahttp.E
 			req.Header.Set("Gram-Chat-Session", head)
 		}
 		values := req.URL.Query()
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
 		if p.ExternalUserID != nil {
 			values.Add("external_user_id", *p.ExternalUserID)
 		}

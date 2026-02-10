@@ -102,6 +102,7 @@ async function $do(
     "limit": payload?.limit,
     "offset": payload?.offset,
     "resolution_status": payload?.resolution_status,
+    "search": payload?.search,
     "to": payload?.to,
   });
 

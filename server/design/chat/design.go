@@ -129,6 +129,7 @@ var _ = Service("chat", func() {
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
 
+			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
 			Attribute("resolution_status", String, "Filter by resolution status")
 			Attribute("from", String, "Filter chats created after this timestamp (ISO 8601)", func() {
@@ -152,6 +153,7 @@ var _ = Service("chat", func() {
 
 		HTTP(func() {
 			GET("/rpc/chat.listChatsWithResolutions")
+			Param("search")
 			Param("external_user_id")
 			Param("resolution_status")
 			Param("from")

@@ -7,7 +7,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 
 export type DateRangePreset = "24h" | "7d" | "30d" | "90d";
 
@@ -52,21 +51,20 @@ export function DateRangeSelect({
 }: DateRangeSelectProps) {
   if (customRange) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-blue-50 border-blue-200">
-        <CalendarIcon className="size-4 text-blue-600" />
-        <span className="text-sm text-blue-800">
-          {format(customRange.from, "MMM d, HH:mm")} –{" "}
-          {format(customRange.to, "MMM d, HH:mm")}
+      <div className="inline-flex items-center gap-2.5 px-3.5 py-2 border border-border/60 rounded-lg bg-background/95 backdrop-blur-sm hover:border-border transition-all">
+        <CalendarIcon className="size-4 text-foreground/60" />
+        <span className="text-sm font-medium text-foreground/90 flex items-center gap-2">
+          <span>{format(customRange.from, "MMM d, HH:mm")}</span>
+          <span className="text-muted-foreground">→</span>
+          <span>{format(customRange.to, "MMM d, HH:mm")}</span>
         </span>
         {onClearCustomRange && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0 hover:bg-blue-100"
+          <button
+            className="ml-0.5 p-0.5 rounded hover:bg-muted/50 transition-colors"
             onClick={onClearCustomRange}
           >
-            <X className="size-3 text-blue-600" />
-          </Button>
+            <X className="size-3.5 text-muted-foreground hover:text-foreground" />
+          </button>
         )}
       </div>
     );

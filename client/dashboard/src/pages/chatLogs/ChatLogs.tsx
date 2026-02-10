@@ -1,6 +1,8 @@
+import { CopilotSidebar } from "@/components/copilot-sidebar";
+import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
 import { useListChatsWithResolutions } from "@gram/client/react-query";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useState, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router";
 import { ChatDetailPanel } from "./ChatDetailPanel";
@@ -11,6 +13,41 @@ import {
   DateRangePreset,
   getDateRange,
 } from "../observability/date-range-select";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
+
+// Score legend component
+function ScoreLegend() {
+  return (
+    <div className="flex items-center px-5 py-3 bg-background border-b text-xs text-muted-foreground whitespace-nowrap overflow-x-auto">
+      {/* Spacer to align icon with score rings - matches the score ring column width */}
+      <div className="w-[44px] shrink-0 flex items-center justify-center">
+        <Icon name="gauge" className="size-5" />
+      </div>
+      <div className="flex items-center gap-4 flex-1">
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="font-medium">Resolution Score</span>
+          <span className="text-muted-foreground/70">
+            — How well the assistant resolved user goals
+          </span>
+        </div>
+        <div className="flex items-center gap-4 ml-auto shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-emerald-500" />
+            <span>80-100 Good</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-500" />
+            <span>50-79 Fair</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-rose-500" />
+            <span>0-49 Poor</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Valid date range presets
 const validPresets: DateRangePreset[] = ["24h", "7d", "30d", "90d"];
@@ -27,11 +64,23 @@ export default function ChatLogs() {
   const [offset, setOffset] = useState(0);
   const limit = 50;
 
+  // Copilot config - includes both chat and logs tools for comprehensive analysis
+  const observabilityToolFilter = useCallback(
+    ({ toolName }: { toolName: string }) => {
+      const name = toolName.toLowerCase();
+      return name.includes("chat") || name.includes("logs");
+    },
+    [],
+  );
+  const mcpConfig = useObservabilityMcpConfig({
+    toolsToInclude: observabilityToolFilter,
+  });
+
   // Parse URL params
   const urlRange = searchParams.get("range");
   const urlFrom = searchParams.get("from");
   const urlTo = searchParams.get("to");
-  const urlUser = searchParams.get("user");
+  const urlSearch = searchParams.get("search");
   const urlStatus = searchParams.get("status");
 
   // Derive state from URL
@@ -48,7 +97,7 @@ export default function ChatLogs() {
     return null;
   }, [urlFrom, urlTo]);
 
-  const externalCustomerId = urlUser ?? "";
+  const searchQuery = urlSearch ?? "";
   const resolutionStatus = urlStatus ?? "";
 
   // Calculate the time range for the query
@@ -96,9 +145,9 @@ export default function ChatLogs() {
     });
   }, [updateSearchParams]);
 
-  const setExternalCustomerId = useCallback(
+  const setSearchQuery = useCallback(
     (value: string) => {
-      updateSearchParams({ user: value || null });
+      updateSearchParams({ search: value || null });
     },
     [updateSearchParams],
   );
@@ -111,7 +160,7 @@ export default function ChatLogs() {
   );
 
   const { data, isLoading, error } = useListChatsWithResolutions({
-    externalUserId: externalCustomerId || undefined,
+    search: searchQuery || undefined,
     resolutionStatus: resolutionStatus || undefined,
     from: timeRange.from,
     to: timeRange.to,
@@ -122,73 +171,117 @@ export default function ChatLogs() {
   const chats = data?.chats ?? [];
   const hasMore = chats.length === limit;
 
+  // Format date range for copilot context
+  const dateRangeContext = useMemo(() => {
+    const formatDate = (d: Date) =>
+      d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    return `Viewing logs from ${formatDate(timeRange.from)} to ${formatDate(timeRange.to)}${
+      resolutionStatus ? `. Filtered to ${resolutionStatus} status.` : ""
+    }${searchQuery ? ` Search query: "${searchQuery}"` : ""}`;
+  }, [timeRange.from, timeRange.to, resolutionStatus, searchQuery]);
+
   return (
-    <div className="flex h-full">
-      {/* Left side: List view */}
-      <div className="flex-1 flex flex-col border-r">
-        <div className="p-6 border-b">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-semibold mb-1">Logs</h1>
-              <p className="text-sm text-muted-foreground">
-                View and debug individual chat conversations
-              </p>
+    <CopilotSidebar
+      mcpConfig={mcpConfig}
+      title="How can I help you debug?"
+      subtitle="Search chat sessions, analyze failures, or explore logs"
+      contextInfo={dateRangeContext}
+      suggestions={[
+        {
+          title: "Failed Chats",
+          label: "Analyze failed chats",
+          prompt:
+            "Show me recent chat sessions that failed. What patterns do you see in the failures?",
+        },
+        {
+          title: "Search Logs",
+          label: "Search raw logs",
+          prompt:
+            "Search the raw telemetry logs for errors or warnings in the current period",
+        },
+        {
+          title: "Debug Session",
+          label: "Debug a specific chat",
+          prompt:
+            "Help me debug a chat session. Search both the chat data and raw logs to understand what happened.",
+        },
+      ]}
+    >
+      <div className="flex h-full">
+        {/* Main content area */}
+        <div className="flex-1 flex flex-col">
+          <div className="p-6 border-b">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-semibold mb-1">Logs</h1>
+                <p className="text-sm text-muted-foreground">
+                  View and debug individual chat conversations
+                </p>
+              </div>
+              <div className="flex-shrink-0">
+                <DateRangeSelect
+                  value={dateRange}
+                  onValueChange={setDateRangeParam}
+                  customRange={customRange}
+                  onClearCustomRange={clearCustomRange}
+                />
+              </div>
             </div>
-            <DateRangeSelect
-              value={dateRange}
-              onValueChange={setDateRangeParam}
-              customRange={customRange}
-              onClearCustomRange={clearCustomRange}
+            <ChatLogsFilters
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+              resolutionStatus={resolutionStatus}
+              onResolutionStatusChange={setResolutionStatus}
             />
           </div>
-          <ChatLogsFilters
-            externalCustomerId={externalCustomerId}
-            onExternalCustomerIdChange={setExternalCustomerId}
-            resolutionStatus={resolutionStatus}
-            onResolutionStatusChange={setResolutionStatus}
-          />
-        </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <ChatLogsTable
-            chats={chats}
-            selectedChatId={selectedChat?.id}
-            onSelectChat={setSelectedChat}
-            isLoading={isLoading}
-            error={error}
-          />
-
-          {hasMore && (
-            <div className="p-4 flex justify-center gap-2">
-              <Button
-                onClick={() => setOffset(Math.max(0, offset - limit))}
-                disabled={offset === 0}
-              >
-                Previous
-              </Button>
-              <Button onClick={() => setOffset(offset + limit)}>Next</Button>
+          <div className="flex-1 overflow-y-auto relative">
+            <div className="sticky top-0 z-10">
+              <ScoreLegend />
             </div>
-          )}
-        </div>
-      </div>
+            <ChatLogsTable
+              chats={chats}
+              selectedChatId={selectedChat?.id}
+              onSelectChat={setSelectedChat}
+              isLoading={isLoading}
+              error={error}
+            />
 
-      {/* Right side: Detail panel */}
-      <div className="w-1/2">
-        {selectedChat ? (
-          <ChatDetailPanel
-            chatId={selectedChat.id}
-            resolutions={selectedChat.resolutions}
-            onClose={() => setSelectedChat(null)}
-          />
-        ) : (
-          <div className="h-full flex items-center justify-center text-muted-foreground">
-            <Stack direction="vertical" gap={2} align="center">
-              <Icon name="messages-square" className="size-12 opacity-50" />
-              <p>Select a chat to view details</p>
-            </Stack>
+            {hasMore && (
+              <div className="p-4 flex justify-center gap-2">
+                <Button
+                  onClick={() => setOffset(Math.max(0, offset - limit))}
+                  disabled={offset === 0}
+                >
+                  Previous
+                </Button>
+                <Button onClick={() => setOffset(offset + limit)}>Next</Button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Right side: Slide-out drawer */}
+        <Drawer
+          open={!!selectedChat}
+          onOpenChange={(open) => !open && setSelectedChat(null)}
+          direction="right"
+        >
+          <DrawerContent className="!w-[720px] sm:!max-w-[720px]">
+            {selectedChat && (
+              <ChatDetailPanel
+                chatId={selectedChat.id}
+                resolutions={selectedChat.resolutions}
+                onClose={() => setSelectedChat(null)}
+              />
+            )}
+          </DrawerContent>
+        </Drawer>
       </div>
-    </div>
+    </CopilotSidebar>
   );
 }

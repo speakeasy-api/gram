@@ -1,4 +1,6 @@
 import { Page } from "@/components/page-layout";
+import { CopilotSidebar, useCopilotState } from "@/components/copilot-sidebar";
+import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import {
   DateRangeSelect,
   DateRangePreset,
@@ -13,7 +15,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
 import { FilterType } from "@gram/client/models/components/listfilteroptionspayload";
-import { useState, useRef, useCallback, useMemo } from "react";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { Icon, IconName } from "@speakeasy-api/moonshine";
 import {
@@ -44,6 +46,7 @@ import {
 import { Line } from "react-chartjs-2";
 import { ChevronRight } from "lucide-react";
 import { useRoutes } from "@/routes";
+import { cn } from "@/lib/utils";
 
 function ViewChatsLink({ from, to }: { from: Date; to: Date }) {
   const routes = useRoutes();
@@ -93,7 +96,7 @@ function FilterBar({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm text-muted-foreground font-medium">
+      <span className="text-sm text-muted-foreground font-medium hidden 2xl:inline">
         Filter by
       </span>
       {/* Integrated segmented control with dropdown */}
@@ -107,11 +110,10 @@ function FilterBar({
               key={value}
               onClick={() => onDimensionChange(value)}
               className={`
-                h-7 px-3 text-sm font-medium rounded-l transition-all duration-150
-                ${value === "all" ? "rounded" : "rounded-l"}
+                h-7 px-3 text-sm font-medium transition-all duration-150 rounded
                 ${
                   isSelected
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-white dark:bg-gray-900 text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }
               `}
@@ -121,71 +123,74 @@ function FilterBar({
           );
         })}
 
-        {/* Integrated searchable dropdown - appears as part of the control */}
-        {dimension !== "all" && (
-          <>
-            <div className="w-px h-5 bg-border/50 mx-1" />
-            <Popover open={open} onOpenChange={setOpen}>
-              <PopoverTrigger asChild>
-                <button className="h-7 min-w-[140px] flex items-center justify-between gap-2 text-sm px-2 hover:bg-muted/50 rounded transition-colors">
-                  <span className="truncate max-w-[120px]">{displayLabel}</span>
-                  <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[220px] p-0" align="end">
-                <Command>
-                  <CommandInput
-                    placeholder={`Search ${dimension === "api_key" ? "API keys" : "users"}...`}
-                    className="h-9"
-                  />
-                  <CommandList>
-                    <CommandEmpty>No results found.</CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        value="__all__"
-                        onSelect={() => {
-                          onValueChange(null);
-                          setOpen(false);
-                        }}
-                        className="cursor-pointer"
-                      >
-                        <Check
-                          className={`mr-2 size-4 ${selectedValue === null ? "opacity-100" : "opacity-0"}`}
-                        />
-                        <span>
-                          All {dimension === "api_key" ? "API Keys" : "Users"}
+        {/* Integrated searchable dropdown - always visible */}
+        <div className="w-px h-5 bg-border/50 mx-1" />
+        <Popover open={dimension !== "all" && open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              disabled={dimension === "all"}
+              className={`h-7 min-w-[140px] flex items-center justify-between gap-2 text-sm px-2 rounded transition-colors ${
+                dimension === "all"
+                  ? "opacity-40 cursor-not-allowed"
+                  : "hover:bg-muted/50"
+              }`}
+            >
+              <span className="truncate max-w-[120px]">{displayLabel}</span>
+              <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[220px] p-0" align="end">
+            <Command>
+              <CommandInput
+                placeholder={`Search ${dimension === "api_key" ? "API keys" : "users"}...`}
+                className="h-9"
+              />
+              <CommandList>
+                <CommandEmpty>No results found.</CommandEmpty>
+                <CommandGroup>
+                  <CommandItem
+                    value="__all__"
+                    onSelect={() => {
+                      onValueChange(null);
+                      setOpen(false);
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <Check
+                      className={`mr-2 size-4 ${selectedValue === null ? "opacity-100" : "opacity-0"}`}
+                    />
+                    <span>
+                      All {dimension === "api_key" ? "API Keys" : "Users"}
+                    </span>
+                  </CommandItem>
+                  {options.map((option) => (
+                    <CommandItem
+                      key={option.id}
+                      value={option.label || option.id}
+                      onSelect={() => {
+                        onValueChange(option.id);
+                        setOpen(false);
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <Check
+                        className={`mr-2 size-4 ${selectedValue === option.id ? "opacity-100" : "opacity-0"}`}
+                      />
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <span className="truncate">
+                          {option.label || option.id}
                         </span>
-                      </CommandItem>
-                      {options.map((option) => (
-                        <CommandItem
-                          key={option.id}
-                          value={option.label || option.id}
-                          onSelect={() => {
-                            onValueChange(option.id);
-                            setOpen(false);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <Check
-                            className={`mr-2 size-4 ${selectedValue === option.id ? "opacity-100" : "opacity-0"}`}
-                          />
-                          <div className="flex items-center justify-between w-full gap-2">
-                            <span className="truncate">
-                              {option.label || option.id}
-                            </span>
-                            <span className="text-muted-foreground text-xs tabular-nums shrink-0">
-                              {option.count.toLocaleString()}
-                            </span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </>
-        )}
+                        <span className="text-muted-foreground text-xs tabular-nums shrink-0">
+                          {option.count.toLocaleString()}
+                        </span>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   );
@@ -193,14 +198,27 @@ function FilterBar({
 
 /**
  * Apply a centered moving average to smooth data (like Datadog).
- * Window size auto-scales based on data length for consistent smoothing.
+ * Adapts window size based on data length for consistent visual smoothing.
  */
 function smoothData(data: number[], windowSize?: number): number[] {
   if (data.length < 3) return data;
 
-  // Auto-scale window: ~8% of data points, min 5, max 21 for heavy smoothing
-  const autoWindow = Math.max(5, Math.min(21, Math.floor(data.length * 0.08)));
-  const window = windowSize ?? autoWindow;
+  // Scale window size with data length for consistent visual smoothing
+  // Fewer points = larger window percentage to maintain smoothness
+  let window: number;
+  if (windowSize !== undefined) {
+    window = windowSize;
+  } else if (data.length < 20) {
+    // Very zoomed in: use 25-30% of data points
+    window = Math.max(3, Math.floor(data.length * 0.3));
+  } else if (data.length < 50) {
+    // Moderate zoom: use ~15% of data points
+    window = Math.max(5, Math.floor(data.length * 0.15));
+  } else {
+    // Full view: use ~8% of data points, max 21
+    window = Math.max(5, Math.min(21, Math.floor(data.length * 0.08)));
+  }
+
   const halfWindow = Math.floor(window / 2);
 
   return data.map((_, i) => {
@@ -221,6 +239,15 @@ function isValidPreset(value: string | null): value is DateRangePreset {
 export default function ObservabilityOverview() {
   const [searchParams, setSearchParams] = useSearchParams();
   const client = useGramContext();
+
+  // Copilot config - filters to metrics-related tools
+  const metricsToolFilter = useCallback(
+    ({ toolName }: { toolName: string }) => toolName.includes("metrics"),
+    [],
+  );
+  const mcpConfig = useObservabilityMcpConfig({
+    toolsToInclude: metricsToolFilter,
+  });
 
   // Parse URL params
   const urlRange = searchParams.get("range");
@@ -280,13 +307,12 @@ export default function ObservabilityOverview() {
   );
 
   const setCustomRangeParam = useCallback(
-    (from: Date, to: Date, interval?: number) => {
+    (from: Date, to: Date) => {
       updateSearchParams({
         range: null,
         from: from.toISOString(),
         to: to.toISOString(),
-        // Preserve the current interval when zooming
-        interval: interval ? String(interval) : null,
+        interval: null,
       });
     },
     [updateSearchParams],
@@ -388,59 +414,142 @@ export default function ObservabilityOverview() {
     placeholderData: keepPreviousData,
   });
 
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs fullWidth />
-      </Page.Header>
-      <Page.Body fullWidth className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold">Insights</h1>
-              <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500">
-                Beta
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Monitor chat sessions, tool performance, and system health
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <FilterBar
-              dimension={filterDimension}
-              onDimensionChange={setFilterDimensionParam}
-              selectedValue={selectedFilterValue}
-              onValueChange={setSelectedFilterValueParam}
-              options={filterOptions?.options ?? []}
-            />
-            <DateRangeSelect
-              value={dateRange}
-              onValueChange={setDateRangeParam}
-              customRange={customRange}
-              onClearCustomRange={clearCustomRange}
-            />
-          </div>
-        </div>
+  // Format date range for copilot context
+  const dateRangeContext = useMemo(() => {
+    const formatDate = (d: Date) =>
+      d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    return `Viewing data from ${formatDate(from)} to ${formatDate(to)}`;
+  }, [from, to]);
 
-        <ObservabilityContent
-          isPending={isPending}
-          isFetching={isFetching}
-          error={error}
-          data={data}
-          dateRange={dateRange}
-          customRange={customRange}
-          onTimeRangeSelect={(from, to) => {
-            // Pass the current interval when zooming to maintain granularity
-            const interval = data?.intervalSeconds
-              ? Number(data.intervalSeconds)
-              : undefined;
-            setCustomRangeParam(from, to, interval);
-          }}
+  return (
+    <CopilotSidebar
+      mcpConfig={mcpConfig}
+      title="What would you like to know?"
+      subtitle="Ask about metrics, trends, or performance insights"
+      contextInfo={dateRangeContext}
+      suggestions={[
+        {
+          title: "Resolution Summary",
+          label: "Summarize chat resolutions",
+          prompt:
+            "Summarize the chat resolution metrics for the current period. What's the success rate?",
+        },
+        {
+          title: "Tool Failures",
+          label: "Analyze failing tools",
+          prompt:
+            "Which tools have the highest failure rates? What might be causing the failures?",
+        },
+        {
+          title: "Performance Trends",
+          label: "Analyze trends",
+          prompt:
+            "What trends do you see in the metrics? Are things improving or declining?",
+        },
+      ]}
+    >
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs fullWidth />
+        </Page.Header>
+        <Page.Body fullWidth className="space-y-6">
+          <InsightsPageHeader
+            filterDimension={filterDimension}
+            onFilterDimensionChange={setFilterDimensionParam}
+            selectedFilterValue={selectedFilterValue}
+            onSelectedFilterValueChange={setSelectedFilterValueParam}
+            filterOptions={filterOptions?.options ?? []}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRangeParam}
+            customRange={customRange}
+            onClearCustomRange={clearCustomRange}
+          />
+
+          <ObservabilityContent
+            isPending={isPending}
+            isFetching={isFetching}
+            error={error}
+            data={data}
+            dateRange={dateRange}
+            customRange={customRange}
+            onTimeRangeSelect={(from, to) => {
+              setCustomRangeParam(from, to);
+            }}
+          />
+        </Page.Body>
+      </Page>
+    </CopilotSidebar>
+  );
+}
+
+function InsightsPageHeader({
+  filterDimension,
+  onFilterDimensionChange,
+  selectedFilterValue,
+  onSelectedFilterValueChange,
+  filterOptions,
+  dateRange,
+  onDateRangeChange,
+  customRange,
+  onClearCustomRange,
+}: {
+  filterDimension: FilterDimension;
+  onFilterDimensionChange: (d: FilterDimension) => void;
+  selectedFilterValue: string | null;
+  onSelectedFilterValueChange: (v: string | null) => void;
+  filterOptions: Array<{ id: string; label: string; count: number }>;
+  dateRange: DateRangePreset;
+  onDateRangeChange: (preset: DateRangePreset) => void;
+  customRange: { from: Date; to: Date } | null;
+  onClearCustomRange: () => void;
+}) {
+  const { isExpanded: isCopilotOpen } = useCopilotState();
+
+  return (
+    <div
+      className={cn(
+        "flex gap-4 transition-all duration-300",
+        isCopilotOpen
+          ? "flex-col items-stretch"
+          : "flex-row items-center justify-between",
+      )}
+    >
+      <div className="flex flex-col gap-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold">Insights</h1>
+          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500">
+            Beta
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Monitor chat sessions, tool performance, and system health
+        </p>
+      </div>
+      <div
+        className={cn(
+          "flex items-center gap-3",
+          isCopilotOpen ? "justify-start" : "flex-shrink-0",
+        )}
+      >
+        <FilterBar
+          dimension={filterDimension}
+          onDimensionChange={onFilterDimensionChange}
+          selectedValue={selectedFilterValue}
+          onValueChange={onSelectedFilterValueChange}
+          options={filterOptions}
         />
-      </Page.Body>
-    </Page>
+        <DateRangeSelect
+          value={dateRange}
+          onValueChange={onDateRangeChange}
+          customRange={customRange}
+          onClearCustomRange={onClearCustomRange}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -482,6 +591,7 @@ function ObservabilityContent({
   customRange: { from: Date; to: Date } | null;
   onTimeRangeSelect: (from: Date, to: Date) => void;
 }) {
+  const { isExpanded: isCopilotOpen } = useCopilotState();
   if (isPending) {
     return <LoadingSkeleton />;
   }
@@ -531,7 +641,14 @@ function ObservabilityContent({
       <section>
         <h2 className="text-lg font-semibold mb-4">Chat Resolution</h2>
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            className={cn(
+              "grid gap-4 transition-all duration-300",
+              isCopilotOpen
+                ? "grid-cols-1 md:grid-cols-2"
+                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+            )}
+          >
             <MetricCard
               title="Total Chats"
               value={summary?.totalChats ?? 0}
@@ -579,7 +696,12 @@ function ObservabilityContent({
               comparisonLabel={comparisonLabel}
             />
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div
+            className={cn(
+              "grid gap-4",
+              isCopilotOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+            )}
+          >
             <ResolvedChatsChart
               data={timeSeries ?? []}
               timeRangeMs={timeRangeMs}
@@ -622,7 +744,12 @@ function ObservabilityContent({
             onTimeRangeSelect={onTimeRangeSelect}
             isLoading={isRefetching}
           />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div
+            className={cn(
+              "grid gap-4",
+              isCopilotOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+            )}
+          >
             <div className="rounded-lg border border-border bg-card p-6">
               <h3 className="text-sm font-semibold mb-4">Top Tools by Usage</h3>
               <ToolBarList
@@ -649,7 +776,14 @@ function ObservabilityContent({
       {/* ===== SYSTEM METRICS SECTION ===== */}
       <section>
         <h2 className="text-lg font-semibold mb-4">System Metrics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div
+          className={cn(
+            "grid gap-4",
+            isCopilotOpen
+              ? "grid-cols-1 md:grid-cols-2"
+              : "grid-cols-1 md:grid-cols-3",
+          )}
+        >
           <MetricCard
             title="Tool Calls"
             value={summary?.totalToolCalls ?? 0}
@@ -819,31 +953,67 @@ function ChartWithSelection({
   data,
   onTimeRangeSelect,
 }: {
-  children: React.ReactNode;
+  children: React.ReactElement;
   data: Array<{ bucketTimeUnixNano?: string }>;
   onTimeRangeSelect?: (from: Date, to: Date) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<ChartJS | null>(null);
   const [selection, setSelection] = useState<{
     startX: number;
     currentX: number;
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Clone children and inject ref
+  const childrenWithRef = React.cloneElement(
+    children as React.ReactElement<{ ref?: (chart: ChartJS | null) => void }>,
+    {
+      ref: (chart: ChartJS | null) => {
+        chartRef.current = chart;
+      },
+    },
+  );
+
+  // Helper to find the nearest data index from an x-coordinate
+  const getDataIndexFromX = useCallback(
+    (x: number): number => {
+      if (!chartRef.current || data.length === 0) {
+        return 0;
+      }
+
+      const chart = chartRef.current;
+      const meta = chart.getDatasetMeta(0);
+      if (!meta || !meta.data || meta.data.length === 0) {
+        return 0;
+      }
+
+      // Find the closest data point by x-coordinate
+      let closestIndex = 0;
+      let minDistance = Infinity;
+
+      meta.data.forEach((point, index) => {
+        const distance = Math.abs(point.x - x);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIndex = index;
+        }
+      });
+
+      return closestIndex;
+    },
+    [data],
+  );
+
   // Calculate the selected date range based on current selection
   const getSelectedRange = useCallback(() => {
     if (!selection || !containerRef.current || data.length === 0) return null;
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const startPercent =
-      Math.min(selection.startX, selection.currentX) / rect.width;
-    const endPercent =
-      Math.max(selection.startX, selection.currentX) / rect.width;
-
-    const startIndex = Math.max(0, Math.floor(startPercent * data.length));
-    const endIndex = Math.min(
-      Math.ceil(endPercent * data.length),
-      data.length - 1,
+    const startIndex = getDataIndexFromX(
+      Math.min(selection.startX, selection.currentX),
+    );
+    const endIndex = getDataIndexFromX(
+      Math.max(selection.startX, selection.currentX),
     );
 
     const startTimestamp =
@@ -856,7 +1026,7 @@ function ChartWithSelection({
       from: new Date(startTimestamp),
       to: new Date(endTimestamp),
     };
-  }, [selection, data]);
+  }, [selection, data, getDataIndexFromX]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -888,33 +1058,32 @@ function ChartWithSelection({
     )
       return;
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const startPercent =
-      Math.min(selection.startX, selection.currentX) / rect.width;
-    const endPercent =
-      Math.max(selection.startX, selection.currentX) / rect.width;
-
-    // Only trigger if selection is meaningful (> 5% of chart width)
-    if (endPercent - startPercent > 0.05 && data.length > 0) {
-      const startIndex = Math.floor(startPercent * data.length);
-      const endIndex = Math.min(
-        Math.ceil(endPercent * data.length),
-        data.length - 1,
+    // Only trigger if selection has meaningful width
+    const selectionWidth = Math.abs(selection.currentX - selection.startX);
+    if (selectionWidth > 10 && data.length > 0) {
+      const startIndex = getDataIndexFromX(
+        Math.min(selection.startX, selection.currentX),
+      );
+      const endIndex = getDataIndexFromX(
+        Math.max(selection.startX, selection.currentX),
       );
 
-      const startTimestamp =
-        Number(data[startIndex]?.bucketTimeUnixNano) / 1_000_000;
-      const endTimestamp =
-        Number(data[endIndex]?.bucketTimeUnixNano) / 1_000_000;
+      // Only proceed if we have different indices (meaningful selection)
+      if (startIndex !== endIndex) {
+        const startTimestamp =
+          Number(data[startIndex]?.bucketTimeUnixNano) / 1_000_000;
+        const endTimestamp =
+          Number(data[endIndex]?.bucketTimeUnixNano) / 1_000_000;
 
-      if (startTimestamp && endTimestamp) {
-        onTimeRangeSelect(new Date(startTimestamp), new Date(endTimestamp));
+        if (startTimestamp && endTimestamp) {
+          onTimeRangeSelect(new Date(startTimestamp), new Date(endTimestamp));
+        }
       }
     }
 
     setSelection(null);
     setIsDragging(false);
-  }, [isDragging, selection, data, onTimeRangeSelect]);
+  }, [isDragging, selection, data, onTimeRangeSelect, getDataIndexFromX]);
 
   const handleMouseLeave = useCallback(() => {
     if (isDragging) {
@@ -957,7 +1126,7 @@ function ChartWithSelection({
           [role="tooltip"], .chartjs-tooltip { display: none !important; }
         `}</style>
       )}
-      {children}
+      {childrenWithRef}
       {selection && selectionWidth > 5 && (
         <div
           className="absolute top-0 bottom-0 bg-blue-500/20 border-l border-r border-blue-500/50 pointer-events-none"
@@ -1090,7 +1259,9 @@ function ToolCallsChart({
     scales: {
       x: {
         grid: {
-          display: false,
+          display: true,
+          color: "rgba(128, 128, 128, 0.1)",
+          lineWidth: 1,
         },
         ticks: {
           maxTicksLimit: 8,
@@ -1210,7 +1381,9 @@ function ResolvedChatsChart({
     scales: {
       x: {
         grid: {
-          display: false,
+          display: true,
+          color: "rgba(128, 128, 128, 0.1)",
+          lineWidth: 1,
         },
         ticks: {
           maxTicksLimit: 8,
@@ -1281,15 +1454,36 @@ function ResolutionStatusChart({
     return formatChartLabel(date, timeRangeMs);
   });
 
+  // Raw data for reference
   const rawSuccessData = data.map((d) => d.resolvedChats ?? 0);
   const rawFailedData = data.map((d) => d.failedChats ?? 0);
   const rawPartialData = data.map((d) => d.partialChats ?? 0);
   const rawAbandonedData = data.map((d) => d.abandonedChats ?? 0);
 
-  const successData = smoothData(rawSuccessData);
-  const failedData = smoothData(rawFailedData);
-  const partialData = smoothData(rawPartialData);
-  const abandonedData = smoothData(rawAbandonedData);
+  // Smooth data but preserve zeros - don't let smoothing inflate zero values
+  const smoothPreservingZeros = (arr: number[]) => {
+    const smoothed = smoothData(arr);
+    // If original value is zero and all neighbors in window are zero, keep it zero
+    return smoothed.map((val, i) => {
+      if (arr[i] === 0) {
+        // Check if all values in the smoothing window are also zero
+        const windowSize = Math.min(5, Math.floor(arr.length * 0.15));
+        const halfWindow = Math.floor(windowSize / 2);
+        const start = Math.max(0, i - halfWindow);
+        const end = Math.min(arr.length, i + halfWindow + 1);
+        const windowValues = arr.slice(start, end);
+        if (windowValues.every((v) => v === 0)) {
+          return 0;
+        }
+      }
+      return val;
+    });
+  };
+
+  const successData = smoothPreservingZeros(rawSuccessData);
+  const failedData = smoothPreservingZeros(rawFailedData);
+  const partialData = smoothPreservingZeros(rawPartialData);
+  const abandonedData = smoothPreservingZeros(rawAbandonedData);
 
   const chartData = {
     labels,
@@ -1380,16 +1574,40 @@ function ResolutionStatusChart({
         callbacks: {
           label: (context: TooltipItem<"line">) => {
             const label = context.dataset.label || "";
-            const value = context.parsed.y ?? 0;
-            return `${label}: ${Math.round(value).toLocaleString()} chats`;
+            // Use raw data for tooltip (actual counts, not smoothed)
+            const idx = context.dataIndex;
+            const rawArrays = [
+              rawSuccessData,
+              rawFailedData,
+              rawPartialData,
+              rawAbandonedData,
+            ];
+            const value = rawArrays[context.datasetIndex]?.[idx] ?? 0;
+            // Don't show zero values in tooltip
+            if (value === 0) return "";
+            return `${label}: ${value.toLocaleString()} chats`;
           },
+        },
+        filter: (tooltipItem: TooltipItem<"line">) => {
+          // Filter based on raw data, not smoothed
+          const rawArrays = [
+            rawSuccessData,
+            rawFailedData,
+            rawPartialData,
+            rawAbandonedData,
+          ];
+          const value =
+            rawArrays[tooltipItem.datasetIndex]?.[tooltipItem.dataIndex] ?? 0;
+          return value > 0;
         },
       },
     },
     scales: {
       x: {
         grid: {
-          display: false,
+          display: true,
+          color: "rgba(128, 128, 128, 0.1)",
+          lineWidth: 1,
         },
         ticks: {
           maxTicksLimit: 8,
@@ -1401,8 +1619,12 @@ function ResolutionStatusChart({
           color: "rgba(128, 128, 128, 0.2)",
         },
         ticks: {
+          precision: 0, // Force integer ticks on Y-axis
+          stepSize: 1, // Ensure tick intervals are whole numbers
           callback: (value: number | string) => {
             const num = typeof value === "string" ? parseFloat(value) : value;
+            // Only show whole numbers
+            if (!Number.isInteger(num)) return "";
             return num.toLocaleString();
           },
         },
@@ -1521,7 +1743,9 @@ function SessionDurationChart({
     scales: {
       x: {
         grid: {
-          display: false,
+          display: true,
+          color: "rgba(128, 128, 128, 0.1)",
+          lineWidth: 1,
         },
         ticks: {
           maxTicksLimit: 8,

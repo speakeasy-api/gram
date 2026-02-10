@@ -149,8 +149,14 @@ func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsage
 
 // BuildListChatsWithResolutionsPayload builds the payload for the chat
 // listChatsWithResolutions endpoint from CLI flags.
-func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
+func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch string, chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
 	var err error
+	var search *string
+	{
+		if chatListChatsWithResolutionsSearch != "" {
+			search = &chatListChatsWithResolutionsSearch
+		}
+	}
 	var externalUserID *string
 	{
 		if chatListChatsWithResolutionsExternalUserID != "" {
@@ -239,6 +245,7 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsExternalUs
 		}
 	}
 	v := &chat.ListChatsWithResolutionsPayload{}
+	v.Search = search
 	v.ExternalUserID = externalUserID
 	v.ResolutionStatus = resolutionStatus
 	v.From = from

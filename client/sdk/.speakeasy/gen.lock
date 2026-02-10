@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 79af8af233300d37fba808055c335606
+  docChecksum: 1bb5051458652e48d2e0a16aba7e8936
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.26.23
-  configChecksum: 2c4b48023e6c0b820de77372a6299844
+  releaseVersion: 0.26.24
+  configChecksum: 3cc142917d9c026b7c82df5f3f070d55
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -907,7 +907,7 @@ trackedFiles:
   docs/models/operations/listchatssecurityoption2.md:
     last_write_checksum: sha1:ac4329bd5c3d3cd40d37cbce5ac96671d710c3cc
   docs/models/operations/listchatswithresolutionsrequest.md:
-    last_write_checksum: sha1:ce26de78f5bfa797bd5be8c4f111190a4d58de4e
+    last_write_checksum: sha1:ef6277f2f01da7418f02f0697c6559e2751fb111
   docs/models/operations/listchatswithresolutionssecurity.md:
     last_write_checksum: sha1:7e130e49b8de4408cc9f7dc45f57459f9789ef64
   docs/models/operations/listchatswithresolutionssecurityoption1.md:
@@ -1354,11 +1354,11 @@ trackedFiles:
     pristine_git_object: 8a33dbb4b9cb9cefaa43e10ddf535cbcd13c9e72
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:2306a182e81fd6d73a2ba56081d0bd28c7a30740
+    last_write_checksum: sha1:50771b10e395ae229580fd27c5ae153bad6ca7ea
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:86d5c9a6d8a16d9667922de2ecda45aca6694e57
+    last_write_checksum: sha1:f145c8350e7b520245f5bc477ffc9728d37ea2b8
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1461,7 +1461,7 @@ trackedFiles:
     last_write_checksum: sha1:815f691eb96b8448fd648fc4d8b929adb53faaf0
     pristine_git_object: 814ef1470b3208dac27bc0c097002de03dbda395
   src/funcs/chatListChatsWithResolutions.ts:
-    last_write_checksum: sha1:6e9aa3126574cd00b378904c8caa5e31ad6e9524
+    last_write_checksum: sha1:614c25cb7caa4d7b0d05453d0b1659d590fd6520
   src/funcs/chatLoad.ts:
     id: 79e579c74f00
     last_write_checksum: sha1:725126bca4f22e08188b1fb4281ce8ceb6b2cac6
@@ -1824,7 +1824,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:5327e2b7048b76d88517eceec0b75cff12ef5389
+    last_write_checksum: sha1:f9d6bb861f44663aa89db856ee82a0b2f67389f2
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2867,7 +2867,7 @@ trackedFiles:
     last_write_checksum: sha1:527fe55193948e1e4f972f749afdae81bc1637bd
     pristine_git_object: ae806c76bc527b24fab19883a174e5a94f065fe2
   src/models/operations/listchatswithresolutions.ts:
-    last_write_checksum: sha1:a96140c9aa0b3c844694bb04436991ab08896e1e
+    last_write_checksum: sha1:8a8736d2b71b7500addb0760bcfc681f44ff9bab
   src/models/operations/listdeployments.ts:
     id: 3c413d710db1
     last_write_checksum: sha1:427b1d34ff2886f11761358f771d4bc316faceea
@@ -3397,9 +3397,9 @@ trackedFiles:
     last_write_checksum: sha1:4296c9e2d9e0e658743349149c61fe6d88cee251
     pristine_git_object: bea716c86a525c16fb766cc3d523b64bcd0e67b6
   src/react-query/listChatsWithResolutions.core.ts:
-    last_write_checksum: sha1:76c3fe9589d1f8daab57e621b2632eb5ecbcad8b
+    last_write_checksum: sha1:66d093bd111e46cfd42024da7f8125deddeda30c
   src/react-query/listChatsWithResolutions.ts:
-    last_write_checksum: sha1:7d3d5144484bc02959447b7d6918bb5ab73128da
+    last_write_checksum: sha1:7b2f0ca474a5c0e8f0a12228deef4cd7f949238f
   src/react-query/listDeployments.core.ts:
     id: 0a5b3d2b85c8
     last_write_checksum: sha1:96adc67fb218011ee756405621a24084c9df5ad2

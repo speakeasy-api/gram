@@ -31,14 +31,16 @@ export const ListTracesResult$inboundSchema: z.ZodType<
   ListTracesResult,
   z.ZodTypeDef,
   unknown
-> = z.object({
-  next_cursor: z.string().optional(),
-  traces: z.array(TraceSummaryRecord$inboundSchema),
-}).transform((v) => {
-  return remap$(v, {
-    "next_cursor": "nextCursor",
+> = z
+  .object({
+    next_cursor: z.string().optional(),
+    traces: z.array(TraceSummaryRecord$inboundSchema),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      next_cursor: "nextCursor",
+    });
   });
-});
 
 export function listTracesResultFromJSON(
   jsonString: string,

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Stack } from "@speakeasy-api/moonshine";
-import { SearchIcon } from "lucide-react";
+import { SearchIcon, X } from "lucide-react";
 
 export function SearchBar({
   value,
@@ -25,8 +25,17 @@ export function SearchBar({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent outline-none"
+        className="flex-1 bg-transparent outline-none min-w-0"
       />
+      {value && (
+        <button
+          onClick={() => onChange("")}
+          className="opacity-50 hover:opacity-100 transition-opacity"
+          aria-label="Clear search"
+        >
+          <X className="size-4" />
+        </button>
+      )}
     </Stack>
   );
 }

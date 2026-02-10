@@ -306,6 +306,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	offset := payload.Offset
 
 	// Convert optional filter parameters (use empty string for SQL NULL check)
+	search := conv.PtrValOr(payload.Search, "")
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	resolutionStatus := conv.PtrValOr(payload.ResolutionStatus, "")
 
@@ -314,19 +315,20 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	if payload.From != nil {
 		t, err := time.Parse(time.RFC3339, *payload.From)
 		if err == nil {
-			fromTime = pgtype.Timestamptz{Time: t, Valid: true}
+			fromTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
 		}
 	}
 	if payload.To != nil {
 		t, err := time.Parse(time.RFC3339, *payload.To)
 		if err == nil {
-			toTime = pgtype.Timestamptz{Time: t, Valid: true}
+			toTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
 		}
 	}
 
 	// Query database - returns denormalized rows (one row per chat+resolution combination)
 	rows, err := s.repo.ListChatsWithResolutions(ctx, repo.ListChatsWithResolutionsParams{
 		ProjectID:        *authCtx.ProjectID,
+		Search:           search,
 		ExternalUserID:   externalUserID,
 		FromTime:         fromTime,
 		ToTime:           toTime,

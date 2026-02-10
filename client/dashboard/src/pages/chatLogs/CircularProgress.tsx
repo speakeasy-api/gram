@@ -11,7 +11,7 @@ export function CircularProgress({
   status,
   size = "md",
 }: CircularProgressProps) {
-  const sizeMap = { sm: 32, md: 48, lg: 64 };
+  const sizeMap = { sm: 40, md: 48, lg: 64 };
   const strokeWidthMap = { sm: 3, md: 4, lg: 5 };
 
   const dimension = sizeMap[size];
@@ -52,7 +52,7 @@ export function CircularProgress({
           )}
         />
       </svg>
-      <span className="absolute text-xs font-medium">{score}%</span>
+      <span className="absolute text-sm font-medium">{score}%</span>
     </div>
   );
 }

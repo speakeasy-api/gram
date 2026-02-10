@@ -209,6 +209,12 @@ WITH limited_chats AS (
     AND (@from_time::timestamptz IS NULL OR c.created_at >= @from_time)
     AND (@to_time::timestamptz IS NULL OR c.created_at <= @to_time)
     AND (
+      @search = ''
+      OR c.id::text ILIKE '%' || @search || '%'
+      OR c.external_user_id ILIKE '%' || @search || '%'
+      OR c.title ILIKE '%' || @search || '%'
+    )
+    AND (
       @resolution_status = ''
       OR (
         @resolution_status = 'unresolved' AND NOT EXISTS (

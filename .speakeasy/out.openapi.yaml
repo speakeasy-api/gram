@@ -2580,6 +2580,13 @@ paths:
       operationId: listChatsWithResolutions
       parameters:
         - allowEmptyValue: true
+          description: Search query (searches chat ID, user ID, and title)
+          in: query
+          name: search
+          schema:
+            description: Search query (searches chat ID, user ID, and title)
+            type: string
+        - allowEmptyValue: true
           description: Filter by external user ID
           in: query
           name: external_user_id

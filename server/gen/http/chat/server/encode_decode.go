@@ -930,6 +930,7 @@ func EncodeListChatsWithResolutionsResponse(encoder func(context.Context, http.R
 func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*chat.ListChatsWithResolutionsPayload, error) {
 	return func(r *http.Request) (*chat.ListChatsWithResolutionsPayload, error) {
 		var (
+			search            *string
 			externalUserID    *string
 			resolutionStatus  *string
 			from              *string
@@ -942,6 +943,10 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 			err               error
 		)
 		qp := r.URL.Query()
+		searchRaw := qp.Get("search")
+		if searchRaw != "" {
+			search = &searchRaw
+		}
 		externalUserIDRaw := qp.Get("external_user_id")
 		if externalUserIDRaw != "" {
 			externalUserID = &externalUserIDRaw
@@ -1010,7 +1015,7 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListChatsWithResolutionsPayload(externalUserID, resolutionStatus, from, to, limit, offset, sessionToken, projectSlugInput, chatSessionsToken)
+		payload := NewListChatsWithResolutionsPayload(search, externalUserID, resolutionStatus, from, to, limit, offset, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

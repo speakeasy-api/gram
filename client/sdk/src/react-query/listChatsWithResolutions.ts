@@ -114,6 +114,7 @@ export function setListChatsWithResolutionsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      search?: string | undefined;
       externalUserId?: string | undefined;
       resolutionStatus?: string | undefined;
       from?: Date | undefined;
@@ -136,6 +137,7 @@ export function invalidateListChatsWithResolutions(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      search?: string | undefined;
       externalUserId?: string | undefined;
       resolutionStatus?: string | undefined;
       from?: Date | undefined;

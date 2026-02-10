@@ -205,6 +205,8 @@ type ListChatsWithResolutionsPayload struct {
 	SessionToken      *string
 	ProjectSlugInput  *string
 	ChatSessionsToken *string
+	// Search query (searches chat ID, user ID, and title)
+	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
 	// Filter by resolution status
