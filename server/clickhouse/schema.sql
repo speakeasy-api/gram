@@ -154,7 +154,6 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
 
     http_status_code AggregateFunction(anyIf, Nullable(Int32), UInt8)
 ) ENGINE = AggregatingMergeTree
-PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(start_time_unix_nano))
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
