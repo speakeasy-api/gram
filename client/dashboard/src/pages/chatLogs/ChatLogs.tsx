@@ -323,7 +323,7 @@ function ChatLogsContent({
           error={error}
         />
 
-        {hasMore && (
+        {(hasMore || offset > 0) && (
           <div className="p-4 flex justify-center gap-2">
             <Button
               onClick={() => setOffset(Math.max(0, offset - limit))}
@@ -331,7 +331,9 @@ function ChatLogsContent({
             >
               Previous
             </Button>
-            <Button onClick={() => setOffset(offset + limit)}>Next</Button>
+            <Button onClick={() => setOffset(offset + limit)} disabled={!hasMore}>
+              Next
+            </Button>
           </div>
         )}
       </div>

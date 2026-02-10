@@ -481,10 +481,17 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 		arg.TimeEnd, alignedStart, intervalNanos, // For calculating number of buckets
 		alignedStart, intervalNanos, arg.TimeEnd, // WHERE clause for bucket generation
 		arg.IntervalSeconds, // INTERVAL for data aggregation
-		buildOptionalFilters(arg.ExternalUserID, arg.APIKeyID), // Optional filters
+		buildOptionalFiltersSQL(arg.ExternalUserID, arg.APIKeyID), // Optional filters - parameterized
 	)
 
 	queryArgs := []any{arg.GramProjectID, arg.TimeStart, arg.TimeEnd}
+	// Append optional filter values as parameterized args (in order)
+	if arg.ExternalUserID != "" {
+		queryArgs = append(queryArgs, arg.ExternalUserID)
+	}
+	if arg.APIKeyID != "" {
+		queryArgs = append(queryArgs, arg.APIKeyID)
+	}
 
 	rows, err := q.conn.Query(ctx, query, queryArgs...)
 	if err != nil {
@@ -508,14 +515,15 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	return buckets, nil
 }
 
-// buildOptionalFilters creates the WHERE clause additions for optional filters.
-func buildOptionalFilters(externalUserID, apiKeyID string) string {
+// buildOptionalFiltersSQL creates the WHERE clause additions for optional filters using parameterized placeholders.
+// The caller must append the corresponding values to queryArgs in the same order.
+func buildOptionalFiltersSQL(externalUserID, apiKeyID string) string {
 	var filters string
 	if externalUserID != "" {
-		filters += fmt.Sprintf(" AND external_user_id = '%s'", externalUserID)
+		filters += " AND external_user_id = ?"
 	}
 	if apiKeyID != "" {
-		filters += fmt.Sprintf(" AND api_key_id = '%s'", apiKeyID)
+		filters += " AND api_key_id = ?"
 	}
 	return filters
 }
@@ -541,7 +549,7 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) as success_count",
 		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failure_count",
 		"avg(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000) as avg_latency_ms",
-		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) / count(*) as failure_rate",
+		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) / greatest(toFloat64(count(*)), 1) as failure_rate",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
