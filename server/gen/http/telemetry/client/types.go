@@ -113,6 +113,10 @@ type GetObservabilityOverviewRequestBody struct {
 	APIKeyID *string `form:"api_key_id,omitempty" json:"api_key_id,omitempty" xml:"api_key_id,omitempty"`
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool `form:"include_time_series" json:"include_time_series" xml:"include_time_series"`
+	// Optional time bucket interval in seconds. When provided, overrides automatic
+	// interval calculation. Useful for maintaining consistent granularity when
+	// zooming.
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
 }
 
 // ListFilterOptionsRequestBody is the type of the "telemetry" service
@@ -208,6 +212,8 @@ type GetObservabilityOverviewResponseBody struct {
 	TopToolsByCount []*ToolMetricResponseBody `form:"top_tools_by_count,omitempty" json:"top_tools_by_count,omitempty" xml:"top_tools_by_count,omitempty"`
 	// Top tools by failure rate
 	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate,omitempty" json:"top_tools_by_failure_rate,omitempty" xml:"top_tools_by_failure_rate,omitempty"`
+	// The time bucket interval in seconds used for the time series data
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
 	// Whether telemetry is enabled for the organization
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
@@ -2361,6 +2367,7 @@ func NewGetObservabilityOverviewRequestBody(p *telemetry.GetObservabilityOvervie
 		ExternalUserID:    p.ExternalUserID,
 		APIKeyID:          p.APIKeyID,
 		IncludeTimeSeries: p.IncludeTimeSeries,
+		IntervalSeconds:   p.IntervalSeconds,
 	}
 	{
 		var zero bool
@@ -3544,7 +3551,8 @@ func NewGetUserMetricsSummaryGatewayError(body *GetUserMetricsSummaryGatewayErro
 // "getObservabilityOverview" endpoint result from a HTTP "OK" response.
 func NewGetObservabilityOverviewResultOK(body *GetObservabilityOverviewResponseBody) *telemetry.GetObservabilityOverviewResult {
 	v := &telemetry.GetObservabilityOverviewResult{
-		Enabled: *body.Enabled,
+		IntervalSeconds: *body.IntervalSeconds,
+		Enabled:         *body.Enabled,
 	}
 	v.Summary = unmarshalObservabilitySummaryResponseBodyToTelemetryObservabilitySummary(body.Summary)
 	v.Comparison = unmarshalObservabilitySummaryResponseBodyToTelemetryObservabilitySummary(body.Comparison)
@@ -4030,6 +4038,9 @@ func ValidateGetObservabilityOverviewResponseBody(body *GetObservabilityOverview
 	}
 	if body.TopToolsByFailureRate == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("top_tools_by_failure_rate", "body"))
+	}
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
 	}
 	if body.Enabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))

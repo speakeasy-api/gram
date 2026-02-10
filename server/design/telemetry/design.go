@@ -786,6 +786,7 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
 		Default(true)
 	})
+	Attribute("interval_seconds", Int64, "Optional time bucket interval in seconds. When provided, overrides automatic interval calculation. Useful for maintaining consistent granularity when zooming.")
 
 	Required("from", "to")
 })
@@ -798,9 +799,10 @@ var GetObservabilityOverviewResult = Type("GetObservabilityOverviewResult", func
 	Attribute("time_series", ArrayOf(TimeSeriesBucketType), "Time series data points")
 	Attribute("top_tools_by_count", ArrayOf(ToolMetricType), "Top tools by call count")
 	Attribute("top_tools_by_failure_rate", ArrayOf(ToolMetricType), "Top tools by failure rate")
+	Attribute("interval_seconds", Int64, "The time bucket interval in seconds used for the time series data")
 	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "enabled")
+	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "interval_seconds", "enabled")
 })
 
 var ObservabilitySummaryType = Type("ObservabilitySummary", func() {

@@ -72,6 +72,9 @@ export function DateRangeSelect({
     );
   }
 
+  // Use explicit array to guarantee order
+  const presetOrder: DateRangePreset[] = ["24h", "7d", "30d", "90d"];
+
   return (
     <Select value={value} onValueChange={onValueChange}>
       <SelectTrigger className="w-[180px]">
@@ -79,9 +82,9 @@ export function DateRangeSelect({
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {Object.entries(PRESETS).map(([key, preset]) => (
+        {presetOrder.map((key) => (
           <SelectItem key={key} value={key}>
-            {preset.label}
+            {PRESETS[key].label}
           </SelectItem>
         ))}
       </SelectContent>

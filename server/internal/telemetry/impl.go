@@ -738,8 +738,13 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
 
-	// Calculate interval for time series based on time range
-	intervalSeconds := calculateInterval(timeStart, timeEnd)
+	// Use provided interval or calculate based on time range
+	var intervalSeconds int64
+	if payload.IntervalSeconds != nil && *payload.IntervalSeconds > 0 {
+		intervalSeconds = *payload.IntervalSeconds
+	} else {
+		intervalSeconds = calculateInterval(timeStart, timeEnd)
+	}
 
 	// Calculate comparison period (same duration, immediately before)
 	duration := timeEnd - timeStart
@@ -817,6 +822,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeSeries:            toTimeSeriesBuckets(timeSeries),
 		TopToolsByCount:       toToolMetrics(toolsByCount),
 		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
+		IntervalSeconds:       intervalSeconds,
 		Enabled:               true,
 	}, nil
 }
@@ -834,8 +840,10 @@ func calculateInterval(timeStart, timeEnd int64) int64 {
 		return 900 // 15 minute buckets
 	case durationHours <= 168: // 7 days
 		return 3600 // 1 hour buckets
-	default:
+	case durationHours <= 720: // 30 days
 		return 21600 // 6 hour buckets
+	default:
+		return 86400 // 1 day buckets for 90+ days
 	}
 }
 

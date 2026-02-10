@@ -13967,6 +13967,10 @@ components:
                     type: boolean
                     description: 'Whether to include time series data (default: true)'
                     default: true
+                interval_seconds:
+                    type: integer
+                    description: Optional time bucket interval in seconds. When provided, overrides automatic interval calculation. Useful for maintaining consistent granularity when zooming.
+                    format: int64
                 to:
                     type: string
                     description: End time in ISO 8601 format
@@ -13984,6 +13988,10 @@ components:
                 enabled:
                     type: boolean
                     description: Whether telemetry is enabled for the organization
+                interval_seconds:
+                    type: integer
+                    description: The time bucket interval in seconds used for the time series data
+                    format: int64
                 summary:
                     $ref: '#/components/schemas/ObservabilitySummary'
                 time_series:
@@ -14008,6 +14016,7 @@ components:
                 - time_series
                 - top_tools_by_count
                 - top_tools_by_failure_rate
+                - interval_seconds
                 - enabled
         GetProjectForm:
             type: object

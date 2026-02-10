@@ -411,55 +411,70 @@ type GetTimeSeriesMetricsParams struct {
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
+// Returns buckets for the entire requested time range, with zeros for periods without data.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMetricsParams) ([]TimeSeriesBucket, error) {
-	sb := sq.Select(
-		// Time bucket
-		"toInt64(toStartOfInterval(fromUnixTimestamp64Nano(time_unix_nano), INTERVAL "+fmt.Sprintf("%d", arg.IntervalSeconds)+" SECOND)) * 1000000000 as bucket_time_unix_nano",
+	// Calculate the number of buckets needed
+	intervalNanos := arg.IntervalSeconds * 1_000_000_000
+	// Align start time to interval boundary
+	alignedStart := (arg.TimeStart / intervalNanos) * intervalNanos
 
-		// Chat metrics - count chats with resolution events in this bucket
-		// total_chats = chats with any resolution analysis (success, failure, partial, abandoned)
-		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label != '') as total_chats",
-		// Resolved: chats with evaluation_score_label = 'success' (from resolution analysis)
-		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
-		// Failed: chats with evaluation_score_label = 'failure' (from resolution analysis)
-		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
-		// Partial: chats with evaluation_score_label = 'partial'
-		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'partial') as partial_chats",
-		// Abandoned: chats with evaluation_score_label = 'abandoned'
-		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'abandoned') as abandoned_chats",
+	// Build the query with a generated time series that covers the full range
+	// This ensures we get buckets even for periods with no data
+	query := fmt.Sprintf(`
+		WITH
+			-- Generate all bucket timestamps for the requested range
+			buckets AS (
+				SELECT toInt64(%d + (number * %d)) AS bucket_time_unix_nano
+				FROM numbers(toUInt64(ceil((%d - %d) / %d)) + 1)
+				WHERE %d + (number * %d) <= %d
+			),
+			-- Aggregate actual data by bucket
+			data AS (
+				SELECT
+					toInt64(toStartOfInterval(fromUnixTimestamp64Nano(time_unix_nano), INTERVAL %d SECOND)) * 1000000000 as bucket_time_unix_nano,
+					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label != '') as total_chats,
+					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats,
+					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats,
+					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'partial') as partial_chats,
+					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'abandoned') as abandoned_chats,
+					countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls,
+					countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls,
+					avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_tool_latency_ms,
+					avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms
+				FROM telemetry_logs
+				WHERE gram_project_id = ?
+					AND time_unix_nano >= ?
+					AND time_unix_nano <= ?
+					%s
+				GROUP BY bucket_time_unix_nano
+			)
+		SELECT
+			b.bucket_time_unix_nano,
+			coalesce(d.total_chats, 0) as total_chats,
+			coalesce(d.resolved_chats, 0) as resolved_chats,
+			coalesce(d.failed_chats, 0) as failed_chats,
+			coalesce(d.partial_chats, 0) as partial_chats,
+			coalesce(d.abandoned_chats, 0) as abandoned_chats,
+			coalesce(d.total_tool_calls, 0) as total_tool_calls,
+			coalesce(d.failed_tool_calls, 0) as failed_tool_calls,
+			coalesce(d.avg_tool_latency_ms, 0) as avg_tool_latency_ms,
+			coalesce(d.avg_session_duration_ms, 0) as avg_session_duration_ms
+		FROM buckets b
+		LEFT JOIN data d ON b.bucket_time_unix_nano = d.bucket_time_unix_nano
+		ORDER BY b.bucket_time_unix_nano ASC
+	`,
+		alignedStart, intervalNanos, // First bucket and interval for generation
+		arg.TimeEnd, alignedStart, intervalNanos, // For calculating number of buckets
+		alignedStart, intervalNanos, arg.TimeEnd, // WHERE clause for bucket generation
+		arg.IntervalSeconds, // INTERVAL for data aggregation
+		buildOptionalFilters(arg.ExternalUserID, arg.APIKeyID), // Optional filters
+	)
 
-		// Tool metrics
-		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
-		"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls",
-		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_tool_latency_ms",
+	queryArgs := []any{arg.GramProjectID, arg.TimeStart, arg.TimeEnd}
 
-		// Session duration (average duration of chats ending in this bucket)
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
-	).
-		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
-
-	// Optional filters
-	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
-	}
-	if arg.APIKeyID != "" {
-		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
-	}
-
-	sb = sb.GroupBy("bucket_time_unix_nano").
-		OrderBy("bucket_time_unix_nano ASC")
-
-	query, args, err := sb.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building time series query: %w", err)
-	}
-
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -479,6 +494,18 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	}
 
 	return buckets, nil
+}
+
+// buildOptionalFilters creates the WHERE clause additions for optional filters.
+func buildOptionalFilters(externalUserID, apiKeyID string) string {
+	var filters string
+	if externalUserID != "" {
+		filters += fmt.Sprintf(" AND external_user_id = '%s'", externalUserID)
+	}
+	if apiKeyID != "" {
+		filters += fmt.Sprintf(" AND api_key_id = '%s'", apiKeyID)
+	}
+	return filters
 }
 
 // GetToolMetricsBreakdownParams contains the parameters for getting tool metrics breakdown.

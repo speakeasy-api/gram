@@ -26,6 +26,10 @@ export type GetObservabilityOverviewPayload = {
    */
   includeTimeSeries?: boolean | undefined;
   /**
+   * Optional time bucket interval in seconds. When provided, overrides automatic interval calculation. Useful for maintaining consistent granularity when zooming.
+   */
+  intervalSeconds?: number | undefined;
+  /**
    * End time in ISO 8601 format
    */
   to: Date;
@@ -37,6 +41,7 @@ export type GetObservabilityOverviewPayload$Outbound = {
   external_user_id?: string | undefined;
   from: string;
   include_time_series: boolean;
+  interval_seconds?: number | undefined;
   to: string;
 };
 
@@ -50,12 +55,14 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodType<
   externalUserId: z.string().optional(),
   from: z.date().transform(v => v.toISOString()),
   includeTimeSeries: z.boolean().default(true),
+  intervalSeconds: z.number().int().optional(),
   to: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
     apiKeyId: "api_key_id",
     externalUserId: "external_user_id",
     includeTimeSeries: "include_time_series",
+    intervalSeconds: "interval_seconds",
   });
 });
 

@@ -228,6 +228,7 @@ export default function ObservabilityOverview() {
   const urlTo = searchParams.get("to");
   const urlFilter = searchParams.get("filter");
   const urlFilterId = searchParams.get("filterId");
+  const urlInterval = searchParams.get("interval");
 
   // Derive state from URL
   const dateRange: DateRangePreset = isValidPreset(urlRange) ? urlRange : "30d";
@@ -272,17 +273,20 @@ export default function ObservabilityOverview() {
         range: preset,
         from: null,
         to: null,
+        interval: null, // Clear interval when switching to preset
       });
     },
     [updateSearchParams],
   );
 
   const setCustomRangeParam = useCallback(
-    (from: Date, to: Date) => {
+    (from: Date, to: Date, interval?: number) => {
       updateSearchParams({
         range: null,
         from: from.toISOString(),
         to: to.toISOString(),
+        // Preserve the current interval when zooming
+        interval: interval ? String(interval) : null,
       });
     },
     [updateSearchParams],
@@ -315,7 +319,11 @@ export default function ObservabilityOverview() {
   );
 
   // Use custom range if set, otherwise use preset
-  const { from, to } = customRange ?? getDateRange(dateRange);
+  // Memoize to prevent new Date objects on every render
+  const { from, to } = useMemo(
+    () => customRange ?? getDateRange(dateRange),
+    [customRange, dateRange],
+  );
 
   // Fetch filter options for the selected dimension (only when not "all")
   const { data: filterOptions } = useQuery({
@@ -323,7 +331,8 @@ export default function ObservabilityOverview() {
       "observability",
       "filterOptions",
       filterDimension,
-      customRange ?? dateRange,
+      from.toISOString(),
+      to.toISOString(),
     ],
     queryFn: () =>
       unwrapAsync(
@@ -352,12 +361,17 @@ export default function ObservabilityOverview() {
     }
   }, [filterDimension, selectedFilterValue]);
 
+  // Parse interval from URL (only used when zooming with custom range)
+  const zoomInterval = urlInterval ? parseInt(urlInterval, 10) : null;
+
   const { data, isPending, isFetching, error } = useQuery({
     queryKey: [
       "observability",
       "overview",
-      customRange ?? dateRange,
+      from.toISOString(),
+      to.toISOString(),
       filterParams,
+      zoomInterval,
     ],
     queryFn: () =>
       unwrapAsync(
@@ -367,6 +381,7 @@ export default function ObservabilityOverview() {
             to,
             includeTimeSeries: true,
             ...filterParams,
+            ...(zoomInterval ? { intervalSeconds: zoomInterval } : {}),
           },
         }),
       ),
@@ -416,7 +431,13 @@ export default function ObservabilityOverview() {
           data={data}
           dateRange={dateRange}
           customRange={customRange}
-          onTimeRangeSelect={setCustomRangeParam}
+          onTimeRangeSelect={(from, to) => {
+            // Pass the current interval when zooming to maintain granularity
+            const interval = data?.intervalSeconds
+              ? Number(data.intervalSeconds)
+              : undefined;
+            setCustomRangeParam(from, to, interval);
+          }}
         />
       </Page.Body>
     </Page>
@@ -809,6 +830,34 @@ function ChartWithSelection({
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Calculate the selected date range based on current selection
+  const getSelectedRange = useCallback(() => {
+    if (!selection || !containerRef.current || data.length === 0) return null;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const startPercent =
+      Math.min(selection.startX, selection.currentX) / rect.width;
+    const endPercent =
+      Math.max(selection.startX, selection.currentX) / rect.width;
+
+    const startIndex = Math.max(0, Math.floor(startPercent * data.length));
+    const endIndex = Math.min(
+      Math.ceil(endPercent * data.length),
+      data.length - 1,
+    );
+
+    const startTimestamp =
+      Number(data[startIndex]?.bucketTimeUnixNano) / 1_000_000;
+    const endTimestamp = Number(data[endIndex]?.bucketTimeUnixNano) / 1_000_000;
+
+    if (!startTimestamp || !endTimestamp) return null;
+
+    return {
+      from: new Date(startTimestamp),
+      to: new Date(endTimestamp),
+    };
+  }, [selection, data]);
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (!onTimeRangeSelect || !containerRef.current) return;
@@ -881,15 +930,33 @@ function ChartWithSelection({
     ? Math.abs(selection.currentX - selection.startX)
     : 0;
 
+  const selectedRange = getSelectedRange();
+
+  // Format date for the range display
+  const formatRangeDate = (date: Date) => {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
   return (
     <div
       ref={containerRef}
-      className="relative h-72 cursor-crosshair"
+      className={`relative h-72 cursor-crosshair ${isDragging ? "[&_canvas]:pointer-events-none" : ""}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
     >
+      {/* Hide tooltips while dragging */}
+      {isDragging && (
+        <style>{`
+          [role="tooltip"], .chartjs-tooltip { display: none !important; }
+        `}</style>
+      )}
       {children}
       {selection && selectionWidth > 5 && (
         <div
@@ -898,7 +965,20 @@ function ChartWithSelection({
             left: selectionLeft,
             width: selectionWidth,
           }}
-        />
+        >
+          {/* Range label */}
+          {selectedRange && selectionWidth > 40 && (
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-background/95 border border-border rounded px-2 py-1 text-xs whitespace-nowrap shadow-sm">
+              <span className="text-muted-foreground">
+                {formatRangeDate(selectedRange.from)}
+              </span>
+              <span className="text-muted-foreground mx-1">→</span>
+              <span className="text-muted-foreground">
+                {formatRangeDate(selectedRange.to)}
+              </span>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -1071,19 +1151,14 @@ function ResolvedChatsChart({
   });
 
   // Calculate resolution rate %
+  // Return 0 for periods with no data (shows as line at bottom instead of gap)
   const rawResolvedPct = data.map((d) => {
     const total = d.totalChats ?? 0;
-    if (total === 0) return null; // Return null for gaps (no data)
+    if (total === 0) return 0;
     return ((d.resolvedChats ?? 0) / total) * 100;
   });
 
-  // Apply smoothing, preserving nulls
-  const nonNullData = rawResolvedPct.filter((v) => v !== null) as number[];
-  const smoothedNonNull = smoothData(nonNullData);
-  let smoothIdx = 0;
-  const resolvedPctData = rawResolvedPct.map((v) =>
-    v === null ? null : smoothedNonNull[smoothIdx++],
-  );
+  const resolvedPctData = smoothData(rawResolvedPct);
 
   const chartData = {
     labels,

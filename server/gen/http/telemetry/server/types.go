@@ -115,6 +115,10 @@ type GetObservabilityOverviewRequestBody struct {
 	APIKeyID *string `form:"api_key_id,omitempty" json:"api_key_id,omitempty" xml:"api_key_id,omitempty"`
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries *bool `form:"include_time_series,omitempty" json:"include_time_series,omitempty" xml:"include_time_series,omitempty"`
+	// Optional time bucket interval in seconds. When provided, overrides automatic
+	// interval calculation. Useful for maintaining consistent granularity when
+	// zooming.
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
 }
 
 // ListFilterOptionsRequestBody is the type of the "telemetry" service
@@ -210,6 +214,8 @@ type GetObservabilityOverviewResponseBody struct {
 	TopToolsByCount []*ToolMetricResponseBody `form:"top_tools_by_count" json:"top_tools_by_count" xml:"top_tools_by_count"`
 	// Top tools by failure rate
 	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate" json:"top_tools_by_failure_rate" xml:"top_tools_by_failure_rate"`
+	// The time bucket interval in seconds used for the time series data
+	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
 	// Whether telemetry is enabled for the organization
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
@@ -2334,7 +2340,8 @@ func NewGetUserMetricsSummaryResponseBody(res *telemetry.GetUserMetricsSummaryRe
 // service.
 func NewGetObservabilityOverviewResponseBody(res *telemetry.GetObservabilityOverviewResult) *GetObservabilityOverviewResponseBody {
 	body := &GetObservabilityOverviewResponseBody{
-		Enabled: res.Enabled,
+		IntervalSeconds: res.IntervalSeconds,
+		Enabled:         res.Enabled,
 	}
 	if res.Summary != nil {
 		body.Summary = marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(res.Summary)
@@ -3866,10 +3873,11 @@ func NewGetUserMetricsSummaryPayload(body *GetUserMetricsSummaryRequestBody, api
 // getObservabilityOverview endpoint payload.
 func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetObservabilityOverviewPayload {
 	v := &telemetry.GetObservabilityOverviewPayload{
-		From:           *body.From,
-		To:             *body.To,
-		ExternalUserID: body.ExternalUserID,
-		APIKeyID:       body.APIKeyID,
+		From:            *body.From,
+		To:              *body.To,
+		ExternalUserID:  body.ExternalUserID,
+		APIKeyID:        body.APIKeyID,
+		IntervalSeconds: body.IntervalSeconds,
 	}
 	if body.IncludeTimeSeries != nil {
 		v.IncludeTimeSeries = *body.IncludeTimeSeries

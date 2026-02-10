@@ -150,6 +150,10 @@ type GetObservabilityOverviewPayload struct {
 	APIKeyID *string
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool
+	// Optional time bucket interval in seconds. When provided, overrides automatic
+	// interval calculation. Useful for maintaining consistent granularity when
+	// zooming.
+	IntervalSeconds *int64
 }
 
 // GetObservabilityOverviewResult is the result type of the telemetry service
@@ -165,6 +169,8 @@ type GetObservabilityOverviewResult struct {
 	TopToolsByCount []*ToolMetric
 	// Top tools by failure rate
 	TopToolsByFailureRate []*ToolMetric
+	// The time bucket interval in seconds used for the time series data
+	IntervalSeconds int64
 	// Whether telemetry is enabled for the organization
 	Enabled bool
 }

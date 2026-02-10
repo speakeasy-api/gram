@@ -30,6 +30,10 @@ export type GetObservabilityOverviewResult = {
    */
   enabled: boolean;
   /**
+   * The time bucket interval in seconds used for the time series data
+   */
+  intervalSeconds: number;
+  /**
    * Aggregated summary metrics for a time period
    */
   summary: ObservabilitySummary;
@@ -55,12 +59,14 @@ export const GetObservabilityOverviewResult$inboundSchema: z.ZodType<
 > = z.object({
   comparison: ObservabilitySummary$inboundSchema,
   enabled: z.boolean(),
+  interval_seconds: z.number().int(),
   summary: ObservabilitySummary$inboundSchema,
   time_series: z.array(TimeSeriesBucket$inboundSchema),
   top_tools_by_count: z.array(ToolMetric$inboundSchema),
   top_tools_by_failure_rate: z.array(ToolMetric$inboundSchema),
 }).transform((v) => {
   return remap$(v, {
+    "interval_seconds": "intervalSeconds",
     "time_series": "timeSeries",
     "top_tools_by_count": "topToolsByCount",
     "top_tools_by_failure_rate": "topToolsByFailureRate",
