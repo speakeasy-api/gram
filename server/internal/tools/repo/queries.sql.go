@@ -503,6 +503,10 @@ SELECT
   ftd.runtime,
   ftd.function_id,
   ftd.meta,
+  ftd.read_only_hint,
+  ftd.destructive_hint,
+  ftd.idempotent_hint,
+  ftd.open_world_hint,
   df.asset_id,
   ftd.created_at,
   ftd.updated_at
@@ -526,20 +530,24 @@ type ListFunctionToolsParams struct {
 }
 
 type ListFunctionToolsRow struct {
-	DeploymentID uuid.UUID
-	ID           uuid.UUID
-	ToolUrn      urn.Tool
-	Name         string
-	Description  string
-	InputSchema  []byte
-	Variables    []byte
-	AuthInput    []byte
-	Runtime      string
-	FunctionID   uuid.UUID
-	Meta         []byte
-	AssetID      uuid.NullUUID
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+	DeploymentID    uuid.UUID
+	ID              uuid.UUID
+	ToolUrn         urn.Tool
+	Name            string
+	Description     string
+	InputSchema     []byte
+	Variables       []byte
+	AuthInput       []byte
+	Runtime         string
+	FunctionID      uuid.UUID
+	Meta            []byte
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	AssetID         uuid.NullUUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 // Two use cases:
@@ -572,6 +580,10 @@ func (q *Queries) ListFunctionTools(ctx context.Context, arg ListFunctionToolsPa
 			&i.Runtime,
 			&i.FunctionID,
 			&i.Meta,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
 			&i.AssetID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -631,6 +643,10 @@ SELECT
   htd.created_at,
   htd.updated_at,
   htd.tags,
+  htd.read_only_hint,
+  htd.destructive_hint,
+  htd.idempotent_hint,
+  htd.open_world_hint,
   (CASE
     WHEN htd.project_id = $2 THEN ''
     WHEN packages.id IS NOT NULL THEN packages.name
@@ -679,6 +695,10 @@ type ListHttpToolsRow struct {
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	Tags                []string
+	ReadOnlyHint        pgtype.Bool
+	DestructiveHint     pgtype.Bool
+	IdempotentHint      pgtype.Bool
+	OpenWorldHint       pgtype.Bool
 	PackageName         string
 }
 
@@ -723,6 +743,10 @@ func (q *Queries) ListHttpTools(ctx context.Context, arg ListHttpToolsParams) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Tags,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
 			&i.PackageName,
 		); err != nil {
 			return nil, err

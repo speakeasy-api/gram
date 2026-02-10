@@ -25,6 +25,7 @@ type mockTool struct {
 	Name        string
 	Description string
 	InputSchema map[string]any
+	Annotations *mcp.ToolAnnotations
 	Response    mockToolResponse
 }
 
@@ -61,6 +62,7 @@ func newMockExternalMCPServer(t *testing.T, transportType externalmcp_types.Tran
 			Name:        tool.Name,
 			Description: tool.Description,
 			InputSchema: json.RawMessage(inputSchemaJSON),
+			Annotations: tool.Annotations,
 		}, func(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			// Convert the mock response content to MCP Content types
 			content := make([]mcp.Content, 0, len(toolResponse.Content))
@@ -517,4 +519,131 @@ func TestE2E_ExternalMCP_Proxy_SSE(t *testing.T) {
 	require.True(t, ok, "expected content item to be a map")
 	require.Equal(t, "text", firstContent["type"])
 	require.Equal(t, "Result: 42", firstContent["text"])
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+// TestE2E_ExternalMCP_Proxy_Annotations verifies that tool annotations from an
+// external MCP server are parsed and forwarded in the tools/list response.
+// This covers the ptrBool fix: explicit false values must be preserved as false,
+// not dropped as nil/absent.
+func TestE2E_ExternalMCP_Proxy_Annotations(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	mockTools := []mockTool{
+		{
+			Name:        "read_data",
+			Description: "Read data from the database",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				Title:           "Read Data",
+				ReadOnlyHint:    true,
+				DestructiveHint: boolPtr(false), // explicit false — must not be dropped
+				IdempotentHint:  true,
+				OpenWorldHint:   boolPtr(false), // explicit false — must not be dropped
+			},
+			Response: mockToolResponse{
+				Content: []map[string]any{
+					{"type": "text", "text": "data"},
+				},
+			},
+		},
+		{
+			Name:        "delete_record",
+			Description: "Delete a record permanently",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint:    false,
+				DestructiveHint: boolPtr(true),
+				IdempotentHint:  true,
+				OpenWorldHint:   boolPtr(true),
+			},
+			Response: mockToolResponse{
+				Content: []map[string]any{
+					{"type": "text", "text": "deleted"},
+				},
+			},
+		},
+	}
+
+	mockServer := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, mockTools)
+	t.Cleanup(mockServer.Close)
+
+	config := setupToolsetWithExternalMCP(t, ctx, ti, mockServer.URL, externalmcp_types.TransportTypeStreamableHTTP, "annot-test")
+
+	// Initialize
+	initResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, []map[string]any{
+		{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{},
+				"clientInfo":      map[string]any{"name": "test-client", "version": "1.0.0"},
+			},
+		},
+	})
+	require.Equal(t, http.StatusOK, initResp.Code, "initialize failed: %s", initResp.Body.String())
+
+	// List tools
+	listResp := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, []map[string]any{
+		{
+			"jsonrpc": "2.0",
+			"id":      2,
+			"method":  "tools/list",
+		},
+	})
+	require.Equal(t, http.StatusOK, listResp.Code, "tools/list failed: %s", listResp.Body.String())
+
+	var listResult map[string]any
+	err := json.Unmarshal(listResp.Body.Bytes(), &listResult)
+	require.NoError(t, err)
+
+	result, ok := listResult["result"].(map[string]any)
+	require.True(t, ok)
+	tools, ok := result["tools"].([]any)
+	require.True(t, ok)
+	require.GreaterOrEqual(t, len(tools), 2, "expected at least 2 tools")
+
+	// Build a tool lookup by name
+	toolsByName := make(map[string]map[string]any)
+	for _, tool := range tools {
+		toolMap, ok := tool.(map[string]any)
+		require.True(t, ok)
+		name, _ := toolMap["name"].(string)
+		toolsByName[name] = toolMap
+	}
+
+	// Verify read_data annotations
+	readTool := toolsByName[config.slug+"--read_data"]
+	require.NotNil(t, readTool, "expected to find read_data tool")
+
+	readAnnotations, ok := readTool["annotations"].(map[string]any)
+	require.True(t, ok, "expected annotations on read_data tool, got: %v", readTool)
+
+	require.Equal(t, "Read Data", readAnnotations["title"], "title should be preserved")
+	require.Equal(t, true, readAnnotations["readOnlyHint"], "readOnlyHint should be true")
+	require.Equal(t, false, readAnnotations["destructiveHint"], "explicit false must be preserved, not dropped")
+	require.Equal(t, true, readAnnotations["idempotentHint"], "idempotentHint should be true")
+	require.Equal(t, false, readAnnotations["openWorldHint"], "explicit false must be preserved, not dropped")
+
+	// Verify delete_record annotations
+	deleteTool := toolsByName[config.slug+"--delete_record"]
+	require.NotNil(t, deleteTool, "expected to find delete_record tool")
+
+	deleteAnnotations, ok := deleteTool["annotations"].(map[string]any)
+	require.True(t, ok, "expected annotations on delete_record tool, got: %v", deleteTool)
+
+	require.Equal(t, true, deleteAnnotations["destructiveHint"], "destructiveHint should be true")
+	require.Equal(t, true, deleteAnnotations["idempotentHint"], "deleting same record twice has no additional effect")
+	require.Equal(t, true, deleteAnnotations["openWorldHint"], "openWorldHint should be true")
 }

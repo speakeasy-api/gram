@@ -1747,6 +1747,9 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 	if v.Variation != nil {
 		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
 	}
+	if v.Annotations != nil {
+		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
+	}
 
 	return res
 }
@@ -1777,17 +1780,40 @@ func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResp
 		return nil
 	}
 	res := &types.ToolVariation{
-		ID:            *v.ID,
-		GroupID:       *v.GroupID,
-		SrcToolUrn:    *v.SrcToolUrn,
-		SrcToolName:   *v.SrcToolName,
-		Confirm:       v.Confirm,
-		ConfirmPrompt: v.ConfirmPrompt,
-		Name:          v.Name,
-		Description:   v.Description,
-		Summarizer:    v.Summarizer,
-		CreatedAt:     *v.CreatedAt,
-		UpdatedAt:     *v.UpdatedAt,
+		ID:              *v.ID,
+		GroupID:         *v.GroupID,
+		SrcToolUrn:      *v.SrcToolUrn,
+		SrcToolName:     *v.SrcToolName,
+		Confirm:         v.Confirm,
+		ConfirmPrompt:   v.ConfirmPrompt,
+		Name:            v.Name,
+		Description:     v.Description,
+		Summarizer:      v.Summarizer,
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
+		CreatedAt:       *v.CreatedAt,
+		UpdatedAt:       *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations builds a value of
+// type *types.ToolAnnotations from a value of type
+// *ToolAnnotationsResponseBody.
+func unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v *ToolAnnotationsResponseBody) *types.ToolAnnotations {
+	if v == nil {
+		return nil
+	}
+	res := &types.ToolAnnotations{
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
 	}
 
 	return res
