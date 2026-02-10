@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "tw-shimmer";
 @reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
 
 @custom-variant dark (&:where(.dark, .dark *));

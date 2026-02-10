@@ -618,6 +618,11 @@ func parseTimeRange(from, to *string) (timeStart, timeEnd int64, err error) {
 		timeEnd = toTime.UnixNano()
 	}
 
+	// Validate that from < to to prevent unsigned integer overflow in ClickHouse queries
+	if timeStart >= timeEnd {
+		return 0, 0, oops.E(oops.CodeBadRequest, nil, "'from' time must be before 'to' time")
+	}
+
 	return timeStart, timeEnd, nil
 }
 
@@ -715,5 +720,254 @@ func (s *Service) CaptureEvent(ctx context.Context, payload *telem_gen.CaptureEv
 
 	return &telem_gen.CaptureEventResult{
 		Success: true,
+	}, nil
+}
+
+// GetObservabilityOverview retrieves aggregated observability metrics for the overview dashboard.
+func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_gen.GetObservabilityOverviewPayload) (res *telem_gen.GetObservabilityOverviewResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	projectID := authCtx.ProjectID.String()
+	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
+
+	// Auto-calculate interval based on time range
+	intervalSeconds := calculateInterval(timeStart, timeEnd)
+
+	// Calculate comparison period (same duration, immediately before)
+	duration := timeEnd - timeStart
+	comparisonStart := timeStart - duration
+	comparisonEnd := timeStart
+
+	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
+	summary, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
+		GramProjectID:  projectID,
+		TimeStart:      timeStart,
+		TimeEnd:        timeEnd,
+		ExternalUserID: externalUserID,
+		APIKeyID:       apiKeyID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
+	}
+
+	comparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
+		GramProjectID:  projectID,
+		TimeStart:      comparisonStart,
+		TimeEnd:        comparisonEnd,
+		ExternalUserID: externalUserID,
+		APIKeyID:       apiKeyID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
+	}
+
+	var timeSeries []repo.TimeSeriesBucket
+	if payload.IncludeTimeSeries {
+		timeSeries, err = s.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
+			GramProjectID:   projectID,
+			TimeStart:       timeStart,
+			TimeEnd:         timeEnd,
+			IntervalSeconds: intervalSeconds,
+			ExternalUserID:  externalUserID,
+			APIKeyID:        apiKeyID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
+		}
+	}
+
+	toolsByCount, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
+		GramProjectID:  projectID,
+		TimeStart:      timeStart,
+		TimeEnd:        timeEnd,
+		ExternalUserID: externalUserID,
+		APIKeyID:       apiKeyID,
+		Limit:          10,
+		SortBy:         "count",
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by count")
+	}
+
+	toolsByFailure, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
+		GramProjectID:  projectID,
+		TimeStart:      timeStart,
+		TimeEnd:        timeEnd,
+		ExternalUserID: externalUserID,
+		APIKeyID:       apiKeyID,
+		Limit:          10,
+		SortBy:         "failure_rate",
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
+	}
+
+	// Convert to API types
+	return &telem_gen.GetObservabilityOverviewResult{
+		Summary:               toObservabilitySummary(summary),
+		Comparison:            toObservabilitySummary(comparison),
+		TimeSeries:            toTimeSeriesBuckets(timeSeries),
+		TopToolsByCount:       toToolMetrics(toolsByCount),
+		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
+		IntervalSeconds:       intervalSeconds,
+		Enabled:               true,
+	}, nil
+}
+
+// calculateInterval determines the appropriate time bucket interval based on the time range.
+// Returns interval in seconds.
+func calculateInterval(timeStart, timeEnd int64) int64 {
+	durationNanos := timeEnd - timeStart
+	durationHours := durationNanos / (int64(time.Hour))
+
+	switch {
+	case durationHours <= 1:
+		return 60 // 1 minute buckets
+	case durationHours <= 24:
+		return 900 // 15 minute buckets
+	case durationHours <= 168: // 7 days
+		return 3600 // 1 hour buckets
+	case durationHours <= 720: // 30 days
+		return 21600 // 6 hour buckets
+	default:
+		return 86400 // 1 day buckets for 90+ days
+	}
+}
+
+// toObservabilitySummary converts repo summary to API type.
+func toObservabilitySummary(summary *repo.OverviewSummary) *telem_gen.ObservabilitySummary {
+	if summary == nil {
+		return &telem_gen.ObservabilitySummary{
+			TotalChats:           0,
+			ResolvedChats:        0,
+			FailedChats:          0,
+			AvgSessionDurationMs: 0,
+			AvgResolutionTimeMs:  0,
+			TotalToolCalls:       0,
+			FailedToolCalls:      0,
+			AvgLatencyMs:         0,
+		}
+	}
+	//nolint:gosec // Values are bounded counts that won't overflow int64
+	return &telem_gen.ObservabilitySummary{
+		TotalChats:           int64(summary.TotalChats),
+		ResolvedChats:        int64(summary.ResolvedChats),
+		FailedChats:          int64(summary.FailedChats),
+		AvgSessionDurationMs: sanitizeFloat64(summary.AvgSessionDurationMs),
+		AvgResolutionTimeMs:  sanitizeFloat64(summary.AvgResolutionTimeMs),
+		TotalToolCalls:       int64(summary.TotalToolCalls),
+		FailedToolCalls:      int64(summary.FailedToolCalls),
+		AvgLatencyMs:         sanitizeFloat64(summary.AvgLatencyMs),
+	}
+}
+
+// toTimeSeriesBuckets converts repo buckets to API type.
+func toTimeSeriesBuckets(buckets []repo.TimeSeriesBucket) []*telem_gen.TimeSeriesBucket {
+	if buckets == nil {
+		return []*telem_gen.TimeSeriesBucket{}
+	}
+	result := make([]*telem_gen.TimeSeriesBucket, len(buckets))
+	for i, b := range buckets {
+		//nolint:gosec // Values are bounded counts that won't overflow int64
+		result[i] = &telem_gen.TimeSeriesBucket{
+			BucketTimeUnixNano:   strconv.FormatInt(b.BucketTimeUnixNano, 10),
+			TotalChats:           int64(b.TotalChats),
+			ResolvedChats:        int64(b.ResolvedChats),
+			FailedChats:          int64(b.FailedChats),
+			PartialChats:         int64(b.PartialChats),
+			AbandonedChats:       int64(b.AbandonedChats),
+			TotalToolCalls:       int64(b.TotalToolCalls),
+			FailedToolCalls:      int64(b.FailedToolCalls),
+			AvgToolLatencyMs:     sanitizeFloat64(b.AvgToolLatencyMs),
+			AvgSessionDurationMs: sanitizeFloat64(b.AvgSessionDurationMs),
+		}
+	}
+	return result
+}
+
+// toToolMetrics converts repo tool metrics to API type.
+func toToolMetrics(tools []repo.ToolMetric) []*telem_gen.ToolMetric {
+	if tools == nil {
+		return []*telem_gen.ToolMetric{}
+	}
+	result := make([]*telem_gen.ToolMetric, len(tools))
+	for i, t := range tools {
+		//nolint:gosec // Values are bounded counts that won't overflow int64
+		result[i] = &telem_gen.ToolMetric{
+			GramUrn:      t.GramURN,
+			CallCount:    int64(t.CallCount),
+			SuccessCount: int64(t.SuccessCount),
+			FailureCount: int64(t.FailureCount),
+			AvgLatencyMs: sanitizeFloat64(t.AvgLatencyMs),
+			FailureRate:  sanitizeFloat64(t.FailureRate),
+		}
+	}
+	return result
+}
+
+// ListFilterOptions retrieves available filter options (API keys or users) for the observability dashboard.
+func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.ListFilterOptionsPayload) (res *telem_gen.ListFilterOptionsResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	options, err := s.chRepo.ListFilterOptions(ctx, repo.ListFilterOptionsParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		FilterType:    payload.FilterType,
+		Limit:         100,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing filter options")
+	}
+
+	// Convert to API types
+	result := make([]*telem_gen.FilterOption, len(options))
+	for i, opt := range options {
+		//nolint:gosec // Values are bounded counts that won't overflow int64
+		result[i] = &telem_gen.FilterOption{
+			ID:    opt.ID,
+			Label: opt.Label,
+			Count: int64(opt.Count),
+		}
+	}
+
+	return &telem_gen.ListFilterOptionsResult{
+		Options: result,
+		Enabled: true,
 	}, nil
 }

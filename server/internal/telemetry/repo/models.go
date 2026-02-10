@@ -173,3 +173,52 @@ type UserSummary struct {
 	ToolSuccessCounts map[string]uint64 `ch:"tool_success_counts"`
 	ToolFailureCounts map[string]uint64 `ch:"tool_failure_counts"`
 }
+
+// TimeSeriesBucket represents a single time bucket for time series metrics.
+// Used for plotting metrics over time in the observability overview.
+type TimeSeriesBucket struct {
+	BucketTimeUnixNano   int64   `ch:"bucket_time_unix_nano"`
+	TotalChats           uint64  `ch:"total_chats"`
+	ResolvedChats        uint64  `ch:"resolved_chats"`
+	FailedChats          uint64  `ch:"failed_chats"`
+	PartialChats         uint64  `ch:"partial_chats"`
+	AbandonedChats       uint64  `ch:"abandoned_chats"`
+	TotalToolCalls       uint64  `ch:"total_tool_calls"`
+	FailedToolCalls      uint64  `ch:"failed_tool_calls"`
+	AvgToolLatencyMs     float64 `ch:"avg_tool_latency_ms"`
+	AvgSessionDurationMs float64 `ch:"avg_session_duration_ms"`
+}
+
+// ToolMetric represents aggregated metrics for a single tool.
+// Used for the top tools tables in the observability overview.
+type ToolMetric struct {
+	GramURN      string  `ch:"gram_urn"`
+	CallCount    uint64  `ch:"call_count"`
+	SuccessCount uint64  `ch:"success_count"`
+	FailureCount uint64  `ch:"failure_count"`
+	AvgLatencyMs float64 `ch:"avg_latency_ms"`
+	FailureRate  float64 `ch:"failure_rate"`
+}
+
+// OverviewSummary represents aggregated summary metrics for the observability overview.
+// Includes metrics for a single time period (used for both current and comparison periods).
+type OverviewSummary struct {
+	// Chat metrics
+	TotalChats           uint64  `ch:"total_chats"`
+	ResolvedChats        uint64  `ch:"resolved_chats"`
+	FailedChats          uint64  `ch:"failed_chats"`
+	AvgSessionDurationMs float64 `ch:"avg_session_duration_ms"`
+	AvgResolutionTimeMs  float64 `ch:"avg_resolution_time_ms"`
+
+	// Tool metrics
+	TotalToolCalls  uint64  `ch:"total_tool_calls"`
+	FailedToolCalls uint64  `ch:"failed_tool_calls"`
+	AvgLatencyMs    float64 `ch:"avg_latency_ms"`
+}
+
+// FilterOption represents a single option for filtering (API key or user).
+type FilterOption struct {
+	ID    string `ch:"id"`
+	Label string `ch:"label"` // Display label (may be same as ID or a friendly name)
+	Count uint64 `ch:"count"` // Number of events for this option
+}

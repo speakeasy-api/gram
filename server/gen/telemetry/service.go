@@ -30,6 +30,12 @@ type Service interface {
 	GetProjectMetricsSummary(context.Context, *GetProjectMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error)
 	// Get aggregated metrics summary grouped by user
 	GetUserMetricsSummary(context.Context, *GetUserMetricsSummaryPayload) (res *GetUserMetricsSummaryResult, err error)
+	// Get observability overview metrics including time series, tool breakdowns,
+	// and summary stats
+	GetObservabilityOverview(context.Context, *GetObservabilityOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// List available filter options (API keys or users) for the observability
+	// overview
+	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -54,7 +60,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary"}
+var MethodNames = [9]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -109,11 +115,58 @@ type ChatSummary struct {
 	TotalTokens int64
 }
 
+// A single filter option (API key or user)
+type FilterOption struct {
+	// Unique identifier for the option
+	ID string
+	// Display label for the option
+	Label string
+	// Number of events for this option
+	Count int64
+}
+
 // GetMetricsSummaryResult is the result type of the telemetry service
 // getProjectMetricsSummary method.
 type GetMetricsSummaryResult struct {
 	// Aggregated metrics
 	Metrics *ProjectSummary
+	// Whether telemetry is enabled for the organization
+	Enabled bool
+}
+
+// GetObservabilityOverviewPayload is the payload type of the telemetry service
+// getObservabilityOverview method.
+type GetObservabilityOverviewPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional external user ID filter
+	ExternalUserID *string
+	// Optional API key ID filter
+	APIKeyID *string
+	// Whether to include time series data (default: true)
+	IncludeTimeSeries bool
+}
+
+// GetObservabilityOverviewResult is the result type of the telemetry service
+// getObservabilityOverview method.
+type GetObservabilityOverviewResult struct {
+	// Current period summary metrics
+	Summary *ObservabilitySummary
+	// Previous period summary metrics for trend calculation
+	Comparison *ObservabilitySummary
+	// Time series data points
+	TimeSeries []*TimeSeriesBucket
+	// Top tools by call count
+	TopToolsByCount []*ToolMetric
+	// Top tools by failure rate
+	TopToolsByFailureRate []*ToolMetric
+	// The time bucket interval in seconds used for the time series data
+	IntervalSeconds int64
 	// Whether telemetry is enabled for the organization
 	Enabled bool
 }
@@ -155,12 +208,55 @@ type GetUserMetricsSummaryResult struct {
 	Enabled bool
 }
 
+// ListFilterOptionsPayload is the payload type of the telemetry service
+// listFilterOptions method.
+type ListFilterOptionsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Type of filter to list options for
+	FilterType string
+}
+
+// ListFilterOptionsResult is the result type of the telemetry service
+// listFilterOptions method.
+type ListFilterOptionsResult struct {
+	// List of filter options
+	Options []*FilterOption
+	// Whether telemetry is enabled for the organization
+	Enabled bool
+}
+
 // Model usage statistics
 type ModelUsage struct {
 	// Model name
 	Name string
 	// Number of times used
 	Count int64
+}
+
+// Aggregated summary metrics for a time period
+type ObservabilitySummary struct {
+	// Total number of chat sessions
+	TotalChats int64
+	// Number of resolved chat sessions
+	ResolvedChats int64
+	// Number of failed chat sessions
+	FailedChats int64
+	// Average session duration in milliseconds
+	AvgSessionDurationMs float64
+	// Average time to resolution in milliseconds
+	AvgResolutionTimeMs float64
+	// Total number of tool calls
+	TotalToolCalls int64
+	// Number of failed tool calls
+	FailedToolCalls int64
+	// Average tool latency in milliseconds
+	AvgLatencyMs float64
 }
 
 // Aggregated metrics
@@ -431,6 +527,30 @@ type TelemetryLogRecord struct {
 	Service *ServiceInfo
 }
 
+// A single time bucket for time series metrics
+type TimeSeriesBucket struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string
+	// Total chat sessions in this bucket
+	TotalChats int64
+	// Resolved chat sessions in this bucket
+	ResolvedChats int64
+	// Failed chat sessions in this bucket
+	FailedChats int64
+	// Partially resolved chat sessions in this bucket
+	PartialChats int64
+	// Abandoned chat sessions in this bucket
+	AbandonedChats int64
+	// Total tool calls in this bucket
+	TotalToolCalls int64
+	// Failed tool calls in this bucket
+	FailedToolCalls int64
+	// Average tool latency in milliseconds
+	AvgToolLatencyMs float64
+	// Average session duration in milliseconds
+	AvgSessionDurationMs float64
+}
+
 // Summary information for a tool call
 type ToolCallSummary struct {
 	// Trace ID (32 hex characters)
@@ -443,6 +563,22 @@ type ToolCallSummary struct {
 	HTTPStatusCode *int32
 	// Gram URN associated with this tool call
 	GramUrn string
+}
+
+// Aggregated metrics for a single tool
+type ToolMetric struct {
+	// Tool URN
+	GramUrn string
+	// Total number of calls
+	CallCount int64
+	// Number of successful calls
+	SuccessCount int64
+	// Number of failed calls
+	FailureCount int64
+	// Average latency in milliseconds
+	AvgLatencyMs float64
+	// Failure rate (0.0 to 1.0)
+	FailureRate float64
 }
 
 // Tool usage statistics

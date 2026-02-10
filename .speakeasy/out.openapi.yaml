@@ -2574,6 +2574,163 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListChats
+  /rpc/chat.listChatsWithResolutions:
+    get:
+      description: List all chats for a project with their resolutions
+      operationId: listChatsWithResolutions
+      parameters:
+        - allowEmptyValue: true
+          description: Search query (searches chat ID, user ID, and title)
+          in: query
+          name: search
+          schema:
+            description: Search query (searches chat ID, user ID, and title)
+            type: string
+        - allowEmptyValue: true
+          description: Filter by external user ID
+          in: query
+          name: external_user_id
+          schema:
+            description: Filter by external user ID
+            type: string
+        - allowEmptyValue: true
+          description: Filter by resolution status
+          in: query
+          name: resolution_status
+          schema:
+            description: Filter by resolution status
+            type: string
+        - allowEmptyValue: true
+          description: Filter chats created after this timestamp (ISO 8601)
+          in: query
+          name: from
+          schema:
+            description: Filter chats created after this timestamp (ISO 8601)
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Filter chats created before this timestamp (ISO 8601)
+          in: query
+          name: to
+          schema:
+            description: Filter chats created before this timestamp (ISO 8601)
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Number of results per page
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Number of results per page
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Pagination offset
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: Pagination offset
+            format: int64
+            minimum: 0
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: Chat Sessions token header
+          in: header
+          name: Gram-Chat-Session
+          schema:
+            description: Chat Sessions token header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListChatsWithResolutionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - chat_sessions_token_header_Gram-Chat-Session: []
+        - {}
+      summary: listChatsWithResolutions chat
+      tags:
+        - chat
+      x-speakeasy-name-override: listChatsWithResolutions
+      x-speakeasy-react-hook:
+        name: ListChatsWithResolutions
+        type: query
   /rpc/chat.load:
     get:
       description: Load a chat by its ID
@@ -8088,6 +8245,112 @@ paths:
       tags:
         - telemetry
       x-speakeasy-name-override: captureEvent
+  /rpc/telemetry.getObservabilityOverview:
+    post:
+      description: Get observability overview metrics including time series, tool breakdowns, and summary stats
+      operationId: getObservabilityOverview
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetObservabilityOverviewPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetObservabilityOverviewResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getObservabilityOverview telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getObservabilityOverview
+      x-speakeasy-react-hook:
+        name: GetObservabilityOverview
+        type: query
   /rpc/telemetry.getProjectMetricsSummary:
     post:
       description: Get aggregated metrics summary for an entire project
@@ -8299,6 +8562,112 @@ paths:
       x-speakeasy-name-override: getUserMetricsSummary
       x-speakeasy-react-hook:
         name: GetUserMetricsSummary
+        type: query
+  /rpc/telemetry.listFilterOptions:
+    post:
+      description: List available filter options (API keys or users) for the observability overview
+      operationId: listFilterOptions
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListFilterOptionsPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFilterOptionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listFilterOptions telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: listFilterOptions
+      x-speakeasy-react-hook:
+        name: ListFilterOptions
         type: query
   /rpc/telemetry.searchChats:
     post:
@@ -11925,7 +12294,6 @@ components:
         content:
           type: string
           description: The content of the message
-          format: binary
         created_at:
           type: string
           description: When the message was created.
@@ -11992,6 +12360,87 @@ components:
         - num_messages
         - created_at
         - updated_at
+    ChatOverviewWithResolutions:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the chat was created.
+          format: date-time
+        external_user_id:
+          type: string
+          description: The ID of the external user who created the chat
+        id:
+          type: string
+          description: The ID of the chat
+        num_messages:
+          type: integer
+          description: The number of messages in the chat
+          format: int64
+        resolutions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatResolution'
+          description: List of resolutions for this chat
+        title:
+          type: string
+          description: The title of the chat
+        updated_at:
+          type: string
+          description: When the chat was last updated.
+          format: date-time
+        user_id:
+          type: string
+          description: The ID of the user who created the chat
+      description: Chat overview with embedded resolution data
+      required:
+        - resolutions
+        - id
+        - title
+        - num_messages
+        - created_at
+        - updated_at
+    ChatResolution:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When resolution was created
+          format: date-time
+        id:
+          type: string
+          description: Resolution ID
+          format: uuid
+        message_ids:
+          type: array
+          items:
+            type: string
+          description: Message IDs associated with this resolution
+          example:
+            - abc-123
+            - def-456
+        resolution:
+          type: string
+          description: Resolution status
+        resolution_notes:
+          type: string
+          description: Notes about the resolution
+        score:
+          type: integer
+          description: Score 0-100
+          format: int64
+        user_goal:
+          type: string
+          description: User's intended goal
+      description: Resolution information for a chat
+      required:
+        - id
+        - user_goal
+        - resolution
+        - resolution_notes
+        - score
+        - created_at
+        - message_ids
     ChatSummary:
       type: object
       properties:
@@ -13224,6 +13673,24 @@ components:
           description: The URL to fetch the OpenAPI document from
       required:
         - url
+    FilterOption:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Number of events for this option
+          format: int64
+        id:
+          type: string
+          description: Unique identifier for the option
+        label:
+          type: string
+          description: Display label for the option
+      description: A single filter option (API key or user)
+      required:
+        - id
+        - label
+        - count
     FunctionEnvironmentVariable:
       type: object
       properties:
@@ -13624,6 +14091,75 @@ components:
       description: Result of metrics summary query
       required:
         - metrics
+        - enabled
+    GetObservabilityOverviewPayload:
+      type: object
+      properties:
+        api_key_id:
+          type: string
+          description: Optional API key ID filter
+        external_user_id:
+          type: string
+          description: Optional external user ID filter
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        include_time_series:
+          type: boolean
+          description: 'Whether to include time series data (default: true)'
+          default: true
+        interval_seconds:
+          type: integer
+          description: Optional time bucket interval in seconds. When provided, overrides automatic interval calculation. Useful for maintaining consistent granularity when zooming.
+          format: int64
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Payload for getting observability overview metrics
+      required:
+        - from
+        - to
+    GetObservabilityOverviewResult:
+      type: object
+      properties:
+        comparison:
+          $ref: '#/components/schemas/ObservabilitySummary'
+        enabled:
+          type: boolean
+          description: Whether telemetry is enabled for the organization
+        interval_seconds:
+          type: integer
+          description: The time bucket interval in seconds used for the time series data
+          format: int64
+        summary:
+          $ref: '#/components/schemas/ObservabilitySummary'
+        time_series:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimeSeriesBucket'
+          description: Time series data points
+        top_tools_by_count:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolMetric'
+          description: Top tools by call count
+        top_tools_by_failure_rate:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolMetric'
+          description: Top tools by failure rate
+      description: Result of observability overview query
+      required:
+        - summary
+        - comparison
+        - time_series
+        - top_tools_by_count
+        - top_tools_by_failure_rate
+        - interval_seconds
         - enabled
     GetProjectForm:
       type: object
@@ -14068,6 +14604,22 @@ components:
           description: The list of chats
       required:
         - chats
+    ListChatsWithResolutionsResult:
+      type: object
+      properties:
+        chats:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatOverviewWithResolutions'
+          description: List of chats with resolutions
+        total:
+          type: integer
+          description: Total number of chats (before pagination)
+          format: int64
+      description: Result of listing chats with resolutions
+      required:
+        - chats
+        - total
     ListDeploymentForm:
       type: object
       properties:
@@ -14098,6 +14650,45 @@ components:
       description: Result type for listing environments
       required:
         - environments
+    ListFilterOptionsPayload:
+      type: object
+      properties:
+        filter_type:
+          type: string
+          description: Type of filter to list options for
+          enum:
+            - api_key
+            - user
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Payload for listing filter options
+      required:
+        - from
+        - to
+        - filter_type
+    ListFilterOptionsResult:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether telemetry is enabled for the organization
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/FilterOption'
+          description: List of filter options
+      description: Result of listing filter options
+      required:
+        - options
+        - enabled
     ListIntegrationsForm:
       type: object
       properties:
@@ -14570,6 +15161,51 @@ components:
       required:
         - slug
         - provider_type
+    ObservabilitySummary:
+      type: object
+      properties:
+        avg_latency_ms:
+          type: number
+          description: Average tool latency in milliseconds
+          format: double
+        avg_resolution_time_ms:
+          type: number
+          description: Average time to resolution in milliseconds
+          format: double
+        avg_session_duration_ms:
+          type: number
+          description: Average session duration in milliseconds
+          format: double
+        failed_chats:
+          type: integer
+          description: Number of failed chat sessions
+          format: int64
+        failed_tool_calls:
+          type: integer
+          description: Number of failed tool calls
+          format: int64
+        resolved_chats:
+          type: integer
+          description: Number of resolved chat sessions
+          format: int64
+        total_chats:
+          type: integer
+          description: Total number of chat sessions
+          format: int64
+        total_tool_calls:
+          type: integer
+          description: Total number of tool calls
+          format: int64
+      description: Aggregated summary metrics for a time period
+      required:
+        - total_chats
+        - resolved_chats
+        - failed_chats
+        - avg_session_duration_ms
+        - avg_resolution_time_ms
+        - total_tool_calls
+        - failed_tool_calls
+        - avg_latency_ms
     OpenAPIv3DeploymentAsset:
       type: object
       properties:
@@ -15963,6 +16599,60 @@ components:
         - price_per_additional_server
         - feature_bullets
         - included_bullets
+    TimeSeriesBucket:
+      type: object
+      properties:
+        abandoned_chats:
+          type: integer
+          description: Abandoned chat sessions in this bucket
+          format: int64
+        avg_session_duration_ms:
+          type: number
+          description: Average session duration in milliseconds
+          format: double
+        avg_tool_latency_ms:
+          type: number
+          description: Average tool latency in milliseconds
+          format: double
+        bucket_time_unix_nano:
+          type: string
+          description: Bucket start time in Unix nanoseconds (string for JS precision)
+        failed_chats:
+          type: integer
+          description: Failed chat sessions in this bucket
+          format: int64
+        failed_tool_calls:
+          type: integer
+          description: Failed tool calls in this bucket
+          format: int64
+        partial_chats:
+          type: integer
+          description: Partially resolved chat sessions in this bucket
+          format: int64
+        resolved_chats:
+          type: integer
+          description: Resolved chat sessions in this bucket
+          format: int64
+        total_chats:
+          type: integer
+          description: Total chat sessions in this bucket
+          format: int64
+        total_tool_calls:
+          type: integer
+          description: Total tool calls in this bucket
+          format: int64
+      description: A single time bucket for time series metrics
+      required:
+        - bucket_time_unix_nano
+        - total_chats
+        - resolved_chats
+        - failed_chats
+        - partial_chats
+        - abandoned_chats
+        - total_tool_calls
+        - failed_tool_calls
+        - avg_tool_latency_ms
+        - avg_session_duration_ms
     Tool:
       type: object
       properties:
@@ -16046,6 +16736,40 @@ components:
         - id
         - name
         - tool_urn
+    ToolMetric:
+      type: object
+      properties:
+        avg_latency_ms:
+          type: number
+          description: Average latency in milliseconds
+          format: double
+        call_count:
+          type: integer
+          description: Total number of calls
+          format: int64
+        failure_count:
+          type: integer
+          description: Number of failed calls
+          format: int64
+        failure_rate:
+          type: number
+          description: Failure rate (0.0 to 1.0)
+          format: double
+        gram_urn:
+          type: string
+          description: Tool URN
+        success_count:
+          type: integer
+          description: Number of successful calls
+          format: int64
+      description: Aggregated metrics for a single tool
+      required:
+        - gram_urn
+        - call_count
+        - success_count
+        - failure_count
+        - avg_latency_ms
+        - failure_rate
     ToolUsage:
       type: object
       properties:

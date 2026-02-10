@@ -34,7 +34,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
     build: [routes.elements, routes.mcp],
-    observe: [routes.logs, routes.metrics],
+    observe: [routes.observability, routes.chatSessions, routes.logs],
     settings: [routes.settings, routes.billing, routes.docs] as AppRoute[],
   };
 

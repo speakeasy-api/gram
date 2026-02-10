@@ -3,8 +3,10 @@
  */
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
+import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
+import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
@@ -27,6 +29,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CaptureEventResult> {
     return unwrapAsync(telemetryCaptureEvent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getObservabilityOverview telemetry
+   *
+   * @remarks
+   * Get observability overview metrics including time series, tool breakdowns, and summary stats
+   */
+  async getObservabilityOverview(
+    request: operations.GetObservabilityOverviewRequest,
+    security?: operations.GetObservabilityOverviewSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetObservabilityOverviewResult> {
+    return unwrapAsync(telemetryGetObservabilityOverview(
       this,
       request,
       security,
@@ -65,6 +86,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.GetUserMetricsSummaryResult> {
     return unwrapAsync(telemetryGetUserMetricsSummary(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listFilterOptions telemetry
+   *
+   * @remarks
+   * List available filter options (API keys or users) for the observability overview
+   */
+  async listFilterOptions(
+    request: operations.ListFilterOptionsRequest,
+    security?: operations.ListFilterOptionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListFilterOptionsResult> {
+    return unwrapAsync(telemetryListFilterOptions(
       this,
       request,
       security,

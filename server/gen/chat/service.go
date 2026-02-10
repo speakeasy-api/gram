@@ -25,6 +25,8 @@ type Service interface {
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
 	// Load a chat by its ID
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
+	// List all chats for a project with their resolutions
+	ListChatsWithResolutions(context.Context, *ListChatsWithResolutionsPayload) (res *ListChatsWithResolutionsResult, err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 }
@@ -51,7 +53,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"listChats", "loadChat", "generateTitle", "creditUsage", "submitFeedback"}
+var MethodNames = [6]string{"listChats", "loadChat", "generateTitle", "creditUsage", "listChatsWithResolutions", "submitFeedback"}
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
@@ -79,7 +81,7 @@ type ChatMessage struct {
 	// The role of the message
 	Role string
 	// The content of the message
-	Content json.RawMessage
+	Content *json.RawMessage
 	// The model that generated the message
 	Model string
 	// The tool call ID of the message
@@ -111,6 +113,44 @@ type ChatOverview struct {
 	CreatedAt string
 	// When the chat was last updated.
 	UpdatedAt string
+}
+
+// Chat overview with embedded resolution data
+type ChatOverviewWithResolutions struct {
+	// List of resolutions for this chat
+	Resolutions []*ChatResolution
+	// The ID of the chat
+	ID string
+	// The title of the chat
+	Title string
+	// The ID of the user who created the chat
+	UserID *string
+	// The ID of the external user who created the chat
+	ExternalUserID *string
+	// The number of messages in the chat
+	NumMessages int
+	// When the chat was created.
+	CreatedAt string
+	// When the chat was last updated.
+	UpdatedAt string
+}
+
+// Resolution information for a chat
+type ChatResolution struct {
+	// Resolution ID
+	ID string
+	// User's intended goal
+	UserGoal string
+	// Resolution status
+	Resolution string
+	// Notes about the resolution
+	ResolutionNotes string
+	// Score 0-100
+	Score int
+	// When resolution was created
+	CreatedAt string
+	// Message IDs associated with this resolution
+	MessageIds []string
 }
 
 // CreditUsagePayload is the payload type of the chat service creditUsage
@@ -157,6 +197,37 @@ type ListChatsPayload struct {
 type ListChatsResult struct {
 	// The list of chats
 	Chats []*ChatOverview
+}
+
+// ListChatsWithResolutionsPayload is the payload type of the chat service
+// listChatsWithResolutions method.
+type ListChatsWithResolutionsPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// Search query (searches chat ID, user ID, and title)
+	Search *string
+	// Filter by external user ID
+	ExternalUserID *string
+	// Filter by resolution status
+	ResolutionStatus *string
+	// Filter chats created after this timestamp (ISO 8601)
+	From *string
+	// Filter chats created before this timestamp (ISO 8601)
+	To *string
+	// Number of results per page
+	Limit int
+	// Pagination offset
+	Offset int
+}
+
+// ListChatsWithResolutionsResult is the result type of the chat service
+// listChatsWithResolutions method.
+type ListChatsWithResolutionsResult struct {
+	// List of chats with resolutions
+	Chats []*ChatOverviewWithResolutions
+	// Total number of chats (before pagination)
+	Total int
 }
 
 // LoadChatPayload is the payload type of the chat service loadChat method.

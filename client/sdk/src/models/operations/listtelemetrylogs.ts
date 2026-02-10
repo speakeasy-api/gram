@@ -159,15 +159,17 @@ export const ListTelemetryLogsSecurityOption1$outboundSchema: z.ZodType<
   ListTelemetryLogsSecurityOption1$Outbound,
   z.ZodTypeDef,
   ListTelemetryLogsSecurityOption1
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+> = z
+  .object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
   });
-});
 
 export function listTelemetryLogsSecurityOption1ToJSON(
   listTelemetryLogsSecurityOption1: ListTelemetryLogsSecurityOption1,
@@ -190,15 +192,17 @@ export const ListTelemetryLogsSecurityOption2$outboundSchema: z.ZodType<
   ListTelemetryLogsSecurityOption2$Outbound,
   z.ZodTypeDef,
   ListTelemetryLogsSecurityOption2
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+> = z
+  .object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
   });
-});
 
 export function listTelemetryLogsSecurityOption2ToJSON(
   listTelemetryLogsSecurityOption2: ListTelemetryLogsSecurityOption2,
@@ -221,15 +225,17 @@ export const ListTelemetryLogsSecurityOption3$outboundSchema: z.ZodType<
   ListTelemetryLogsSecurityOption3$Outbound,
   z.ZodTypeDef,
   ListTelemetryLogsSecurityOption3
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+> = z
+  .object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
   });
-});
 
 export function listTelemetryLogsSecurityOption3ToJSON(
   listTelemetryLogsSecurityOption3: ListTelemetryLogsSecurityOption3,
@@ -252,15 +258,17 @@ export const ListTelemetryLogsSecurityOption4$outboundSchema: z.ZodType<
   ListTelemetryLogsSecurityOption4$Outbound,
   z.ZodTypeDef,
   ListTelemetryLogsSecurityOption4
-> = z.object({
-  projectSlugHeaderGramProject: z.string(),
-  sessionHeaderGramSession: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+> = z
+  .object({
+    projectSlugHeaderGramProject: z.string(),
+    sessionHeaderGramSession: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+    });
   });
-});
 
 export function listTelemetryLogsSecurityOption4ToJSON(
   listTelemetryLogsSecurityOption4: ListTelemetryLogsSecurityOption4,
@@ -285,23 +293,29 @@ export const ListTelemetryLogsSecurity$outboundSchema: z.ZodType<
   ListTelemetryLogsSecurity$Outbound,
   z.ZodTypeDef,
   ListTelemetryLogsSecurity
-> = z.object({
-  option1: z.lazy(() => ListTelemetryLogsSecurityOption1$outboundSchema)
-    .optional(),
-  option2: z.lazy(() => ListTelemetryLogsSecurityOption2$outboundSchema)
-    .optional(),
-  option3: z.lazy(() => ListTelemetryLogsSecurityOption3$outboundSchema)
-    .optional(),
-  option4: z.lazy(() => ListTelemetryLogsSecurityOption4$outboundSchema)
-    .optional(),
-}).transform((v) => {
-  return remap$(v, {
-    option1: "Option1",
-    option2: "Option2",
-    option3: "Option3",
-    option4: "Option4",
+> = z
+  .object({
+    option1: z
+      .lazy(() => ListTelemetryLogsSecurityOption1$outboundSchema)
+      .optional(),
+    option2: z
+      .lazy(() => ListTelemetryLogsSecurityOption2$outboundSchema)
+      .optional(),
+    option3: z
+      .lazy(() => ListTelemetryLogsSecurityOption3$outboundSchema)
+      .optional(),
+    option4: z
+      .lazy(() => ListTelemetryLogsSecurityOption4$outboundSchema)
+      .optional(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      option1: "Option1",
+      option2: "Option2",
+      option3: "Option3",
+      option4: "Option4",
+    });
   });
-});
 
 export function listTelemetryLogsSecurityToJSON(
   listTelemetryLogsSecurity: ListTelemetryLogsSecurity,
@@ -316,8 +330,8 @@ export const SeverityText$outboundSchema: z.ZodNativeEnum<typeof SeverityText> =
   z.nativeEnum(SeverityText);
 
 /** @internal */
-export const HttpMethod$outboundSchema: z.ZodNativeEnum<typeof HttpMethod> = z
-  .nativeEnum(HttpMethod);
+export const HttpMethod$outboundSchema: z.ZodNativeEnum<typeof HttpMethod> =
+  z.nativeEnum(HttpMethod);
 
 /** @internal */
 export const QueryParamSort$outboundSchema: z.ZodNativeEnum<
@@ -350,42 +364,44 @@ export const ListTelemetryLogsRequest$outboundSchema: z.ZodType<
   ListTelemetryLogsRequest$Outbound,
   z.ZodTypeDef,
   ListTelemetryLogsRequest
-> = z.object({
-  timeStart: z.number().int().optional(),
-  timeEnd: z.number().int().optional(),
-  gramUrn: z.string().optional(),
-  traceId: z.string().optional(),
-  deploymentId: z.string().optional(),
-  functionId: z.string().optional(),
-  severityText: SeverityText$outboundSchema.optional(),
-  httpStatusCode: z.number().int().optional(),
-  httpRoute: z.string().optional(),
-  httpMethod: HttpMethod$outboundSchema.optional(),
-  serviceName: z.string().optional(),
-  cursor: z.string().optional(),
-  limit: z.number().int().default(50),
-  sort: QueryParamSort$outboundSchema.default("desc"),
-  gramKey: z.string().optional(),
-  gramSession: z.string().optional(),
-  gramProject: z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    timeStart: "time_start",
-    timeEnd: "time_end",
-    gramUrn: "gram_urn",
-    traceId: "trace_id",
-    deploymentId: "deployment_id",
-    functionId: "function_id",
-    severityText: "severity_text",
-    httpStatusCode: "http_status_code",
-    httpRoute: "http_route",
-    httpMethod: "http_method",
-    serviceName: "service_name",
-    gramKey: "Gram-Key",
-    gramSession: "Gram-Session",
-    gramProject: "Gram-Project",
+> = z
+  .object({
+    timeStart: z.number().int().optional(),
+    timeEnd: z.number().int().optional(),
+    gramUrn: z.string().optional(),
+    traceId: z.string().optional(),
+    deploymentId: z.string().optional(),
+    functionId: z.string().optional(),
+    severityText: SeverityText$outboundSchema.optional(),
+    httpStatusCode: z.number().int().optional(),
+    httpRoute: z.string().optional(),
+    httpMethod: HttpMethod$outboundSchema.optional(),
+    serviceName: z.string().optional(),
+    cursor: z.string().optional(),
+    limit: z.number().int().default(50),
+    sort: QueryParamSort$outboundSchema.default("desc"),
+    gramKey: z.string().optional(),
+    gramSession: z.string().optional(),
+    gramProject: z.string().optional(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      timeStart: "time_start",
+      timeEnd: "time_end",
+      gramUrn: "gram_urn",
+      traceId: "trace_id",
+      deploymentId: "deployment_id",
+      functionId: "function_id",
+      severityText: "severity_text",
+      httpStatusCode: "http_status_code",
+      httpRoute: "http_route",
+      httpMethod: "http_method",
+      serviceName: "service_name",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+    });
   });
-});
 
 export function listTelemetryLogsRequestToJSON(
   listTelemetryLogsRequest: ListTelemetryLogsRequest,

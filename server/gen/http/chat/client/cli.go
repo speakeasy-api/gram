@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goa "goa.design/goa/v3/pkg"
@@ -139,6 +140,118 @@ func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsage
 		}
 	}
 	v := &chat.CreditUsagePayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildListChatsWithResolutionsPayload builds the payload for the chat
+// listChatsWithResolutions endpoint from CLI flags.
+func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch string, chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
+	var err error
+	var search *string
+	{
+		if chatListChatsWithResolutionsSearch != "" {
+			search = &chatListChatsWithResolutionsSearch
+		}
+	}
+	var externalUserID *string
+	{
+		if chatListChatsWithResolutionsExternalUserID != "" {
+			externalUserID = &chatListChatsWithResolutionsExternalUserID
+		}
+	}
+	var resolutionStatus *string
+	{
+		if chatListChatsWithResolutionsResolutionStatus != "" {
+			resolutionStatus = &chatListChatsWithResolutionsResolutionStatus
+		}
+	}
+	var from *string
+	{
+		if chatListChatsWithResolutionsFrom != "" {
+			from = &chatListChatsWithResolutionsFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if chatListChatsWithResolutionsTo != "" {
+			to = &chatListChatsWithResolutionsTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if chatListChatsWithResolutionsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatListChatsWithResolutionsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var offset int
+	{
+		if chatListChatsWithResolutionsOffset != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatListChatsWithResolutionsOffset, 10, strconv.IntSize)
+			offset = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for offset, must be INT")
+			}
+			if offset < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if chatListChatsWithResolutionsSessionToken != "" {
+			sessionToken = &chatListChatsWithResolutionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatListChatsWithResolutionsProjectSlugInput != "" {
+			projectSlugInput = &chatListChatsWithResolutionsProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatListChatsWithResolutionsChatSessionsToken != "" {
+			chatSessionsToken = &chatListChatsWithResolutionsChatSessionsToken
+		}
+	}
+	v := &chat.ListChatsWithResolutionsPayload{}
+	v.Search = search
+	v.ExternalUserID = externalUserID
+	v.ResolutionStatus = resolutionStatus
+	v.From = from
+	v.To = to
+	v.Limit = limit
+	v.Offset = offset
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

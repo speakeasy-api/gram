@@ -3,7 +3,6 @@
  */
 
 import * as z from "zod/v3";
-import * as b64$ from "../../lib/base64.js";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
@@ -13,7 +12,7 @@ export type ChatMessage = {
   /**
    * The content of the message
    */
-  content?: Uint8Array | string | undefined;
+  content?: string | undefined;
   /**
    * When the message was created.
    */
@@ -58,7 +57,7 @@ export const ChatMessage$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  content: b64$.zodInbound.optional(),
+  content: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   external_user_id: z.string().optional(),
   finish_reason: z.string().optional(),

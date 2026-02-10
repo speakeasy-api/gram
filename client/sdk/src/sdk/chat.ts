@@ -5,6 +5,7 @@
 import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { chatList } from "../funcs/chatList.js";
+import { chatListChatsWithResolutions } from "../funcs/chatListChatsWithResolutions.js";
 import { chatLoad } from "../funcs/chatLoad.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -63,6 +64,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListChatsResult> {
     return unwrapAsync(chatList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listChatsWithResolutions chat
+   *
+   * @remarks
+   * List all chats for a project with their resolutions
+   */
+  async listChatsWithResolutions(
+    request?: operations.ListChatsWithResolutionsRequest | undefined,
+    security?: operations.ListChatsWithResolutionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListChatsWithResolutionsResult> {
+    return unwrapAsync(chatListChatsWithResolutions(
       this,
       request,
       security,
