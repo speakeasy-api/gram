@@ -43,6 +43,7 @@ import {
   RefreshCcwIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { useParams } from "react-router";
 
 export default function UploadOpenAPI() {
@@ -268,7 +269,9 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to fetch OpenAPI content");
+        const errorMessage = "Failed to fetch OpenAPI content from server";
+        toast.error(errorMessage);
+        throw new Error(errorMessage);
       }
 
       const blob = await response.blob();
@@ -278,7 +281,11 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
 
       setFile(file);
     } catch (error) {
-      console.error("Failed to fetch OpenAPI content:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch OpenAPI content",
+      );
       // Fallback to empty file if fetch fails
       setFile(
         new File([], "My API", {
