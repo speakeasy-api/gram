@@ -258,7 +258,6 @@ export default function ObservabilityOverview() {
   const urlTo = searchParams.get("to");
   const urlFilter = searchParams.get("filter");
   const urlFilterId = searchParams.get("filterId");
-  const urlInterval = searchParams.get("interval");
 
   // Derive state from URL
   const dateRange: DateRangePreset = isValidPreset(urlRange) ? urlRange : "30d";
@@ -315,7 +314,6 @@ export default function ObservabilityOverview() {
         range: null,
         from: from.toISOString(),
         to: to.toISOString(),
-        interval: null,
       });
     },
     [updateSearchParams],
@@ -390,9 +388,6 @@ export default function ObservabilityOverview() {
     }
   }, [filterDimension, selectedFilterValue]);
 
-  // Parse interval from URL (only used when zooming with custom range)
-  const zoomInterval = urlInterval ? parseInt(urlInterval, 10) : null;
-
   const { data, isPending, isFetching, error } = useQuery({
     queryKey: [
       "observability",
@@ -400,7 +395,6 @@ export default function ObservabilityOverview() {
       from.toISOString(),
       to.toISOString(),
       filterParams,
-      zoomInterval,
     ],
     queryFn: () =>
       unwrapAsync(
@@ -410,7 +404,6 @@ export default function ObservabilityOverview() {
             to,
             includeTimeSeries: true,
             ...filterParams,
-            ...(zoomInterval ? { intervalSeconds: zoomInterval } : {}),
           },
         }),
       ),

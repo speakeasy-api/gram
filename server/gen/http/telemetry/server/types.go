@@ -115,10 +115,6 @@ type GetObservabilityOverviewRequestBody struct {
 	APIKeyID *string `form:"api_key_id,omitempty" json:"api_key_id,omitempty" xml:"api_key_id,omitempty"`
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries *bool `form:"include_time_series,omitempty" json:"include_time_series,omitempty" xml:"include_time_series,omitempty"`
-	// Optional time bucket interval in seconds. When provided, overrides automatic
-	// interval calculation. Useful for maintaining consistent granularity when
-	// zooming.
-	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
 }
 
 // ListFilterOptionsRequestBody is the type of the "telemetry" service
@@ -3883,11 +3879,10 @@ func NewGetUserMetricsSummaryPayload(body *GetUserMetricsSummaryRequestBody, api
 // getObservabilityOverview endpoint payload.
 func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetObservabilityOverviewPayload {
 	v := &telemetry.GetObservabilityOverviewPayload{
-		From:            *body.From,
-		To:              *body.To,
-		ExternalUserID:  body.ExternalUserID,
-		APIKeyID:        body.APIKeyID,
-		IntervalSeconds: body.IntervalSeconds,
+		From:           *body.From,
+		To:             *body.To,
+		ExternalUserID: body.ExternalUserID,
+		APIKeyID:       body.APIKeyID,
 	}
 	if body.IncludeTimeSeries != nil {
 		v.IncludeTimeSeries = *body.IncludeTimeSeries

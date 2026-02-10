@@ -113,21 +113,19 @@ func TestGetObservabilityOverview_TimeSeriesMetrics(t *testing.T) {
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
-	intervalSeconds := int64(1800) // 30 minute buckets
 
 	result, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
 		From:              from,
 		To:                to,
 		IncludeTimeSeries: true,
-		IntervalSeconds:   &intervalSeconds,
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotEmpty(t, result.TimeSeries)
 
-	// With 2-hour range and 30-min buckets, we should have 4+ buckets
-	require.GreaterOrEqual(t, len(result.TimeSeries), 4)
+	// With 2-hour range and auto-calculated 15-min buckets, we should have 8+ buckets
+	require.GreaterOrEqual(t, len(result.TimeSeries), 8)
 
 	// Verify the first bucket has a valid timestamp
 	require.Positive(t, result.TimeSeries[0].BucketTimeUnixNano)

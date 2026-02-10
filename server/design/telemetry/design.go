@@ -798,7 +798,6 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
 		Default(true)
 	})
-	Attribute("interval_seconds", Int64, "Optional time bucket interval in seconds. When provided, overrides automatic interval calculation. Useful for maintaining consistent granularity when zooming.")
 
 	Required("from", "to")
 })
