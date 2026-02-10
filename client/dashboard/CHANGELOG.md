@@ -1,5 +1,14 @@
 # dashboard
 
+## 0.27.8
+
+### Patch Changes
+
+- 6d195c5: Show date in deployment log line timestamps on the deployments page
+- Updated dependencies [b2347fc]
+- Updated dependencies [a34d18a]
+  - @gram/client@0.27.3
+
 ## 0.27.7
 
 ### Patch Changes

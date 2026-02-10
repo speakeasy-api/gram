@@ -1,5 +1,12 @@
 # @gram/client
 
+## 0.27.3
+
+### Patch Changes
+
+- b2347fc: Adds a new telemetry endpoint to fetch user usage data
+- a34d18a: Adds chat resolution stats in telemetry metrics
+
 ## 0.27.1
 
 ### Patch Changes
