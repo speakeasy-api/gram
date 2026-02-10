@@ -1,5 +1,6 @@
-import { CopilotSidebar } from "@/components/copilot-sidebar";
+import { CopilotSidebar, useCopilotState } from "@/components/copilot-sidebar";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import { cn } from "@/lib/utils";
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
 import { useListChatsWithResolutions } from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
@@ -211,77 +212,146 @@ export default function ChatLogs() {
         },
       ]}
     >
-      <div className="flex h-full">
-        {/* Main content area */}
-        <div className="flex-1 flex flex-col">
-          <div className="p-6 border-b">
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <div className="min-w-0">
-                <h1 className="text-2xl font-semibold mb-1">Logs</h1>
-                <p className="text-sm text-muted-foreground">
-                  View and debug individual chat conversations
-                </p>
-              </div>
-              <div className="flex-shrink-0">
-                <DateRangeSelect
-                  value={dateRange}
-                  onValueChange={setDateRangeParam}
-                  customRange={customRange}
-                  onClearCustomRange={clearCustomRange}
-                />
-              </div>
-            </div>
-            <ChatLogsFilters
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              resolutionStatus={resolutionStatus}
-              onResolutionStatusChange={setResolutionStatus}
-            />
+      <ChatLogsContent
+        dateRange={dateRange}
+        setDateRangeParam={setDateRangeParam}
+        customRange={customRange}
+        clearCustomRange={clearCustomRange}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        resolutionStatus={resolutionStatus}
+        setResolutionStatus={setResolutionStatus}
+        chats={chats}
+        selectedChat={selectedChat}
+        setSelectedChat={setSelectedChat}
+        isLoading={isLoading}
+        error={error}
+        hasMore={hasMore}
+        offset={offset}
+        setOffset={setOffset}
+        limit={limit}
+      />
+    </CopilotSidebar>
+  );
+}
+
+// Separate component to use useCopilotState inside CopilotSidebar context
+function ChatLogsContent({
+  dateRange,
+  setDateRangeParam,
+  customRange,
+  clearCustomRange,
+  searchQuery,
+  setSearchQuery,
+  resolutionStatus,
+  setResolutionStatus,
+  chats,
+  selectedChat,
+  setSelectedChat,
+  isLoading,
+  error,
+  hasMore,
+  offset,
+  setOffset,
+  limit,
+}: {
+  dateRange: DateRangePreset;
+  setDateRangeParam: (preset: DateRangePreset) => void;
+  customRange: { from: Date; to: Date } | null;
+  clearCustomRange: () => void;
+  searchQuery: string;
+  setSearchQuery: (value: string) => void;
+  resolutionStatus: string;
+  setResolutionStatus: (value: string) => void;
+  chats: ChatOverviewWithResolutions[];
+  selectedChat: ChatOverviewWithResolutions | null;
+  setSelectedChat: (chat: ChatOverviewWithResolutions | null) => void;
+  isLoading: boolean;
+  error: Error | null;
+  hasMore: boolean;
+  offset: number;
+  setOffset: (offset: number) => void;
+  limit: number;
+}) {
+  const { isExpanded: isCopilotOpen } = useCopilotState();
+
+  return (
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      {/* Header section */}
+      <div className="p-6 border-b shrink-0">
+        <div
+          className={cn(
+            "flex gap-4 mb-4 transition-all duration-300",
+            isCopilotOpen
+              ? "flex-col items-stretch"
+              : "flex-row items-center justify-between",
+          )}
+        >
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold mb-1">Logs</h1>
+            <p className="text-sm text-muted-foreground">
+              View and debug individual chat conversations
+            </p>
           </div>
-
-          <div className="flex-1 overflow-y-auto relative">
-            <div className="sticky top-0 z-10">
-              <ScoreLegend />
-            </div>
-            <ChatLogsTable
-              chats={chats}
-              selectedChatId={selectedChat?.id}
-              onSelectChat={setSelectedChat}
-              isLoading={isLoading}
-              error={error}
+          <div className="flex-shrink-0">
+            <DateRangeSelect
+              value={dateRange}
+              onValueChange={setDateRangeParam}
+              customRange={customRange}
+              onClearCustomRange={clearCustomRange}
             />
-
-            {hasMore && (
-              <div className="p-4 flex justify-center gap-2">
-                <Button
-                  onClick={() => setOffset(Math.max(0, offset - limit))}
-                  disabled={offset === 0}
-                >
-                  Previous
-                </Button>
-                <Button onClick={() => setOffset(offset + limit)}>Next</Button>
-              </div>
-            )}
           </div>
         </div>
-
-        {/* Right side: Slide-out drawer */}
-        <Drawer
-          open={!!selectedChat}
-          onOpenChange={(open) => !open && setSelectedChat(null)}
-          direction="right"
-        >
-          <DrawerContent className="!w-[720px] sm:!max-w-[720px]">
-            {selectedChat && (
-              <ChatDetailPanel
-                chatId={selectedChat.id}
-                resolutions={selectedChat.resolutions}
-                onClose={() => setSelectedChat(null)}
-              />
-            )}
-          </DrawerContent>
-        </Drawer>
+        <ChatLogsFilters
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          resolutionStatus={resolutionStatus}
+          onResolutionStatusChange={setResolutionStatus}
+        />
       </div>
-    </CopilotSidebar>
+
+      {/* Content section */}
+      <div className="flex-1 overflow-y-auto relative min-h-0">
+        <div className="sticky top-0 z-10">
+          <ScoreLegend />
+        </div>
+        <ChatLogsTable
+          chats={chats}
+          selectedChatId={selectedChat?.id}
+          onSelectChat={setSelectedChat}
+          isLoading={isLoading}
+          error={error}
+        />
+
+        {hasMore && (
+          <div className="p-4 flex justify-center gap-2">
+            <Button
+              onClick={() => setOffset(Math.max(0, offset - limit))}
+              disabled={offset === 0}
+            >
+              Previous
+            </Button>
+            <Button onClick={() => setOffset(offset + limit)}>Next</Button>
+          </div>
+        )}
+      </div>
+
+      {/* Right side: Slide-out drawer */}
+      <Drawer
+        open={!!selectedChat}
+        onOpenChange={(open) => !open && setSelectedChat(null)}
+        direction="right"
+      >
+        <DrawerContent className="!w-[720px] sm:!max-w-[720px]">
+          {selectedChat && (
+            <ChatDetailPanel
+              chatId={selectedChat.id}
+              resolutions={selectedChat.resolutions}
+              onClose={() => setSelectedChat(null)}
+            />
+          )}
+        </DrawerContent>
+      </Drawer>
+    </div>
   );
 }
