@@ -1,3 +1,4 @@
+import { AnnotationBadges } from "@/components/tool-list/AnnotationBadges";
 import { MethodBadge } from "@/components/tool-list/MethodBadge";
 import { Button } from "@/components/ui/button";
 import {
@@ -381,6 +382,7 @@ export function PlaygroundConfigPanel({
                                     {tool.name}
                                   </p>
                                   <div className="flex items-center gap-2 shrink-0 ml-2">
+                                    <AnnotationBadges tool={tool} />
                                     {tool.type === "http" &&
                                       tool.httpMethod && (
                                         <MethodBadge method={tool.httpMethod} />
