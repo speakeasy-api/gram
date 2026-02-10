@@ -2,16 +2,18 @@ import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import { AddServersDialog } from "@/pages/catalog/AddServerDialog";
+import { CommandBar } from "@/pages/catalog/CommandBar";
+import { type Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, Search, SearchXIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useNavigate } from "react-router";
 import { CategoryTabs } from "./CategoryTabs";
 import { FilterChips } from "./FilterChips";
 import { defaultFilterValues, FilterSidebar } from "./FilterSidebar";
@@ -27,11 +29,20 @@ export function CatalogRoot() {
 export default function Catalog() {
   const routes = useRoutes();
   const client = useSdkClient();
+  const organization = useOrganization();
+  const project = useProject();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const [serverToAdd, setServerToAdd] = useState<Server | null>(null);
 
   // Filter state from URL
   const filterState = useFilterState();
+
+  // Multi-select state
+  const [selectedServers, setSelectedServers] = useState<Set<string>>(
+    new Set(),
+  );
+  const [addingServers, setAddingServers] = useState<Server[]>([]);
+  const [targetProjectSlug, setTargetProjectSlug] = useState(project.slug);
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteListMCPCatalog(searchQuery);
@@ -93,6 +104,50 @@ export default function Catalog() {
       f.minTools > 0
     );
   }, [filterState.filters]);
+
+  // Multi-select handlers
+  const toggleServerSelection = (serverKey: string) => {
+    setSelectedServers((prev) => {
+      const next = new Set(prev);
+      if (next.has(serverKey)) {
+        next.delete(serverKey);
+      } else {
+        next.add(serverKey);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedServers(new Set());
+
+  const getSelectedServerObjects = () =>
+    filteredServers.filter((s) =>
+      selectedServers.has(`${s.registryId}-${s.registrySpecifier}`),
+    );
+
+  const projectOptions = organization.projects.map((p) => ({
+    value: p.slug,
+    label: p.name || p.slug,
+  }));
+
+  const handleAdd = () => {
+    setAddingServers(getSelectedServerObjects());
+  };
+
+  const handleGoToMCPs = () => {
+    navigate(`/${organization.slug}/${targetProjectSlug}/mcp`);
+  };
+
+  const handleCreateProject = async (name: string) => {
+    const result = await client.projects.create({
+      createProjectRequestBody: {
+        name,
+        organizationId: organization.id,
+      },
+    });
+    await organization.refetch();
+    setTargetProjectSlug(result.project.slug);
+  };
 
   // Infinite scroll with IntersectionObserver
   useEffect(() => {
@@ -186,23 +241,27 @@ export default function Catalog() {
               {/* Server grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {isLoading &&
-                  [...Array(6)].map((_, i) => (
-                    <Skeleton key={i} className="h-[200px]" />
-                  ))}
+                  Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
+                    (id) => <Skeleton key={id} className="h-[200px]" />,
+                  )}
                 {!isLoading &&
-                  filteredServers.map((server) => (
-                    <ServerCard
-                      key={`${server.registryId}-${server.registrySpecifier}`}
-                      server={server}
-                      detailHref={routes.catalog.detail.href(
-                        encodeURIComponent(server.registrySpecifier),
-                      )}
-                      externalMcps={externalMcps}
-                      onAdd={() => setServerToAdd(server)}
-                      onRemove={(slug) => removeServerMutation.mutate(slug)}
-                      isRemoving={removeServerMutation.isPending}
-                    />
-                  ))}
+                  filteredServers.map((server) => {
+                    const serverKey = `${server.registryId}-${server.registrySpecifier}`;
+                    return (
+                      <ServerCard
+                        key={serverKey}
+                        server={server}
+                        detailHref={routes.catalog.detail.href(
+                          encodeURIComponent(server.registrySpecifier),
+                        )}
+                        externalMcps={externalMcps}
+                        onRemove={(slug) => removeServerMutation.mutate(slug)}
+                        isRemoving={removeServerMutation.isPending}
+                        isSelected={selectedServers.has(serverKey)}
+                        onToggleSelect={() => toggleServerSelection(serverKey)}
+                      />
+                    );
+                  })}
               </div>
 
               {/* Load more trigger */}
@@ -241,11 +300,30 @@ export default function Catalog() {
         </Page.Section>
       </Page.Body>
 
-      <AddServerDialog
-        server={serverToAdd}
-        open={!!serverToAdd}
-        onOpenChange={(open) => !open && setServerToAdd(null)}
-        onServerAdded={() => refetchDeployment()}
+      <AddServersDialog
+        servers={addingServers}
+        projects={projectOptions}
+        projectSlug={targetProjectSlug}
+        onProjectChange={setTargetProjectSlug}
+        onCreateProject={handleCreateProject}
+        onGoToMCPs={handleGoToMCPs}
+        open={addingServers.length > 0}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddingServers([]);
+            clearSelection();
+          }
+        }}
+        onServersAdded={() => refetchDeployment()}
+      />
+      <CommandBar
+        selectedCount={selectedServers.size}
+        projects={projectOptions}
+        currentProjectSlug={targetProjectSlug}
+        onSelectProject={setTargetProjectSlug}
+        onCreateProject={handleCreateProject}
+        onAdd={handleAdd}
+        onClear={clearSelection}
       />
     </Page>
   );

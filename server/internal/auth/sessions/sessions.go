@@ -107,6 +107,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		AccountType:          "",
 		ProjectSlug:          nil,
 		APIKeyScopes:         nil,
+		APIKeyID:             "",
 	}
 
 	if session.ActiveOrganizationID == "" {
@@ -134,6 +135,10 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	return ctx, nil
+}
+
+func (s *Manager) AuthenticateWithCookie(ctx context.Context) (context.Context, error) {
+	return s.Authenticate(ctx, "", false)
 }
 
 func (s *Manager) Billing() billing.Repository {

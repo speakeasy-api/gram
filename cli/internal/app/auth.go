@@ -122,7 +122,7 @@ func newAuthCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "dashboard-url",
 				Usage:   "URL of the Gram dashboard for authentication",
-				EnvVars: []string{"GRAM_DASHBOARD_URL"},
+				EnvVars: []string{"GRAM_SITE_URL"},
 			},
 		},
 		Subcommands: []*cli.Command{

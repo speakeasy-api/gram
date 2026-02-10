@@ -301,6 +301,12 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   request_content_type TEXT,
   response_filter JSONB NULL,
 
+  -- Tool behavior hints (aligned with MCP annotations spec)
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -372,6 +378,12 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   auth_input JSONB,
   -- Record<string, string>
   meta JSONB,
+
+  -- Tool behavior hints (aligned with MCP annotations spec)
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -519,7 +531,8 @@ CREATE TABLE IF NOT EXISTS custom_domains (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_domain_key
-ON custom_domains (domain);
+ON custom_domains (domain)
+WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_key
 ON custom_domains (organization_id)
@@ -824,6 +837,26 @@ CREATE TABLE IF NOT EXISTS chat_resolutions (
   CONSTRAINT chat_resolutions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chat_user_feedback (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+  message_id uuid NOT NULL,
+
+  user_resolution TEXT NOT NULL,
+  user_resolution_notes TEXT,
+
+  chat_resolution_id uuid,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_resolution_user_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_resolution_user_feedback_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT chat_resolution_user_feedback_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+  CONSTRAINT chat_resolution_user_feedback_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+  CONSTRAINT chat_resolution_user_feedback_chat_resolution_id_fkey FOREIGN KEY (chat_resolution_id) REFERENCES chat_resolutions(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS chat_resolution_messages (
   chat_resolution_id uuid NOT NULL,
   message_id uuid NOT NULL,
@@ -894,6 +927,13 @@ CREATE TABLE IF NOT EXISTS tool_variations (
   description TEXT,
   tags TEXT[],
   summarizer TEXT,
+
+  -- Tool behavior hint overrides (NULL = inherit from base tool)
+  title TEXT,
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1279,7 +1319,7 @@ WHERE deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS user_oauth_tokens (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
-  -- Scoping: per user, per org, per OAuth server (RFC recommendation)
+  -- Scoping: per user, per org, per toolset
   user_id TEXT NOT NULL,
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
@@ -1287,7 +1327,6 @@ CREATE TABLE IF NOT EXISTS user_oauth_tokens (
   toolset_id uuid NOT NULL,  -- FK to toolsets
 
   -- OAuth 2.1 server issuer URL (from AS metadata, e.g., "https://accounts.google.com")
-  -- This allows token reuse across MCP servers sharing the same OAuth provider
   oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
 
   -- Token data (encrypted at rest via application layer)
@@ -1315,7 +1354,7 @@ CREATE TABLE IF NOT EXISTS user_oauth_tokens (
 
 -- Unique constraint: one token per user per org per OAuth issuer
 CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
-ON user_oauth_tokens (user_id, organization_id, oauth_server_issuer)
+ON user_oauth_tokens (user_id, organization_id, toolset_id)
 WHERE deleted IS FALSE;
 
 -- Team invites for organization member management
@@ -1328,7 +1367,7 @@ CREATE TABLE IF NOT EXISTS team_invites (
   email TEXT NOT NULL CHECK (email <> '' AND CHAR_LENGTH(email) <= 255),
   invited_by_user_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'cancelled')),
-  token TEXT NOT NULL CHECK (token <> '' AND CHAR_LENGTH(token) <= 64),
+  token TEXT NOT NULL CHECK (token <> ''),
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 

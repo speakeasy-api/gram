@@ -2,6 +2,7 @@ import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { getServerURL } from "@/lib/utils";
 import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
@@ -9,6 +10,7 @@ import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchTool
 import {
   FeatureName,
   TelemetryLogRecord,
+  ToolCallSummary,
 } from "@gram/client/models/components";
 import {
   useFeaturesSetMutation,
@@ -89,6 +91,7 @@ export default function LogsPage() {
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    throwOnError: false,
   });
 
   // Flatten all pages into a single array of traces
@@ -113,20 +116,16 @@ export default function LogsPage() {
 
   const isMutatingLogs = logsMutationStatus === "pending";
 
-  const handleSetLogs = async (enabled: boolean) => {
+  const handleSetLogs = (enabled: boolean) => {
     setLogsMutationError(null);
-    try {
-      await setLogsFeature({
-        request: {
-          setProductFeatureRequestBody: {
-            featureName: FeatureName.Logs,
-            enabled,
-          },
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.Logs,
+          enabled,
         },
-      });
-    } catch {
-      // error state handled in onError callback
-    }
+      },
+    });
   };
 
   // Debounce search input
@@ -205,84 +204,20 @@ export default function LogsPage() {
                 className="overflow-y-auto flex-1"
                 onScroll={handleScroll}
               >
-                {error ? (
-                  <div className="flex flex-col items-center gap-2 py-12">
-                    <XIcon className="size-6 stroke-destructive-default" />
-                    <span className="text-destructive-default font-medium">
-                      Error loading traces
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {error instanceof Error
-                        ? error.message
-                        : "An unexpected error occurred"}
-                    </span>
-                  </div>
-                ) : isLoading ? (
-                  <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-                    <Icon
-                      name="loader-circle"
-                      className="size-4 animate-spin"
-                    />
-                    <span>Loading traces...</span>
-                  </div>
-                ) : allTraces.length === 0 ? (
-                  <div className="py-12 text-center text-muted-foreground">
-                    {logsEnabled ? (
-                      searchQuery ? (
-                        "No traces match your search"
-                      ) : (
-                        "No traces found"
-                      )
-                    ) : (
-                      <div className="flex flex-col items-center gap-3">
-                        <span>Logs are disabled for your organization.</span>
-                        <Button
-                          onClick={() => handleSetLogs(true)}
-                          disabled={isMutatingLogs}
-                          size="sm"
-                          variant="secondary"
-                        >
-                          <Button.LeftIcon>
-                            <Icon
-                              name="test-tube-diagonal"
-                              className="size-4"
-                            />
-                          </Button.LeftIcon>
-                          <Button.Text>
-                            {isMutatingLogs ? "Updating Logs" : "Enable Logs"}
-                          </Button.Text>
-                        </Button>
-                        {logsMutationError && (
-                          <span className="text-sm text-destructive-default">
-                            {logsMutationError}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {allTraces.map((trace) => (
-                      <TraceRow
-                        key={trace.traceId}
-                        trace={trace}
-                        isExpanded={expandedTraceId === trace.traceId}
-                        onToggle={() => toggleExpand(trace.traceId)}
-                        onLogClick={handleLogClick}
-                      />
-                    ))}
-
-                    {isFetchingNextPage && (
-                      <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground border-t border-border">
-                        <Icon
-                          name="loader-circle"
-                          className="size-4 animate-spin"
-                        />
-                        <span className="text-sm">Loading more traces...</span>
-                      </div>
-                    )}
-                  </>
-                )}
+                <TraceListContent
+                  error={error}
+                  isLoading={isLoading}
+                  logsEnabled={logsEnabled}
+                  allTraces={allTraces}
+                  searchQuery={searchQuery}
+                  expandedTraceId={expandedTraceId}
+                  isFetchingNextPage={isFetchingNextPage}
+                  isMutatingLogs={isMutatingLogs}
+                  logsMutationError={logsMutationError}
+                  onEnableLogs={() => handleSetLogs(true)}
+                  onToggleExpand={toggleExpand}
+                  onLogClick={handleLogClick}
+                />
               </div>
 
               {/* Footer */}
@@ -340,6 +275,159 @@ export default function LogsPage() {
         onOpenChange={(open) => !open && setSelectedLog(null)}
       />
     </Page>
+  );
+}
+
+function TraceListContent({
+  error,
+  isLoading,
+  logsEnabled,
+  allTraces,
+  searchQuery,
+  expandedTraceId,
+  isFetchingNextPage,
+  isMutatingLogs,
+  logsMutationError,
+  onEnableLogs,
+  onToggleExpand,
+  onLogClick,
+}: {
+  error: Error | null;
+  isLoading: boolean;
+  logsEnabled: boolean;
+  allTraces: ToolCallSummary[];
+  searchQuery: string | null;
+  expandedTraceId: string | null;
+  isFetchingNextPage: boolean;
+  isMutatingLogs: boolean;
+  logsMutationError: string | null;
+  onEnableLogs: () => void;
+  onToggleExpand: (traceId: string) => void;
+  onLogClick: (log: TelemetryLogRecord) => void;
+}) {
+  if (error instanceof ServiceError && error.statusCode === 404) {
+    return (
+      <LogsDisabledState
+        onEnableLogs={onEnableLogs}
+        isMutating={isMutatingLogs}
+        mutationError={logsMutationError}
+      />
+    );
+  }
+
+  if (error) {
+    return (
+      <LogsError
+        error={
+          error instanceof Error
+            ? error
+            : new Error("An unexpected error occurred")
+        }
+      />
+    );
+  }
+
+  if (isLoading) {
+    return <LogsLoading />;
+  }
+
+  if (allTraces.length === 0) {
+    if (!logsEnabled) {
+      return (
+        <LogsDisabledState
+          onEnableLogs={onEnableLogs}
+          isMutating={isMutatingLogs}
+          mutationError={logsMutationError}
+        />
+      );
+    }
+    return <LogsEmptyState searchQuery={searchQuery} />;
+  }
+
+  return (
+    <>
+      {allTraces.map((trace) => (
+        <TraceRow
+          key={trace.traceId}
+          trace={trace}
+          isExpanded={expandedTraceId === trace.traceId}
+          onToggle={() => onToggleExpand(trace.traceId)}
+          onLogClick={onLogClick}
+        />
+      ))}
+
+      {isFetchingNextPage && (
+        <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground border-t border-border">
+          <Icon name="loader-circle" className="size-4 animate-spin" />
+          <span className="text-sm">Loading more traces...</span>
+        </div>
+      )}
+    </>
+  );
+}
+
+function LogsDisabledState({
+  onEnableLogs,
+  isMutating,
+  mutationError,
+}: {
+  onEnableLogs: () => void;
+  isMutating: boolean;
+  mutationError: string | null;
+}) {
+  return (
+    <div className="py-12 text-center text-muted-foreground">
+      <div className="flex flex-col items-center gap-3">
+        <span>Logs are disabled for your organization.</span>
+        <Button
+          onClick={onEnableLogs}
+          disabled={isMutating}
+          size="sm"
+          variant="secondary"
+        >
+          <Button.LeftIcon>
+            <Icon name="test-tube-diagonal" className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>
+            {isMutating ? "Updating Logs" : "Enable Logs"}
+          </Button.Text>
+        </Button>
+        {mutationError && (
+          <span className="text-sm text-destructive-default">
+            {mutationError}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LogsError({ error }: { error: Error }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-12">
+      <XIcon className="size-6 stroke-destructive-default" />
+      <span className="text-destructive-default font-medium">
+        Error loading traces
+      </span>
+      <span className="text-sm text-muted-foreground">{error.message}</span>
+    </div>
+  );
+}
+
+function LogsLoading() {
+  return (
+    <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+      <Icon name="loader-circle" className="size-4 animate-spin" />
+      <span>Loading traces...</span>
+    </div>
+  );
+}
+
+function LogsEmptyState({ searchQuery }: { searchQuery: string | null }) {
+  return (
+    <div className="py-12 text-center text-muted-foreground">
+      {searchQuery ? "No traces match your search" : "No traces found"}
+    </div>
   );
 }
 

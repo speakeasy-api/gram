@@ -5,7 +5,7 @@ import type { Cassette } from '@/lib/cassette'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const meta: any = {
-  title: 'Replay',
+  title: 'Misc/Replay',
   component: Replay,
   parameters: {
     layout: 'fullscreen',
@@ -141,6 +141,178 @@ const reasoningCassette: Cassette = {
   ],
 }
 
+/**
+ * Simulates what the converter produced BEFORE the dedup fix (AGE-1295).
+ *
+ * The server accumulates all tool calls into each assistant message, so when
+ * assistant-ui merges consecutive assistant chunks into a single displayed
+ * message, the parts look like:
+ *   chunk 1: text + tc_1
+ *   chunk 2: text + tc_1 + tc_2         ← tc_1 duplicated
+ *   chunk 3: text + tc_1 + tc_2 + tc_3  ← tc_1, tc_2 duplicated
+ *
+ * This causes every tool group to show "Executed 3 tools" instead of 1 each.
+ */
+const beforeFixCassette: Cassette = {
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Search for 3 deals in HubSpot for me.' },
+      ],
+    },
+    {
+      role: 'assistant',
+      content: [
+        // --- chunk 1: first attempt ---
+        {
+          type: 'text',
+          text: "I'll search for 3 deals in HubSpot for you.",
+        },
+        {
+          type: 'tool-call',
+          toolCallId: 'tc_deals_1',
+          toolName: 'hubspot_search_deals',
+          args: { query: 'deals', limit: 3 },
+          result: { error: 'Invalid filter groups structure' },
+        },
+        // --- chunk 2: second attempt (accumulates tc_1 + tc_2) ---
+        {
+          type: 'text',
+          text: 'Let me try a different approach to retrieve deals:',
+        },
+        {
+          type: 'tool-call',
+          toolCallId: 'tc_deals_1_dup',
+          toolName: 'hubspot_search_deals',
+          args: { query: 'deals', limit: 3 },
+          result: { error: 'Invalid filter groups structure' },
+        },
+        {
+          type: 'tool-call',
+          toolCallId: 'tc_deals_2',
+          toolName: 'hubspot_search_deals',
+          args: { query: 'deals', limit: 3, filterGroups: [] },
+          result: { error: 'Filter groups must not be empty' },
+        },
+        // --- chunk 3: third attempt (accumulates tc_1 + tc_2 + tc_3) ---
+        {
+          type: 'text',
+          text: 'Let me try with proper filter groups structure:',
+        },
+        {
+          type: 'tool-call',
+          toolCallId: 'tc_deals_1_dup2',
+          toolName: 'hubspot_search_deals',
+          args: { query: 'deals', limit: 3 },
+          result: { error: 'Invalid filter groups structure' },
+        },
+        {
+          type: 'tool-call',
+          toolCallId: 'tc_deals_2_dup',
+          toolName: 'hubspot_search_deals',
+          args: { query: 'deals', limit: 3, filterGroups: [] },
+          result: { error: 'Filter groups must not be empty' },
+        },
+        {
+          type: 'tool-call',
+          toolCallId: 'tc_deals_3',
+          toolName: 'hubspot_search_deals',
+          args: {
+            limit: 3,
+            filterGroups: [
+              {
+                filters: [
+                  { propertyName: 'dealname', operator: 'HAS_PROPERTY' },
+                ],
+              },
+            ],
+          },
+          result: {
+            deals: [
+              { id: '1', name: 'Acme Corp', amount: 50000 },
+              { id: '2', name: 'Globex Inc', amount: 75000 },
+              { id: '3', name: 'Initech LLC', amount: 30000 },
+            ],
+          },
+        },
+        {
+          type: 'text',
+          text: 'Here are the 3 deals I found:\n\n1. **Acme Corp** — $50,000\n2. **Globex Inc** — $75,000\n3. **Initech LLC** — $30,000',
+        },
+      ],
+    },
+  ],
+}
+
+const interleavedToolCallsCassette: Cassette = {
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Search for 3 deals in HubSpot for me.' },
+      ],
+    },
+    {
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text: "I'll search for 3 deals in HubSpot for you.",
+        },
+        {
+          type: 'tool-call',
+          toolCallId: 'tc_deals_1',
+          toolName: 'hubspot_search_deals',
+          args: { query: 'deals', limit: 3 },
+          result: { error: 'Invalid filter groups structure' },
+        },
+        {
+          type: 'text',
+          text: 'Let me try a different approach to retrieve deals:',
+        },
+        {
+          type: 'tool-call',
+          toolCallId: 'tc_deals_2',
+          toolName: 'hubspot_search_deals',
+          args: { query: 'deals', limit: 3, filterGroups: [] },
+          result: { error: 'Filter groups must not be empty' },
+        },
+        {
+          type: 'text',
+          text: 'Let me try with proper filter groups structure:',
+        },
+        {
+          type: 'tool-call',
+          toolCallId: 'tc_deals_3',
+          toolName: 'hubspot_search_deals',
+          args: {
+            limit: 3,
+            filterGroups: [
+              {
+                filters: [
+                  { propertyName: 'dealname', operator: 'HAS_PROPERTY' },
+                ],
+              },
+            ],
+          },
+          result: {
+            deals: [
+              { id: '1', name: 'Acme Corp', amount: 50000 },
+              { id: '2', name: 'Globex Inc', amount: 75000 },
+              { id: '3', name: 'Initech LLC', amount: 30000 },
+            ],
+          },
+        },
+        {
+          type: 'text',
+          text: 'Here are the 3 deals I found:\n\n1. **Acme Corp** — $50,000\n2. **Globex Inc** — $75,000\n3. **Initech LLC** — $30,000',
+        },
+      ],
+    },
+  ],
+}
+
 const multiTurnCassette: Cassette = {
   messages: [
     {
@@ -233,6 +405,64 @@ export const ToolCalls: Story = () => (
   </Replay>
 )
 ToolCalls.decorators = [
+  (Story) => (
+    <div className="m-auto flex h-screen w-full max-w-3xl flex-col px-4">
+      <Story />
+    </div>
+  ),
+]
+
+/**
+ * BEFORE the fix (AGE-1295): simulates the duplicated tool calls that the
+ * converter used to produce. Each tool group shows an inflated count because
+ * the server's accumulated tool_calls were not deduplicated.
+ *
+ * Expected: groups show "Executed 2 tools" and "Executed 3 tools" instead
+ * of 1 tool each — this is the bug.
+ */
+export const BeforeFix_DuplicatedToolCalls: Story = () => (
+  <Replay
+    cassette={beforeFixCassette}
+    config={{
+      variant: 'standalone',
+      tools: { expandToolGroupsByDefault: false },
+    }}
+    typingSpeed={0}
+    userMessageDelay={0}
+    assistantStartDelay={0}
+  >
+    <Chat />
+  </Replay>
+)
+BeforeFix_DuplicatedToolCalls.decorators = [
+  (Story) => (
+    <div className="m-auto flex h-screen w-full max-w-3xl flex-col px-4">
+      <Story />
+    </div>
+  ),
+]
+
+/**
+ * AFTER the fix (AGE-1295): the converter now deduplicates tool calls, so
+ * each tool group correctly shows only its own tool call.
+ *
+ * Expected: each group shows exactly 1 tool call.
+ */
+export const AfterFix_DeduplicatedToolCalls: Story = () => (
+  <Replay
+    cassette={interleavedToolCallsCassette}
+    config={{
+      variant: 'standalone',
+      tools: { expandToolGroupsByDefault: false },
+    }}
+    typingSpeed={0}
+    userMessageDelay={0}
+    assistantStartDelay={0}
+  >
+    <Chat />
+  </Replay>
+)
+AfterFix_DeduplicatedToolCalls.decorators = [
   (Story) => (
     <div className="m-auto flex h-screen w-full max-w-3xl flex-col px-4">
       <Story />

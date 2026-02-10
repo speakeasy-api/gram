@@ -1,5 +1,74 @@
 # dashboard
 
+## 0.27.9
+
+### Patch Changes
+
+- f635e22: Support for [MCP tool annotations](https://modelcontextprotocol.io/legacy/concepts/tools#tool-annotations). Tool annotations provide additional metadata about a tool’s behavior,
+  helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool, but should not be relied upon for security decisions.
+
+  The MCP specification defines the following annotations for tools that Gram now supports for external mcp servers sourced from the Catalog as well as HTTP based tools.
+
+  | Annotation        | Type    | Default | Description                                                                                                                          |
+  | ----------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `title`           | string  | -       | A human-readable title for the tool, useful for UI display                                                                           |
+  | `readOnlyHint`    | boolean | false   | If true, indicates the tool does not modify its environment                                                                          |
+  | `destructiveHint` | boolean | true    | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false)                                     |
+  | `idempotentHint`  | boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when `readOnlyHint` is false) |
+  | `openWorldHint`   | boolean | true    | If true, the tool may interact with an "open world" of external entities                                                             |
+
+  Tool annotations can be edited in the playground or in the tools tab of a specific MCP server.
+
+- Updated dependencies [f635e22]
+  - @gram/client@0.27.4
+  - @gram-ai/elements@1.26.1
+
+## 0.27.8
+
+### Patch Changes
+
+- 6d195c5: Show date in deployment log line timestamps on the deployments page
+- Updated dependencies [b2347fc]
+- Updated dependencies [a34d18a]
+  - @gram/client@0.27.3
+
+## 0.27.7
+
+### Patch Changes
+
+- Updated dependencies [9cb2f0e]
+  - @gram-ai/elements@1.26.0
+
+## 0.27.6
+
+### Patch Changes
+
+- Updated dependencies [e08b45e]
+  - @gram/client@0.27.1
+  - @gram-ai/elements@1.25.2
+
+## 0.27.5
+
+### Patch Changes
+
+- a7422f8: feat: add OAuth support for external MCP servers in the Playground
+- a753172: feat: customize documentation button text on MCP install page
+- 7505433: fix: allow creating MCP server when project has sources but no toolsets
+- 1f74200: Fixes issue with loading of metrics when logs are disabled.
+- Updated dependencies [a7422f8]
+- Updated dependencies [a753172]
+- Updated dependencies [6e29702]
+- Updated dependencies [1f74200]
+  - @gram/client@0.26.18
+
+## 0.27.4
+
+### Patch Changes
+
+- a7cb2d9: reinstate deployments access in Sources page UI and make relevant deployment accessible from a source card
+- Updated dependencies [63bb328]
+  - @gram-ai/elements@1.25.1
+
 ## 0.27.3
 
 ### Patch Changes

@@ -12,6 +12,7 @@ type AuthContext struct {
 	ActiveOrganizationID string
 	UserID               string
 	ExternalUserID       string // Customer-provided user identifier (e.g., from chat session JWTs)
+	APIKeyID             string
 	SessionID            *string
 	ProjectID            *uuid.UUID
 	OrganizationSlug     string
@@ -22,9 +23,12 @@ type AuthContext struct {
 }
 
 type RequestContext struct {
-	ReqURL string
-	Host   string
-	Method string
+	ReqURL      string
+	Host        string
+	Method      string
+	Referer     string
+	RefererHost string
+	UserAgent   string
 }
 
 const (

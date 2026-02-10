@@ -120,6 +120,37 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "creditUsage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetCreditUsage"}`)
 	})
+
+	Method("submitFeedback", func() {
+		Description("Submit user feedback for a chat (success/failure)")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			Attribute("id", String, "The ID of the chat")
+			Attribute("feedback", String, "User feedback: success or failure", func() {
+				Enum("success", "failure")
+			})
+			Required("id", "feedback")
+		})
+
+		Result(func() {
+			Attribute("success", Boolean, "Whether the feedback was submitted successfully")
+			Required("success")
+		})
+
+		HTTP(func() {
+			POST("/rpc/chat.submitFeedback")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "submitFeedback")
+		Meta("openapi:extension:x-speakeasy-name-override", "submitFeedback")
+	})
 })
 
 var ListChatsResult = Type("ListChatsResult", func() {

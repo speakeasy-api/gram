@@ -33,9 +33,25 @@ export type UpsertGlobalToolVariationForm = {
    */
   description?: string | undefined;
   /**
+   * Override: if true, the tool may perform destructive updates
+   */
+  destructiveHint?: boolean | undefined;
+  /**
+   * Override: if true, repeated calls have no additional effect
+   */
+  idempotentHint?: boolean | undefined;
+  /**
    * The name of the tool variation
    */
   name?: string | undefined;
+  /**
+   * Override: if true, the tool interacts with external entities
+   */
+  openWorldHint?: boolean | undefined;
+  /**
+   * Override: if true, the tool does not modify its environment
+   */
+  readOnlyHint?: boolean | undefined;
   /**
    * The name of the source tool
    */
@@ -56,6 +72,10 @@ export type UpsertGlobalToolVariationForm = {
    * The tags of the tool variation
    */
   tags?: Array<string> | undefined;
+  /**
+   * Display name override for the tool
+   */
+  title?: string | undefined;
 };
 
 /** @internal */
@@ -67,12 +87,17 @@ export type UpsertGlobalToolVariationForm$Outbound = {
   confirm?: string | undefined;
   confirm_prompt?: string | undefined;
   description?: string | undefined;
+  destructive_hint?: boolean | undefined;
+  idempotent_hint?: boolean | undefined;
   name?: string | undefined;
+  open_world_hint?: boolean | undefined;
+  read_only_hint?: boolean | undefined;
   src_tool_name: string;
   src_tool_urn: string;
   summarizer?: string | undefined;
   summary?: string | undefined;
   tags?: Array<string> | undefined;
+  title?: string | undefined;
 };
 
 /** @internal */
@@ -84,15 +109,24 @@ export const UpsertGlobalToolVariationForm$outboundSchema: z.ZodType<
   confirm: Confirm$outboundSchema.optional(),
   confirmPrompt: z.string().optional(),
   description: z.string().optional(),
+  destructiveHint: z.boolean().optional(),
+  idempotentHint: z.boolean().optional(),
   name: z.string().optional(),
+  openWorldHint: z.boolean().optional(),
+  readOnlyHint: z.boolean().optional(),
   srcToolName: z.string(),
   srcToolUrn: z.string(),
   summarizer: z.string().optional(),
   summary: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  title: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     confirmPrompt: "confirm_prompt",
+    destructiveHint: "destructive_hint",
+    idempotentHint: "idempotent_hint",
+    openWorldHint: "open_world_hint",
+    readOnlyHint: "read_only_hint",
     srcToolName: "src_tool_name",
     srcToolUrn: "src_tool_urn",
   });

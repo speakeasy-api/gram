@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -52,6 +53,7 @@ type WorkerOptions struct {
 	RagService           *rag.ToolsetVectorStore
 	AgentsService        *agents.Service
 	MCPRegistryClient    *externalmcp.RegistryClient
+	TelemetryService     *telemetry.Service
 }
 
 func ForDeploymentProcessing(
@@ -82,6 +84,7 @@ func ForDeploymentProcessing(
 		RedisClient:          nil,
 		PosthogClient:        nil,
 		AgentsService:        nil,
+		TelemetryService:     nil,
 	}
 }
 
@@ -112,6 +115,7 @@ func NewTemporalWorker(
 		RagService:           nil,
 		AgentsService:        nil,
 		MCPRegistryClient:    nil,
+		TelemetryService:     nil,
 	}
 
 	for _, o := range options {
@@ -135,6 +139,7 @@ func NewTemporalWorker(
 			RagService:           conv.Default(o.RagService, opts.RagService),
 			AgentsService:        conv.Default(o.AgentsService, opts.AgentsService),
 			MCPRegistryClient:    conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
+			TelemetryService:     conv.Default(o.TelemetryService, opts.TelemetryService),
 		}
 	}
 
@@ -169,6 +174,7 @@ func NewTemporalWorker(
 		opts.AgentsService,
 		opts.MCPRegistryClient,
 		client,
+		opts.TelemetryService,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -194,6 +200,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
+	temporalWorker.RegisterActivity(activities.GetUserFeedbackForChat)
 	// Agent runner related activities
 	temporalWorker.RegisterActivity(activities.PreprocessAgentsInput)
 	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
@@ -206,6 +213,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
+	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)

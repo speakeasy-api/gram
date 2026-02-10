@@ -1,8 +1,8 @@
-[**@gram-ai/elements v1.25.0**](README.md)
+[**@gram-ai/elements v1.26.1**](README.md)
 
 ***
 
-# @gram-ai/elements v1.25.0
+# @gram-ai/elements v1.26.1
 
 ## Interfaces
 
@@ -55,6 +55,7 @@
 - [ChatHistory](functions/ChatHistory.md)
 - [Replay](functions/Replay.md)
 - [ShareButton](functions/ShareButton.md)
+- [useChatId](functions/useChatId.md)
 - [GramElementsProvider](functions/GramElementsProvider.md)
 - [useRecordCassette](functions/useRecordCassette.md)
 - [useThreadId](functions/useThreadId.md)

@@ -18,17 +18,21 @@ import {
   type Model,
 } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
+import { useToolset } from "@gram/client/react-query/toolset.js";
 import {
   useGetMcpMetadata,
   useListEnvironments,
-  useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { AlertCircle, HistoryIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
+import {
+  getExternalMcpOAuthConfig,
+  useExternalMcpOAuthStatus,
+} from "./PlaygroundAuth";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -58,8 +62,11 @@ export function PlaygroundElements({
   const initialThreadId = searchParams.get("threadId") ?? undefined;
 
   // Get toolset data to construct MCP URL
-  const { data: toolsetsData } = useListToolsets();
-  const toolset = toolsetsData?.toolsets?.find((ts) => ts.slug === toolsetSlug);
+  const { data: toolset } = useToolset(
+    { slug: toolsetSlug ?? "" },
+    {},
+    { enabled: !!toolsetSlug },
+  );
 
   // Get MCP URL from toolset (always uses Gram domain, not custom domains)
   const mcpUrl = useInternalMcpUrl(toolset);
@@ -85,6 +92,19 @@ export function PlaygroundElements({
     environmentSlug ?? defaultEnvironmentSlug,
     mcpMetadata,
   );
+
+  // Check if this toolset requires external MCP OAuth
+  const mcpOAuthConfig = useMemo(
+    () =>
+      toolset?.tools ? getExternalMcpOAuthConfig(toolset.tools) : undefined,
+    [toolset?.tools],
+  );
+
+  const { data: oauthStatus, isLoading: oauthStatusLoading } =
+    useExternalMcpOAuthStatus(toolset?.id, {
+      slug: mcpOAuthConfig?.slug,
+      enabled: !!mcpOAuthConfig,
+    });
 
   // Create getSession function using SDK mutation with session auth
   const getSession = useCallback(async () => {
@@ -127,6 +147,19 @@ export function PlaygroundElements({
     );
   }
 
+  // Block rendering if OAuth is required but user is not authenticated
+  if (
+    mcpOAuthConfig &&
+    !oauthStatusLoading &&
+    oauthStatus?.status !== "authenticated"
+  ) {
+    return (
+      <OAuthRequiredNotice
+        providerName={mcpOAuthConfig.name || mcpOAuthConfig.slug}
+      />
+    );
+  }
+
   return (
     <GramElementsProvider
       config={{
@@ -146,6 +179,9 @@ export function PlaygroundElements({
         },
         mcp: mcpUrl,
         gramEnvironment: environmentSlug ?? undefined,
+        environment: {
+          ...userProvidedHeaders,
+        },
         variant: "standalone",
         model: {
           defaultModel: model as Model,
@@ -169,7 +205,6 @@ export function PlaygroundElements({
         components: {
           ThreadWelcome: GramThreadWelcome,
         },
-        environment: userProvidedHeaders,
       }}
     >
       <div className="h-full flex flex-col min-h-0">
@@ -221,12 +256,32 @@ function AuthWarningBanner({
         {missingCount === 1 ? "variable" : "variables"} not configured.{" "}
         <routes.mcp.details.Link
           params={[toolsetSlug]}
-          hash="auth"
+          hash="authentication"
           className="underline hover:text-foreground font-medium"
         >
           Configure now
         </routes.mcp.details.Link>
       </span>
+    </div>
+  );
+}
+
+function OAuthRequiredNotice({ providerName }: { providerName: string }) {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3 text-center max-w-md px-4">
+        <div className="rounded-full bg-warning/15 p-3">
+          <ShieldAlert className="size-6 text-warning" />
+        </div>
+        <Type className="font-medium">OAuth Connection Required</Type>
+        <Type muted className="text-sm">
+          This MCP server requires authentication with{" "}
+          <span className="font-medium text-foreground">{providerName}</span>.
+          Use the <span className="font-medium text-foreground">Connect</span>{" "}
+          button in the Authentication section of the sidebar to authorize
+          access.
+        </Type>
+      </div>
     </div>
   );
 }

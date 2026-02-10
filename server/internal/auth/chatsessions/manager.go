@@ -110,6 +110,7 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		AccountType:          "",
 		APIKeyScopes:         nil,
 		SessionID:            nil,
+		APIKeyID:             claims.APIKeyID,
 	}
 
 	return contextvalues.SetAuthContext(ctx, authCtx), nil

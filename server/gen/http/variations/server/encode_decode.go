@@ -701,17 +701,22 @@ func EncodeListGlobalError(encoder func(context.Context, http.ResponseWriter) go
 // *ToolVariationResponseBody from a value of type *types.ToolVariation.
 func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation) *ToolVariationResponseBody {
 	res := &ToolVariationResponseBody{
-		ID:            v.ID,
-		GroupID:       v.GroupID,
-		SrcToolUrn:    v.SrcToolUrn,
-		SrcToolName:   v.SrcToolName,
-		Confirm:       v.Confirm,
-		ConfirmPrompt: v.ConfirmPrompt,
-		Name:          v.Name,
-		Description:   v.Description,
-		Summarizer:    v.Summarizer,
-		CreatedAt:     v.CreatedAt,
-		UpdatedAt:     v.UpdatedAt,
+		ID:              v.ID,
+		GroupID:         v.GroupID,
+		SrcToolUrn:      v.SrcToolUrn,
+		SrcToolName:     v.SrcToolName,
+		Confirm:         v.Confirm,
+		ConfirmPrompt:   v.ConfirmPrompt,
+		Name:            v.Name,
+		Description:     v.Description,
+		Summarizer:      v.Summarizer,
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
+		CreatedAt:       v.CreatedAt,
+		UpdatedAt:       v.UpdatedAt,
 	}
 
 	return res

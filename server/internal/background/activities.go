@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -58,6 +59,7 @@ type Activities struct {
 	segmentChat                   *resolution_activities.SegmentChat
 	deleteChatResolutions         *resolution_activities.DeleteChatResolutions
 	analyzeSegment                *resolution_activities.AnalyzeSegment
+	getUserFeedbackForChat        *resolution_activities.GetUserFeedbackForChat
 }
 
 func NewActivities(
@@ -83,6 +85,7 @@ func NewActivities(
 	agentsService *agents.Service,
 	mcpRegistryClient *externalmcp.RegistryClient,
 	temporalClient client.Client,
+	telemetryService *telemetry.Service,
 ) *Activities {
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -112,7 +115,8 @@ func NewActivities(
 		recordAgentExecution:          activities.NewRecordAgentExecution(logger, db),
 		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, openrouterChatClient),
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, openrouterChatClient),
+		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, openrouterChatClient, telemetryService),
+		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 	}
 }
 
@@ -236,4 +240,12 @@ func (a *Activities) AnalyzeSegment(ctx context.Context, input resolution_activi
 		return fmt.Errorf("analyze segment: %w", err)
 	}
 	return nil
+}
+
+func (a *Activities) GetUserFeedbackForChat(ctx context.Context, input resolution_activities.GetUserFeedbackForChatArgs) (*resolution_activities.GetUserFeedbackForChatResult, error) {
+	result, err := a.getUserFeedbackForChat.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("get user feedback for chat: %w", err)
+	}
+	return result, nil
 }

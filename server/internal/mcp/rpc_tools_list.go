@@ -29,11 +29,13 @@ type toolsListResult struct {
 }
 
 type toolListEntry struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema,omitempty,omitzero"`
-	Meta        map[string]any  `json:"_meta,omitempty"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	InputSchema json.RawMessage   `json:"inputSchema,omitempty,omitzero"`
+	Annotations *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
+	Meta        map[string]any    `json:"_meta,omitempty"`
 }
+
 
 func handleToolsList(
 	ctx context.Context,
@@ -158,6 +160,7 @@ func buildToolListEntries(
 				Name:        extTool.Name,
 				Description: extTool.Description,
 				InputSchema: extTool.Schema,
+				Annotations: extTool.Annotations,
 				Meta:        nil,
 			})
 		}
@@ -191,6 +194,21 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 		Name:        toolEntry.Name,
 		Description: toolEntry.Description,
 		InputSchema: toolEntry.InputSchema,
+		Annotations: convertConvAnnotations(toolEntry.Annotations),
 		Meta:        toolEntry.Meta,
+	}
+}
+
+// convertConvAnnotations converts conv.ToolAnnotations to externalmcp.ToolAnnotations.
+func convertConvAnnotations(c *conv.ToolAnnotations) *externalmcp.ToolAnnotations {
+	if c == nil {
+		return nil
+	}
+	return &externalmcp.ToolAnnotations{
+		Title:           c.Title,
+		ReadOnlyHint:    c.ReadOnlyHint,
+		DestructiveHint: c.DestructiveHint,
+		IdempotentHint:  c.IdempotentHint,
+		OpenWorldHint:   c.OpenWorldHint,
 	}
 }

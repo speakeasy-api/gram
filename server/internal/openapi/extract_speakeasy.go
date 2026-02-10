@@ -113,7 +113,7 @@ func (p *ToolExtractor) doSpeakeasy(
 
 	doc, err := parseSpeakeasy(ctx, tracer, bytes.NewReader(data))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document.\n%s", err.Error()).Log(ctx, logger)
 	}
 
 	upgradeStart := time.Now()
@@ -754,6 +754,10 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		PathSettings:        pathSettings,
 		RequestContentType:  conv.PtrToPGText(requestContentType),
 		ResponseFilter:      responseFilter,
+		ReadOnlyHint:    pgtype.Bool{Bool: inferReadOnlyHint(method), Valid: true},
+		DestructiveHint: pgtype.Bool{Bool: inferDestructiveHint(method), Valid: true},
+		IdempotentHint:  pgtype.Bool{Bool: inferIdempotentHint(method), Valid: true},
+		OpenWorldHint:   pgtype.Bool{Bool: true, Valid: true},
 	}, deploymentEvents, nil
 }
 
@@ -976,6 +980,31 @@ func mergeDefs(ctx context.Context, logger *slog.Logger, a, b Defs) Defs {
 	}
 
 	return a
+}
+
+// inferReadOnlyHint returns true for read-only HTTP methods (GET, HEAD, OPTIONS).
+func inferReadOnlyHint(method string) bool {
+	switch strings.ToUpper(method) {
+	case "GET", "HEAD", "OPTIONS":
+		return true
+	default:
+		return false
+	}
+}
+
+// inferDestructiveHint returns true for destructive HTTP methods (DELETE).
+func inferDestructiveHint(method string) bool {
+	return strings.EqualFold(method, "DELETE")
+}
+
+// inferIdempotentHint returns true for idempotent HTTP methods (GET, HEAD, OPTIONS, PUT, DELETE).
+func inferIdempotentHint(method string) bool {
+	switch strings.ToUpper(method) {
+	case "GET", "HEAD", "OPTIONS", "PUT", "DELETE":
+		return true
+	default:
+		return false
+	}
 }
 
 func createEmptyObjectSchema() *oas3.Schema {

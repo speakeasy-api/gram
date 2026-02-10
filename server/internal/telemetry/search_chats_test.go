@@ -246,6 +246,232 @@ func TestSearchChats_FilterByDeploymentID(t *testing.T) {
 	require.Len(t, result.Chats, 2)
 }
 
+func TestSearchChats_PaginationAscOrder(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+
+	// Create 5 distinct chats with ascending timestamps
+	for i := range 5 {
+		chatID := uuid.New().String()
+		ts := now.Add(-time.Duration(50-i*10) * time.Minute)
+		insertChatLogWithChatID(t, ctx, projectID, deploymentID, ts, chatID, 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Page 1: limit 2 with ascending sort
+	page1, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 2,
+		Sort:  "asc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page1.Chats, 2)
+	require.NotNil(t, page1.NextCursor)
+
+	// Page 2
+	page2, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Cursor: page1.NextCursor,
+		Limit:  2,
+		Sort:   "asc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page2.Chats, 2)
+	require.NotNil(t, page2.NextCursor)
+
+	// Page 3: remaining
+	page3, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Cursor: page2.NextCursor,
+		Limit:  2,
+		Sort:   "asc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page3.Chats, 1)
+	require.Nil(t, page3.NextCursor)
+
+	// Verify ascending order across pages
+	allChats := append(append(page1.Chats, page2.Chats...), page3.Chats...)
+	for i := 0; i < len(allChats)-1; i++ {
+		require.Less(t, allChats[i].StartTimeUnixNano, allChats[i+1].StartTimeUnixNano,
+			"chats should be sorted ascending by start time across pages")
+	}
+
+	// Verify no duplicates
+	seen := make(map[string]bool)
+	for _, chat := range allChats {
+		require.False(t, seen[chat.GramChatID], "duplicate chat ID across pages: %s", chat.GramChatID)
+		seen[chat.GramChatID] = true
+	}
+}
+
+func TestSearchChats_ChatWithOnlyTools(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	chatID := uuid.New().String()
+
+	// Insert only tool calls, no completion messages
+	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, "tools:http:petstore:listPets", 200, 0.5)
+	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, "tools:http:petstore:getPet", 200, 0.3)
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+
+	chat := result.Chats[0]
+	require.Equal(t, chatID, chat.GramChatID)
+	require.Equal(t, uint64(2), chat.LogCount)
+	require.Equal(t, uint64(2), chat.ToolCallCount)
+	require.Equal(t, uint64(0), chat.MessageCount) // No completion messages
+	// Model is nil or empty string when no completions (anyIf returns empty string)
+	if chat.Model != nil {
+		require.Empty(t, *chat.Model, "Model should be empty when no completions")
+	}
+	require.Equal(t, int64(0), chat.TotalInputTokens)
+	require.Equal(t, int64(0), chat.TotalOutputTokens)
+	require.Equal(t, int64(0), chat.TotalTokens)
+	require.Equal(t, "success", chat.Status) // All tools succeeded (200)
+}
+
+func TestSearchChats_ChatWithOnlyMessages(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	chatID := uuid.New().String()
+
+	// Insert only completion messages, no tool calls
+	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, 100, 50, 150, 1.5, "stop", "gpt-4", "openai")
+	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, 200, 100, 300, 2.0, "stop", "gpt-4", "openai")
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+
+	chat := result.Chats[0]
+	require.Equal(t, chatID, chat.GramChatID)
+	require.Equal(t, uint64(2), chat.LogCount)
+	require.Equal(t, uint64(0), chat.ToolCallCount) // No tool calls
+	require.Equal(t, uint64(2), chat.MessageCount)
+	require.NotNil(t, chat.Model)
+	require.Equal(t, "gpt-4", *chat.Model)
+	require.Equal(t, int64(300), chat.TotalInputTokens)  // 100 + 200
+	require.Equal(t, int64(150), chat.TotalOutputTokens) // 50 + 100
+	require.Equal(t, int64(450), chat.TotalTokens)       // 150 + 300
+	require.Equal(t, "success", chat.Status)             // No failed tools
+}
+
+func TestSearchChats_FilterByGramURN(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+
+	// Chat 1: petstore tools
+	chatID1 := uuid.New().String()
+	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID1, "tools:http:petstore:listPets", 200, 0.5)
+
+	// Chat 2: weather tools
+	chatID2 := uuid.New().String()
+	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID2, "tools:http:weather:forecast", 200, 0.3)
+
+	// Chat 3: another petstore tool
+	chatID3 := uuid.New().String()
+	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), chatID3, "tools:http:petstore:getPet", 200, 0.4)
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Filter by "petstore" substring - should match 2 chats
+	gramURN := "petstore"
+	result, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From:    &from,
+			To:      &to,
+			GramUrn: &gramURN,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 2, "should match 2 chats with petstore in gram_urn")
+
+	// Verify the matched chats are the petstore ones
+	chatIDs := make(map[string]bool)
+	for _, chat := range result.Chats {
+		chatIDs[chat.GramChatID] = true
+	}
+	require.True(t, chatIDs[chatID1], "should include chat with listPets")
+	require.True(t, chatIDs[chatID3], "should include chat with getPet")
+	require.False(t, chatIDs[chatID2], "should not include chat with weather")
+}
+
 func TestSearchChats_PaginationCursorScopedByProject(t *testing.T) {
 	t.Parallel()
 

@@ -262,6 +262,15 @@ func handleToolsCall(
 		if payload.chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
 		}
+		if payload.userID != "" {
+			logAttrs[attr.UserIDKey] = payload.userID
+		}
+		if payload.externalUserID != "" {
+			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
+		}
+		if payload.apiKeyID != "" {
+			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
+		}
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{

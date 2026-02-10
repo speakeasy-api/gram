@@ -5,9 +5,9 @@ import "net/http"
 type Code string
 
 const (
-	CodeUnauthorized       Code = "unauthorized"
-	CodeForbidden          Code = "forbidden"
-	CodeBadRequest         Code = "bad_request"
+	CodeUnauthorized     Code = "unauthorized"
+	CodeForbidden        Code = "forbidden"
+	CodeBadRequest       Code = "bad_request"
 	CodeNotFound           Code = "not_found"
 	CodeConflict           Code = "conflict"
 	CodeUnsupportedMedia   Code = "unsupported_media"
@@ -19,9 +19,9 @@ const (
 )
 
 var StatusCodes = map[Code]int{
-	CodeUnauthorized:       http.StatusUnauthorized,
-	CodeForbidden:          http.StatusForbidden,
-	CodeBadRequest:         http.StatusBadRequest,
+	CodeUnauthorized: http.StatusUnauthorized,
+	CodeForbidden:    http.StatusForbidden,
+	CodeBadRequest:   http.StatusBadRequest,
 	CodeNotFound:           http.StatusNotFound,
 	CodeConflict:           http.StatusConflict,
 	CodeUnsupportedMedia:   http.StatusUnsupportedMediaType,

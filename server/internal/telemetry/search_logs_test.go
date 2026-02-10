@@ -32,10 +32,9 @@ func TestSearchLogs_LogsDisabled(t *testing.T) {
 		Sort:  "desc",
 	})
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Empty(t, result.Logs, "should return no logs when feature is disabled")
-	require.False(t, result.Enabled, "Enabled should be false when logs feature is disabled")
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "logs are not enabled")
 }
 
 func TestSearchLogs_Empty(t *testing.T) {
@@ -97,6 +96,183 @@ func TestSearchLogs_SortDescending(t *testing.T) {
 		require.GreaterOrEqual(t, result.Logs[i].TimeUnixNano, result.Logs[i+1].TimeUnixNano,
 			"logs should be sorted descending by time")
 	}
+}
+
+func TestSearchLogs_SortAscending(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	// Insert 5 logs
+	insertTestTelemetryLogs(t, ctx, projectID, deploymentID, 5)
+
+	now := time.Now().UTC()
+	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 10,
+		Sort:  "asc",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Logs, 5)
+	require.Nil(t, result.NextCursor)
+
+	// Verify ascending order
+	for i := 0; i < len(result.Logs)-1; i++ {
+		require.LessOrEqual(t, result.Logs[i].TimeUnixNano, result.Logs[i+1].TimeUnixNano,
+			"logs should be sorted ascending by time")
+	}
+}
+
+func TestSearchLogs_PaginationAscOrder(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	// Insert 10 logs
+	insertTestTelemetryLogs(t, ctx, projectID, deploymentID, 10)
+
+	now := time.Now().UTC()
+	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Get first page (limit 4) with ascending sort
+	page1, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 4,
+		Sort:  "asc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page1.Logs, 4)
+	require.NotNil(t, page1.NextCursor, "should have next cursor when more results exist")
+
+	// Get second page using cursor
+	page2, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Cursor: page1.NextCursor,
+		Limit:  4,
+		Sort:   "asc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page2.Logs, 4)
+	require.NotNil(t, page2.NextCursor, "should have next cursor for third page")
+
+	// Get third page (remaining logs)
+	page3, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Cursor: page2.NextCursor,
+		Limit:  4,
+		Sort:   "asc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page3.Logs, 2)
+	require.Nil(t, page3.NextCursor, "should not have next cursor on last page")
+
+	// Verify all logs are in ascending order across pages
+	allLogs := append(append(page1.Logs, page2.Logs...), page3.Logs...)
+	for i := 0; i < len(allLogs)-1; i++ {
+		require.Less(t, allLogs[i].TimeUnixNano, allLogs[i+1].TimeUnixNano,
+			"logs should be sorted ascending across pages")
+	}
+}
+
+func TestSearchLogs_CursorTieBreaking(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	sameTimestamp := now.Add(-30 * time.Minute)
+
+	// Insert 5 logs with the SAME timestamp but different IDs
+	// This tests the tie-breaking behavior using ID
+	for range 5 {
+		insertTelemetryLogAtExactTime(t, ctx, projectID, deploymentID, sameTimestamp, nil, "urn:gram:test", "INFO")
+	}
+
+	// Wait for ClickHouse eventual consistency
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Get first page (limit 2)
+	page1, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 2,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page1.Logs, 2)
+	require.NotNil(t, page1.NextCursor)
+
+	// Get second page
+	page2, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Cursor: page1.NextCursor,
+		Limit:  2,
+		Sort:   "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page2.Logs, 2)
+	require.NotNil(t, page2.NextCursor)
+
+	// Get third page
+	page3, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Cursor: page2.NextCursor,
+		Limit:  2,
+		Sort:   "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, page3.Logs, 1)
+	require.Nil(t, page3.NextCursor)
+
+	// Verify no duplicates across pages (all IDs should be unique)
+	allLogs := append(append(page1.Logs, page2.Logs...), page3.Logs...)
+	seen := make(map[string]bool)
+	for _, log := range allLogs {
+		require.False(t, seen[log.ID], "duplicate log ID across pages: %s", log.ID)
+		seen[log.ID] = true
+	}
+	require.Len(t, seen, 5, "should have exactly 5 unique logs")
 }
 
 func TestSearchLogs_Pagination(t *testing.T) {
@@ -572,6 +748,48 @@ func TestSearchLogs_Filters(t *testing.T) {
 			},
 			expectedCount: 2, // Only create-order logs, not get-users
 		},
+		// Additional edge case: 3+ filters combined
+		{
+			name: "combine deployment_id, function_id, and severity filters",
+			filter: &gen.SearchLogsFilter{
+				From:         &from,
+				To:           &to,
+				DeploymentID: &deployment1,
+				FunctionID:   &function1,
+				SeverityText: stringPtr("INFO"),
+			},
+			expectedCount: 1, // Only deployment1 + function1 + INFO
+		},
+		{
+			name: "combine gram_urns array with deployment_id scalar filter",
+			filter: &gen.SearchLogsFilter{
+				From:         &from,
+				To:           &to,
+				GramUrns:     []string{"urn:gram:http:api:get-users", "urn:gram:http:api:create-order"},
+				DeploymentID: &deployment1,
+			},
+			expectedCount: 4, // All matching URNs in deployment1
+		},
+		{
+			name: "combine http_method and http_status_code filters",
+			filter: &gen.SearchLogsFilter{
+				From:           &from,
+				To:             &to,
+				HTTPMethod:     stringPtr("POST"),
+				HTTPStatusCode: int32Ptr(500),
+			},
+			expectedCount: 3, // POST requests with 500 status
+		},
+		{
+			name: "combine service_name and severity filters",
+			filter: &gen.SearchLogsFilter{
+				From:         &from,
+				To:           &to,
+				ServiceName:  stringPtr("gram-functions"),
+				SeverityText: stringPtr("INFO"),
+			},
+			expectedCount: 2, // gram-functions + INFO
+		},
 	}
 
 	for _, tt := range tests {
@@ -622,10 +840,9 @@ func TestSearchToolCalls_LogsDisabled(t *testing.T) {
 		Sort:  "desc",
 	})
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Empty(t, result.ToolCalls, "should return no tool calls when feature is disabled")
-	require.False(t, result.Enabled, "Enabled should be false when logs feature is disabled")
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "logs are not enabled")
 }
 
 func TestSearchToolCalls_Empty(t *testing.T) {
@@ -840,6 +1057,30 @@ func insertTelemetryLog(t *testing.T, ctx context.Context, projectID, deployment
 
 	// ClickHouse eventual consistency
 	time.Sleep(100 * time.Millisecond)
+}
+
+// insertTelemetryLogAtExactTime inserts a log without sleeping after, allowing
+// multiple logs to be inserted with the same timestamp for tie-breaking tests.
+// Caller should sleep once after inserting all logs.
+func insertTelemetryLogAtExactTime(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, traceID *string, gramURN, severityText string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), severityText, "test log body",
+		traceID, nil, "{}", "{}",
+		projectID, deploymentID, gramURN, "test-service")
+	require.NoError(t, err)
 }
 
 type testLogParams struct {
