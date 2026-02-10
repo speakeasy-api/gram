@@ -269,10 +269,9 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
       );
 
       if (!response.ok) {
-        const errorMessage = "Failed to fetch OpenAPI content from server";
-        toast.error(errorMessage);
-        throw new Error(errorMessage);
+        throw new Error("Failed to fetch OpenAPI content from server");
       }
+
 
       const blob = await response.blob();
       const file = new File([blob], "My API", {
