@@ -40,7 +40,7 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
           <div
-            className={`text-xs font-semibold uppercase px-2 py-1 rounded ${severityClass} bg-surface-secondary-default`}
+            className={`text-xs font-semibold uppercase px-2 py-1 rounded ${severityClass} bg-muted`}
           >
             {log.severityText || "INFO"}
           </div>
@@ -103,7 +103,7 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
             <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
               Message
             </div>
-            <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4">
+            <div className="bg-muted border border-border rounded-lg p-4">
               <pre className="font-mono text-sm whitespace-pre-wrap break-words">
                 {log.body || "(no message)"}
               </pre>
@@ -135,7 +135,7 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
               Full Log Record
             </div>
             <button
-              className="p-1.5 rounded hover:bg-surface-secondary-default"
+              className="p-1.5 rounded hover:bg-muted"
               onClick={() => {
                 void navigator.clipboard.writeText(
                   JSON.stringify(log, null, 2),
@@ -145,7 +145,7 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
               <Copy className="size-4" />
             </button>
           </div>
-          <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 overflow-y-auto flex-1">
+          <div className="bg-muted border border-border rounded-lg p-4 overflow-y-auto flex-1">
             <pre className="font-mono text-sm whitespace-pre-wrap break-all">
               {JSON.stringify(log, null, 2)}
             </pre>
@@ -169,7 +169,7 @@ function MetadataBadge({
 }) {
   return (
     <button
-      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-tertiary hover:bg-surface-secondary-default transition-colors text-sm"
+      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-sm"
       onClick={() => {
         if (copyValue) {
           void navigator.clipboard.writeText(copyValue);
@@ -201,7 +201,7 @@ function AttributesSection({
           {title}
         </div>
         <button
-          className="p-1.5 rounded hover:bg-surface-secondary-default"
+          className="p-1.5 rounded hover:bg-muted"
           onClick={() => {
             void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
           }}
@@ -209,11 +209,11 @@ function AttributesSection({
           <Copy className="size-4" />
         </button>
       </div>
-      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg divide-y divide-neutral-softest">
+      <div className="bg-muted border border-border rounded-lg divide-y divide-border">
         {flatEntries.map(([key, value]) => (
           <div
             key={key}
-            className="flex flex-col gap-1 px-4 py-2.5 hover:bg-surface-tertiary transition-colors"
+            className="flex flex-col gap-1 px-4 py-2.5 hover:bg-muted/50 transition-colors"
           >
             <span className="text-xs text-muted-foreground">{key}</span>
             <span className="text-sm font-mono break-all">{value}</span>
