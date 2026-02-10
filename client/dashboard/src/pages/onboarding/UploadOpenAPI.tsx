@@ -29,6 +29,7 @@ import {
   GetDeploymentResult,
   UploadOpenAPIv3Result,
 } from "@gram/client/models/components";
+import {assetsServeOpenAPIv3} from "@gram/client/funcs/assetsServeOpenAPIv3"
 import {
   useDeploymentLogs,
   useLatestDeployment,
@@ -256,42 +257,17 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
 
   const handleUrlUpload = async (result: UploadOpenAPIv3Result) => {
     setAsset(result);
-
-    try {
-      // Fetch the actual content from the backend
-      const response = await fetch(
-        `${getServerURL()}/rpc/assets.serveOpenAPIv3?id=${result.asset.id}&project_id=${project.id}`,
-        {
-          headers: {
-            "gram-session": session.session,
-          },
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch OpenAPI content from server");
-      }
-
-
-      const blob = await response.blob();
-      const file = new File([blob], "My API", {
-        type: result.asset.contentType,
-      });
-
-      setFile(file);
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to fetch OpenAPI content",
-      );
-      // Fallback to empty file if fetch fails
-      setFile(
-        new File([], "My API", {
-          type: result.asset?.contentType ?? "application/yaml",
-        }),
-      );
+    const response = await assetsServeOpenAPIv3(client, {id: result.asset.id, projectId: result.asset.id});
+    if (!response.ok) {
+        toast.error(`Failed to fetch OpenAPI content: ${response.error.message}`)
+        return
     }
+
+    // Convert ReadableStream to Blob
+    const blob = await new Response(response.value.result).blob();
+    setFile(new File([blob], "My API", {
+      type: result.asset.contentType,
+    }))
 
     telemetry.capture("onboarding_event", {
       action: "spec_uploaded",
