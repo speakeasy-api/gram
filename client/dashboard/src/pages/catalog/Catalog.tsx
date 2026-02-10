@@ -6,18 +6,20 @@ import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServersDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
-import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import { type Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Badge, Button, Input, Stack } from "@speakeasy-api/moonshine";
-import {
-  Loader2,
-  Search,
-  SearchXIcon,
-  Server as ServerIcon,
-} from "lucide-react";
+import { Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { Loader2, Search, SearchXIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, Outlet, useNavigate } from "react-router";
+import { Outlet, useNavigate } from "react-router";
+import { CategoryTabs } from "./CategoryTabs";
+import { FilterChips } from "./FilterChips";
+import { defaultFilterValues, FilterSidebar } from "./FilterSidebar";
+import { countByCategory, filterAndSortServers } from "./hooks/serverMetadata";
+import { useFilterState } from "./hooks/useFilterState";
+import { ServerCard } from "./ServerCard";
+import { SortDropdown } from "./SortDropdown";
 
 export function CatalogRoot() {
   return <Outlet />;
@@ -28,12 +30,18 @@ export default function Catalog() {
   const client = useSdkClient();
   const organization = useOrganization();
   const project = useProject();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter state from URL
+  const filterState = useFilterState();
+
   const [selectedServers, setSelectedServers] = useState<Set<string>>(
     new Set(),
   );
   const [addingServers, setAddingServers] = useState<Server[]>([]);
   const [targetProjectSlug, setTargetProjectSlug] = useState(project.slug);
+
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteListMCPCatalog(searchQuery);
   const { data: deploymentResult, refetch: refetchDeployment } =
@@ -46,6 +54,28 @@ export default function Catalog() {
   const allServers = useMemo(() => {
     return data?.pages.flatMap((page) => page.servers as Server[]) ?? [];
   }, [data]);
+
+  // Count servers by category for badges
+  const categoryCounts = useMemo(() => {
+    return countByCategory(allServers);
+  }, [allServers]);
+
+  // Apply client-side filtering based on filter state
+  const filteredServers = useMemo(() => {
+    return filterAndSortServers(allServers, filterState);
+  }, [allServers, filterState]);
+
+  // Check if any granular filters are active
+  const hasActiveFilters = useMemo(() => {
+    const f = filterState.filters;
+    return (
+      f.authTypes.length > 0 ||
+      f.toolBehaviors.length > 0 ||
+      f.minUsers > 0 ||
+      f.updatedRange !== "any" ||
+      f.minTools > 0
+    );
+  }, [filterState.filters]);
 
   const toggleServerSelection = (serverKey: string) => {
     setSelectedServers((prev) => {
@@ -62,7 +92,7 @@ export default function Catalog() {
   const clearSelection = () => setSelectedServers(new Set());
 
   const getSelectedServerObjects = () =>
-    allServers.filter((s) =>
+    filteredServers.filter((s) =>
       selectedServers.has(`${s.registryId}-${s.registrySpecifier}`),
     );
 
@@ -75,7 +105,6 @@ export default function Catalog() {
     setAddingServers(getSelectedServerObjects());
   };
 
-  const navigate = useNavigate();
   const handleGoToMCPs = () => {
     navigate(`/${organization.slug}/${targetProjectSlug}/mcp`);
   };
@@ -118,11 +147,12 @@ export default function Catalog() {
         <Page.Section>
           <Page.Section.Title>MCP Catalog</Page.Section.Title>
           <Page.Section.Description>
-            Import official MCP servers to your project. Powered by the official
-            MCP registry.
+            Discover and import MCP servers to your project. Powered by the
+            official MCP registry.
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="vertical" gap={6}>
+              {/* Search bar */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -133,26 +163,70 @@ export default function Catalog() {
                 />
               </div>
 
+              {/* Category tabs + Filters row */}
+              <Stack
+                direction="horizontal"
+                gap={4}
+                align="center"
+                justify="space-between"
+                className="flex-wrap"
+              >
+                <CategoryTabs
+                  value={filterState.category}
+                  onChange={filterState.setCategory}
+                  counts={categoryCounts}
+                />
+
+                <Stack direction="horizontal" gap={3} align="center">
+                  <FilterSidebar
+                    values={filterState.filters}
+                    onChange={filterState.setFilters}
+                    onClear={() => filterState.setFilters(defaultFilterValues)}
+                  />
+                  <SortDropdown
+                    value={filterState.sort}
+                    onChange={filterState.setSort}
+                  />
+                </Stack>
+              </Stack>
+
+              {/* Results count */}
+              {!isLoading && (
+                <div className="flex justify-end">
+                  <Type small muted>
+                    {filteredServers.length === allServers.length
+                      ? `${allServers.length} servers`
+                      : `${filteredServers.length} of ${allServers.length} servers`}
+                  </Type>
+                </div>
+              )}
+
+              {/* Active filter chips */}
+              {hasActiveFilters && (
+                <FilterChips
+                  values={filterState.filters}
+                  onChange={filterState.setFilters}
+                  onClearAll={() => filterState.setFilters(defaultFilterValues)}
+                />
+              )}
+
+              {/* Server grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {isLoading &&
-                  [...Array(6)].map((_, i) => (
-                    <Skeleton key={i} className="h-[200px]" />
-                  ))}
+                  Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
+                    (id) => <Skeleton key={id} className="h-[200px]" />,
+                  )}
                 {!isLoading &&
-                  allServers?.map((server) => {
+                  filteredServers.map((server) => {
                     const serverKey = `${server.registryId}-${server.registrySpecifier}`;
                     return (
-                      <MCPServerCard
+                      <ServerCard
                         key={serverKey}
                         server={server}
                         detailHref={routes.catalog.detail.href(
                           encodeURIComponent(server.registrySpecifier),
                         )}
-                        isAdded={externalMcps.some(
-                          (mcp) =>
-                            mcp.registryServerSpecifier ===
-                            server.registrySpecifier,
-                        )}
+                        externalMcps={externalMcps}
                         isSelected={selectedServers.has(serverKey)}
                         onToggleSelect={() => toggleServerSelection(serverKey)}
                       />
@@ -177,13 +251,25 @@ export default function Catalog() {
                 </div>
               )}
 
-              {!isLoading && allServers?.length === 0 && (
-                <EmptySearchResult onClear={() => setSearchQuery("")} />
+              {/* Empty state */}
+              {!isLoading && filteredServers.length === 0 && (
+                <EmptySearchResult
+                  hasFilters={
+                    hasActiveFilters ||
+                    filterState.category !== "all" ||
+                    searchQuery !== ""
+                  }
+                  onClear={() => {
+                    setSearchQuery("");
+                    filterState.clearFilters();
+                  }}
+                />
               )}
             </Stack>
           </Page.Section.Body>
         </Page.Section>
       </Page.Body>
+
       <AddServersDialog
         servers={addingServers}
         projects={projectOptions}
@@ -213,9 +299,15 @@ export default function Catalog() {
   );
 }
 
-function EmptySearchResult({ onClear }: { onClear: () => void }) {
+function EmptySearchResult({
+  hasFilters,
+  onClear,
+}: {
+  hasFilters: boolean;
+  onClear: () => void;
+}) {
   return (
-    <div className="w-full  flex items-center justify-center bg-background rounded-xl border-1 py-8">
+    <div className="w-full flex items-center justify-center bg-background rounded-xl border py-8">
       <Stack
         gap={1}
         className="w-full max-w-sm m-8"
@@ -226,94 +318,19 @@ function EmptySearchResult({ onClear }: { onClear: () => void }) {
           <SearchXIcon className="size-16 text-foreground" />
         </div>
         <Heading variant="h5" className="font-medium">
-          No matching entries
+          No matching servers
         </Heading>
         <Type small muted className="mb-4 text-center">
-          No MCP servers match your query. Try adjusting or clearing your
-          search.
+          {hasFilters
+            ? "No MCP servers match your current filters. Try adjusting or clearing your filters."
+            : "No MCP servers found. Check back later for new additions."}
         </Type>
-        <Button onClick={onClear} size="sm">
-          Clear Search
-        </Button>
+        {hasFilters && (
+          <Button onClick={onClear} size="sm">
+            <Button.Text>Clear Filters</Button.Text>
+          </Button>
+        )}
       </Stack>
-    </div>
-  );
-}
-
-interface MCPServerCardProps {
-  server: Server;
-  detailHref: string;
-  isAdded: boolean;
-  isSelected: boolean;
-  onToggleSelect: () => void;
-}
-
-function MCPServerCard({
-  server,
-  detailHref,
-  isAdded,
-  isSelected,
-  onToggleSelect,
-}: MCPServerCardProps) {
-  const meta = server.meta["com.pulsemcp/server"];
-  const isOfficial = meta?.isOfficial;
-  const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
-  const displayName = server.title ?? server.registrySpecifier;
-
-  return (
-    <div
-      className={`group relative flex flex-col gap-4 rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer h-full ${
-        isSelected ? "ring-2 ring-primary border-primary" : ""
-      }`}
-      onClick={onToggleSelect}
-    >
-      <Stack direction="horizontal" gap={3}>
-        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
-          {server.iconUrl ? (
-            <img
-              src={server.iconUrl}
-              alt={displayName}
-              className="w-8 h-8 rounded"
-            />
-          ) : (
-            <ServerIcon className="w-6 h-6 text-muted-foreground" />
-          )}
-        </div>
-        <Stack gap={1} className="min-w-0">
-          <Stack direction="horizontal" gap={2} align="center">
-            <Type
-              variant="subheading"
-              className="group-hover:text-primary transition-colors"
-            >
-              {displayName}
-            </Type>
-            {isOfficial && <Badge>Official</Badge>}
-            {isAdded && <Badge>Added</Badge>}
-          </Stack>
-          <Type small muted>
-            {server.registrySpecifier} • v{server.version}
-          </Type>
-        </Stack>
-      </Stack>
-      <Type small muted className="line-clamp-2">
-        {server.description}
-      </Type>
-      <div className="mt-auto pt-2">
-        <Stack direction="horizontal" justify="space-between" align="center">
-          {visitorsTotal && visitorsTotal > 0 ? (
-            <Type small muted>
-              {visitorsTotal.toLocaleString()} monthly users
-            </Type>
-          ) : (
-            <div />
-          )}
-          <Link to={detailHref} onClick={(e) => e.stopPropagation()}>
-            <Button variant="secondary" size="sm">
-              <Button.Text>View Details</Button.Text>
-            </Button>
-          </Link>
-        </Stack>
-      </div>
     </div>
   );
 }
