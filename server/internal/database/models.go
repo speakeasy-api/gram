@@ -255,6 +255,11 @@ type ExternalMcpToolDefinition struct {
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
 	HeaderDefinitions          []byte
+	Title                      pgtype.Text
+	ReadOnlyHint               pgtype.Bool
+	DestructiveHint            pgtype.Bool
+	IdempotentHint             pgtype.Bool
+	OpenWorldHint              pgtype.Bool
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeletedAt                  pgtype.Timestamptz
