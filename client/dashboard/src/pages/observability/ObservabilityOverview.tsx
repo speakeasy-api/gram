@@ -43,7 +43,20 @@ import {
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import { ChevronRight } from "lucide-react";
-import { Link } from "react-router";
+import { useRoutes } from "@/routes";
+
+function ViewChatsLink({ from, to }: { from: Date; to: Date }) {
+  const routes = useRoutes();
+  return (
+    <routes.chatLogs.Link
+      queryParams={{ from: from.toISOString(), to: to.toISOString() }}
+      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors no-underline hover:no-underline"
+    >
+      View chats
+      <ChevronRight className="size-4" />
+    </routes.chatLogs.Link>
+  );
+}
 
 // Register Chart.js components
 ChartJS.register(
@@ -55,16 +68,6 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
-
-/**
- * Build the URL for navigating to the logs page with time range applied.
- */
-function buildLogsUrl(from: Date, to: Date): string {
-  const params = new URLSearchParams();
-  params.set("from", from.toISOString());
-  params.set("to", to.toISOString());
-  return `/logs?${params.toString()}`;
-}
 
 type FilterDimension = "all" | "api_key" | "user";
 
@@ -1155,13 +1158,7 @@ function ResolvedChatsChart({
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <Link
-          to={buildLogsUrl(from, to)}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          View chats
-          <ChevronRight className="size-4" />
-        </Link>
+        <ViewChatsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
@@ -1342,13 +1339,7 @@ function ResolutionStatusChart({
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <Link
-          to={buildLogsUrl(from, to)}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          View chats
-          <ChevronRight className="size-4" />
-        </Link>
+        <ViewChatsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
@@ -1480,13 +1471,7 @@ function SessionDurationChart({
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <Link
-          to={buildLogsUrl(from, to)}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          View chats
-          <ChevronRight className="size-4" />
-        </Link>
+        <ViewChatsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
