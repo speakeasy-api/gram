@@ -618,6 +618,11 @@ func parseTimeRange(from, to *string) (timeStart, timeEnd int64, err error) {
 		timeEnd = toTime.UnixNano()
 	}
 
+	// Validate that from < to to prevent unsigned integer overflow in ClickHouse queries
+	if timeStart >= timeEnd {
+		return 0, 0, oops.E(oops.CodeBadRequest, nil, "'from' time must be before 'to' time")
+	}
+
 	return timeStart, timeEnd, nil
 }
 
