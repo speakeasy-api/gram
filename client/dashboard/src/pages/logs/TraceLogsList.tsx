@@ -5,7 +5,6 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
-import { USE_DUMMY_DATA, DUMMY_LOGS_BY_TRACE } from "./Logs";
 
 interface TraceLogsListProps {
   traceId: string;
@@ -36,35 +35,11 @@ export function TraceLogsList({
           },
         }),
       ),
-    enabled: isExpanded && !USE_DUMMY_DATA,
+    enabled: isExpanded,
   });
 
   if (!isExpanded) {
     return null;
-  }
-
-  // Use dummy data if enabled
-  if (USE_DUMMY_DATA) {
-    const dummyLogs = DUMMY_LOGS_BY_TRACE[traceId] ?? [];
-    if (dummyLogs.length === 0) {
-      return (
-        <div className="px-4 py-3 pl-12 text-sm text-muted-foreground bg-muted/30">
-          No spans found for this trace
-        </div>
-      );
-    }
-    return (
-      <div className="bg-muted/30">
-        {dummyLogs.map((log, index) => (
-          <ChildLogRow
-            key={log.id}
-            log={log}
-            isLast={index === dummyLogs.length - 1}
-            onClick={() => onLogClick(log)}
-          />
-        ))}
-      </div>
-    );
   }
 
   if (isPending) {
