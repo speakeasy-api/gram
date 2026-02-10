@@ -121,6 +121,14 @@ async function collectTools(
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema,
+        annotations: tool.annotations
+          ? {
+              readOnlyHint: tool.annotations.readOnlyHint,
+              destructiveHint: tool.annotations.destructiveHint,
+              idempotentHint: tool.annotations.idempotentHint,
+              openWorldHint: tool.annotations.openWorldHint,
+            }
+          : undefined,
         variables: variables,
         meta: {
           ...tool._meta,
