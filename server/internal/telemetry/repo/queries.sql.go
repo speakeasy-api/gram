@@ -234,17 +234,15 @@ type ListTracesParams struct {
 func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]TraceSummary, error) {
 	sb := sq.Select(
 		"trace_id",
-		"min(time_unix_nano) as start_time_unix_nano",
-		"count(*) as log_count",
-		"anyIf(toInt32OrNull(toString(attributes.http.response.status_code)), toString(attributes.http.response.status_code) != '') as http_status_code",
+		"min(start_time_unix_nano) as start_time_unix_nano",
+		"sum(log_count) as log_count",
+		"anyIfMerge(http_status_code) as http_status_code",
 		"any(gram_urn) as gram_urn",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("trace_id IS NOT NULL").
-		Where("trace_id != ''")
+		Having("start_time_unix_nano >= ?", arg.TimeStart).
+		Having("start_time_unix_nano <= ?", arg.TimeEnd)
 
 	// Optional filters
 	if arg.GramDeploymentID != "" {
@@ -253,13 +251,25 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 	if arg.GramFunctionID != "" {
 		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
 	}
+
+	// URN filter must use HAVING because gram_urn in SELECT is aliased to any(gram_urn),
+	// and ClickHouse resolves aliases in WHERE, which would create an invalid aggregate-in-WHERE.
 	if arg.GramURN != "" {
-		sb = sb.Where("position(telemetry_logs.gram_urn, ?) > 0", arg.GramURN)
+		sb = sb.Having("position(gram_urn, ?) > 0", arg.GramURN)
 	}
 
 	sb = sb.GroupBy("trace_id")
 
-	sb = withHavingPagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "trace_id", "min(time_unix_nano)")
+	sb = withHavingPagination(
+		sb,
+		arg.Cursor,
+		arg.SortOrder,
+		arg.GramProjectID,
+		"trace_id",
+		"start_time_unix_nano",
+		"min(start_time_unix_nano)",
+		TableNameTraceSummaries,
+	)
 
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "")
 
