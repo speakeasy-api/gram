@@ -201,6 +201,20 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 	}, nil
 }
 
+func (s *Service) InferSkillsFromToolset(ctx context.Context, payload *gen.InferSkillsFromToolsetPayload) (*gen.InferSkillsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// TODO: Implement actual skill inference logic
+	// For now, return empty arrays
+	return &gen.InferSkillsResult{
+		Tools:  []*types.ToolEntry{},
+		Skills: []string{},
+	}, nil
+}
+
 func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*types.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

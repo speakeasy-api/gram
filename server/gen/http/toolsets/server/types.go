@@ -144,8 +144,10 @@ type ListToolsetsResponseBody struct {
 // InferSkillsFromToolsetResponseBody is the type of the "toolsets" service
 // "inferSkillsFromToolset" endpoint HTTP response body.
 type InferSkillsFromToolsetResponseBody struct {
-	// The inferred skills
-	Skills map[*ToolEntryResponseBody]string `form:"skills" json:"skills" xml:"skills"`
+	// The tools
+	Tools []*ToolEntryResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The inferred skills corresponding to each tool
+	Skills []string `form:"skills" json:"skills" xml:"skills"`
 }
 
 // UpdateToolsetResponseBody is the type of the "toolsets" service
@@ -3282,13 +3284,25 @@ func NewListToolsetsResponseBody(res *toolsets.ListToolsetsResult) *ListToolsets
 // result of the "inferSkillsFromToolset" endpoint of the "toolsets" service.
 func NewInferSkillsFromToolsetResponseBody(res *toolsets.InferSkillsResult) *InferSkillsFromToolsetResponseBody {
 	body := &InferSkillsFromToolsetResponseBody{}
-	if res.Skills != nil {
-		body.Skills = make(map[*ToolEntryResponseBody]string, len(res.Skills))
-		for key, val := range res.Skills {
-			tk := marshalTypesToolEntryToToolEntryResponseBody(val)
-			tv := val
-			body.Skills[tk] = tv
+	if res.Tools != nil {
+		body.Tools = make([]*ToolEntryResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolEntryToToolEntryResponseBody(val)
 		}
+	} else {
+		body.Tools = []*ToolEntryResponseBody{}
+	}
+	if res.Skills != nil {
+		body.Skills = make([]string, len(res.Skills))
+		for i, val := range res.Skills {
+			body.Skills[i] = val
+		}
+	} else {
+		body.Skills = []string{}
 	}
 	return body
 }

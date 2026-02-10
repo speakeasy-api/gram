@@ -313,8 +313,9 @@ var ListToolsetsResult = Type("ListToolsetsResult", func() {
 })
 
 var InferSkillsResult = Type("InferSkillsResult", func() {
-	Attribute("skills", MapOf(shared.ToolEntry, String), "The inferred skills")
-	Required("skills")
+	Attribute("tools", ArrayOf(shared.ToolEntry), "The tools")
+	Attribute("skills", ArrayOf(String), "The inferred skills corresponding to each tool")
+	Required("tools", "skills")
 })
 
 var UpdateToolsetForm = Type("UpdateToolsetForm", func() {

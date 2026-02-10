@@ -156,8 +156,10 @@ type InferSkillsFromToolsetPayload struct {
 // InferSkillsResult is the result type of the toolsets service
 // inferSkillsFromToolset method.
 type InferSkillsResult struct {
-	// The inferred skills
-	Skills map[*types.ToolEntry]string
+	// The tools
+	Tools []*types.ToolEntry
+	// The inferred skills corresponding to each tool
+	Skills []string
 }
 
 // ListToolsetsPayload is the payload type of the toolsets service listToolsets

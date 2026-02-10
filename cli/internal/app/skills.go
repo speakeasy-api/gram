@@ -70,11 +70,14 @@ func doSkills(c *cli.Context) error {
 		Scheme: parsedURL.Scheme,
 		Host:   parsedURL.Host,
 	})
-	result, err := tsc.ListToolsets(ctx, apiKey, projectSlug)
-	fmt.Printf("%v", result)
 
+	result, err := tsc.InferSkillsFromToolset(ctx, apiKey, projectSlug)
 	if err != nil {
-		return fmt.Errorf("could not list toolsets: %w", err)
+		return fmt.Errorf("could not infer skills from toolset: %w", err)
 	}
-	return fmt.Errorf("lol %s", "foo")
+
+	fmt.Printf("Tools: %v\n", result.Tools)
+	fmt.Printf("Skills: %v\n", result.Skills)
+
+	return nil
 }

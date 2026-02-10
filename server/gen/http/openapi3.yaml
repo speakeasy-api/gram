@@ -13814,11 +13814,17 @@ components:
             type: object
             properties:
                 skills:
-                    type: object
-                    description: The inferred skills
-                    additionalProperties:
+                    type: array
+                    items:
                         type: string
+                    description: The inferred skills corresponding to each tool
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolEntry'
+                    description: The tools
             required:
+                - tools
                 - skills
         InfoResponseBody:
             type: object

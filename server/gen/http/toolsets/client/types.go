@@ -144,8 +144,10 @@ type ListToolsetsResponseBody struct {
 // InferSkillsFromToolsetResponseBody is the type of the "toolsets" service
 // "inferSkillsFromToolset" endpoint HTTP response body.
 type InferSkillsFromToolsetResponseBody struct {
-	// The inferred skills
-	Skills map[*ToolEntryResponseBody]string `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
+	// The tools
+	Tools []*ToolEntryResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// The inferred skills corresponding to each tool
+	Skills []string `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
 }
 
 // UpdateToolsetResponseBody is the type of the "toolsets" service
@@ -3644,11 +3646,17 @@ func NewListToolsetsGatewayError(body *ListToolsetsGatewayErrorResponseBody) *go
 // "inferSkillsFromToolset" endpoint result from a HTTP "OK" response.
 func NewInferSkillsFromToolsetInferSkillsResultOK(body *InferSkillsFromToolsetResponseBody) *toolsets.InferSkillsResult {
 	v := &toolsets.InferSkillsResult{}
-	v.Skills = make(map[*types.ToolEntry]string, len(body.Skills))
-	for key, val := range body.Skills {
-		tk := unmarshalToolEntryResponseBodyToTypesToolEntry(val)
-		tv := val
-		v.Skills[tk] = tv
+	v.Tools = make([]*types.ToolEntry, len(body.Tools))
+	for i, val := range body.Tools {
+		if val == nil {
+			v.Tools[i] = nil
+			continue
+		}
+		v.Tools[i] = unmarshalToolEntryResponseBodyToTypesToolEntry(val)
+	}
+	v.Skills = make([]string, len(body.Skills))
+	for i, val := range body.Skills {
+		v.Skills[i] = val
 	}
 
 	return v
@@ -5831,12 +5839,15 @@ func ValidateListToolsetsResponseBody(body *ListToolsetsResponseBody) (err error
 // ValidateInferSkillsFromToolsetResponseBody runs the validations defined on
 // InferSkillsFromToolsetResponseBody
 func ValidateInferSkillsFromToolsetResponseBody(body *InferSkillsFromToolsetResponseBody) (err error) {
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
 	if body.Skills == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("skills", "body"))
 	}
-	for k, _ := range body.Skills {
-		if k != nil {
-			if err2 := ValidateToolEntryResponseBody(k); err2 != nil {
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateToolEntryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}

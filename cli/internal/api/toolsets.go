@@ -32,6 +32,7 @@ func NewToolsetsClient(options *ToolsetsClientOptions) *ToolsetsClient {
 	client := toolsets.NewClient(
 		h.CreateToolset(),
 		h.ListToolsets(),
+		h.InferSkillsFromToolset(),
 		h.UpdateToolset(),
 		h.DeleteToolset(),
 		h.GetToolset(),
@@ -82,4 +83,20 @@ func (c *ToolsetsClient) ListToolsets(ctx context.Context, apiKey secret.Secret,
 	}
 
 	return result.Toolsets, nil
+}
+
+func (c *ToolsetsClient) InferSkillsFromToolset(ctx context.Context, apiKey secret.Secret, projectSlug string) (*toolsets.InferSkillsResult, error) {
+	key := apiKey.Reveal()
+	payload := &toolsets.InferSkillsFromToolsetPayload{
+		ApikeyToken:      &key,
+		SessionToken:     nil,
+		ProjectSlugInput: &projectSlug,
+	}
+
+	result, err := c.client.InferSkillsFromToolset(ctx, payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to infer skills from toolset: %w", err)
+	}
+
+	return result, nil
 }
