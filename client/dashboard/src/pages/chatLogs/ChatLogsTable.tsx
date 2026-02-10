@@ -49,7 +49,7 @@ function formatDuration(chat: ChatOverviewWithResolutions): string {
     : `${minutes}m`;
 }
 
-// Subtle copy button that shows on hover
+// Subtle copy button - always visible
 function CopyButton({
   value,
   label,
@@ -64,20 +64,22 @@ function CopyButton({
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation(); // Don't trigger row selection
-      navigator.clipboard.writeText(value);
+      // Copy with the label prefix
+      navigator.clipboard.writeText(`${label}: ${value}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     },
-    [value],
+    [value, label],
   );
 
   return (
     <button
       onClick={handleCopy}
       className={cn(
-        "p-0.5 rounded opacity-0 group-hover/row:opacity-60 hover:!opacity-100 transition-opacity",
-        "hover:bg-muted",
-        copied && "!opacity-100",
+        "p-0.5 rounded transition-colors",
+        "opacity-50 hover:opacity-100",
+        "hover:bg-muted/80",
+        copied && "opacity-100",
         className,
       )}
       title={`Copy ${label}`}
@@ -254,7 +256,7 @@ export function ChatLogsTable({
             key={chat.id}
             onClick={() => onSelectChat(chat)}
             className={cn(
-              "group/row w-full text-left px-5 py-4 transition-all duration-150",
+              "w-full text-left px-5 py-4 transition-all duration-150",
               "hover:bg-muted/50",
               "focus:outline-none focus-visible:bg-muted/50",
               isSelected && "bg-primary/[0.03] hover:bg-primary/[0.05]",
