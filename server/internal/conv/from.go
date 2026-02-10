@@ -130,6 +130,16 @@ func PtrToPGTextEmpty(t *string) pgtype.Text {
 	return pgtype.Text{String: *t, Valid: *t != ""}
 }
 
+// PtrToPGBool converts a bool pointer to a pgtype.Bool. If the pointer is nil,
+// the result has Valid set to false.
+func PtrToPGBool(b *bool) pgtype.Bool {
+	if b == nil {
+		return pgtype.Bool{Bool: false, Valid: false}
+	}
+
+	return pgtype.Bool{Bool: *b, Valid: true}
+}
+
 // FromPGBool converts a pgtype.Bool to a bool or subtype of bool. If Bool is
 // not valid, it returns nil.
 func FromPGBool[T ~bool](t pgtype.Bool) *T {

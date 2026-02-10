@@ -1,9 +1,9 @@
-import { Metrics } from "@gram/client/models/components";
+import { ProjectSummary } from "@gram/client/models/components";
 import { ToolFailures } from "./charts/ToolFailures";
 import { ToolCallsByType } from "./charts/ToolCallsByType";
 
 interface MetricsChartsProps {
-  metrics: Metrics;
+  metrics: ProjectSummary;
 }
 
 function ChartCard({

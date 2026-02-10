@@ -8,6 +8,7 @@ import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetrics
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
+import { telemetrySearchUsers } from "../funcs/telemetrySearchUsers.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -121,6 +122,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.SearchToolCallsResult> {
     return unwrapAsync(telemetrySearchToolCalls(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * searchUsers telemetry
+   *
+   * @remarks
+   * Search and list user usage summaries grouped by user_id or external_user_id
+   */
+  async searchUsers(
+    request: operations.SearchUsersRequest,
+    security?: operations.SearchUsersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SearchUsersResult> {
+    return unwrapAsync(telemetrySearchUsers(
       this,
       request,
       security,

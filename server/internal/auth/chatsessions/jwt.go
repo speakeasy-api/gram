@@ -16,6 +16,7 @@ type ChatSessionClaims struct {
 	OrganizationSlug string  `json:"organization_slug"`
 	ProjectSlug      string  `json:"project_slug"`
 	ExternalUserID   *string `json:"external_user_id,omitempty"`
+	APIKeyID         string  `json:"api_key_id"`
 	jwt.RegisteredClaims
 }
 

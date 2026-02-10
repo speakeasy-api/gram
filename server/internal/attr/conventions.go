@@ -15,6 +15,7 @@ const (
 	ErrorMessageKey                   = semconv.ErrorMessageKey
 	ExceptionStacktraceKey            = semconv.ExceptionStacktraceKey
 	ExternalUserIDKey                 = attribute.Key("gram.external_user.id")
+	APIKeyIDKey                       = attribute.Key("gram.api_key.id")
 	ContainerIDKey                    = semconv.ContainerIDKey
 	ContainerNetworkIDKey             = attribute.Key("container.network.id")
 	FilePathKey                       = semconv.FilePathKey
@@ -354,6 +355,9 @@ func SlogUserID(v string) slog.Attr      { return slog.String(string(UserIDKey),
 
 func ExternalUserID(v string) attribute.KeyValue { return ExternalUserIDKey.String(v) }
 func SlogExternalUserID(v string) slog.Attr      { return slog.String(string(ExternalUserIDKey), v) }
+
+func APIKeyID(v string) attribute.KeyValue { return APIKeyIDKey.String(v) }
+func SlogAPIKeyID(v string) slog.Attr      { return slog.String(string(APIKeyIDKey), v) }
 
 func Actual(v any) attribute.KeyValue { return ActualKey.String(fmt.Sprintf("%v", v)) }
 func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }

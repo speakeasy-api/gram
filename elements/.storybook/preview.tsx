@@ -113,7 +113,7 @@ const preview: Preview = {
       }
 
       return (
-        <ElementsDecorator config={elementsConfig} key={storybookTheme}>
+        <ElementsDecorator config={elementsConfig}>
           <Story />
         </ElementsDecorator>
       )

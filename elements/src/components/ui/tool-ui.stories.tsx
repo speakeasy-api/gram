@@ -7,14 +7,17 @@ import { ToolUI } from './tool-ui'
 // However, to use this design variant, we'd have to add lots of metadata to the tool parts
 
 const meta: Meta<typeof ToolUI> = {
+  title: 'Components/Tool UI',
   component: ToolUI,
   parameters: {
-    layout: 'centered',
+    layout: 'fullscreen',
   },
   decorators: [
     (Story) => (
-      <div className="w-[400px] p-4">
-        <Story />
+      <div className="bg-background text-foreground flex min-h-screen items-start justify-center p-6">
+        <div className="w-[400px]">
+          <Story />
+        </div>
       </div>
     ),
   ],

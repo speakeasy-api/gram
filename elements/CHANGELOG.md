@@ -1,5 +1,55 @@
 # @gram-ai/elements
 
+## 1.26.1
+
+### Patch Changes
+
+- f635e22: Support for [MCP tool annotations](https://modelcontextprotocol.io/legacy/concepts/tools#tool-annotations). Tool annotations provide additional metadata about a tool’s behavior,
+  helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool, but should not be relied upon for security decisions.
+
+  The MCP specification defines the following annotations for tools that Gram now supports for external mcp servers sourced from the Catalog as well as HTTP based tools.
+
+  | Annotation        | Type    | Default | Description                                                                                                                          |
+  | ----------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `title`           | string  | -       | A human-readable title for the tool, useful for UI display                                                                           |
+  | `readOnlyHint`    | boolean | false   | If true, indicates the tool does not modify its environment                                                                          |
+  | `destructiveHint` | boolean | true    | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false)                                     |
+  | `idempotentHint`  | boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when `readOnlyHint` is false) |
+  | `openWorldHint`   | boolean | true    | If true, the tool may interact with an "open world" of external entities                                                             |
+
+  Tool annotations can be edited in the playground or in the tools tab of a specific MCP server.
+
+## 1.26.0
+
+### Minor Changes
+
+- 9cb2f0e: Chart plugin and generative UI overhaul
+
+  **Chart Plugin**
+  - Replace Vega-Lite with Recharts for React 19 compatibility
+  - Add themed tooltips using CSS variables (oklch colors)
+  - Update chart stories to use MCP orders summary tool
+
+  **Generative UI**
+  - Add macOS-style window frames with traffic light buttons
+  - Add whimsical cycling loading messages (50 messages, 2s fade transitions)
+  - Streamline LLM prompt from ~150 lines to concise bulleted format
+
+  **Component Fixes**
+  - ActionButton executes tools via useToolExecution hook
+  - Align Text, Badge, Progress props with LLM prompt specification
+  - Fix catalog schema toolName → action mismatch
+  - Fix setTimeout cleanup in CyclingLoadingMessage
+
+  **Storybook**
+  - Fix theme toggle causing full component remount
+
+## 1.25.2
+
+### Patch Changes
+
+- e08b45e: Adds support for forwarding and storing user feedback. Incorporates the stored user feedback into chat resolution analysis
+
 ## 1.25.1
 
 ### Patch Changes

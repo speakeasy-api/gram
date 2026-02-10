@@ -79,17 +79,22 @@ func (s *Service) ListGlobal(ctx context.Context, payload *gen.ListGlobalPayload
 	variations := make([]*types.ToolVariation, 0, len(rows))
 	for _, row := range rows {
 		variations = append(variations, &types.ToolVariation{
-			ID:            row.ToolVariation.ID.String(),
-			GroupID:       row.ToolVariation.GroupID.String(),
-			SrcToolUrn:    row.ToolVariation.SrcToolUrn.String(),
-			SrcToolName:   row.ToolVariation.SrcToolName,
-			Confirm:       conv.FromPGText[string](row.ToolVariation.Confirm),
-			ConfirmPrompt: conv.FromPGText[string](row.ToolVariation.ConfirmPrompt),
-			Name:          conv.FromPGText[string](row.ToolVariation.Name),
-			Description:   conv.FromPGText[string](row.ToolVariation.Description),
-			Summarizer:    conv.FromPGText[string](row.ToolVariation.Summarizer),
-			CreatedAt:     row.ToolVariation.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:     row.ToolVariation.UpdatedAt.Time.Format(time.RFC3339),
+			ID:              row.ToolVariation.ID.String(),
+			GroupID:         row.ToolVariation.GroupID.String(),
+			SrcToolUrn:      row.ToolVariation.SrcToolUrn.String(),
+			SrcToolName:     row.ToolVariation.SrcToolName,
+			Confirm:         conv.FromPGText[string](row.ToolVariation.Confirm),
+			ConfirmPrompt:   conv.FromPGText[string](row.ToolVariation.ConfirmPrompt),
+			Name:            conv.FromPGText[string](row.ToolVariation.Name),
+			Description:     conv.FromPGText[string](row.ToolVariation.Description),
+			Summarizer:      conv.FromPGText[string](row.ToolVariation.Summarizer),
+			Title:           conv.FromPGText[string](row.ToolVariation.Title),
+			ReadOnlyHint:    conv.FromPGBool[bool](row.ToolVariation.ReadOnlyHint),
+			DestructiveHint: conv.FromPGBool[bool](row.ToolVariation.DestructiveHint),
+			IdempotentHint:  conv.FromPGBool[bool](row.ToolVariation.IdempotentHint),
+			OpenWorldHint:   conv.FromPGBool[bool](row.ToolVariation.OpenWorldHint),
+			CreatedAt:       row.ToolVariation.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:       row.ToolVariation.UpdatedAt.Time.Format(time.RFC3339),
 		})
 	}
 
@@ -136,16 +141,21 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 	}
 
 	row, err := tx.UpsertToolVariation(ctx, repo.UpsertToolVariationParams{
-		GroupID:       groupID,
-		SrcToolUrn:    srcToolUrn,
-		SrcToolName:   payload.SrcToolName,
-		Confirm:       conv.PtrToPGText(payload.Confirm),
-		ConfirmPrompt: conv.PtrToPGText(payload.ConfirmPrompt),
-		Name:          conv.PtrToPGText(payload.Name),
-		Summary:       conv.PtrToPGText(payload.Summary),
-		Description:   conv.PtrToPGText(payload.Description),
-		Tags:          payload.Tags,
-		Summarizer:    conv.PtrToPGText(payload.Summarizer),
+		GroupID:         groupID,
+		SrcToolUrn:      srcToolUrn,
+		SrcToolName:     payload.SrcToolName,
+		Confirm:         conv.PtrToPGText(payload.Confirm),
+		ConfirmPrompt:   conv.PtrToPGText(payload.ConfirmPrompt),
+		Name:            conv.PtrToPGText(payload.Name),
+		Summary:         conv.PtrToPGText(payload.Summary),
+		Description:     conv.PtrToPGText(payload.Description),
+		Tags:            payload.Tags,
+		Summarizer:      conv.PtrToPGText(payload.Summarizer),
+		Title:           conv.PtrToPGText(payload.Title),
+		ReadOnlyHint:    conv.PtrToPGBool(payload.ReadOnlyHint),
+		DestructiveHint: conv.PtrToPGBool(payload.DestructiveHint),
+		IdempotentHint:  conv.PtrToPGBool(payload.IdempotentHint),
+		OpenWorldHint:   conv.PtrToPGBool(payload.OpenWorldHint),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error upserting global tool variation").Log(ctx, s.logger)
@@ -157,17 +167,22 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 
 	return &gen.UpsertGlobalToolVariationResult{
 		Variation: &types.ToolVariation{
-			ID:            row.ID.String(),
-			GroupID:       row.GroupID.String(),
-			SrcToolUrn:    row.SrcToolUrn.String(),
-			SrcToolName:   row.SrcToolName,
-			Confirm:       conv.FromPGText[string](row.Confirm),
-			ConfirmPrompt: conv.FromPGText[string](row.ConfirmPrompt),
-			Name:          conv.FromPGText[string](row.Name),
-			Description:   conv.FromPGText[string](row.Description),
-			Summarizer:    conv.FromPGText[string](row.Summarizer),
-			CreatedAt:     row.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:     row.UpdatedAt.Time.Format(time.RFC3339),
+			ID:              row.ID.String(),
+			GroupID:         row.GroupID.String(),
+			SrcToolUrn:      row.SrcToolUrn.String(),
+			SrcToolName:     row.SrcToolName,
+			Confirm:         conv.FromPGText[string](row.Confirm),
+			ConfirmPrompt:   conv.FromPGText[string](row.ConfirmPrompt),
+			Name:            conv.FromPGText[string](row.Name),
+			Description:     conv.FromPGText[string](row.Description),
+			Summarizer:      conv.FromPGText[string](row.Summarizer),
+			Title:           conv.FromPGText[string](row.Title),
+			ReadOnlyHint:    conv.FromPGBool[bool](row.ReadOnlyHint),
+			DestructiveHint: conv.FromPGBool[bool](row.DestructiveHint),
+			IdempotentHint:  conv.FromPGBool[bool](row.IdempotentHint),
+			OpenWorldHint:   conv.FromPGBool[bool](row.OpenWorldHint),
+			CreatedAt:       row.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:       row.UpdatedAt.Time.Format(time.RFC3339),
 		},
 	}, nil
 }

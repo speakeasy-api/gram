@@ -1,4 +1,4 @@
-import { Metrics } from "@gram/client/models/components";
+import { ProjectSummary } from "@gram/client/models/components";
 import { formatNumber } from "./charts/utils";
 import {
   MessageSquareIcon,
@@ -10,7 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 
 interface MetricsCardsProps {
-  metrics: Metrics;
+  metrics: ProjectSummary;
 }
 
 function formatDuration(ms: number): string {
