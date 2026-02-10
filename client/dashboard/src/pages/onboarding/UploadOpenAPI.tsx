@@ -262,7 +262,6 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
       projectId: project.id,
     });
     if (!response.ok) {
-      console.log(response);
       toast.error(`Failed to fetch OpenAPI content: ${response.error.message}`);
       return;
     }
