@@ -2,6 +2,7 @@ import type { ChatOverviewWithResolutions } from "@gram/client/models/components
 import { cn } from "@/lib/utils";
 import { Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
+import { useState, useCallback } from "react";
 
 interface ChatLogsTableProps {
   chats: ChatOverviewWithResolutions[];
@@ -46,6 +47,50 @@ function formatDuration(chat: ChatOverviewWithResolutions): string {
   return remainingSeconds > 0
     ? `${minutes}m ${remainingSeconds}s`
     : `${minutes}m`;
+}
+
+// Subtle copy button that shows on hover
+function CopyButton({
+  value,
+  label,
+  className,
+}: {
+  value: string;
+  label: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation(); // Don't trigger row selection
+      navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    },
+    [value],
+  );
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={cn(
+        "p-0.5 rounded opacity-0 group-hover/row:opacity-60 hover:!opacity-100 transition-opacity",
+        "hover:bg-muted",
+        copied && "!opacity-100",
+        className,
+      )}
+      title={`Copy ${label}`}
+    >
+      <Icon
+        name={copied ? "check" : "copy"}
+        className={cn(
+          "size-3.5",
+          copied ? "text-emerald-500" : "text-muted-foreground",
+        )}
+      />
+    </button>
+  );
 }
 
 // Circular progress indicator component with label
@@ -209,7 +254,7 @@ export function ChatLogsTable({
             key={chat.id}
             onClick={() => onSelectChat(chat)}
             className={cn(
-              "w-full text-left px-5 py-4 transition-all duration-150",
+              "group/row w-full text-left px-5 py-4 transition-all duration-150",
               "hover:bg-muted/50",
               "focus:outline-none focus-visible:bg-muted/50",
               isSelected && "bg-primary/[0.03] hover:bg-primary/[0.05]",
@@ -243,6 +288,7 @@ export function ChatLogsTable({
                   <span className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
                     {getTraceId(chat.id)}
                   </span>
+                  <CopyButton value={chat.id} label="Chat ID" />
                   <span className="text-muted-foreground/40">·</span>
                   <span className="text-sm text-muted-foreground">
                     {format(chat.createdAt, "MMM d, HH:mm")}
@@ -261,6 +307,9 @@ export function ChatLogsTable({
                     <span className="truncate max-w-[120px]">
                       {chat.externalUserId || "anonymous"}
                     </span>
+                    {chat.externalUserId && (
+                      <CopyButton value={chat.externalUserId} label="User ID" />
+                    )}
                   </span>
                   <span className="flex items-center gap-1.5">
                     <Icon name="timer" className="size-4 opacity-60" />
