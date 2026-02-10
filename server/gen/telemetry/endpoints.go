@@ -19,6 +19,7 @@ type Endpoints struct {
 	SearchLogs               goa.Endpoint
 	SearchToolCalls          goa.Endpoint
 	SearchChats              goa.Endpoint
+	SearchUsers              goa.Endpoint
 	CaptureEvent             goa.Endpoint
 	GetProjectMetricsSummary goa.Endpoint
 	GetUserMetricsSummary    goa.Endpoint
@@ -32,6 +33,7 @@ func NewEndpoints(s Service) *Endpoints {
 		SearchLogs:               NewSearchLogsEndpoint(s, a.APIKeyAuth),
 		SearchToolCalls:          NewSearchToolCallsEndpoint(s, a.APIKeyAuth),
 		SearchChats:              NewSearchChatsEndpoint(s, a.APIKeyAuth),
+		SearchUsers:              NewSearchUsersEndpoint(s, a.APIKeyAuth),
 		CaptureEvent:             NewCaptureEventEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		GetProjectMetricsSummary: NewGetProjectMetricsSummaryEndpoint(s, a.APIKeyAuth),
 		GetUserMetricsSummary:    NewGetUserMetricsSummaryEndpoint(s, a.APIKeyAuth),
@@ -43,6 +45,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SearchLogs = m(e.SearchLogs)
 	e.SearchToolCalls = m(e.SearchToolCalls)
 	e.SearchChats = m(e.SearchChats)
+	e.SearchUsers = m(e.SearchUsers)
 	e.CaptureEvent = m(e.CaptureEvent)
 	e.GetProjectMetricsSummary = m(e.GetProjectMetricsSummary)
 	e.GetUserMetricsSummary = m(e.GetUserMetricsSummary)
@@ -222,6 +225,65 @@ func NewSearchChatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.SearchChats(ctx, p)
+	}
+}
+
+// NewSearchUsersEndpoint returns an endpoint function that calls the method
+// "searchUsers" of service "telemetry".
+func NewSearchUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SearchUsersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SearchUsers(ctx, p)
 	}
 }
 

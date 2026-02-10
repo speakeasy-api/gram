@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
@@ -421,6 +422,23 @@ func newWorkerCommand() *cli.Command {
 				baseChatClient,
 			)
 
+			// Create ClickHouse client and telemetry service for resolution events
+			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, chShutdown)
+
+			logsEnabled := func(ctx context.Context, orgID string) (bool, error) {
+				isEnabled, err := productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureLogs)
+				if err != nil {
+					logger.ErrorContext(ctx, "error checking if logs are enabled", attr.SlogError(err))
+					return false, fmt.Errorf("error checking if logs are enabled: %w", err)
+				}
+				return isEnabled, nil
+			}
+			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, posthogClient)
+
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				DB:                   db,
 				EncryptionClient:     encryptionClient,
@@ -441,6 +459,7 @@ func newWorkerCommand() *cli.Command {
 				RagService:           ragService,
 				AgentsService:        agentsService,
 				MCPRegistryClient:    mcpRegistryClient,
+				TelemetryService:     telemetryService,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

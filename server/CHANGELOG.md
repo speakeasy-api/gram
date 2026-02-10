@@ -1,5 +1,43 @@
 # server
 
+## 0.22.5
+
+### Patch Changes
+
+- f635e22: Support for [MCP tool annotations](https://modelcontextprotocol.io/legacy/concepts/tools#tool-annotations). Tool annotations provide additional metadata about a tool’s behavior,
+  helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool, but should not be relied upon for security decisions.
+
+  The MCP specification defines the following annotations for tools that Gram now supports for external mcp servers sourced from the Catalog as well as HTTP based tools.
+
+  | Annotation        | Type    | Default | Description                                                                                                                          |
+  | ----------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `title`           | string  | -       | A human-readable title for the tool, useful for UI display                                                                           |
+  | `readOnlyHint`    | boolean | false   | If true, indicates the tool does not modify its environment                                                                          |
+  | `destructiveHint` | boolean | true    | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false)                                     |
+  | `idempotentHint`  | boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when `readOnlyHint` is false) |
+  | `openWorldHint`   | boolean | true    | If true, the tool may interact with an "open world" of external entities                                                             |
+
+  Tool annotations can be edited in the playground or in the tools tab of a specific MCP server.
+
+## 0.22.4
+
+### Patch Changes
+
+- b2347fc: Adds a new telemetry endpoint to fetch user usage data
+- cd7a003: feat: record api key id in telemetry logs
+- a34d18a: Adds chat resolution stats in telemetry metrics
+
+## 0.22.3
+
+### Patch Changes
+
+- e246458: Starts writing chat resolution telemetry data.
+- a7422f8: feat: add OAuth support for external MCP servers in the Playground
+- a753172: feat: customize documentation button text on MCP install page
+- 4ef4d5e: fix: allow surfacing openapi parse errors in the UI
+- 6e29702: Adds a new endpoint to get metrics per user. Allows filtering logs per user.
+- 1f74200: Fixes issue with loading of metrics when logs are disabled.
+
 ## 0.22.2
 
 ### Patch Changes

@@ -706,6 +706,7 @@ func newStartCommand() *cli.Command {
 						RagService:           ragService,
 						AgentsService:        agentsWorkerSvc,
 						MCPRegistryClient:    mcpRegistryClient,
+						TelemetryService:     telemSvc,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

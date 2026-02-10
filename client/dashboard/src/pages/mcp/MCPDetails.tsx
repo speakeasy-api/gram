@@ -537,7 +537,15 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
   const handleToolUpdate = async (
     tool: Tool,
-    updates: { name?: string; description?: string },
+    updates: {
+      name?: string;
+      description?: string;
+      title?: string;
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    },
   ) => {
     if (tool.type === "prompt") {
       await client.templates.update({
@@ -565,6 +573,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
       overridden_fields: Object.keys(updates).join(", "),
     });
 
+    toast.success("Tool updated");
     refetch();
   };
 

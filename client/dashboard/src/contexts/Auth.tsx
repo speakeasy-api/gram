@@ -1,4 +1,4 @@
-import { getServerURL } from "@/lib/utils";
+import { FullPageError } from "@/components/full-page-error";
 import { LINKED_FROM_PARAM } from "@/pages/home/Home";
 import {
   InfoResponseBody,
@@ -166,19 +166,9 @@ export const useOrganization = (): OrganizationEntry & {
   });
 };
 
-// Error fallback component
-const ErrorFallback = ({ error }: { error: Error }) => {
-  return (
-    <div role="alert">
-      <p>Something went wrong:</p>
-      <pre>{error.message}</pre>
-    </div>
-  );
-};
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
+    <ErrorBoundary FallbackComponent={FullPageError}>
       <AuthHandler>{children}</AuthHandler>
     </ErrorBoundary>
   );
@@ -321,11 +311,7 @@ export const useUser = () => {
 
 export const useIsAdmin = () => {
   const { isAdmin } = useUser();
-  const devHostnames = import.meta.env.VITE_DEV_HOSTNAMES?.split(",") ?? [
-    "localhost",
-  ];
-  const isLocal = devHostnames.some((h) => getServerURL().includes(h));
-  return isAdmin || isLocal;
+  return isAdmin;
 };
 
 export function usePylonInAppChat(user: User | undefined) {

@@ -10,6 +10,7 @@ export { ElementsProvider } from './contexts/ElementsProvider'
 export { useElements as useGramElements } from './hooks/useElements'
 export { useElements } from './hooks/useElements'
 export { useThreadId } from './hooks/useThreadId'
+export { useChatId } from './contexts/ChatIdContext'
 
 // Core Components
 export { Chat } from '@/components/Chat'

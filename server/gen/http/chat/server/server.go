@@ -19,12 +19,12 @@ import (
 
 // Server lists the chat service endpoint HTTP handlers.
 type Server struct {
-	Mounts                   []*MountPoint
-	ListChats                http.Handler
-	LoadChat                 http.Handler
-	GenerateTitle            http.Handler
-	CreditUsage              http.Handler
-	ListChatsWithResolutions http.Handler
+	Mounts         []*MountPoint
+	ListChats      http.Handler
+	LoadChat       http.Handler
+	GenerateTitle  http.Handler
+	CreditUsage    http.Handler
+	SubmitFeedback http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -58,13 +58,13 @@ func New(
 			{"LoadChat", "GET", "/rpc/chat.load"},
 			{"GenerateTitle", "POST", "/rpc/chat.generateTitle"},
 			{"CreditUsage", "GET", "/rpc/chat.creditUsage"},
-			{"ListChatsWithResolutions", "GET", "/rpc/chat.listChatsWithResolutions"},
+			{"SubmitFeedback", "POST", "/rpc/chat.submitFeedback"},
 		},
-		ListChats:                NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
-		LoadChat:                 NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
-		GenerateTitle:            NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
-		CreditUsage:              NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
-		ListChatsWithResolutions: NewListChatsWithResolutionsHandler(e.ListChatsWithResolutions, mux, decoder, encoder, errhandler, formatter),
+		ListChats:      NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
+		LoadChat:       NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
+		GenerateTitle:  NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
+		CreditUsage:    NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
+		SubmitFeedback: NewSubmitFeedbackHandler(e.SubmitFeedback, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -77,7 +77,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.LoadChat = m(s.LoadChat)
 	s.GenerateTitle = m(s.GenerateTitle)
 	s.CreditUsage = m(s.CreditUsage)
-	s.ListChatsWithResolutions = m(s.ListChatsWithResolutions)
+	s.SubmitFeedback = m(s.SubmitFeedback)
 }
 
 // MethodNames returns the methods served.
@@ -89,7 +89,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountLoadChatHandler(mux, h.LoadChat)
 	MountGenerateTitleHandler(mux, h.GenerateTitle)
 	MountCreditUsageHandler(mux, h.CreditUsage)
-	MountListChatsWithResolutionsHandler(mux, h.ListChatsWithResolutions)
+	MountSubmitFeedbackHandler(mux, h.SubmitFeedback)
 }
 
 // Mount configures the mux to serve the chat endpoints.
@@ -309,22 +309,21 @@ func NewCreditUsageHandler(
 	})
 }
 
-// MountListChatsWithResolutionsHandler configures the mux to serve the "chat"
-// service "listChatsWithResolutions" endpoint.
-func MountListChatsWithResolutionsHandler(mux goahttp.Muxer, h http.Handler) {
+// MountSubmitFeedbackHandler configures the mux to serve the "chat" service
+// "submitFeedback" endpoint.
+func MountSubmitFeedbackHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/chat.listChatsWithResolutions", otelhttp.WithRouteTag("/rpc/chat.listChatsWithResolutions", f).ServeHTTP)
+	mux.Handle("POST", "/rpc/chat.submitFeedback", otelhttp.WithRouteTag("/rpc/chat.submitFeedback", f).ServeHTTP)
 }
 
-// NewListChatsWithResolutionsHandler creates a HTTP handler which loads the
-// HTTP request and calls the "chat" service "listChatsWithResolutions"
-// endpoint.
-func NewListChatsWithResolutionsHandler(
+// NewSubmitFeedbackHandler creates a HTTP handler which loads the HTTP request
+// and calls the "chat" service "submitFeedback" endpoint.
+func NewSubmitFeedbackHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -333,13 +332,13 @@ func NewListChatsWithResolutionsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeListChatsWithResolutionsRequest(mux, decoder)
-		encodeResponse = EncodeListChatsWithResolutionsResponse(encoder)
-		encodeError    = EncodeListChatsWithResolutionsError(encoder, formatter)
+		decodeRequest  = DecodeSubmitFeedbackRequest(mux, decoder)
+		encodeResponse = EncodeSubmitFeedbackResponse(encoder)
+		encodeError    = EncodeSubmitFeedbackError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listChatsWithResolutions")
+		ctx = context.WithValue(ctx, goa.MethodKey, "submitFeedback")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

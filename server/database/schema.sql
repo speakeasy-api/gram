@@ -301,6 +301,12 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   request_content_type TEXT,
   response_filter JSONB NULL,
 
+  -- Tool behavior hints (aligned with MCP annotations spec)
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -372,6 +378,12 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   auth_input JSONB,
   -- Record<string, string>
   meta JSONB,
+
+  -- Tool behavior hints (aligned with MCP annotations spec)
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -915,6 +927,13 @@ CREATE TABLE IF NOT EXISTS tool_variations (
   description TEXT,
   tags TEXT[],
   summarizer TEXT,
+
+  -- Tool behavior hint overrides (NULL = inherit from base tool)
+  title TEXT,
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

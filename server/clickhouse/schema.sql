@@ -109,7 +109,9 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     urn String MATERIALIZED toString(attributes.gram.tool.urn) COMMENT 'Tool URN (materialized from attributes.gram.tool.urn).',
     chat_id String MATERIALIZED toString(attributes.gen_ai.conversation.id) COMMENT 'Chat ID (materialized from attributes.gen_ai.conversation.id).',
     user_id String MATERIALIZED toString(attributes.user.id) COMMENT 'User ID (materialized from attributes.user.id).',
-    external_user_id String MATERIALIZED toString(attributes.gram.external_user.id) COMMENT 'External user ID (materialized from attributes.gram.external_user.id).'
+    external_user_id String MATERIALIZED toString(attributes.gram.external_user.id) COMMENT 'External user ID (materialized from attributes.gram.external_user.id).',
+    api_key_id String MATERIALIZED toString(attributes.gram.api_key.id) COMMENT 'API key ID (materialized from attributes.gram.api_key.id).',
+    evaluation_score_label String MATERIALIZED toString(attributes.gen_ai.evaluation.score.label) COMMENT 'Evaluation result label (success, failure, partial, abandoned).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -133,3 +135,5 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_urn ON telemetry_logs (urn) TY
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_chat_id ON telemetry_logs (chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_user_id ON telemetry_logs (user_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_user_id ON telemetry_logs (external_user_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_api_key_id ON telemetry_logs (api_key_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_evaluation_score_label ON telemetry_logs (evaluation_score_label) TYPE bloom_filter(0.01) GRANULARITY 1;

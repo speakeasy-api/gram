@@ -16,31 +16,36 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 type AnalyzeSegment struct {
-	logger     *slog.Logger
-	repo       *repo.Queries
-	chatClient *openrouter.ChatClient
-	db         *pgxpool.Pool
+	logger           *slog.Logger
+	repo             *repo.Queries
+	chatClient       *openrouter.ChatClient
+	db               *pgxpool.Pool
+	telemetryService *telemetry.Service
 }
 
-func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *AnalyzeSegment {
+func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient *openrouter.ChatClient, telemetryService *telemetry.Service) *AnalyzeSegment {
 	return &AnalyzeSegment{
-		logger:     logger,
-		repo:       repo.New(db),
-		chatClient: chatClient,
-		db:         db,
+		logger:           logger,
+		repo:             repo.New(db),
+		chatClient:       chatClient,
+		db:               db,
+		telemetryService: telemetryService,
 	}
 }
 
 type AnalyzeSegmentArgs struct {
-	ChatID     uuid.UUID
-	ProjectID  uuid.UUID
-	OrgID      string
-	StartIndex int
-	EndIndex   int
+	ChatID       uuid.UUID
+	ProjectID    uuid.UUID
+	OrgID        string
+	APIKeyID     string
+	StartIndex   int
+	EndIndex     int
+	UserFeedback []UserFeedback
 }
 
 type toolCallAnalysis struct {
@@ -71,10 +76,18 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("invalid segment indices: start=%d, end=%d, total=%d", args.StartIndex, args.EndIndex, len(allMessages))
 	}
 
+	// Check for existing user feedback
+	var applicableUserFeedback []UserFeedback
+	for _, feedback := range args.UserFeedback {
+		if feedback.MessageIndex >= args.StartIndex && feedback.MessageIndex <= args.EndIndex {
+			applicableUserFeedback = append(applicableUserFeedback, feedback)
+		}
+	}
+
 	segmentMessages := allMessages[args.StartIndex : args.EndIndex+1]
 	segmentText := a.formatSegment(segmentMessages)
 
-	result, err := a.analyzeWithLLM(ctx, args.OrgID, args.ProjectID, segmentText)
+	result, err := a.analyzeWithLLM(ctx, args.OrgID, args.ProjectID, segmentText, applicableUserFeedback)
 	if err != nil {
 		return fmt.Errorf("failed to analyze segment with LLM: %w", err)
 	}
@@ -113,10 +126,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	}
 
 	// Insert resolution
-	score := result.Score
-	if score < 0 {
-		score = 0
-	}
+	score := max(result.Score, 0)
 	if score > 100 {
 		score = 100
 	}
@@ -143,6 +153,17 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		}
 	}
 
+	// Attach the resolution to the user feedback
+	for _, fb := range applicableUserFeedback {
+		err := txRepo.AddUserFeedbackChatResolution(ctx, repo.AddUserFeedbackChatResolutionParams{
+			ID:               fb.ID,
+			ChatResolutionID: uuid.NullUUID{UUID: resolutionID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to add user feedback to chat resolution: %w", err)
+		}
+	}
+
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
@@ -152,6 +173,42 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		attr.SlogChatID(args.ChatID.String()),
 	)
 
+	if a.telemetryService == nil {
+		return nil
+	}
+
+	attrs := map[attr.Key]any{
+		attr.GenAIEvaluationNameKey:        "chat_resolution",
+		attr.GenAIEvaluationScoreLabelKey:  result.Resolution,
+		attr.GenAIEvaluationScoreValueKey:  score,
+		attr.GenAIEvaluationExplanationKey: result.ResolutionNotes,
+		attr.GenAIConversationIDKey:        args.ChatID.String(),
+		attr.ProjectIDKey:                  args.ProjectID.String(),
+		attr.OrganizationIDKey:             args.OrgID,
+		attr.APIKeyIDKey:                   args.APIKeyID,
+	}
+
+	chatInfo, err := a.repo.GetChat(ctx, args.ChatID)
+	if err == nil && chatInfo.CreatedAt.Valid {
+		resolutionTimeSecs := time.Since(chatInfo.CreatedAt.Time).Seconds()
+
+		attrs[attr.GenAIConversationDuration] = resolutionTimeSecs
+	}
+
+	a.telemetryService.CreateLog(telemetry.LogParams{
+		Timestamp: time.Now(),
+		ToolInfo: telemetry.ToolInfo{
+			ID:             "",
+			URN:            "",
+			Name:           "chat_resolution",
+			ProjectID:      args.ProjectID.String(),
+			DeploymentID:   "",
+			FunctionID:     nil,
+			OrganizationID: args.OrgID,
+		},
+		Attributes: attrs,
+	})
+
 	return nil
 }
 
@@ -159,7 +216,14 @@ func (a *AnalyzeSegment) formatSegment(messages []repo.ChatMessage) string {
 	return formatChatMessages(messages)
 }
 
-func (a *AnalyzeSegment) analyzeWithLLM(ctx context.Context, orgID string, projectID uuid.UUID, segmentText string) (*segmentAnalysisResult, error) {
+func (a *AnalyzeSegment) analyzeWithLLM(
+	ctx context.Context,
+	orgID string,
+	projectID uuid.UUID,
+	segmentText string,
+	userFeedback []UserFeedback,
+) (*segmentAnalysisResult, error) {
+	userFeedbackText := a.formatUserFeedback(userFeedback)
 	systemPrompt := `Analyze this conversation segment comprehensively.
 
 1. Identify the user's goal/intent in this segment
@@ -174,10 +238,18 @@ func (a *AnalyzeSegment) analyzeWithLLM(ctx context.Context, orgID string, proje
 
 Return structured JSON.`
 
+	userPromptText := segmentText
+	if userFeedbackText != "" {
+		userPromptText = fmt.Sprintf(`%s
+
+USER FEEDBACK: The user gave feedback on this chat. Take this feedback into account when analyzing the resolution status and quality score.
+%s`, segmentText, userFeedbackText)
+	}
+
 	userPrompt := fmt.Sprintf(`%s
 
 Analyze this conversation segment.
-If there are no tool calls, return an empty array.`, segmentText)
+If there are no tool calls, return an empty array.`, userPromptText)
 
 	analysisCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
@@ -279,4 +351,15 @@ If there are no tool calls, return an empty array.`, segmentText)
 	}
 
 	return &result, nil
+}
+
+func (a *AnalyzeSegment) formatUserFeedback(userFeedback []UserFeedback) string {
+	feedbackText := ""
+	for _, fb := range userFeedback {
+		feedbackText += fmt.Sprintf(`User feedback at message index %d: %s\n`, fb.MessageIndex, fb.Resolution)
+		if fb.ResolutionNotes != "" {
+			feedbackText += fmt.Sprintf(`-- User feedback notes: %s\n`, fb.ResolutionNotes)
+		}
+	}
+	return feedbackText
 }

@@ -10,7 +10,6 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goa "goa.design/goa/v3/pkg"
@@ -147,82 +146,45 @@ func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsage
 	return v, nil
 }
 
-// BuildListChatsWithResolutionsPayload builds the payload for the chat
-// listChatsWithResolutions endpoint from CLI flags.
-func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
+// BuildSubmitFeedbackPayload builds the payload for the chat submitFeedback
+// endpoint from CLI flags.
+func BuildSubmitFeedbackPayload(chatSubmitFeedbackBody string, chatSubmitFeedbackSessionToken string, chatSubmitFeedbackProjectSlugInput string, chatSubmitFeedbackChatSessionsToken string) (*chat.SubmitFeedbackPayload, error) {
 	var err error
-	var externalUserID *string
+	var body SubmitFeedbackRequestBody
 	{
-		if chatListChatsWithResolutionsExternalUserID != "" {
-			externalUserID = &chatListChatsWithResolutionsExternalUserID
+		err = json.Unmarshal([]byte(chatSubmitFeedbackBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"feedback\": \"failure\",\n      \"id\": \"abc123\"\n   }'")
 		}
-	}
-	var resolutionStatus *string
-	{
-		if chatListChatsWithResolutionsResolutionStatus != "" {
-			resolutionStatus = &chatListChatsWithResolutionsResolutionStatus
+		if !(body.Feedback == "success" || body.Feedback == "failure") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feedback", body.Feedback, []any{"success", "failure"}))
 		}
-	}
-	var limit int
-	{
-		if chatListChatsWithResolutionsLimit != "" {
-			var v int64
-			v, err = strconv.ParseInt(chatListChatsWithResolutionsLimit, 10, strconv.IntSize)
-			limit = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for limit, must be INT")
-			}
-			if limit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
-			}
-			if limit > 100 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var offset int
-	{
-		if chatListChatsWithResolutionsOffset != "" {
-			var v int64
-			v, err = strconv.ParseInt(chatListChatsWithResolutionsOffset, 10, strconv.IntSize)
-			offset = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for offset, must be INT")
-			}
-			if offset < 0 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
-			}
-			if err != nil {
-				return nil, err
-			}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
 	{
-		if chatListChatsWithResolutionsSessionToken != "" {
-			sessionToken = &chatListChatsWithResolutionsSessionToken
+		if chatSubmitFeedbackSessionToken != "" {
+			sessionToken = &chatSubmitFeedbackSessionToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if chatListChatsWithResolutionsProjectSlugInput != "" {
-			projectSlugInput = &chatListChatsWithResolutionsProjectSlugInput
+		if chatSubmitFeedbackProjectSlugInput != "" {
+			projectSlugInput = &chatSubmitFeedbackProjectSlugInput
 		}
 	}
 	var chatSessionsToken *string
 	{
-		if chatListChatsWithResolutionsChatSessionsToken != "" {
-			chatSessionsToken = &chatListChatsWithResolutionsChatSessionsToken
+		if chatSubmitFeedbackChatSessionsToken != "" {
+			chatSessionsToken = &chatSubmitFeedbackChatSessionsToken
 		}
 	}
-	v := &chat.ListChatsWithResolutionsPayload{}
-	v.ExternalUserID = externalUserID
-	v.ResolutionStatus = resolutionStatus
-	v.Limit = limit
-	v.Offset = offset
+	v := &chat.SubmitFeedbackPayload{
+		ID:       body.ID,
+		Feedback: body.Feedback,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

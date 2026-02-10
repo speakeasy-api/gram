@@ -7,6 +7,7 @@ import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { SearchBar } from "@/components/ui/search-bar";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import {
@@ -41,8 +42,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { SettingsProjectsTable } from "./SettingsProjectsTable";
+import { useEffect, useMemo, useState } from "react";
+import { SettingsDangerZone } from "./SettingsDangerZone";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -64,6 +65,7 @@ export default function Settings() {
     useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
+  const [apiKeySearch, setApiKeySearch] = useState("");
   const CNAME_VALUE = getCustomDomainCNAME();
 
   // Domain validation regex (same as used in the backend)
@@ -77,6 +79,14 @@ export default function Settings() {
   const txtValue = `gram-domain-verify=${subdomain},${organization.id}`;
 
   const { data: keysData } = useListAPIKeysSuspense();
+
+  const filteredKeys = useMemo(() => {
+    const keys = keysData?.keys ?? [];
+    const search = apiKeySearch.trim().toLowerCase();
+    if (!search) return keys;
+    return keys.filter((key) => key.name.toLowerCase().includes(search));
+  }, [keysData?.keys, apiKeySearch]);
+
   const {
     domain,
     isLoading: domainIsLoading,
@@ -299,24 +309,25 @@ export default function Settings() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <SettingsProjectsTable />
-
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-          className="mt-8"
-        >
+        <Stack direction="horizontal" justify="space-between" align="center">
           <Heading variant="h4">API Keys</Heading>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             New API Key
           </Button>
         </Stack>
+        <Stack direction="horizontal" gap={2} className="mb-2">
+          <SearchBar
+            value={apiKeySearch}
+            onChange={setApiKeySearch}
+            placeholder="Search by key name"
+            className="w-64"
+          />
+        </Stack>
         <Table
           columns={apiKeyColumns}
-          data={keysData?.keys ?? []}
+          data={filteredKeys}
           rowKey={(row) => row.id}
-          className="min-h-fit max-h-[500px] overflow-y-auto"
+          className="max-h-[500px] overflow-y-auto"
           noResultsMessage={
             <Stack
               gap={2}
@@ -324,17 +335,21 @@ export default function Settings() {
               align="center"
               justify="center"
             >
-              <Type variant="body">No API keys yet</Type>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setIsCreateDialogOpen(true)}
-              >
-                <Button.LeftIcon>
-                  <Icon name="key-round" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Create Key</Button.Text>
-              </Button>
+              <Type variant="body">
+                {apiKeySearch ? "No matching API keys" : "No API keys yet"}
+              </Type>
+              {!apiKeySearch && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setIsCreateDialogOpen(true)}
+                >
+                  <Button.LeftIcon>
+                    <Icon name="key-round" className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Create Key</Button.Text>
+                </Button>
+              )}
             </Stack>
           }
         />
@@ -717,6 +732,8 @@ export default function Settings() {
           icon={Globe}
           accountUpgrade
         />
+
+        <SettingsDangerZone />
 
         {isAdmin && (
           <div className="mt-12 p-4 rounded-lg bg-red-500/5 border border-red-500/20">

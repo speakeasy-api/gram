@@ -287,3 +287,44 @@ SELECT
     ) as resolutions
 FROM chats c
 WHERE c.id = @id;
+
+-- name: ListUserFeedbackForChat :many
+SELECT *
+FROM chat_user_feedback
+WHERE chat_id = @chat_id
+ORDER BY created_at DESC;
+
+-- name: DeleteChatResolutionsAfterMessage :exec
+DELETE FROM chat_resolutions
+WHERE id IN (
+    SELECT DISTINCT cr.id
+    FROM chat_resolutions cr
+    JOIN chat_resolution_messages crm ON cr.id = crm.chat_resolution_id
+    JOIN chat_messages cm ON crm.message_id = cm.id
+    WHERE cr.chat_id = @chat_id
+      AND cm.seq > (
+        SELECT seq FROM chat_messages WHERE chat_messages.id = @after_message_id
+      )
+  );
+
+-- name: InsertUserFeedback :one
+INSERT INTO chat_user_feedback (
+    project_id,
+    chat_id,
+    message_id,
+    user_resolution,
+    user_resolution_notes,
+    chat_resolution_id
+) VALUES (
+    @project_id,
+    @chat_id,
+    @message_id,
+    @user_resolution,
+    @user_resolution_notes,
+    @chat_resolution_id
+) RETURNING id;
+
+-- name: AddUserFeedbackChatResolution :exec
+UPDATE chat_user_feedback
+SET chat_resolution_id = @chat_resolution_id
+WHERE id = @id;

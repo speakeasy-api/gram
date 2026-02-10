@@ -20,6 +20,7 @@
  */
 
 import { ROOT_SELECTOR } from '@/constants/tailwind'
+import { ChatIdContext } from '@/contexts/ChatIdContext'
 import { ElementsContext } from '@/contexts/contexts'
 import { ReplayContext } from '@/contexts/ReplayContext'
 import { ToolApprovalProvider } from '@/contexts/ToolApprovalContext'
@@ -110,24 +111,28 @@ export const Replay = ({
 
   const replayCtx = useMemo(() => ({ isReplay: true }), [])
 
+  const chatIdValue = useMemo(() => ({ chatId: 'replay' }), [])
+
   return (
     <QueryClientProvider client={replayQueryClient}>
       <AssistantRuntimeProvider runtime={runtime}>
         <ReplayContext.Provider value={replayCtx}>
           <ElementsContext.Provider value={contextValue}>
-            <ToolApprovalProvider>
-              <div
-                className={cn(
-                  ROOT_SELECTOR,
-                  (config.variant === 'standalone' ||
-                    config.variant === 'sidecar') &&
-                    'h-full min-h-0 flex-1'
-                )}
-              >
-                {children}
-              </div>
-              <ReplayController cassette={cassette} options={replayOptions} />
-            </ToolApprovalProvider>
+            <ChatIdContext.Provider value={chatIdValue}>
+              <ToolApprovalProvider>
+                <div
+                  className={cn(
+                    ROOT_SELECTOR,
+                    (config.variant === 'standalone' ||
+                      config.variant === 'sidecar') &&
+                      'h-full min-h-0 flex-1'
+                  )}
+                >
+                  {children}
+                </div>
+                <ReplayController cassette={cassette} options={replayOptions} />
+              </ToolApprovalProvider>
+            </ChatIdContext.Provider>
           </ElementsContext.Provider>
         </ReplayContext.Provider>
       </AssistantRuntimeProvider>

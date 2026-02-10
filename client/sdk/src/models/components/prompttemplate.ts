@@ -12,6 +12,10 @@ import {
   CanonicalToolAttributes,
   CanonicalToolAttributes$inboundSchema,
 } from "./canonicaltoolattributes.js";
+import {
+  ToolAnnotations,
+  ToolAnnotations$inboundSchema,
+} from "./toolannotations.js";
 import { ToolVariation, ToolVariation$inboundSchema } from "./toolvariation.js";
 
 /**
@@ -41,6 +45,10 @@ export type PromptTemplateKind = ClosedEnum<typeof PromptTemplateKind>;
  * A prompt template
  */
 export type PromptTemplate = {
+  /**
+   * Tool annotations providing behavioral hints about the tool
+   */
+  annotations?: ToolAnnotations | undefined;
   /**
    * The original details of a tool
    */
@@ -143,6 +151,7 @@ export const PromptTemplate$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  annotations: ToolAnnotations$inboundSchema.optional(),
   canonical: CanonicalToolAttributes$inboundSchema.optional(),
   canonical_name: z.string(),
   confirm: z.string().optional(),

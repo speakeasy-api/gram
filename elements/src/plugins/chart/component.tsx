@@ -1,149 +1,103 @@
 'use client'
 
 import { useDensity } from '@/hooks/useDensity'
-import { useRadius } from '@/hooks/useRadius'
 import { cn } from '@/lib/utils'
+import { isJsonRenderTree, type JsonRenderNode } from '@/lib/generative-ui'
 import { SyntaxHighlighterProps } from '@assistant-ui/react-markdown'
 import { AlertCircleIcon } from 'lucide-react'
-import { FC, useEffect, useMemo, useRef, useState } from 'react'
-import { parse, View, Warn } from 'vega'
-import { expressionInterpreter } from 'vega-interpreter'
+import { FC, useMemo } from 'react'
+import { MacOSWindowFrame } from '../components/MacOSWindowFrame'
+import { PluginLoadingState } from '../components/PluginLoadingState'
+
+// Import all chart components
+import {
+  BarChart,
+  LineChart,
+  AreaChart,
+  PieChart,
+  DonutChart,
+  ScatterChart,
+  RadarChart,
+} from './ui'
+
+const loadingMessages = [
+  'Rendering chart...',
+  'Visualizing data...',
+  'Building chart...',
+  'Processing data...',
+]
+
+function getRandomLoadingMessage() {
+  return loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
+}
+
+/**
+ * Chart components registry
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const chartComponents: Record<string, FC<any>> = {
+  BarChart,
+  LineChart,
+  AreaChart,
+  PieChart,
+  DonutChart,
+  ScatterChart,
+  RadarChart,
+}
+
+/**
+ * Render a chart node from json-render tree
+ */
+function renderChartNode(node: JsonRenderNode): React.ReactNode {
+  const Component = chartComponents[node.type]
+
+  if (!Component) {
+    return (
+      <div className="text-muted-foreground flex items-center gap-2 text-sm">
+        <AlertCircleIcon className="size-4" />
+        <span>Unknown chart type: {node.type}</span>
+      </div>
+    )
+  }
+
+  return <Component {...(node.props ?? {})} />
+}
 
 export const ChartRenderer: FC<SyntaxHighlighterProps> = ({ code }) => {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const viewRef = useRef<View | null>(null)
-  const wrapperRef = useRef<HTMLDivElement>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [chartReady, setChartReady] = useState(false)
-  const [containerWidth, setContainerWidth] = useState(0)
-  const r = useRadius()
   const d = useDensity()
 
-  // Track container width so the Vega view can fill available space
-  useEffect(() => {
-    const el = wrapperRef.current
-    if (!el) return
-    const ro = new ResizeObserver(([entry]) => {
-      setContainerWidth(entry.contentRect.width)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  // Parse and validate JSON in useMemo - only recomputes when code changes
-  const parsedSpec = useMemo(() => {
+  // Parse JSON - returns null if invalid (still streaming)
+  const content = useMemo(() => {
     const trimmedCode = code.trim()
     if (!trimmedCode) return null
 
     try {
-      const spec = JSON.parse(trimmedCode) as Record<string, unknown>
-
-      // Validate that data array exists and has at least one record with values
-      const dataArray = spec.data as Array<{ values?: unknown[] }> | undefined
-      if (!dataArray?.length) return null
-
-      const hasValidData = dataArray.some(
-        (d) => Array.isArray(d.values) && d.values.length > 0
-      )
-      if (!hasValidData) return null
-
-      return spec
+      const parsed = JSON.parse(trimmedCode)
+      // Validate it has a type field (basic json-render structure)
+      if (!isJsonRenderTree(parsed)) {
+        return null
+      }
+      return parsed
     } catch {
+      // JSON is incomplete (still streaming) - return null to show loading state
       return null
     }
   }, [code])
 
-  // Only render when we have valid JSON
-  const shouldRender = parsedSpec !== null
+  // Memoize the loading message so it doesn't change on every render
+  const loadingMessage = useMemo(() => getRandomLoadingMessage(), [])
 
-  // Build the spec with autosize and width derived from the container
-  const sizedSpec = useMemo(() => {
-    if (!parsedSpec || containerWidth === 0) return null
-    // Padding used by the outer wrapper (p-lg ≈ 24px each side)
-    const padding = 48
-    const availableWidth = Math.max(containerWidth - padding, 100)
-    return {
-      ...parsedSpec,
-      width: availableWidth,
-      autosize: { type: 'fit' as const, contains: 'padding' as const },
-    }
-  }, [parsedSpec, containerWidth])
+  // Show loading shimmer while JSON is incomplete/streaming
+  if (!content) {
+    return <PluginLoadingState text={loadingMessage} />
+  }
 
-  useEffect(() => {
-    if (!containerRef.current || !shouldRender || !sizedSpec) {
-      return
-    }
-
-    setError(null)
-    setChartReady(false)
-
-    const runChart = async () => {
-      try {
-        // Clean up any existing view
-        if (viewRef.current) {
-          viewRef.current.finalize()
-          viewRef.current = null
-        }
-
-        const chart = parse(sizedSpec, undefined, { ast: true })
-        const view = new View(chart, {
-          container: containerRef.current ?? undefined,
-          renderer: 'svg',
-          hover: true,
-          logLevel: Warn,
-          expr: expressionInterpreter,
-        })
-        viewRef.current = view
-
-        await view.runAsync()
-        setChartReady(true)
-      } catch (err) {
-        console.error('Failed to render chart:', err)
-        setError(err instanceof Error ? err.message : 'Failed to render chart')
-      }
-    }
-
-    runChart()
-
-    return () => {
-      if (viewRef.current) {
-        viewRef.current.finalize()
-        viewRef.current = null
-      }
-    }
-  }, [shouldRender, sizedSpec])
-
-  const showLoading = !chartReady && !error
-
+  // Render with macOS-style window frame
   return (
-    <div
-      ref={wrapperRef}
-      className={cn(
-        // the after:hidden is to prevent assistant-ui from showing its default code block loading indicator
-        'border-border relative min-h-[400px] w-full overflow-hidden border after:hidden',
-        r('lg'),
-        showLoading ? '' : d('p-lg')
-      )}
-    >
-      {showLoading && (
-        <div className="bg-muted absolute inset-0 z-10 flex items-center justify-center">
-          <span className="shimmer text-muted-foreground text-sm">
-            Rendering chart...
-          </span>
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-background absolute inset-0 z-10 flex items-center justify-center gap-2 text-rose-500">
-          <AlertCircleIcon name="alert-circle" className="h-4 w-4" />
-          {error}
-        </div>
-      )}
-
-      <div
-        ref={containerRef}
-        className={error || showLoading ? 'invisible' : 'block'}
-      />
-    </div>
+    <MacOSWindowFrame>
+      <div className={cn('bg-card w-full', d('p-lg'))}>
+        {renderChartNode(content)}
+      </div>
+    </MacOSWindowFrame>
   )
 }

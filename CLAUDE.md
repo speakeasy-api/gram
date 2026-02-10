@@ -36,6 +36,7 @@ Speak like a software engineer team member and don't be pointlessly agreeable su
   - `server/`: Main backend service codebase
   - `cli/`: Command-line interface for Gram that users use to interact with the Gram service
   - `functions/`: Serverless function runner powering the Gram Functions feature
+  - `ts-framework/functions/`: TypeScript SDK for function authors (`Gram.tool()` API, manifest generation, MCP passthrough)
   - `client/`: Frontend React application for Gram
 
 </structure>
@@ -75,6 +76,7 @@ Contains the main application code for the Gram server:
 - `mise gen:goa-server`: Generate Goa code for the server
 - `mise db:diff`: Create a versioned database migration
 - `mise db:migrate`: Apply pending migrations to local database
+- `cd client/dashboard && pnpm tsc --noEmit`: Type-check the frontend without emitting files
 
 </commands>
 
@@ -106,6 +108,7 @@ You are an expert AI programming assistant specializing in building APIs with Go
 - When logging errors make sure to always include them in the log payload using `slog.String("error", err)`. Example: `logger.ErrorContext(ctx, "failed to write to database", slog.String("error", err))`.
 - Any functions or methods that relate to making API calls or database queries or working with timers should take a `context.Context` value as their first argument.
 - Always run linters as part of finalizing your code changes. Use `mise lint:server` to run the linters on the server codebase.
+- The `exhaustruct` linter requires all struct fields to be explicitly set in struct literals. When adding new fields to a type, update ALL call sites — including places that construct the struct with zero values (e.g., `MyStruct{}` → `MyStruct{NewField: nil}`).
 
 ### Go Testing Guidelines
 
@@ -118,6 +121,7 @@ You are an expert AI programming assistant specializing in building APIs with Go
 - Use the `pnpm` package manager
 - When interacting with the server, prefer the `@gram/sdk` package (sourced from workspace at `./client/sdk`)
 - For data fetching and server state, use `@tanstack/react-query` instead of manual `useEffect`/`useState` patterns
+- When invalidating React Query caches after mutations, invalidate ALL relevant query keys — not just the most specific one. Different hooks may use different query key prefixes for the same data (e.g., `queryKeyInstance` vs `toolsets.getBySlug`). Use broad invalidation helpers like `invalidateAllToolset(queryClient)` to ensure all consumers refresh.
 
 ### Styling and Design System
 
@@ -158,6 +162,7 @@ You are an expert AI programming assistant specializing in building APIs with Go
   - Use expand-contract pattern instead of removing existing columns from a schema. Introduce new columns instead when appropriate.
   - Always call out when making a backwards incompatible schema change.
   - Suggest running `mise db:diff <migration-name>` after making schema changes to generate a migration file. Replace `<migration-name>` with a clear snake-case migration id such as `users-add-email-column`.
+  - **Migration deployment coupling:** Queries using `SELECT *` or `sqlc.embed()` create a tight coupling between migrations and server deploys. Adding columns to a table breaks any deployed server binary compiled against the old schema (pgx fails to scan the extra columns). Migrations that add columns to tables with `SELECT *` queries **must** be deployed atomically with the updated server binary.
 
 ## ClickHouse Queries (Telemetry Package)
 

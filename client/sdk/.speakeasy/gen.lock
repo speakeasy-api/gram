@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 36f5ed6a24ba3362dffc8f1da465c9fb
+  docChecksum: fce055ff7bc8f43dca71d6571ac7a5d1
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.26.20
-  configChecksum: 50a1f08cdc74bd49ea6a7301ba9025cc
+  releaseVersion: 0.26.18
+  configChecksum: 008d45cb10bc7818c293ac6c3b44c86d
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -111,13 +111,9 @@ trackedFiles:
   docs/models/components/chat.md:
     last_write_checksum: sha1:1d9147e1dd95d38eae1c3172acd445187fc08bbd
   docs/models/components/chatmessage.md:
-    last_write_checksum: sha1:3e557f117bcc3c5dd1156ed113d3f49ddcb452c0
+    last_write_checksum: sha1:804aa0bb2b503c458f9a91c5053719064dec4047
   docs/models/components/chatoverview.md:
     last_write_checksum: sha1:ce67585a7097159bb08d62af32cb6374bbfe3769
-  docs/models/components/chatoverviewwithresolutions.md:
-    last_write_checksum: sha1:900c1b2e8717e49be4788989c61ad726a0a5edc2
-  docs/models/components/chatresolution.md:
-    last_write_checksum: sha1:f056a2c0377fd38d04bc53c8a3ebe45ede6abff2
   docs/models/components/chatsummary.md:
     last_write_checksum: sha1:f9fd65255888d56b260f69936019baf95044cf3f
   docs/models/components/chatsummarystatus.md:
@@ -272,8 +268,6 @@ trackedFiles:
     last_write_checksum: sha1:c72b7daebcaec401a59c137e89ab02f377a52910
   docs/models/components/listchatsresult.md:
     last_write_checksum: sha1:5c4c74b4fc53fff8bf475f0abbb3f72971158dce
-  docs/models/components/listchatswithresolutionsresult.md:
-    last_write_checksum: sha1:39a311585ebeaa9c8ce51dc3b3ea47749de595ea
   docs/models/components/listdeploymentresult.md:
     last_write_checksum: sha1:12f43e3bf8a04f8aea833fc962369ab4ed4da623
   docs/models/components/listenvironmentsresult.md:
@@ -864,14 +858,6 @@ trackedFiles:
     last_write_checksum: sha1:9c9840c025f86447adf0ffb515fcd7a44eed475c
   docs/models/operations/listchatssecurityoption2.md:
     last_write_checksum: sha1:ac4329bd5c3d3cd40d37cbce5ac96671d710c3cc
-  docs/models/operations/listchatswithresolutionsrequest.md:
-    last_write_checksum: sha1:7182d33a613f302dfcecc0e8dba7361a21b1cdf3
-  docs/models/operations/listchatswithresolutionssecurity.md:
-    last_write_checksum: sha1:7e130e49b8de4408cc9f7dc45f57459f9789ef64
-  docs/models/operations/listchatswithresolutionssecurityoption1.md:
-    last_write_checksum: sha1:acb5b589bde53777cd8707c455ae6dd333ca5680
-  docs/models/operations/listchatswithresolutionssecurityoption2.md:
-    last_write_checksum: sha1:e6d0c618244e2a268c1d2052e012e82bd9e6eaf5
   docs/models/operations/listdeploymentsrequest.md:
     last_write_checksum: sha1:fd4e1ce28cb917070b9bcbdb697464db94e567d2
   docs/models/operations/listdeploymentssecurity.md:
@@ -1225,7 +1211,7 @@ trackedFiles:
   docs/sdks/auth/README.md:
     last_write_checksum: sha1:18384a8309d0bb0622755466208f0a551404762f
   docs/sdks/chat/README.md:
-    last_write_checksum: sha1:fd34a588ac76560f0450af21fd90f64149428e2e
+    last_write_checksum: sha1:b0b9079a70104820e80a2c890f5841a7206016b7
   docs/sdks/chatsessions/README.md:
     last_write_checksum: sha1:5931e949f459441faaa30e05840cbaf1fab82836
   docs/sdks/deployments/README.md:
@@ -1288,11 +1274,11 @@ trackedFiles:
     pristine_git_object: 8a33dbb4b9cb9cefaa43e10ddf535cbcd13c9e72
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:d82419dee4674161a2c7d097150477f2327fd2fc
+    last_write_checksum: sha1:2523013db1b957876a37c1894f66fb61a14a6972
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:f547e6f641e3dc80e1d0d158338a55f74775cf0f
+    last_write_checksum: sha1:e670966d101f817fc6c24b7449b0f0688063b1cc
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1340,7 +1326,7 @@ trackedFiles:
     pristine_git_object: 240c833a1610bdeb2f8ce95cd89efb0c393ef214
   src/funcs/assetsServeOpenAPIv3.ts:
     id: 505ec90ecaa1
-    last_write_checksum: sha1:16f5e896928838b087e92752ed6094fbce3e445e
+    last_write_checksum: sha1:1f6a2edf458db6d50e45c1efa9d64e77fd3eeb42
     pristine_git_object: 3ce057453a111c2bcebd8481d8e92403d00150bf
   src/funcs/assetsUploadChatAttachment.ts:
     id: 2666ceb491db
@@ -1394,8 +1380,6 @@ trackedFiles:
     id: 8b6b78f0ea19
     last_write_checksum: sha1:815f691eb96b8448fd648fc4d8b929adb53faaf0
     pristine_git_object: 814ef1470b3208dac27bc0c097002de03dbda395
-  src/funcs/chatListChatsWithResolutions.ts:
-    last_write_checksum: sha1:95050a48d95eb669d1ce808ae37e42fb27ce8ca4
   src/funcs/chatLoad.ts:
     id: 79e579c74f00
     last_write_checksum: sha1:725126bca4f22e08188b1fb4281ce8ceb6b2cac6
@@ -1750,7 +1734,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:c7a63a673b579a4a4bb1a77a1a8311c9c84231be
+    last_write_checksum: sha1:6ece479866029bef7e23d8087edeaa433520b9f4
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -1886,16 +1870,12 @@ trackedFiles:
     pristine_git_object: d74d2ff627fec7af63710786888c09ce919dbf87
   src/models/components/chatmessage.ts:
     id: 64060926ed56
-    last_write_checksum: sha1:296de977e73438d2e161d973cc5f82b5f40a79de
+    last_write_checksum: sha1:bbfddd05d125d5f35c9efed8d2a459642f2a8c88
     pristine_git_object: 9bdc3bfc1f7458c0044bb61b2382f8301c0828bf
   src/models/components/chatoverview.ts:
     id: b060f6650726
     last_write_checksum: sha1:694376ef6ee9b92f12913b286a075d5ecc02edd3
     pristine_git_object: 60c3257be0907ff0b08bb4ee07a7dd6e300350be
-  src/models/components/chatoverviewwithresolutions.ts:
-    last_write_checksum: sha1:0b37d77dc6ef216995c1e76af137657e84783427
-  src/models/components/chatresolution.ts:
-    last_write_checksum: sha1:4f3eb93338fb292a3daf6a46a431bc606bddd3af
   src/models/components/chatsummary.ts:
     last_write_checksum: sha1:643baba15eb8c1a1d2f0edbf80517dc11efe1626
   src/models/components/createdeploymentrequestbody.ts:
@@ -2118,7 +2098,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:270b71452c940286a38a229d74513b4b7058e743
+    last_write_checksum: sha1:f8028f0fea59714f96f130caf66729476a261e62
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -2160,8 +2140,6 @@ trackedFiles:
     id: ebb1711bf3ec
     last_write_checksum: sha1:0132d22babb8a84d0074247b686d10bfe6619e63
     pristine_git_object: bebdca38f9f3c4f2a151d86cbbdf2494e408bef7
-  src/models/components/listchatswithresolutionsresult.ts:
-    last_write_checksum: sha1:cee70066fa1e3d2b2b21b47314cd9629f67c3877
   src/models/components/listdeploymentresult.ts:
     id: 928cd071711c
     last_write_checksum: sha1:005b981ae821effd3e4ec474431c4244ca76f1f1
@@ -2742,7 +2720,7 @@ trackedFiles:
     last_write_checksum: sha1:4e61d91b4a18d756f2fb758d51d82f3bde204cc5
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:3af094dc201d54e9da095c2943d71daa33a7d5c2
+    last_write_checksum: sha1:08f5d9318e73b36167af466bf569e08821f8d869
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -2764,8 +2742,6 @@ trackedFiles:
     id: fcaf6c1044c0
     last_write_checksum: sha1:527fe55193948e1e4f972f749afdae81bc1637bd
     pristine_git_object: ae806c76bc527b24fab19883a174e5a94f065fe2
-  src/models/operations/listchatswithresolutions.ts:
-    last_write_checksum: sha1:2e93f3d2c0ea4d6f4b6d411c728e0f1a95494540
   src/models/operations/listdeployments.ts:
     id: 3c413d710db1
     last_write_checksum: sha1:427b1d34ff2886f11761358f771d4bc316faceea
@@ -3224,7 +3200,7 @@ trackedFiles:
     pristine_git_object: 48f56cd5f501f734c3428170db837bbe2568246f
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:67a780642f19306b585c3130a365f0fccd4239af
+    last_write_checksum: sha1:0e3fc95e13bbef22a975bde100d54b39894ca255
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -3282,10 +3258,6 @@ trackedFiles:
     id: d2978638e300
     last_write_checksum: sha1:4296c9e2d9e0e658743349149c61fe6d88cee251
     pristine_git_object: bea716c86a525c16fb766cc3d523b64bcd0e67b6
-  src/react-query/listChatsWithResolutions.core.ts:
-    last_write_checksum: sha1:2da59446fa536de4fc6f80807ad5098669325c9c
-  src/react-query/listChatsWithResolutions.ts:
-    last_write_checksum: sha1:2a5af4611105a2ea85ed754b5cb86d8b2a75eb97
   src/react-query/listDeployments.core.ts:
     id: 0a5b3d2b85c8
     last_write_checksum: sha1:96adc67fb218011ee756405621a24084c9df5ad2
@@ -3600,7 +3572,7 @@ trackedFiles:
     pristine_git_object: 44215c8408f8a7efedc98fd3a186fb20547b0622
   src/sdk/chat.ts:
     id: c56babc22a20
-    last_write_checksum: sha1:22f7fe4f326976386e4bf2a4441b7d9c67072ff6
+    last_write_checksum: sha1:134d44a4a29a0acd13d680c12700b451ccdbc310
     pristine_git_object: cf43d8a78da06d7e74a857165809b0f43d02fadf
   src/sdk/chatsessions.ts:
     id: 35b6de66e2dc
@@ -4363,6 +4335,7 @@ examples:
       responses:
         "200":
           application/json: "x-file: example.file"
+          '*/*': "x-file: example.file"
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -4993,19 +4966,6 @@ examples:
       responses:
         "200":
           application/json: {"enabled": true, "metrics": {"avg_chat_duration_ms": 719.48, "avg_tokens_per_request": 2261.2, "avg_tool_duration_ms": 7422.06, "distinct_models": 12857, "distinct_providers": 512991, "finish_reason_stop": 485562, "finish_reason_tool_calls": 528228, "first_seen_unix_nano": "50574", "last_seen_unix_nano": "883619", "models": [{"count": 444554, "name": "<value>"}], "tool_call_failure": 740752, "tool_call_success": 495299, "tools": [{"count": 22149, "failure_count": 937327, "success_count": 364001, "urn": "<value>"}], "total_chat_requests": 605771, "total_chats": 156800, "total_input_tokens": 133513, "total_output_tokens": 204831, "total_tokens": 63502, "total_tool_calls": 158236}}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  listChatsWithResolutions:
-    speakeasy-default-list-chats-with-resolutions:
-      parameters:
-        query:
-          limit: 50
-          offset: 0
-      responses:
-        "200":
-          application/json: {"chats": [{"created_at": "2024-03-12T14:08:15.680Z", "id": "<id>", "num_messages": 236956, "resolutions": [{"created_at": "2024-12-29T23:05:18.944Z", "id": "7388f705-63e1-45b3-9e77-6296c7937c05", "message_ids": ["abc-123", "def-456"], "resolution": "failure", "resolution_notes": "<value>", "score": 789128, "user_goal": "<value>"}], "title": "<value>", "updated_at": "2026-08-30T11:51:39.615Z"}], "total": 52256}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

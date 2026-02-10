@@ -17,11 +17,12 @@ type AnalyzeChatResolutionsParams struct {
 	ChatID    uuid.UUID
 	ProjectID uuid.UUID
 	OrgID     string
+	APIKeyID  string
 }
 
 // ChatResolutionAnalyzer schedules async chat resolution analysis.
 type ChatResolutionAnalyzer interface {
-	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID string) error
+	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
 }
 
 // TemporalChatResolutionAnalyzer implements ChatResolutionAnalyzer using Temporal.
@@ -29,11 +30,12 @@ type TemporalChatResolutionAnalyzer struct {
 	Temporal client.Client
 }
 
-func (t *TemporalChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID string) error {
+func (t *TemporalChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
 	_, err := ExecuteAnalyzeChatResolutionsWorkflow(ctx, t.Temporal, AnalyzeChatResolutionsParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
 		OrgID:     orgID,
+		APIKeyID:  apiKeyID,
 	})
 	return err
 }
@@ -61,22 +63,38 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 
 	var a *Activities
 
-	// Phase 1: Segment the chat into logical breakpoints
-	var segmentOutput activities.SegmentChatOutput
+	// Phase 0: Get user feedback message ID if it exists
+	var feedbackResult activities.GetUserFeedbackForChatResult
 	err := workflow.ExecuteActivity(
+		ctx,
+		a.GetUserFeedbackForChat,
+		activities.GetUserFeedbackForChatArgs{
+			ProjectID: params.ProjectID,
+			ChatID:    params.ChatID,
+		},
+	).Get(ctx, &feedbackResult)
+	if err != nil {
+		return fmt.Errorf("failed to get user feedback message ID: %w", err)
+	}
+
+	// Phase 1: Segment the chat into logical breakpoints
+	// Pass feedback message IDs as hints for segmentation
+	var segmentOutput activities.SegmentChatOutput
+	err = workflow.ExecuteActivity(
 		ctx,
 		a.SegmentChat,
 		activities.SegmentChatArgs{
-			ChatID:    params.ChatID,
-			ProjectID: params.ProjectID,
-			OrgID:     params.OrgID,
+			ChatID:       params.ChatID,
+			ProjectID:    params.ProjectID,
+			OrgID:        params.OrgID,
+			APIKeyID:     params.APIKeyID,
+			UserFeedback: feedbackResult.UserFeedback,
 		},
 	).Get(ctx, &segmentOutput)
 	if err != nil {
 		return fmt.Errorf("failed to segment chat: %w", err)
 	}
 
-	// Delete existing resolutions before analyzing segments
 	err = workflow.ExecuteActivity(
 		ctx,
 		a.DeleteChatResolutions,
@@ -94,11 +112,13 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 			ctx,
 			a.AnalyzeSegment,
 			activities.AnalyzeSegmentArgs{
-				ChatID:     params.ChatID,
-				ProjectID:  params.ProjectID,
-				OrgID:      params.OrgID,
-				StartIndex: segment.StartIndex,
-				EndIndex:   segment.EndIndex,
+				ChatID:       params.ChatID,
+				ProjectID:    params.ProjectID,
+				OrgID:        params.OrgID,
+				StartIndex:   segment.StartIndex,
+				EndIndex:     segment.EndIndex,
+				APIKeyID:     params.APIKeyID,
+				UserFeedback: feedbackResult.UserFeedback,
 			},
 		).Get(ctx, nil)
 		if err != nil {
