@@ -671,7 +671,14 @@ async function seedObservabilityData(init: {
   `;
 
   try {
-    await $`psql $GRAM_DATABASE_URL -c ${pgSQL}`.quiet();
+    // Use individual env vars to avoid search_path issue with psql
+    const dbHost = process.env.DB_HOST || "localhost";
+    const dbPort = process.env.DB_PORT || "5432";
+    const dbUser = process.env.DB_USER || "gram";
+    const dbPassword = process.env.DB_PASSWORD || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+
+    await $`PGPASSWORD=${dbPassword} psql -h ${dbHost} -p ${dbPort} -U ${dbUser} -d ${dbName} -c ${pgSQL}`.quiet();
     log.info(`Inserted ${NUM_CHATS} chats with messages into PostgreSQL`);
   } catch (e) {
     log.warn(`Failed to seed PostgreSQL: ${e}`);
@@ -739,10 +746,14 @@ async function seedObservabilityData(init: {
   `;
 
   try {
-    // Write to temp file and execute (handles large inserts better)
+    // Write to temp file and execute via docker
     const tmpFile = `/tmp/seed_clickhouse_${Date.now()}.sql`;
     await fs.writeFile(tmpFile, chSQL);
-    await $`clickhouse-client --host $CLICKHOUSE_HOST --port $CLICKHOUSE_NATIVE_PORT --user $CLICKHOUSE_USERNAME --password $CLICKHOUSE_PASSWORD --secure --query "$(cat ${tmpFile})"`.quiet();
+
+    // Use docker exec to run clickhouse-client inside the container
+    // Copy the file into the container, then execute using --queries-file
+    await $`docker cp ${tmpFile} gram-clickhouse-1:/tmp/seed.sql`.quiet();
+    await $`docker exec gram-clickhouse-1 clickhouse-client --multiquery --queries-file /tmp/seed.sql`.quiet();
     await fs.unlink(tmpFile);
     log.info(
       `Inserted ${chInserts.length} telemetry events into ClickHouse`,

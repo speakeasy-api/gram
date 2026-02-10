@@ -43,6 +43,7 @@ import {
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import { ChevronRight } from "lucide-react";
+import { Link } from "react-router";
 
 // Register Chart.js components
 ChartJS.register(
@@ -54,6 +55,16 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
+
+/**
+ * Build the URL for navigating to the logs page with time range applied.
+ */
+function buildLogsUrl(from: Date, to: Date): string {
+  const params = new URLSearchParams();
+  params.set("from", from.toISOString());
+  params.set("to", to.toISOString());
+  return `/logs?${params.toString()}`;
+}
 
 type FilterDimension = "all" | "api_key" | "user";
 
@@ -551,6 +562,8 @@ function ObservabilityContent({
               title="Resolution Rate Over Time"
               onTimeRangeSelect={onTimeRangeSelect}
               isLoading={isRefetching}
+              from={from}
+              to={to}
             />
             <ResolutionStatusChart
               data={timeSeries ?? []}
@@ -558,6 +571,8 @@ function ObservabilityContent({
               title="Chats by Resolution Status"
               onTimeRangeSelect={onTimeRangeSelect}
               isLoading={isRefetching}
+              from={from}
+              to={to}
             />
           </div>
           <SessionDurationChart
@@ -566,6 +581,8 @@ function ObservabilityContent({
             title="Avg Session Duration Over Time"
             onTimeRangeSelect={onTimeRangeSelect}
             isLoading={isRefetching}
+            from={from}
+            to={to}
           />
         </div>
       </section>
@@ -1028,6 +1045,8 @@ function ResolvedChatsChart({
   title,
   onTimeRangeSelect,
   isLoading,
+  from,
+  to,
 }: {
   data: Array<{
     bucketTimeUnixNano?: string;
@@ -1039,6 +1058,8 @@ function ResolvedChatsChart({
   title: string;
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
+  from: Date;
+  to: Date;
 }) {
   const labels = data.map((d) => {
     const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
@@ -1134,13 +1155,13 @@ function ResolvedChatsChart({
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <button
+        <Link
+          to={buildLogsUrl(from, to)}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          onClick={(e) => e.preventDefault()}
         >
-          Explore
+          View chats
           <ChevronRight className="size-4" />
-        </button>
+        </Link>
       </div>
       <div className="relative">
         {isLoading && (
@@ -1165,6 +1186,8 @@ function ResolutionStatusChart({
   title,
   onTimeRangeSelect,
   isLoading,
+  from,
+  to,
 }: {
   data: Array<{
     bucketTimeUnixNano?: string;
@@ -1177,6 +1200,8 @@ function ResolutionStatusChart({
   title: string;
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
+  from: Date;
+  to: Date;
 }) {
   const labels = data.map((d) => {
     const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
@@ -1317,13 +1342,13 @@ function ResolutionStatusChart({
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <button
+        <Link
+          to={buildLogsUrl(from, to)}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          onClick={(e) => e.preventDefault()}
         >
-          Explore
+          View chats
           <ChevronRight className="size-4" />
-        </button>
+        </Link>
       </div>
       <div className="relative">
         {isLoading && (
@@ -1348,6 +1373,8 @@ function SessionDurationChart({
   title,
   onTimeRangeSelect,
   isLoading,
+  from,
+  to,
 }: {
   data: Array<{
     bucketTimeUnixNano?: string;
@@ -1357,6 +1384,8 @@ function SessionDurationChart({
   title: string;
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
+  from: Date;
+  to: Date;
 }) {
   const labels = data.map((d) => {
     const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
@@ -1451,13 +1480,13 @@ function SessionDurationChart({
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <button
+        <Link
+          to={buildLogsUrl(from, to)}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          onClick={(e) => e.preventDefault()}
         >
-          Explore
+          View chats
           <ChevronRight className="size-4" />
-        </button>
+        </Link>
       </div>
       <div className="relative">
         {isLoading && (
