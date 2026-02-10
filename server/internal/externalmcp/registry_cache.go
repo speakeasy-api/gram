@@ -50,7 +50,8 @@ func registryCacheKey(prefix string, req *http.Request) string {
 
 	h := sha256.New()
 	for _, k := range keys {
-		vals := req.Header[k]
+		vals := make([]string, len(req.Header[k]))
+		copy(vals, req.Header[k])
 		sort.Strings(vals)
 		_, _ = fmt.Fprintf(h, "%s=%s\n", k, strings.Join(vals, ","))
 	}
