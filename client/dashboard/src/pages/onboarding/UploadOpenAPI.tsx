@@ -29,6 +29,7 @@ import {
   GetDeploymentResult,
   UploadOpenAPIv3Result,
 } from "@gram/client/models/components";
+import { assetsServeOpenAPIv3 } from "@gram/client/funcs/assetsServeOpenAPIv3";
 import {
   useDeploymentLogs,
   useLatestDeployment,
@@ -43,6 +44,7 @@ import {
   RefreshCcwIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { useParams } from "react-router";
 
 export default function UploadOpenAPI() {
@@ -253,13 +255,25 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
     }
   };
 
-  const handleUrlUpload = (result: UploadOpenAPIv3Result) => {
+  const handleUrlUpload = async (result: UploadOpenAPIv3Result) => {
     setAsset(result);
+    const response = await assetsServeOpenAPIv3(client, {
+      id: result.asset.id,
+      projectId: project.id,
+    });
+    if (!response.ok) {
+      toast.error(`Failed to fetch OpenAPI content: ${response.error.message}`);
+      return;
+    }
+
+    // Convert ReadableStream to Blob
+    const blob = await new Response(response.value.result).blob();
     setFile(
-      new File([], "My API", {
-        type: result.asset?.contentType ?? "application/yaml",
+      new File([blob], "My API", {
+        type: result.asset.contentType,
       }),
     );
+
     telemetry.capture("onboarding_event", {
       action: "spec_uploaded",
       source: "url",

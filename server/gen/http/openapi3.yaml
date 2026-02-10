@@ -1165,7 +1165,7 @@ paths:
             responses:
                 "200":
                     content:
-                        application/json:
+                        '*/*':
                             schema:
                                 format: binary
                                 type: string
