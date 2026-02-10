@@ -134,7 +134,7 @@ func PtrToPGTextEmpty(t *string) pgtype.Text {
 // the result has Valid set to false.
 func PtrToPGBool(b *bool) pgtype.Bool {
 	if b == nil {
-		return pgtype.Bool{Valid: false}
+		return pgtype.Bool{Bool: false, Valid: false}
 	}
 
 	return pgtype.Bool{Bool: *b, Valid: true}

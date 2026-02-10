@@ -225,6 +225,11 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 			SessionToken:     nil,
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
+			Title:            nil,
+			ReadOnlyHint:     nil,
+			DestructiveHint:  nil,
+			IdempotentHint:   nil,
+			OpenWorldHint:    nil,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to update template").Log(ctx, logger)

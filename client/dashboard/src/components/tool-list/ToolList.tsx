@@ -297,9 +297,7 @@ function ToolRow({
   const openEditDialog = (type: "name" | "description" | "annotations") => {
     setEditType(type);
     if (type === "annotations") {
-      setAnnotTitle(
-        tool.variation?.title ?? tool.annotations?.title ?? "",
-      );
+      setAnnotTitle(tool.variation?.title ?? tool.annotations?.title ?? "");
       setAnnotReadOnly(
         tool.variation?.readOnlyHint ?? tool.annotations?.readOnlyHint ?? false,
       );

@@ -46,7 +46,11 @@ function getToolTypeLabel(tool: Tool): string {
 /** Get the effective annotation value: variation override > base annotation > undefined */
 function getAnnotationValue(
   tool: Tool,
-  field: "readOnlyHint" | "destructiveHint" | "idempotentHint" | "openWorldHint",
+  field:
+    | "readOnlyHint"
+    | "destructiveHint"
+    | "idempotentHint"
+    | "openWorldHint",
 ): boolean | undefined {
   if (tool.type === "prompt" || tool.type === "external-mcp") return undefined;
   const variationVal = tool.variation?.[field];
@@ -132,7 +136,16 @@ export function EditToolDialog({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, name, title, description, readOnlyHint, destructiveHint, idempotentHint, openWorldHint]);
+  }, [
+    open,
+    name,
+    title,
+    description,
+    readOnlyHint,
+    destructiveHint,
+    idempotentHint,
+    openWorldHint,
+  ]);
 
   const handleSave = async () => {
     if (!tool) return;

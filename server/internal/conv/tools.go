@@ -236,7 +236,13 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 // Variation fields that are nil are inherited from the base; non-nil values override.
 func applyAnnotationVariation(base *types.ToolAnnotations, variation types.ToolVariation) *types.ToolAnnotations {
 	// Start with existing annotations or an empty struct
-	result := &types.ToolAnnotations{}
+	result := &types.ToolAnnotations{
+		Title:           nil,
+		ReadOnlyHint:    nil,
+		DestructiveHint: nil,
+		IdempotentHint:  nil,
+		OpenWorldHint:   nil,
+	}
 	if base != nil {
 		result = &types.ToolAnnotations{
 			Title:           base.Title,
@@ -321,6 +327,7 @@ type ToolAnnotations struct {
 // Columns are nullable (pgtype.Bool) — invalid values are omitted from the result.
 func AnnotationsFromColumns(readOnly, destructive, idempotent, openWorld pgtype.Bool) *types.ToolAnnotations {
 	return &types.ToolAnnotations{
+		Title:           nil,
 		ReadOnlyHint:    FromPGBool[bool](readOnly),
 		DestructiveHint: FromPGBool[bool](destructive),
 		IdempotentHint:  FromPGBool[bool](idempotent),
