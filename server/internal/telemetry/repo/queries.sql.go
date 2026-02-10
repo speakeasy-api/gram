@@ -446,11 +446,11 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 			data AS (
 				SELECT
 					toInt64(toStartOfInterval(fromUnixTimestamp64Nano(time_unix_nano), INTERVAL %d SECOND)) * 1000000000 as bucket_time_unix_nano,
-					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label != '') as total_chats,
-					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats,
-					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats,
-					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'partial') as partial_chats,
-					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'abandoned') as abandoned_chats,
+					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label != '') as total_chats,
+					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'success') as resolved_chats,
+					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'failure') as failed_chats,
+					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'partial') as partial_chats,
+					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'abandoned') as abandoned_chats,
 					countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls,
 					countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls,
 					avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_tool_latency_ms,
@@ -619,11 +619,11 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 	sb := sq.Select(
 		// Chat metrics - count only chats with resolution analysis for accurate resolution rate
 		// total_chats = chats with any resolution event (success, failure, partial, abandoned)
-		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label != '') as total_chats",
+		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label != '') as total_chats",
 		// Resolved: chats with evaluation_score_label = 'success' (from resolution analysis)
-		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
+		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
 		// Failed: chats with evaluation_score_label = 'failure' (from resolution analysis)
-		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
+		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
 		// Resolution time: average duration from resolution analysis events (gen_ai.conversation.duration is set in resolution events)
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms",
