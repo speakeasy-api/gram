@@ -25,6 +25,7 @@ type Server struct {
 	GenerateTitle            http.Handler
 	CreditUsage              http.Handler
 	ListChatsWithResolutions http.Handler
+	SubmitFeedback           http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -59,12 +60,14 @@ func New(
 			{"GenerateTitle", "POST", "/rpc/chat.generateTitle"},
 			{"CreditUsage", "GET", "/rpc/chat.creditUsage"},
 			{"ListChatsWithResolutions", "GET", "/rpc/chat.listChatsWithResolutions"},
+			{"SubmitFeedback", "POST", "/rpc/chat.submitFeedback"},
 		},
 		ListChats:                NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
 		LoadChat:                 NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
 		GenerateTitle:            NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
 		CreditUsage:              NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
 		ListChatsWithResolutions: NewListChatsWithResolutionsHandler(e.ListChatsWithResolutions, mux, decoder, encoder, errhandler, formatter),
+		SubmitFeedback:           NewSubmitFeedbackHandler(e.SubmitFeedback, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -78,6 +81,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GenerateTitle = m(s.GenerateTitle)
 	s.CreditUsage = m(s.CreditUsage)
 	s.ListChatsWithResolutions = m(s.ListChatsWithResolutions)
+	s.SubmitFeedback = m(s.SubmitFeedback)
 }
 
 // MethodNames returns the methods served.
@@ -90,6 +94,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGenerateTitleHandler(mux, h.GenerateTitle)
 	MountCreditUsageHandler(mux, h.CreditUsage)
 	MountListChatsWithResolutionsHandler(mux, h.ListChatsWithResolutions)
+	MountSubmitFeedbackHandler(mux, h.SubmitFeedback)
 }
 
 // Mount configures the mux to serve the chat endpoints.
@@ -340,6 +345,59 @@ func NewListChatsWithResolutionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listChatsWithResolutions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSubmitFeedbackHandler configures the mux to serve the "chat" service
+// "submitFeedback" endpoint.
+func MountSubmitFeedbackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/chat.submitFeedback", otelhttp.WithRouteTag("/rpc/chat.submitFeedback", f).ServeHTTP)
+}
+
+// NewSubmitFeedbackHandler creates a HTTP handler which loads the HTTP request
+// and calls the "chat" service "submitFeedback" endpoint.
+func NewSubmitFeedbackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSubmitFeedbackRequest(mux, decoder)
+		encodeResponse = EncodeSubmitFeedbackResponse(encoder)
+		encodeError    = EncodeSubmitFeedbackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "submitFeedback")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

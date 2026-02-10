@@ -37,6 +37,10 @@ type Client struct {
 	// the listChatsWithResolutions endpoint.
 	ListChatsWithResolutionsDoer goahttp.Doer
 
+	// SubmitFeedback Doer is the HTTP client used to make requests to the
+	// submitFeedback endpoint.
+	SubmitFeedbackDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -62,6 +66,7 @@ func NewClient(
 		GenerateTitleDoer:            doer,
 		CreditUsageDoer:              doer,
 		ListChatsWithResolutionsDoer: doer,
+		SubmitFeedbackDoer:           doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -185,6 +190,30 @@ func (c *Client) ListChatsWithResolutions() goa.Endpoint {
 		resp, err := c.ListChatsWithResolutionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "listChatsWithResolutions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SubmitFeedback returns an endpoint that makes HTTP requests to the chat
+// service submitFeedback server.
+func (c *Client) SubmitFeedback() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSubmitFeedbackRequest(c.encoder)
+		decodeResponse = DecodeSubmitFeedbackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSubmitFeedbackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SubmitFeedbackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "submitFeedback", err)
 		}
 		return decodeResponse(resp)
 	}

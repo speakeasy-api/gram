@@ -12,6 +12,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addUserFeedbackChatResolution = `-- name: AddUserFeedbackChatResolution :exec
+UPDATE chat_user_feedback
+SET chat_resolution_id = $1
+WHERE id = $2
+`
+
+type AddUserFeedbackChatResolutionParams struct {
+	ChatResolutionID uuid.NullUUID
+	ID               uuid.UUID
+}
+
+func (q *Queries) AddUserFeedbackChatResolution(ctx context.Context, arg AddUserFeedbackChatResolutionParams) error {
+	_, err := q.db.Exec(ctx, addUserFeedbackChatResolution, arg.ChatResolutionID, arg.ID)
+	return err
+}
+
 const countChatMessages = `-- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages WHERE chat_id = $1
 `
@@ -53,6 +69,30 @@ DELETE FROM chat_resolutions WHERE chat_id = $1
 
 func (q *Queries) DeleteChatResolutions(ctx context.Context, chatID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteChatResolutions, chatID)
+	return err
+}
+
+const deleteChatResolutionsAfterMessage = `-- name: DeleteChatResolutionsAfterMessage :exec
+DELETE FROM chat_resolutions
+WHERE id IN (
+    SELECT DISTINCT cr.id
+    FROM chat_resolutions cr
+    JOIN chat_resolution_messages crm ON cr.id = crm.chat_resolution_id
+    JOIN chat_messages cm ON crm.message_id = cm.id
+    WHERE cr.chat_id = $1
+      AND cm.seq > (
+        SELECT seq FROM chat_messages WHERE chat_messages.id = $2
+      )
+  )
+`
+
+type DeleteChatResolutionsAfterMessageParams struct {
+	ChatID         uuid.UUID
+	AfterMessageID uuid.UUID
+}
+
+func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg DeleteChatResolutionsAfterMessageParams) error {
+	_, err := q.db.Exec(ctx, deleteChatResolutionsAfterMessage, arg.ChatID, arg.AfterMessageID)
 	return err
 }
 
@@ -279,6 +319,47 @@ type InsertChatResolutionMessageParams struct {
 func (q *Queries) InsertChatResolutionMessage(ctx context.Context, arg InsertChatResolutionMessageParams) error {
 	_, err := q.db.Exec(ctx, insertChatResolutionMessage, arg.ChatResolutionID, arg.MessageID)
 	return err
+}
+
+const insertUserFeedback = `-- name: InsertUserFeedback :one
+INSERT INTO chat_user_feedback (
+    project_id,
+    chat_id,
+    message_id,
+    user_resolution,
+    user_resolution_notes,
+    chat_resolution_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+) RETURNING id
+`
+
+type InsertUserFeedbackParams struct {
+	ProjectID           uuid.UUID
+	ChatID              uuid.UUID
+	MessageID           uuid.UUID
+	UserResolution      string
+	UserResolutionNotes pgtype.Text
+	ChatResolutionID    uuid.NullUUID
+}
+
+func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedbackParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertUserFeedback,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.MessageID,
+		arg.UserResolution,
+		arg.UserResolutionNotes,
+		arg.ChatResolutionID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listAllChats = `-- name: ListAllChats :many
@@ -700,6 +781,42 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 			&i.Score,
 			&i.ResolutionCreatedAt,
 			&i.MessageIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserFeedbackForChat = `-- name: ListUserFeedbackForChat :many
+SELECT id, project_id, chat_id, message_id, user_resolution, user_resolution_notes, chat_resolution_id, created_at
+FROM chat_user_feedback
+WHERE chat_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListUserFeedbackForChat(ctx context.Context, chatID uuid.UUID) ([]ChatUserFeedback, error) {
+	rows, err := q.db.Query(ctx, listUserFeedbackForChat, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatUserFeedback
+	for rows.Next() {
+		var i ChatUserFeedback
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ChatID,
+			&i.MessageID,
+			&i.UserResolution,
+			&i.UserResolutionNotes,
+			&i.ChatResolutionID,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

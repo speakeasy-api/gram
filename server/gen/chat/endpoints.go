@@ -21,6 +21,7 @@ type Endpoints struct {
 	GenerateTitle            goa.Endpoint
 	CreditUsage              goa.Endpoint
 	ListChatsWithResolutions goa.Endpoint
+	SubmitFeedback           goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "chat" service with endpoints.
@@ -33,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GenerateTitle:            NewGenerateTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		CreditUsage:              NewCreditUsageEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		ListChatsWithResolutions: NewListChatsWithResolutionsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		SubmitFeedback:           NewSubmitFeedbackEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
 }
 
@@ -43,6 +45,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GenerateTitle = m(e.GenerateTitle)
 	e.CreditUsage = m(e.CreditUsage)
 	e.ListChatsWithResolutions = m(e.ListChatsWithResolutions)
+	e.SubmitFeedback = m(e.SubmitFeedback)
 }
 
 // NewListChatsEndpoint returns an endpoint function that calls the method
@@ -277,5 +280,52 @@ func NewListChatsWithResolutionsEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.ListChatsWithResolutions(ctx, p)
+	}
+}
+
+// NewSubmitFeedbackEndpoint returns an endpoint function that calls the method
+// "submitFeedback" of service "chat".
+func NewSubmitFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SubmitFeedbackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if p.ChatSessionsToken != nil {
+				token = *p.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SubmitFeedback(ctx, p)
 	}
 }

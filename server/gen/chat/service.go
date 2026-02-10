@@ -27,6 +27,8 @@ type Service interface {
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 	// List all chats for a project with their resolutions
 	ListChatsWithResolutions(context.Context, *ListChatsWithResolutionsPayload) (res *ListChatsWithResolutionsResult, err error)
+	// Submit user feedback for a chat (success/failure)
+	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -51,7 +53,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"listChats", "loadChat", "generateTitle", "creditUsage", "listChatsWithResolutions"}
+var MethodNames = [6]string{"listChats", "loadChat", "generateTitle", "creditUsage", "listChatsWithResolutions", "submitFeedback"}
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
@@ -229,6 +231,25 @@ type LoadChatPayload struct {
 	ChatSessionsToken *string
 	// The ID of the chat
 	ID string
+}
+
+// SubmitFeedbackPayload is the payload type of the chat service submitFeedback
+// method.
+type SubmitFeedbackPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// The ID of the chat
+	ID string
+	// User feedback: success or failure
+	Feedback string
+}
+
+// SubmitFeedbackResult is the result type of the chat service submitFeedback
+// method.
+type SubmitFeedbackResult struct {
+	// Whether the feedback was submitted successfully
+	Success bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
