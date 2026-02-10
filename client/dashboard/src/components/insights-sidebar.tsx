@@ -6,19 +6,19 @@ import { useState, useMemo, createContext, useContext } from "react";
 import { cn } from "@/lib/utils";
 
 // Context for sidebar state
-const CopilotContext = createContext<{ isExpanded: boolean }>({
+const InsightsContext = createContext<{ isExpanded: boolean }>({
   isExpanded: false,
 });
 
 /**
- * Hook to access the copilot sidebar state.
+ * Hook to access the insights sidebar state.
  * Returns { isExpanded } to allow pages to adapt their layout.
  */
-export function useCopilotState() {
-  return useContext(CopilotContext);
+export function useInsightsState() {
+  return useContext(InsightsContext);
 }
 
-interface CopilotSidebarProps {
+interface InsightsSidebarProps {
   /** Base MCP config from useObservabilityMcpConfig */
   mcpConfig: Omit<ElementsConfig, "variant" | "welcome" | "theme">;
   /** Title shown in the chat welcome screen */
@@ -42,7 +42,7 @@ interface CopilotSidebarProps {
 const SIDEBAR_MAX_WIDTH = 670;
 const SIDEBAR_MAX_PERCENT = 40; // Never more than 40% of viewport
 
-export function CopilotSidebar({
+export function InsightsSidebar({
   mcpConfig,
   title,
   subtitle,
@@ -50,7 +50,7 @@ export function CopilotSidebar({
   defaultExpanded = false,
   contextInfo,
   children,
-}: CopilotSidebarProps) {
+}: InsightsSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const { theme } = useMoonshineConfig();
 
@@ -87,7 +87,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
   const contextValue = useMemo(() => ({ isExpanded }), [isExpanded]);
 
   return (
-    <CopilotContext.Provider value={contextValue}>
+    <InsightsContext.Provider value={contextValue}>
       <div className="flex h-full w-full">
         {/* Main content area - shrinks when sidebar opens */}
         <div
@@ -106,7 +106,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
             "fixed right-0 top-1/2 -translate-y-1/2 z-40 flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2.5 rounded-l-lg shadow-lg hover:bg-primary/90 transition-all duration-300 group",
             isExpanded && "opacity-0 pointer-events-none",
           )}
-          aria-label="Open Copilot"
+          aria-label="Open AI Insights"
         >
           <Wand2 className="size-4" />
           <span className="text-sm font-medium">Ask AI</span>
@@ -124,7 +124,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
               <Sparkles className="size-5 text-primary" />
-              <span className="font-semibold">AI Copilot</span>
+              <span className="font-semibold">AI Insights</span>
               <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500">
                 Beta
               </span>
@@ -132,7 +132,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
             <button
               onClick={() => setIsExpanded(false)}
               className="p-1.5 rounded hover:bg-muted transition-colors"
-              aria-label="Close Copilot"
+              aria-label="Close AI Insights"
             >
               <ChevronRight className="size-5" />
             </button>
@@ -146,6 +146,6 @@ When the user asks about "current period", "selected period", "this timeframe", 
           </div>
         </div>
       </div>
-    </CopilotContext.Provider>
+    </InsightsContext.Provider>
   );
 }

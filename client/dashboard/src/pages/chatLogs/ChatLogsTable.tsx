@@ -1,5 +1,10 @@
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
 import { cn } from "@/lib/utils";
+import {
+  resolutionBgColors,
+  resolutionStrokeColors,
+  resolutionStrokeMutedColors,
+} from "@/lib/resolution-colors";
 import { Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useState, useCallback } from "react";
@@ -111,16 +116,12 @@ function ScoreRing({
   const offset = circumference - (score / 100) * circumference;
 
   const colorMap = {
-    success: "stroke-emerald-500",
-    failure: "stroke-rose-500",
-    partial: "stroke-amber-500",
+    ...resolutionStrokeColors,
     unresolved: "stroke-muted-foreground/30",
   };
 
   const bgColorMap = {
-    success: "stroke-emerald-500/15",
-    failure: "stroke-rose-500/15",
-    partial: "stroke-amber-500/15",
+    ...resolutionStrokeMutedColors,
     unresolved: "stroke-muted-foreground/10",
   };
 
@@ -170,9 +171,7 @@ function StatusDot({
   status: "success" | "failure" | "partial" | "unresolved";
 }) {
   const colorMap = {
-    success: "bg-emerald-500",
-    failure: "bg-rose-500",
-    partial: "bg-amber-500",
+    ...resolutionBgColors,
     unresolved: "bg-muted-foreground/40",
   };
 

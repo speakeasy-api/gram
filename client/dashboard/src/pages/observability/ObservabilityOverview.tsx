@@ -1,5 +1,8 @@
 import { Page } from "@/components/page-layout";
-import { CopilotSidebar, useCopilotState } from "@/components/copilot-sidebar";
+import {
+  InsightsSidebar,
+  useInsightsState,
+} from "@/components/insights-sidebar";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import {
   DateRangeSelect,
@@ -426,7 +429,7 @@ export default function ObservabilityOverview() {
   }, [from, to]);
 
   return (
-    <CopilotSidebar
+    <InsightsSidebar
       mcpConfig={mcpConfig}
       title="What would you like to know?"
       subtitle="Ask about metrics, trends, or performance insights"
@@ -482,7 +485,7 @@ export default function ObservabilityOverview() {
           />
         </Page.Body>
       </Page>
-    </CopilotSidebar>
+    </InsightsSidebar>
   );
 }
 
@@ -507,13 +510,13 @@ function InsightsPageHeader({
   customRange: { from: Date; to: Date } | null;
   onClearCustomRange: () => void;
 }) {
-  const { isExpanded: isCopilotOpen } = useCopilotState();
+  const { isExpanded: isInsightsOpen } = useInsightsState();
 
   return (
     <div
       className={cn(
         "flex gap-4 transition-all duration-300",
-        isCopilotOpen
+        isInsightsOpen
           ? "flex-col items-stretch"
           : "flex-row items-center justify-between",
       )}
@@ -532,7 +535,7 @@ function InsightsPageHeader({
       <div
         className={cn(
           "flex items-center gap-3",
-          isCopilotOpen ? "justify-start" : "flex-shrink-0",
+          isInsightsOpen ? "justify-start" : "flex-shrink-0",
         )}
       >
         <FilterBar
@@ -591,7 +594,7 @@ function ObservabilityContent({
   customRange: { from: Date; to: Date } | null;
   onTimeRangeSelect: (from: Date, to: Date) => void;
 }) {
-  const { isExpanded: isCopilotOpen } = useCopilotState();
+  const { isExpanded: isInsightsOpen } = useInsightsState();
   if (isPending) {
     return <LoadingSkeleton />;
   }
@@ -644,7 +647,7 @@ function ObservabilityContent({
           <div
             className={cn(
               "grid gap-4 transition-all duration-300",
-              isCopilotOpen
+              isInsightsOpen
                 ? "grid-cols-1 md:grid-cols-2"
                 : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
             )}
@@ -699,7 +702,7 @@ function ObservabilityContent({
           <div
             className={cn(
               "grid gap-4",
-              isCopilotOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+              isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
             )}
           >
             <ResolvedChatsChart
@@ -747,7 +750,7 @@ function ObservabilityContent({
           <div
             className={cn(
               "grid gap-4",
-              isCopilotOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+              isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
             )}
           >
             <div className="rounded-lg border border-border bg-card p-6">
@@ -779,7 +782,7 @@ function ObservabilityContent({
         <div
           className={cn(
             "grid gap-4",
-            isCopilotOpen
+            isInsightsOpen
               ? "grid-cols-1 md:grid-cols-2"
               : "grid-cols-1 md:grid-cols-3",
           )}

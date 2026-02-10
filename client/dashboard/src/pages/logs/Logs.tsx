@@ -1,4 +1,7 @@
-import { CopilotSidebar, useCopilotState } from "@/components/copilot-sidebar";
+import {
+  InsightsSidebar,
+  useInsightsState,
+} from "@/components/insights-sidebar";
 import { SearchBar } from "@/components/ui/search-bar";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
@@ -35,7 +38,7 @@ export default function LogsPage() {
   });
 
   return (
-    <CopilotSidebar
+    <InsightsSidebar
       mcpConfig={mcpConfig}
       title="Explore Logs"
       subtitle="Ask me about your logs! Powered by Elements + Gram MCP"
@@ -58,12 +61,12 @@ export default function LogsPage() {
       ]}
     >
       <LogsContent />
-    </CopilotSidebar>
+    </InsightsSidebar>
   );
 }
 
 function LogsContent() {
-  const { isExpanded: isCopilotOpen } = useCopilotState();
+  const { isExpanded: isInsightsOpen } = useInsightsState();
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
@@ -175,7 +178,7 @@ function LogsContent() {
         <div
           className={cn(
             "flex gap-4 mb-4 transition-all duration-300",
-            isCopilotOpen
+            isInsightsOpen
               ? "flex-col items-stretch"
               : "flex-row items-center justify-between",
           )}

@@ -1,6 +1,10 @@
-import { CopilotSidebar, useCopilotState } from "@/components/copilot-sidebar";
+import {
+  InsightsSidebar,
+  useInsightsState,
+} from "@/components/insights-sidebar";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
+import { resolutionBgColors } from "@/lib/resolution-colors";
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
 import { useListChatsWithResolutions } from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
@@ -15,6 +19,22 @@ import {
   getDateRange,
 } from "../observability/date-range-select";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+
+// Reusable score indicator with colored dot
+function ScoreIndicator({
+  colorClass,
+  children,
+}: {
+  colorClass: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={cn("size-2 rounded-full", colorClass)} />
+      <span>{children}</span>
+    </div>
+  );
+}
 
 // Score legend component
 function ScoreLegend() {
@@ -32,18 +52,15 @@ function ScoreLegend() {
           </span>
         </div>
         <div className="flex items-center gap-4 ml-auto shrink-0">
-          <div className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-emerald-500" />
-            <span>80-100 Good</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-amber-500" />
-            <span>50-79 Fair</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-rose-500" />
-            <span>0-49 Poor</span>
-          </div>
+          <ScoreIndicator colorClass={resolutionBgColors.success}>
+            80-100 Good
+          </ScoreIndicator>
+          <ScoreIndicator colorClass={resolutionBgColors.partial}>
+            50-79 Fair
+          </ScoreIndicator>
+          <ScoreIndicator colorClass={resolutionBgColors.failure}>
+            0-49 Poor
+          </ScoreIndicator>
         </div>
       </div>
     </div>
@@ -186,7 +203,7 @@ export default function ChatLogs() {
   }, [timeRange.from, timeRange.to, resolutionStatus, searchQuery]);
 
   return (
-    <CopilotSidebar
+    <InsightsSidebar
       mcpConfig={mcpConfig}
       title="How can I help you debug?"
       subtitle="Search chat sessions, analyze failures, or explore logs"
@@ -231,11 +248,11 @@ export default function ChatLogs() {
         setOffset={setOffset}
         limit={limit}
       />
-    </CopilotSidebar>
+    </InsightsSidebar>
   );
 }
 
-// Separate component to use useCopilotState inside CopilotSidebar context
+// Separate component to use useInsightsState inside InsightsSidebar context
 function ChatLogsContent({
   dateRange,
   setDateRangeParam,
@@ -273,7 +290,7 @@ function ChatLogsContent({
   setOffset: (offset: number) => void;
   limit: number;
 }) {
-  const { isExpanded: isCopilotOpen } = useCopilotState();
+  const { isExpanded: isInsightsOpen } = useInsightsState();
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden">
@@ -282,7 +299,7 @@ function ChatLogsContent({
         <div
           className={cn(
             "flex gap-4 mb-4 transition-all duration-300",
-            isCopilotOpen
+            isInsightsOpen
               ? "flex-col items-stretch"
               : "flex-row items-center justify-between",
           )}
