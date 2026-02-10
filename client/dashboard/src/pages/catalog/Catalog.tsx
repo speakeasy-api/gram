@@ -77,7 +77,6 @@ export default function Catalog() {
     );
   }, [filterState.filters]);
 
-
   const toggleServerSelection = (serverKey: string) => {
     setSelectedServers((prev) => {
       const next = new Set(prev);
