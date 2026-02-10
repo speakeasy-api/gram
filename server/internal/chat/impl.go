@@ -295,6 +295,15 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	// If an external user ID is set, restrict to only their chats
+	// This prevents chat-session users from viewing other users' chats
+	if authCtx.ExternalUserID != "" {
+		if payload.ExternalUserID == nil || *payload.ExternalUserID != authCtx.ExternalUserID {
+			// Force filter to their own external user ID
+			payload.ExternalUserID = &authCtx.ExternalUserID
+		}
+	}
+
 	// Set up pagination with safe int32 conversion
 	limit := payload.Limit
 	if limit == 0 {

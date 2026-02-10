@@ -52,14 +52,22 @@ export function ChatLogsFilters({
 }: ChatLogsFiltersProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
+  // Sync local state when prop changes externally (e.g., browser back/forward)
+  useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
   // Debounced auto-submit
   useEffect(() => {
+    // Skip if already in sync to avoid unnecessary updates
+    if (localSearch === searchQuery) return;
+
     const timer = setTimeout(() => {
       onSearchQueryChange(localSearch);
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [localSearch, onSearchQueryChange]);
+  }, [localSearch, searchQuery, onSearchQueryChange]);
 
   const handleStatusChange = (value: string) => {
     // Convert "all" back to empty string for the API
