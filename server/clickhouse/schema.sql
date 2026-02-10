@@ -159,7 +159,7 @@ TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated trace summaries for fast trace-level queries without needing to scan all logs';
 
-create MATERIALIZED VIEW IF NOT EXISTS trace_summaries_mv TO trace_summaries AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS trace_summaries_mv TO trace_summaries AS
 SELECT
     trace_id,
     gram_project_id,
