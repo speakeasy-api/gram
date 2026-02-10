@@ -69,7 +69,7 @@ export function ServerCard({
         )}
       >
         {/* Illustration header */}
-        <div className="h-32 w-full overflow-hidden border-b relative">
+        <div className="h-36 w-full overflow-hidden border-b relative">
           {server.iconUrl ? (
             <ExternalMCPIllustration
               slug={slug}
@@ -87,7 +87,7 @@ export function ServerCard({
             <div className="absolute top-2 right-2">
               <Badge
                 variant="outline"
-                className="border-warning/50 bg-warning/10 text-warning backdrop-blur-sm"
+                className="border-warning bg-warning/50 text-white backdrop-blur-sm"
               >
                 Official
               </Badge>

@@ -128,7 +128,7 @@ export function FilterSidebar({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="start">
+      <PopoverContent className="w-80 p-0" align="end">
         <div className="flex items-center justify-between p-4 border-b">
           <span className="font-medium">Filters</span>
           {activeCount > 0 && (
