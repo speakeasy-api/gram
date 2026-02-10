@@ -325,7 +325,13 @@ type ToolAnnotations struct {
 
 // AnnotationsFromColumns builds a *types.ToolAnnotations from individual DB boolean columns.
 // Columns are nullable (pgtype.Bool) — invalid values are omitted from the result.
+// Returns nil when all columns are NULL (e.g. tools created before annotations were added).
+// Title is intentionally omitted here — it is a variation-only field sourced from tool_variations.
 func AnnotationsFromColumns(readOnly, destructive, idempotent, openWorld pgtype.Bool) *types.ToolAnnotations {
+	if !readOnly.Valid && !destructive.Valid && !idempotent.Valid && !openWorld.Valid {
+		return nil
+	}
+
 	return &types.ToolAnnotations{
 		Title:           nil,
 		ReadOnlyHint:    FromPGBool[bool](readOnly),
