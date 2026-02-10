@@ -64,6 +64,30 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsets"}`)
 	})
 
+	Method("inferSkillsFromToolset", func() {
+		Description("arst")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(InferSkillsResult)
+
+		HTTP(func() {
+			POST("/rpc/toolsets.inferskillsfromtoolset")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "inferSkillsFromToolset")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsets"}`)
+	})
+
 	Method("updateToolset", func() {
 		Description("Update a toolset's properties including name, description, and HTTP tools")
 
@@ -286,6 +310,11 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 var ListToolsetsResult = Type("ListToolsetsResult", func() {
 	Attribute("toolsets", ArrayOf(shared.ToolsetEntry), "The list of toolsets")
 	Required("toolsets")
+})
+
+var InferSkillsResult = Type("InferSkillsResult", func() {
+	Attribute("skills", MapOf(shared.ToolEntry, String), "The inferred skills")
+	Required("skills")
 })
 
 var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
