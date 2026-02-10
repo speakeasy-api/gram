@@ -289,6 +289,101 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	return &gen.ListChatsResult{Chats: result}, nil
 }
 
+func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.ListChatsWithResolutionsPayload) (*gen.ListChatsWithResolutionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Set up pagination with safe int32 conversion
+	limit := payload.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	offset := payload.Offset
+
+	// Convert optional filter parameters (use empty string for SQL NULL check)
+	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	resolutionStatus := conv.PtrValOr(payload.ResolutionStatus, "")
+
+	// Query database - returns denormalized rows (one row per chat+resolution combination)
+	rows, err := s.repo.ListChatsWithResolutions(ctx, repo.ListChatsWithResolutionsParams{
+		ProjectID:        *authCtx.ProjectID,
+		ExternalUserID:   externalUserID,
+		ResolutionStatus: resolutionStatus,
+		PageLimit:        int32(limit),  //nolint:gosec // limit is bounded by validation above
+		PageOffset:       int32(offset), //nolint:gosec // offset is controlled by client pagination
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats with resolutions").Log(ctx, s.logger)
+	}
+
+	// Group denormalized rows by chat_id
+	chatMap := make(map[string]*gen.ChatOverviewWithResolutions)
+	chatOrder := make([]string, 0) // Preserve order
+
+	for _, row := range rows {
+		chatID := row.ChatID.String()
+
+		// If this is the first row for this chat, create the chat entry
+		if _, exists := chatMap[chatID]; !exists {
+			chatMap[chatID] = &gen.ChatOverviewWithResolutions{
+				ID:             chatID,
+				Title:          row.Title.String,
+				UserID:         conv.FromPGText[string](row.UserID),
+				ExternalUserID: conv.FromPGText[string](row.ExternalUserID),
+				NumMessages:    int(row.NumMessages),
+				CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
+				Resolutions:    make([]*gen.ChatResolution, 0),
+			}
+			chatOrder = append(chatOrder, chatID)
+		}
+
+		// Add resolution to this chat (if one exists - ResolutionID can be NULL from LEFT JOIN)
+		if row.ResolutionID.Valid {
+			// Convert message_ids from interface{} to []string
+			var messageIDs []string
+			if row.MessageIds != nil {
+				// PostgreSQL array comes back as []interface{} containing uuid.UUID values
+				if msgIDsSlice, ok := row.MessageIds.([]interface{}); ok {
+					messageIDs = make([]string, len(msgIDsSlice))
+					for i, msgID := range msgIDsSlice {
+						if uid, ok := msgID.(uuid.UUID); ok {
+							messageIDs[i] = uid.String()
+						}
+					}
+				}
+			}
+
+			resolution := &gen.ChatResolution{
+				ID:              row.ResolutionID.UUID.String(),
+				UserGoal:        row.UserGoal.String,
+				Resolution:      row.Resolution.String,
+				ResolutionNotes: row.ResolutionNotes.String,
+				Score:           int(row.Score.Int32),
+				CreatedAt:       row.ResolutionCreatedAt.Time.Format(time.RFC3339),
+				MessageIds:      messageIDs,
+			}
+			chatMap[chatID].Resolutions = append(chatMap[chatID].Resolutions, resolution)
+		}
+	}
+
+	// Convert map to ordered slice
+	chats := make([]*gen.ChatOverviewWithResolutions, len(chatOrder))
+	for i, chatID := range chatOrder {
+		chats[i] = chatMap[chatID]
+	}
+
+	return &gen.ListChatsWithResolutionsResult{
+		Chats: chats,
+		Total: len(chats),
+	}, nil
+}
+
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -313,8 +408,11 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-		return nil, oops.C(oops.CodeUnauthorized)
+	// If this isn't coming from the dashboard, make sure the external user ID matches
+	if authCtx.SessionID == nil {
+		if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+			return nil, oops.C(oops.CodeUnauthorized)
+		}
 	}
 
 	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
@@ -335,7 +433,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			Model:          msg.Model.String,
 			UserID:         &msg.UserID.String,
 			ExternalUserID: &msg.ExternalUserID.String,
-			Content:        content,
+			Content:        &content,
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,

@@ -27,7 +27,7 @@ func CreditUsageChatPath() string {
 	return "/rpc/chat.creditUsage"
 }
 
-// SubmitFeedbackChatPath returns the URL path to the chat service submitFeedback HTTP endpoint.
-func SubmitFeedbackChatPath() string {
-	return "/rpc/chat.submitFeedback"
+// ListChatsWithResolutionsChatPath returns the URL path to the chat service listChatsWithResolutions HTTP endpoint.
+func ListChatsWithResolutionsChatPath() string {
+	return "/rpc/chat.listChatsWithResolutions"
 }

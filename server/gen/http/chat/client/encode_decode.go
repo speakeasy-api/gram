@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -977,13 +978,14 @@ func DecodeCreditUsageResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
-// BuildSubmitFeedbackRequest instantiates a HTTP request object with method
-// and path set to call the "chat" service "submitFeedback" endpoint
-func (c *Client) BuildSubmitFeedbackRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SubmitFeedbackChatPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
+// BuildListChatsWithResolutionsRequest instantiates a HTTP request object with
+// method and path set to call the "chat" service "listChatsWithResolutions"
+// endpoint
+func (c *Client) BuildListChatsWithResolutionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListChatsWithResolutionsChatPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("chat", "submitFeedback", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("chat", "listChatsWithResolutions", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -992,13 +994,13 @@ func (c *Client) BuildSubmitFeedbackRequest(ctx context.Context, v any) (*http.R
 	return req, nil
 }
 
-// EncodeSubmitFeedbackRequest returns an encoder for requests sent to the chat
-// submitFeedback server.
-func EncodeSubmitFeedbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListChatsWithResolutionsRequest returns an encoder for requests sent
+// to the chat listChatsWithResolutions server.
+func EncodeListChatsWithResolutionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*chat.SubmitFeedbackPayload)
+		p, ok := v.(*chat.ListChatsWithResolutionsPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("chat", "submitFeedback", "*chat.SubmitFeedbackPayload", v)
+			return goahttp.ErrInvalidType("chat", "listChatsWithResolutions", "*chat.ListChatsWithResolutionsPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -1012,18 +1014,24 @@ func EncodeSubmitFeedbackRequest(encoder func(*http.Request) goahttp.Encoder) fu
 			head := *p.ChatSessionsToken
 			req.Header.Set("Gram-Chat-Session", head)
 		}
-		body := NewSubmitFeedbackRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("chat", "submitFeedback", err)
+		values := req.URL.Query()
+		if p.ExternalUserID != nil {
+			values.Add("external_user_id", *p.ExternalUserID)
 		}
+		if p.ResolutionStatus != nil {
+			values.Add("resolution_status", *p.ResolutionStatus)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		values.Add("offset", fmt.Sprintf("%v", p.Offset))
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
 
-// DecodeSubmitFeedbackResponse returns a decoder for responses returned by the
-// chat submitFeedback endpoint. restoreBody controls whether the response body
-// should be restored after having been read.
-// DecodeSubmitFeedbackResponse may return the following errors:
+// DecodeListChatsWithResolutionsResponse returns a decoder for responses
+// returned by the chat listChatsWithResolutions endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListChatsWithResolutionsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1035,7 +1043,7 @@ func EncodeSubmitFeedbackRequest(encoder func(*http.Request) goahttp.Encoder) fu
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeSubmitFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeListChatsWithResolutionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -1052,169 +1060,169 @@ func DecodeSubmitFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, 
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body SubmitFeedbackResponseBody
+				body ListChatsWithResolutionsResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 			}
-			err = ValidateSubmitFeedbackResponseBody(&body)
+			err = ValidateListChatsWithResolutionsResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 			}
-			res := NewSubmitFeedbackResultOK(&body)
+			res := NewListChatsWithResolutionsResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body SubmitFeedbackUnauthorizedResponseBody
+				body ListChatsWithResolutionsUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 			}
-			err = ValidateSubmitFeedbackUnauthorizedResponseBody(&body)
+			err = ValidateListChatsWithResolutionsUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 			}
-			return nil, NewSubmitFeedbackUnauthorized(&body)
+			return nil, NewListChatsWithResolutionsUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body SubmitFeedbackForbiddenResponseBody
+				body ListChatsWithResolutionsForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 			}
-			err = ValidateSubmitFeedbackForbiddenResponseBody(&body)
+			err = ValidateListChatsWithResolutionsForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 			}
-			return nil, NewSubmitFeedbackForbidden(&body)
+			return nil, NewListChatsWithResolutionsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body SubmitFeedbackBadRequestResponseBody
+				body ListChatsWithResolutionsBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 			}
-			err = ValidateSubmitFeedbackBadRequestResponseBody(&body)
+			err = ValidateListChatsWithResolutionsBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 			}
-			return nil, NewSubmitFeedbackBadRequest(&body)
+			return nil, NewListChatsWithResolutionsBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body SubmitFeedbackNotFoundResponseBody
+				body ListChatsWithResolutionsNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 			}
-			err = ValidateSubmitFeedbackNotFoundResponseBody(&body)
+			err = ValidateListChatsWithResolutionsNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 			}
-			return nil, NewSubmitFeedbackNotFound(&body)
+			return nil, NewListChatsWithResolutionsNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body SubmitFeedbackConflictResponseBody
+				body ListChatsWithResolutionsConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 			}
-			err = ValidateSubmitFeedbackConflictResponseBody(&body)
+			err = ValidateListChatsWithResolutionsConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 			}
-			return nil, NewSubmitFeedbackConflict(&body)
+			return nil, NewListChatsWithResolutionsConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body SubmitFeedbackUnsupportedMediaResponseBody
+				body ListChatsWithResolutionsUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 			}
-			err = ValidateSubmitFeedbackUnsupportedMediaResponseBody(&body)
+			err = ValidateListChatsWithResolutionsUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 			}
-			return nil, NewSubmitFeedbackUnsupportedMedia(&body)
+			return nil, NewListChatsWithResolutionsUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body SubmitFeedbackInvalidResponseBody
+				body ListChatsWithResolutionsInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 			}
-			err = ValidateSubmitFeedbackInvalidResponseBody(&body)
+			err = ValidateListChatsWithResolutionsInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 			}
-			return nil, NewSubmitFeedbackInvalid(&body)
+			return nil, NewListChatsWithResolutionsInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body SubmitFeedbackInvariantViolationResponseBody
+					body ListChatsWithResolutionsInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+					return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 				}
-				err = ValidateSubmitFeedbackInvariantViolationResponseBody(&body)
+				err = ValidateListChatsWithResolutionsInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+					return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 				}
-				return nil, NewSubmitFeedbackInvariantViolation(&body)
+				return nil, NewListChatsWithResolutionsInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body SubmitFeedbackUnexpectedResponseBody
+					body ListChatsWithResolutionsUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+					return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 				}
-				err = ValidateSubmitFeedbackUnexpectedResponseBody(&body)
+				err = ValidateListChatsWithResolutionsUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+					return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 				}
-				return nil, NewSubmitFeedbackUnexpected(&body)
+				return nil, NewListChatsWithResolutionsUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("chat", "submitFeedback", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("chat", "listChatsWithResolutions", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body SubmitFeedbackGatewayErrorResponseBody
+				body ListChatsWithResolutionsGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
 			}
-			err = ValidateSubmitFeedbackGatewayErrorResponseBody(&body)
+			err = ValidateListChatsWithResolutionsGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "submitFeedback", err)
+				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
 			}
-			return nil, NewSubmitFeedbackGatewayError(&body)
+			return nil, NewListChatsWithResolutionsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("chat", "submitFeedback", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("chat", "listChatsWithResolutions", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1249,6 +1257,50 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResolutions
+// builds a value of type *chat.ChatOverviewWithResolutions from a value of
+// type *ChatOverviewWithResolutionsResponseBody.
+func unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResolutions(v *ChatOverviewWithResolutionsResponseBody) *chat.ChatOverviewWithResolutions {
+	res := &chat.ChatOverviewWithResolutions{
+		ID:             *v.ID,
+		Title:          *v.Title,
+		UserID:         v.UserID,
+		ExternalUserID: v.ExternalUserID,
+		NumMessages:    *v.NumMessages,
+		CreatedAt:      *v.CreatedAt,
+		UpdatedAt:      *v.UpdatedAt,
+	}
+	res.Resolutions = make([]*chat.ChatResolution, len(v.Resolutions))
+	for i, val := range v.Resolutions {
+		if val == nil {
+			res.Resolutions[i] = nil
+			continue
+		}
+		res.Resolutions[i] = unmarshalChatResolutionResponseBodyToChatChatResolution(val)
+	}
+
+	return res
+}
+
+// unmarshalChatResolutionResponseBodyToChatChatResolution builds a value of
+// type *chat.ChatResolution from a value of type *ChatResolutionResponseBody.
+func unmarshalChatResolutionResponseBodyToChatChatResolution(v *ChatResolutionResponseBody) *chat.ChatResolution {
+	res := &chat.ChatResolution{
+		ID:              *v.ID,
+		UserGoal:        *v.UserGoal,
+		Resolution:      *v.Resolution,
+		ResolutionNotes: *v.ResolutionNotes,
+		Score:           *v.Score,
+		CreatedAt:       *v.CreatedAt,
+	}
+	res.MessageIds = make([]string, len(v.MessageIds))
+	for i, val := range v.MessageIds {
+		res.MessageIds[i] = val
 	}
 
 	return res

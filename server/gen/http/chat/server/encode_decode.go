@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
@@ -912,47 +913,72 @@ func EncodeCreditUsageError(encoder func(context.Context, http.ResponseWriter) g
 	}
 }
 
-// EncodeSubmitFeedbackResponse returns an encoder for responses returned by
-// the chat submitFeedback endpoint.
-func EncodeSubmitFeedbackResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListChatsWithResolutionsResponse returns an encoder for responses
+// returned by the chat listChatsWithResolutions endpoint.
+func EncodeListChatsWithResolutionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*chat.SubmitFeedbackResult)
+		res, _ := v.(*chat.ListChatsWithResolutionsResult)
 		enc := encoder(ctx, w)
-		body := NewSubmitFeedbackResponseBody(res)
+		body := NewListChatsWithResolutionsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeSubmitFeedbackRequest returns a decoder for requests sent to the chat
-// submitFeedback endpoint.
-func DecodeSubmitFeedbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*chat.SubmitFeedbackPayload, error) {
-	return func(r *http.Request) (*chat.SubmitFeedbackPayload, error) {
+// DecodeListChatsWithResolutionsRequest returns a decoder for requests sent to
+// the chat listChatsWithResolutions endpoint.
+func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*chat.ListChatsWithResolutionsPayload, error) {
+	return func(r *http.Request) (*chat.ListChatsWithResolutionsPayload, error) {
 		var (
-			body SubmitFeedbackRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return nil, gerr
-			}
-			return nil, goa.DecodePayloadError(err.Error())
-		}
-		err = ValidateSubmitFeedbackRequestBody(&body)
-		if err != nil {
-			return nil, err
-		}
-
-		var (
+			externalUserID    *string
+			resolutionStatus  *string
+			limit             int
+			offset            int
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
+			err               error
 		)
+		qp := r.URL.Query()
+		externalUserIDRaw := qp.Get("external_user_id")
+		if externalUserIDRaw != "" {
+			externalUserID = &externalUserIDRaw
+		}
+		resolutionStatusRaw := qp.Get("resolution_status")
+		if resolutionStatusRaw != "" {
+			resolutionStatus = &resolutionStatusRaw
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 50
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+		}
+		{
+			offsetRaw := qp.Get("offset")
+			if offsetRaw != "" {
+				v, err2 := strconv.ParseInt(offsetRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("offset", offsetRaw, "integer"))
+				}
+				offset = int(v)
+			}
+		}
+		if offset < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -965,7 +991,10 @@ func DecodeSubmitFeedbackRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if chatSessionsTokenRaw != "" {
 			chatSessionsToken = &chatSessionsTokenRaw
 		}
-		payload := NewSubmitFeedbackPayload(&body, sessionToken, projectSlugInput, chatSessionsToken)
+		if err != nil {
+			return nil, err
+		}
+		payload := NewListChatsWithResolutionsPayload(externalUserID, resolutionStatus, limit, offset, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -992,9 +1021,9 @@ func DecodeSubmitFeedbackRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	}
 }
 
-// EncodeSubmitFeedbackError returns an encoder for errors returned by the
-// submitFeedback chat endpoint.
-func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListChatsWithResolutionsError returns an encoder for errors returned
+// by the listChatsWithResolutions chat endpoint.
+func EncodeListChatsWithResolutionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -1011,7 +1040,7 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSubmitFeedbackUnauthorizedResponseBody(res)
+				body = NewListChatsWithResolutionsUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -1025,7 +1054,7 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSubmitFeedbackForbiddenResponseBody(res)
+				body = NewListChatsWithResolutionsForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -1039,7 +1068,7 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSubmitFeedbackBadRequestResponseBody(res)
+				body = NewListChatsWithResolutionsBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -1053,7 +1082,7 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSubmitFeedbackNotFoundResponseBody(res)
+				body = NewListChatsWithResolutionsNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -1067,7 +1096,7 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSubmitFeedbackConflictResponseBody(res)
+				body = NewListChatsWithResolutionsConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -1081,7 +1110,7 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSubmitFeedbackUnsupportedMediaResponseBody(res)
+				body = NewListChatsWithResolutionsUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -1095,7 +1124,7 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSubmitFeedbackInvalidResponseBody(res)
+				body = NewListChatsWithResolutionsInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -1109,7 +1138,7 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSubmitFeedbackInvariantViolationResponseBody(res)
+				body = NewListChatsWithResolutionsInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1123,7 +1152,7 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSubmitFeedbackUnexpectedResponseBody(res)
+				body = NewListChatsWithResolutionsUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1137,7 +1166,7 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSubmitFeedbackGatewayErrorResponseBody(res)
+				body = NewListChatsWithResolutionsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -1178,6 +1207,58 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      v.CreatedAt,
+	}
+
+	return res
+}
+
+// marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponseBody
+// builds a value of type *ChatOverviewWithResolutionsResponseBody from a value
+// of type *chat.ChatOverviewWithResolutions.
+func marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponseBody(v *chat.ChatOverviewWithResolutions) *ChatOverviewWithResolutionsResponseBody {
+	res := &ChatOverviewWithResolutionsResponseBody{
+		ID:             v.ID,
+		Title:          v.Title,
+		UserID:         v.UserID,
+		ExternalUserID: v.ExternalUserID,
+		NumMessages:    v.NumMessages,
+		CreatedAt:      v.CreatedAt,
+		UpdatedAt:      v.UpdatedAt,
+	}
+	if v.Resolutions != nil {
+		res.Resolutions = make([]*ChatResolutionResponseBody, len(v.Resolutions))
+		for i, val := range v.Resolutions {
+			if val == nil {
+				res.Resolutions[i] = nil
+				continue
+			}
+			res.Resolutions[i] = marshalChatChatResolutionToChatResolutionResponseBody(val)
+		}
+	} else {
+		res.Resolutions = []*ChatResolutionResponseBody{}
+	}
+
+	return res
+}
+
+// marshalChatChatResolutionToChatResolutionResponseBody builds a value of type
+// *ChatResolutionResponseBody from a value of type *chat.ChatResolution.
+func marshalChatChatResolutionToChatResolutionResponseBody(v *chat.ChatResolution) *ChatResolutionResponseBody {
+	res := &ChatResolutionResponseBody{
+		ID:              v.ID,
+		UserGoal:        v.UserGoal,
+		Resolution:      v.Resolution,
+		ResolutionNotes: v.ResolutionNotes,
+		Score:           v.Score,
+		CreatedAt:       v.CreatedAt,
+	}
+	if v.MessageIds != nil {
+		res.MessageIds = make([]string, len(v.MessageIds))
+		for i, val := range v.MessageIds {
+			res.MessageIds[i] = val
+		}
+	} else {
+		res.MessageIds = []string{}
 	}
 
 	return res

@@ -15,21 +15,21 @@ import (
 
 // Client is the "chat" service client.
 type Client struct {
-	ListChatsEndpoint      goa.Endpoint
-	LoadChatEndpoint       goa.Endpoint
-	GenerateTitleEndpoint  goa.Endpoint
-	CreditUsageEndpoint    goa.Endpoint
-	SubmitFeedbackEndpoint goa.Endpoint
+	ListChatsEndpoint                goa.Endpoint
+	LoadChatEndpoint                 goa.Endpoint
+	GenerateTitleEndpoint            goa.Endpoint
+	CreditUsageEndpoint              goa.Endpoint
+	ListChatsWithResolutionsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "chat" service client given the endpoints.
-func NewClient(listChats, loadChat, generateTitle, creditUsage, submitFeedback goa.Endpoint) *Client {
+func NewClient(listChats, loadChat, generateTitle, creditUsage, listChatsWithResolutions goa.Endpoint) *Client {
 	return &Client{
-		ListChatsEndpoint:      listChats,
-		LoadChatEndpoint:       loadChat,
-		GenerateTitleEndpoint:  generateTitle,
-		CreditUsageEndpoint:    creditUsage,
-		SubmitFeedbackEndpoint: submitFeedback,
+		ListChatsEndpoint:                listChats,
+		LoadChatEndpoint:                 loadChat,
+		GenerateTitleEndpoint:            generateTitle,
+		CreditUsageEndpoint:              creditUsage,
+		ListChatsWithResolutionsEndpoint: listChatsWithResolutions,
 	}
 }
 
@@ -121,8 +121,9 @@ func (c *Client) CreditUsage(ctx context.Context, p *CreditUsagePayload) (res *C
 	return ires.(*CreditUsageResult), nil
 }
 
-// SubmitFeedback calls the "submitFeedback" endpoint of the "chat" service.
-// SubmitFeedback may return the following errors:
+// ListChatsWithResolutions calls the "listChatsWithResolutions" endpoint of
+// the "chat" service.
+// ListChatsWithResolutions may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -134,11 +135,11 @@ func (c *Client) CreditUsage(ctx context.Context, p *CreditUsagePayload) (res *C
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) SubmitFeedback(ctx context.Context, p *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error) {
+func (c *Client) ListChatsWithResolutions(ctx context.Context, p *ListChatsWithResolutionsPayload) (res *ListChatsWithResolutionsResult, err error) {
 	var ires any
-	ires, err = c.SubmitFeedbackEndpoint(ctx, p)
+	ires, err = c.ListChatsWithResolutionsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*SubmitFeedbackResult), nil
+	return ires.(*ListChatsWithResolutionsResult), nil
 }

@@ -12,22 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const addUserFeedbackChatResolution = `-- name: AddUserFeedbackChatResolution :exec
-UPDATE chat_user_feedback
-SET chat_resolution_id = $1
-WHERE id = $2
-`
-
-type AddUserFeedbackChatResolutionParams struct {
-	ChatResolutionID uuid.NullUUID
-	ID               uuid.UUID
-}
-
-func (q *Queries) AddUserFeedbackChatResolution(ctx context.Context, arg AddUserFeedbackChatResolutionParams) error {
-	_, err := q.db.Exec(ctx, addUserFeedbackChatResolution, arg.ChatResolutionID, arg.ID)
-	return err
-}
-
 const countChatMessages = `-- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages WHERE chat_id = $1
 `
@@ -72,30 +56,6 @@ func (q *Queries) DeleteChatResolutions(ctx context.Context, chatID uuid.UUID) e
 	return err
 }
 
-const deleteChatResolutionsAfterMessage = `-- name: DeleteChatResolutionsAfterMessage :exec
-DELETE FROM chat_resolutions
-WHERE id IN (
-    SELECT DISTINCT cr.id
-    FROM chat_resolutions cr
-    JOIN chat_resolution_messages crm ON cr.id = crm.chat_resolution_id
-    JOIN chat_messages cm ON crm.message_id = cm.id
-    WHERE cr.chat_id = $1
-      AND cm.seq > (
-        SELECT seq FROM chat_messages WHERE chat_messages.id = $2
-      )
-  )
-`
-
-type DeleteChatResolutionsAfterMessageParams struct {
-	ChatID         uuid.UUID
-	AfterMessageID uuid.UUID
-}
-
-func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg DeleteChatResolutionsAfterMessageParams) error {
-	_, err := q.db.Exec(ctx, deleteChatResolutionsAfterMessage, arg.ChatID, arg.AfterMessageID)
-	return err
-}
-
 const getChat = `-- name: GetChat :one
 SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
 `
@@ -114,6 +74,76 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getChatWithResolutions = `-- name: GetChatWithResolutions :one
+SELECT
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    (
+        COALESCE(
+            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
+            0
+        )
+    )::integer as num_messages,
+    COALESCE(
+        (
+            SELECT json_agg(
+                json_build_object(
+                    'id', cr.id,
+                    'user_goal', cr.user_goal,
+                    'resolution', cr.resolution,
+                    'resolution_notes', cr.resolution_notes,
+                    'score', cr.score,
+                    'created_at', cr.created_at,
+                    'message_ids', (
+                        SELECT COALESCE(array_agg(crm.message_id), ARRAY[]::uuid[])
+                        FROM chat_resolution_messages crm
+                        WHERE crm.chat_resolution_id = cr.id
+                    )
+                ) ORDER BY cr.created_at DESC
+            )
+            FROM chat_resolutions cr
+            WHERE cr.chat_id = c.id
+        ),
+        '[]'::json
+    ) as resolutions
+FROM chats c
+WHERE c.id = $1
+`
+
+type GetChatWithResolutionsRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+	NumMessages    int32
+	Resolutions    interface{}
+}
+
+func (q *Queries) GetChatWithResolutions(ctx context.Context, id uuid.UUID) (GetChatWithResolutionsRow, error) {
+	row := q.db.QueryRow(ctx, getChatWithResolutions, id)
+	var i GetChatWithResolutionsRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.ExternalUserID,
+		&i.Title,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.NumMessages,
+		&i.Resolutions,
 	)
 	return i, err
 }
@@ -249,47 +279,6 @@ type InsertChatResolutionMessageParams struct {
 func (q *Queries) InsertChatResolutionMessage(ctx context.Context, arg InsertChatResolutionMessageParams) error {
 	_, err := q.db.Exec(ctx, insertChatResolutionMessage, arg.ChatResolutionID, arg.MessageID)
 	return err
-}
-
-const insertUserFeedback = `-- name: InsertUserFeedback :one
-INSERT INTO chat_user_feedback (
-    project_id,
-    chat_id,
-    message_id,
-    user_resolution,
-    user_resolution_notes,
-    chat_resolution_id
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6
-) RETURNING id
-`
-
-type InsertUserFeedbackParams struct {
-	ProjectID           uuid.UUID
-	ChatID              uuid.UUID
-	MessageID           uuid.UUID
-	UserResolution      string
-	UserResolutionNotes pgtype.Text
-	ChatResolutionID    uuid.NullUUID
-}
-
-func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedbackParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, insertUserFeedback,
-		arg.ProjectID,
-		arg.ChatID,
-		arg.MessageID,
-		arg.UserResolution,
-		arg.UserResolutionNotes,
-		arg.ChatResolutionID,
-	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
 }
 
 const listAllChats = `-- name: ListAllChats :many
@@ -600,31 +589,117 @@ func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserPara
 	return items, nil
 }
 
-const listUserFeedbackForChat = `-- name: ListUserFeedbackForChat :many
-SELECT id, project_id, chat_id, message_id, user_resolution, user_resolution_notes, chat_resolution_id, created_at
-FROM chat_user_feedback
-WHERE chat_id = $1
-ORDER BY created_at DESC
+const listChatsWithResolutions = `-- name: ListChatsWithResolutions :many
+WITH limited_chats AS (
+  SELECT c.id, c.title, c.user_id, c.external_user_id, c.created_at, c.updated_at
+  FROM chats c
+  WHERE c.project_id = $1
+    AND c.deleted IS FALSE
+    AND ($2 = '' OR c.external_user_id = $2)
+    AND (
+      $3 = ''
+      OR (
+        $3 = 'unresolved' AND NOT EXISTS (
+          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
+        )
+      )
+      OR (
+        $3 != 'unresolved' AND EXISTS (
+          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $3
+        )
+      )
+    )
+  ORDER BY c.updated_at DESC
+  LIMIT $5
+  OFFSET $4
+)
+SELECT
+    lc.id as chat_id,
+    lc.title,
+    lc.user_id,
+    lc.external_user_id,
+    lc.created_at,
+    lc.updated_at,
+    (
+        COALESCE(
+            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = lc.id),
+            0
+        )
+    )::integer as num_messages,
+    cr.id as resolution_id,
+    cr.user_goal,
+    cr.resolution,
+    cr.resolution_notes,
+    cr.score,
+    cr.created_at as resolution_created_at,
+    COALESCE(
+        (
+            SELECT array_agg(crm.message_id)
+            FROM chat_resolution_messages crm
+            WHERE crm.chat_resolution_id = cr.id
+        ),
+        ARRAY[]::uuid[]
+    ) as message_ids
+FROM limited_chats lc
+LEFT JOIN chat_resolutions cr ON cr.chat_id = lc.id
+ORDER BY lc.updated_at DESC, cr.created_at DESC
 `
 
-func (q *Queries) ListUserFeedbackForChat(ctx context.Context, chatID uuid.UUID) ([]ChatUserFeedback, error) {
-	rows, err := q.db.Query(ctx, listUserFeedbackForChat, chatID)
+type ListChatsWithResolutionsParams struct {
+	ProjectID        uuid.UUID
+	ExternalUserID   interface{}
+	ResolutionStatus interface{}
+	PageOffset       int32
+	PageLimit        int32
+}
+
+type ListChatsWithResolutionsRow struct {
+	ChatID              uuid.UUID
+	Title               pgtype.Text
+	UserID              pgtype.Text
+	ExternalUserID      pgtype.Text
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	NumMessages         int32
+	ResolutionID        uuid.NullUUID
+	UserGoal            pgtype.Text
+	Resolution          pgtype.Text
+	ResolutionNotes     pgtype.Text
+	Score               pgtype.Int4
+	ResolutionCreatedAt pgtype.Timestamptz
+	MessageIds          interface{}
+}
+
+func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWithResolutionsParams) ([]ListChatsWithResolutionsRow, error) {
+	rows, err := q.db.Query(ctx, listChatsWithResolutions,
+		arg.ProjectID,
+		arg.ExternalUserID,
+		arg.ResolutionStatus,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ChatUserFeedback
+	var items []ListChatsWithResolutionsRow
 	for rows.Next() {
-		var i ChatUserFeedback
+		var i ListChatsWithResolutionsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
 			&i.ChatID,
-			&i.MessageID,
-			&i.UserResolution,
-			&i.UserResolutionNotes,
-			&i.ChatResolutionID,
+			&i.Title,
+			&i.UserID,
+			&i.ExternalUserID,
 			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.NumMessages,
+			&i.ResolutionID,
+			&i.UserGoal,
+			&i.Resolution,
+			&i.ResolutionNotes,
+			&i.Score,
+			&i.ResolutionCreatedAt,
+			&i.MessageIds,
 		); err != nil {
 			return nil, err
 		}

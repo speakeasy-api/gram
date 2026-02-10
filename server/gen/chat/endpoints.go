@@ -16,11 +16,11 @@ import (
 
 // Endpoints wraps the "chat" service endpoints.
 type Endpoints struct {
-	ListChats      goa.Endpoint
-	LoadChat       goa.Endpoint
-	GenerateTitle  goa.Endpoint
-	CreditUsage    goa.Endpoint
-	SubmitFeedback goa.Endpoint
+	ListChats                goa.Endpoint
+	LoadChat                 goa.Endpoint
+	GenerateTitle            goa.Endpoint
+	CreditUsage              goa.Endpoint
+	ListChatsWithResolutions goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "chat" service with endpoints.
@@ -28,11 +28,11 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListChats:      NewListChatsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		LoadChat:       NewLoadChatEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		GenerateTitle:  NewGenerateTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		CreditUsage:    NewCreditUsageEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		SubmitFeedback: NewSubmitFeedbackEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ListChats:                NewListChatsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		LoadChat:                 NewLoadChatEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		GenerateTitle:            NewGenerateTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		CreditUsage:              NewCreditUsageEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ListChatsWithResolutions: NewListChatsWithResolutionsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
 }
 
@@ -42,7 +42,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.LoadChat = m(e.LoadChat)
 	e.GenerateTitle = m(e.GenerateTitle)
 	e.CreditUsage = m(e.CreditUsage)
-	e.SubmitFeedback = m(e.SubmitFeedback)
+	e.ListChatsWithResolutions = m(e.ListChatsWithResolutions)
 }
 
 // NewListChatsEndpoint returns an endpoint function that calls the method
@@ -233,11 +233,11 @@ func NewCreditUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, aut
 	}
 }
 
-// NewSubmitFeedbackEndpoint returns an endpoint function that calls the method
-// "submitFeedback" of service "chat".
-func NewSubmitFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
+// NewListChatsWithResolutionsEndpoint returns an endpoint function that calls
+// the method "listChatsWithResolutions" of service "chat".
+func NewListChatsWithResolutionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*SubmitFeedbackPayload)
+		p := req.(*ListChatsWithResolutionsPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -276,6 +276,6 @@ func NewSubmitFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, 
 		if err != nil {
 			return nil, err
 		}
-		return s.SubmitFeedback(ctx, p)
+		return s.ListChatsWithResolutions(ctx, p)
 	}
 }

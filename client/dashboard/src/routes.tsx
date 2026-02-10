@@ -20,6 +20,7 @@ import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import Logs from "./pages/logs/Logs";
+import ChatLogs from "./pages/chatLogs/ChatLogs";
 import Metrics from "./pages/metrics/Metrics";
 import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
@@ -257,6 +258,12 @@ const ROUTE_STRUCTURE = {
     url: "logs",
     icon: "activity",
     component: Logs,
+  },
+  chatLogs: {
+    title: "Chat Logs",
+    url: "chat-logs",
+    icon: "messages-square",
+    component: ChatLogs,
   },
   metrics: {
     title: "Metrics",

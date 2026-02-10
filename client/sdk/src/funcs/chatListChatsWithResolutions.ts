@@ -3,7 +3,7 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -27,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * submitFeedback chat
+ * listChatsWithResolutions chat
  *
  * @remarks
- * Submit user feedback for a chat (success/failure)
+ * List all chats for a project with their resolutions
  */
-export function chatSubmitFeedback(
+export function chatListChatsWithResolutions(
   client: GramCore,
-  request: operations.SubmitFeedbackRequest,
-  security?: operations.SubmitFeedbackSecurity | undefined,
+  request?: operations.ListChatsWithResolutionsRequest | undefined,
+  security?: operations.ListChatsWithResolutionsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.CaptureEventResult,
+    components.ListChatsWithResolutionsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +61,13 @@ export function chatSubmitFeedback(
 
 async function $do(
   client: GramCore,
-  request: operations.SubmitFeedbackRequest,
-  security?: operations.SubmitFeedbackSecurity | undefined,
+  request?: operations.ListChatsWithResolutionsRequest | undefined,
+  security?: operations.ListChatsWithResolutionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.CaptureEventResult,
+      components.ListChatsWithResolutionsResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -83,32 +83,38 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => operations.SubmitFeedbackRequest$outboundSchema.parse(value),
+    (value) =>
+      operations.ListChatsWithResolutionsRequest$outboundSchema.optional()
+        .parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.SubmitFeedbackRequestBody, {
-    explode: true,
+  const body = null;
+
+  const path = pathToFunc("/rpc/chat.listChatsWithResolutions")();
+
+  const query = encodeFormQuery({
+    "external_user_id": payload?.external_user_id,
+    "limit": payload?.limit,
+    "offset": payload?.offset,
+    "resolution_status": payload?.resolution_status,
   });
 
-  const path = pathToFunc("/rpc/chat.submitFeedback")();
-
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Chat-Session": encodeSimple(
       "Gram-Chat-Session",
-      payload["Gram-Chat-Session"],
+      payload?.["Gram-Chat-Session"],
       { explode: false, charEncoding: "none" },
     ),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -139,7 +145,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "submitFeedback",
+    operationID: "listChatsWithResolutions",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -153,10 +159,11 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -194,7 +201,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.CaptureEventResult,
+    components.ListChatsWithResolutionsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -205,7 +212,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.CaptureEventResult$inboundSchema),
+    M.json(200, components.ListChatsWithResolutionsResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

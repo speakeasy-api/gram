@@ -33,9 +33,9 @@ type Client struct {
 	// endpoint.
 	CreditUsageDoer goahttp.Doer
 
-	// SubmitFeedback Doer is the HTTP client used to make requests to the
-	// submitFeedback endpoint.
-	SubmitFeedbackDoer goahttp.Doer
+	// ListChatsWithResolutions Doer is the HTTP client used to make requests to
+	// the listChatsWithResolutions endpoint.
+	ListChatsWithResolutionsDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -57,16 +57,16 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListChatsDoer:       doer,
-		LoadChatDoer:        doer,
-		GenerateTitleDoer:   doer,
-		CreditUsageDoer:     doer,
-		SubmitFeedbackDoer:  doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListChatsDoer:                doer,
+		LoadChatDoer:                 doer,
+		GenerateTitleDoer:            doer,
+		CreditUsageDoer:              doer,
+		ListChatsWithResolutionsDoer: doer,
+		RestoreResponseBody:          restoreBody,
+		scheme:                       scheme,
+		host:                         host,
+		decoder:                      dec,
+		encoder:                      enc,
 	}
 }
 
@@ -166,15 +166,15 @@ func (c *Client) CreditUsage() goa.Endpoint {
 	}
 }
 
-// SubmitFeedback returns an endpoint that makes HTTP requests to the chat
-// service submitFeedback server.
-func (c *Client) SubmitFeedback() goa.Endpoint {
+// ListChatsWithResolutions returns an endpoint that makes HTTP requests to the
+// chat service listChatsWithResolutions server.
+func (c *Client) ListChatsWithResolutions() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeSubmitFeedbackRequest(c.encoder)
-		decodeResponse = DecodeSubmitFeedbackResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListChatsWithResolutionsRequest(c.encoder)
+		decodeResponse = DecodeListChatsWithResolutionsResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildSubmitFeedbackRequest(ctx, v)
+		req, err := c.BuildListChatsWithResolutionsRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -182,9 +182,9 @@ func (c *Client) SubmitFeedback() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.SubmitFeedbackDoer.Do(req)
+		resp, err := c.ListChatsWithResolutionsDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("chat", "submitFeedback", err)
+			return nil, goahttp.ErrRequestError("chat", "listChatsWithResolutions", err)
 		}
 		return decodeResponse(resp)
 	}

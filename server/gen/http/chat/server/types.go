@@ -21,15 +21,6 @@ type GenerateTitleRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
-// SubmitFeedbackRequestBody is the type of the "chat" service "submitFeedback"
-// endpoint HTTP request body.
-type SubmitFeedbackRequestBody struct {
-	// The ID of the chat
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// User feedback: success or failure
-	Feedback *string `form:"feedback,omitempty" json:"feedback,omitempty" xml:"feedback,omitempty"`
-}
-
 // ListChatsResponseBody is the type of the "chat" service "listChats" endpoint
 // HTTP response body.
 type ListChatsResponseBody struct {
@@ -74,11 +65,13 @@ type CreditUsageResponseBody struct {
 	MonthlyCredits int `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
 }
 
-// SubmitFeedbackResponseBody is the type of the "chat" service
-// "submitFeedback" endpoint HTTP response body.
-type SubmitFeedbackResponseBody struct {
-	// Whether the feedback was submitted successfully
-	Success bool `form:"success" json:"success" xml:"success"`
+// ListChatsWithResolutionsResponseBody is the type of the "chat" service
+// "listChatsWithResolutions" endpoint HTTP response body.
+type ListChatsWithResolutionsResponseBody struct {
+	// List of chats with resolutions
+	Chats []*ChatOverviewWithResolutionsResponseBody `form:"chats" json:"chats" xml:"chats"`
+	// Total number of chats (before pagination)
+	Total int `form:"total" json:"total" xml:"total"`
 }
 
 // ListChatsUnauthorizedResponseBody is the type of the "chat" service
@@ -804,9 +797,10 @@ type CreditUsageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SubmitFeedbackUnauthorizedResponseBody is the type of the "chat" service
-// "submitFeedback" endpoint HTTP response body for the "unauthorized" error.
-type SubmitFeedbackUnauthorizedResponseBody struct {
+// ListChatsWithResolutionsUnauthorizedResponseBody is the type of the "chat"
+// service "listChatsWithResolutions" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListChatsWithResolutionsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -822,9 +816,10 @@ type SubmitFeedbackUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SubmitFeedbackForbiddenResponseBody is the type of the "chat" service
-// "submitFeedback" endpoint HTTP response body for the "forbidden" error.
-type SubmitFeedbackForbiddenResponseBody struct {
+// ListChatsWithResolutionsForbiddenResponseBody is the type of the "chat"
+// service "listChatsWithResolutions" endpoint HTTP response body for the
+// "forbidden" error.
+type ListChatsWithResolutionsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -840,9 +835,10 @@ type SubmitFeedbackForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SubmitFeedbackBadRequestResponseBody is the type of the "chat" service
-// "submitFeedback" endpoint HTTP response body for the "bad_request" error.
-type SubmitFeedbackBadRequestResponseBody struct {
+// ListChatsWithResolutionsBadRequestResponseBody is the type of the "chat"
+// service "listChatsWithResolutions" endpoint HTTP response body for the
+// "bad_request" error.
+type ListChatsWithResolutionsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -858,9 +854,10 @@ type SubmitFeedbackBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SubmitFeedbackNotFoundResponseBody is the type of the "chat" service
-// "submitFeedback" endpoint HTTP response body for the "not_found" error.
-type SubmitFeedbackNotFoundResponseBody struct {
+// ListChatsWithResolutionsNotFoundResponseBody is the type of the "chat"
+// service "listChatsWithResolutions" endpoint HTTP response body for the
+// "not_found" error.
+type ListChatsWithResolutionsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -876,9 +873,10 @@ type SubmitFeedbackNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SubmitFeedbackConflictResponseBody is the type of the "chat" service
-// "submitFeedback" endpoint HTTP response body for the "conflict" error.
-type SubmitFeedbackConflictResponseBody struct {
+// ListChatsWithResolutionsConflictResponseBody is the type of the "chat"
+// service "listChatsWithResolutions" endpoint HTTP response body for the
+// "conflict" error.
+type ListChatsWithResolutionsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -894,10 +892,10 @@ type SubmitFeedbackConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SubmitFeedbackUnsupportedMediaResponseBody is the type of the "chat" service
-// "submitFeedback" endpoint HTTP response body for the "unsupported_media"
-// error.
-type SubmitFeedbackUnsupportedMediaResponseBody struct {
+// ListChatsWithResolutionsUnsupportedMediaResponseBody is the type of the
+// "chat" service "listChatsWithResolutions" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListChatsWithResolutionsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -913,9 +911,10 @@ type SubmitFeedbackUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SubmitFeedbackInvalidResponseBody is the type of the "chat" service
-// "submitFeedback" endpoint HTTP response body for the "invalid" error.
-type SubmitFeedbackInvalidResponseBody struct {
+// ListChatsWithResolutionsInvalidResponseBody is the type of the "chat"
+// service "listChatsWithResolutions" endpoint HTTP response body for the
+// "invalid" error.
+type ListChatsWithResolutionsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -931,10 +930,10 @@ type SubmitFeedbackInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SubmitFeedbackInvariantViolationResponseBody is the type of the "chat"
-// service "submitFeedback" endpoint HTTP response body for the
-// "invariant_violation" error.
-type SubmitFeedbackInvariantViolationResponseBody struct {
+// ListChatsWithResolutionsInvariantViolationResponseBody is the type of the
+// "chat" service "listChatsWithResolutions" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListChatsWithResolutionsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -950,9 +949,10 @@ type SubmitFeedbackInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SubmitFeedbackUnexpectedResponseBody is the type of the "chat" service
-// "submitFeedback" endpoint HTTP response body for the "unexpected" error.
-type SubmitFeedbackUnexpectedResponseBody struct {
+// ListChatsWithResolutionsUnexpectedResponseBody is the type of the "chat"
+// service "listChatsWithResolutions" endpoint HTTP response body for the
+// "unexpected" error.
+type ListChatsWithResolutionsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -968,9 +968,10 @@ type SubmitFeedbackUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SubmitFeedbackGatewayErrorResponseBody is the type of the "chat" service
-// "submitFeedback" endpoint HTTP response body for the "gateway_error" error.
-type SubmitFeedbackGatewayErrorResponseBody struct {
+// ListChatsWithResolutionsGatewayErrorResponseBody is the type of the "chat"
+// service "listChatsWithResolutions" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListChatsWithResolutionsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1011,7 +1012,7 @@ type ChatMessageResponseBody struct {
 	// The role of the message
 	Role string `form:"role" json:"role" xml:"role"`
 	// The content of the message
-	Content json.RawMessage `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	Content *json.RawMessage `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
 	// The model that generated the message
 	Model string `form:"model" json:"model" xml:"model"`
 	// The tool call ID of the message
@@ -1026,6 +1027,45 @@ type ChatMessageResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// When the message was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
+// ChatOverviewWithResolutionsResponseBody is used to define fields on response
+// body types.
+type ChatOverviewWithResolutionsResponseBody struct {
+	// List of resolutions for this chat
+	Resolutions []*ChatResolutionResponseBody `form:"resolutions" json:"resolutions" xml:"resolutions"`
+	// The ID of the chat
+	ID string `form:"id" json:"id" xml:"id"`
+	// The title of the chat
+	Title string `form:"title" json:"title" xml:"title"`
+	// The ID of the user who created the chat
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The ID of the external user who created the chat
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// The number of messages in the chat
+	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
+	// When the chat was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the chat was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ChatResolutionResponseBody is used to define fields on response body types.
+type ChatResolutionResponseBody struct {
+	// Resolution ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// User's intended goal
+	UserGoal string `form:"user_goal" json:"user_goal" xml:"user_goal"`
+	// Resolution status
+	Resolution string `form:"resolution" json:"resolution" xml:"resolution"`
+	// Notes about the resolution
+	ResolutionNotes string `form:"resolution_notes" json:"resolution_notes" xml:"resolution_notes"`
+	// Score 0-100
+	Score int `form:"score" json:"score" xml:"score"`
+	// When resolution was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Message IDs associated with this resolution
+	MessageIds []string `form:"message_ids" json:"message_ids" xml:"message_ids"`
 }
 
 // NewListChatsResponseBody builds the HTTP response body from the result of
@@ -1093,11 +1133,23 @@ func NewCreditUsageResponseBody(res *chat.CreditUsageResult) *CreditUsageRespons
 	return body
 }
 
-// NewSubmitFeedbackResponseBody builds the HTTP response body from the result
-// of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackResponseBody(res *chat.SubmitFeedbackResult) *SubmitFeedbackResponseBody {
-	body := &SubmitFeedbackResponseBody{
-		Success: res.Success,
+// NewListChatsWithResolutionsResponseBody builds the HTTP response body from
+// the result of the "listChatsWithResolutions" endpoint of the "chat" service.
+func NewListChatsWithResolutionsResponseBody(res *chat.ListChatsWithResolutionsResult) *ListChatsWithResolutionsResponseBody {
+	body := &ListChatsWithResolutionsResponseBody{
+		Total: res.Total,
+	}
+	if res.Chats != nil {
+		body.Chats = make([]*ChatOverviewWithResolutionsResponseBody, len(res.Chats))
+		for i, val := range res.Chats {
+			if val == nil {
+				body.Chats[i] = nil
+				continue
+			}
+			body.Chats[i] = marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponseBody(val)
+		}
+	} else {
+		body.Chats = []*ChatOverviewWithResolutionsResponseBody{}
 	}
 	return body
 }
@@ -1662,10 +1714,11 @@ func NewCreditUsageGatewayErrorResponseBody(res *goa.ServiceError) *CreditUsageG
 	return body
 }
 
-// NewSubmitFeedbackUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackUnauthorizedResponseBody(res *goa.ServiceError) *SubmitFeedbackUnauthorizedResponseBody {
-	body := &SubmitFeedbackUnauthorizedResponseBody{
+// NewListChatsWithResolutionsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listChatsWithResolutions" endpoint of the
+// "chat" service.
+func NewListChatsWithResolutionsUnauthorizedResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsUnauthorizedResponseBody {
+	body := &ListChatsWithResolutionsUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1676,10 +1729,11 @@ func NewSubmitFeedbackUnauthorizedResponseBody(res *goa.ServiceError) *SubmitFee
 	return body
 }
 
-// NewSubmitFeedbackForbiddenResponseBody builds the HTTP response body from
-// the result of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackForbiddenResponseBody(res *goa.ServiceError) *SubmitFeedbackForbiddenResponseBody {
-	body := &SubmitFeedbackForbiddenResponseBody{
+// NewListChatsWithResolutionsForbiddenResponseBody builds the HTTP response
+// body from the result of the "listChatsWithResolutions" endpoint of the
+// "chat" service.
+func NewListChatsWithResolutionsForbiddenResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsForbiddenResponseBody {
+	body := &ListChatsWithResolutionsForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1690,10 +1744,11 @@ func NewSubmitFeedbackForbiddenResponseBody(res *goa.ServiceError) *SubmitFeedba
 	return body
 }
 
-// NewSubmitFeedbackBadRequestResponseBody builds the HTTP response body from
-// the result of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackBadRequestResponseBody(res *goa.ServiceError) *SubmitFeedbackBadRequestResponseBody {
-	body := &SubmitFeedbackBadRequestResponseBody{
+// NewListChatsWithResolutionsBadRequestResponseBody builds the HTTP response
+// body from the result of the "listChatsWithResolutions" endpoint of the
+// "chat" service.
+func NewListChatsWithResolutionsBadRequestResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsBadRequestResponseBody {
+	body := &ListChatsWithResolutionsBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1704,10 +1759,11 @@ func NewSubmitFeedbackBadRequestResponseBody(res *goa.ServiceError) *SubmitFeedb
 	return body
 }
 
-// NewSubmitFeedbackNotFoundResponseBody builds the HTTP response body from the
-// result of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackNotFoundResponseBody(res *goa.ServiceError) *SubmitFeedbackNotFoundResponseBody {
-	body := &SubmitFeedbackNotFoundResponseBody{
+// NewListChatsWithResolutionsNotFoundResponseBody builds the HTTP response
+// body from the result of the "listChatsWithResolutions" endpoint of the
+// "chat" service.
+func NewListChatsWithResolutionsNotFoundResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsNotFoundResponseBody {
+	body := &ListChatsWithResolutionsNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1718,10 +1774,11 @@ func NewSubmitFeedbackNotFoundResponseBody(res *goa.ServiceError) *SubmitFeedbac
 	return body
 }
 
-// NewSubmitFeedbackConflictResponseBody builds the HTTP response body from the
-// result of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackConflictResponseBody(res *goa.ServiceError) *SubmitFeedbackConflictResponseBody {
-	body := &SubmitFeedbackConflictResponseBody{
+// NewListChatsWithResolutionsConflictResponseBody builds the HTTP response
+// body from the result of the "listChatsWithResolutions" endpoint of the
+// "chat" service.
+func NewListChatsWithResolutionsConflictResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsConflictResponseBody {
+	body := &ListChatsWithResolutionsConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1732,10 +1789,11 @@ func NewSubmitFeedbackConflictResponseBody(res *goa.ServiceError) *SubmitFeedbac
 	return body
 }
 
-// NewSubmitFeedbackUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackUnsupportedMediaResponseBody(res *goa.ServiceError) *SubmitFeedbackUnsupportedMediaResponseBody {
-	body := &SubmitFeedbackUnsupportedMediaResponseBody{
+// NewListChatsWithResolutionsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listChatsWithResolutions" endpoint of
+// the "chat" service.
+func NewListChatsWithResolutionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsUnsupportedMediaResponseBody {
+	body := &ListChatsWithResolutionsUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1746,10 +1804,11 @@ func NewSubmitFeedbackUnsupportedMediaResponseBody(res *goa.ServiceError) *Submi
 	return body
 }
 
-// NewSubmitFeedbackInvalidResponseBody builds the HTTP response body from the
-// result of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackInvalidResponseBody(res *goa.ServiceError) *SubmitFeedbackInvalidResponseBody {
-	body := &SubmitFeedbackInvalidResponseBody{
+// NewListChatsWithResolutionsInvalidResponseBody builds the HTTP response body
+// from the result of the "listChatsWithResolutions" endpoint of the "chat"
+// service.
+func NewListChatsWithResolutionsInvalidResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsInvalidResponseBody {
+	body := &ListChatsWithResolutionsInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1760,10 +1819,11 @@ func NewSubmitFeedbackInvalidResponseBody(res *goa.ServiceError) *SubmitFeedback
 	return body
 }
 
-// NewSubmitFeedbackInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackInvariantViolationResponseBody(res *goa.ServiceError) *SubmitFeedbackInvariantViolationResponseBody {
-	body := &SubmitFeedbackInvariantViolationResponseBody{
+// NewListChatsWithResolutionsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listChatsWithResolutions" endpoint of
+// the "chat" service.
+func NewListChatsWithResolutionsInvariantViolationResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsInvariantViolationResponseBody {
+	body := &ListChatsWithResolutionsInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1774,10 +1834,11 @@ func NewSubmitFeedbackInvariantViolationResponseBody(res *goa.ServiceError) *Sub
 	return body
 }
 
-// NewSubmitFeedbackUnexpectedResponseBody builds the HTTP response body from
-// the result of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackUnexpectedResponseBody(res *goa.ServiceError) *SubmitFeedbackUnexpectedResponseBody {
-	body := &SubmitFeedbackUnexpectedResponseBody{
+// NewListChatsWithResolutionsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listChatsWithResolutions" endpoint of the
+// "chat" service.
+func NewListChatsWithResolutionsUnexpectedResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsUnexpectedResponseBody {
+	body := &ListChatsWithResolutionsUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1788,10 +1849,11 @@ func NewSubmitFeedbackUnexpectedResponseBody(res *goa.ServiceError) *SubmitFeedb
 	return body
 }
 
-// NewSubmitFeedbackGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "submitFeedback" endpoint of the "chat" service.
-func NewSubmitFeedbackGatewayErrorResponseBody(res *goa.ServiceError) *SubmitFeedbackGatewayErrorResponseBody {
-	body := &SubmitFeedbackGatewayErrorResponseBody{
+// NewListChatsWithResolutionsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listChatsWithResolutions" endpoint of the
+// "chat" service.
+func NewListChatsWithResolutionsGatewayErrorResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsGatewayErrorResponseBody {
+	body := &ListChatsWithResolutionsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1845,13 +1907,14 @@ func NewCreditUsagePayload(sessionToken *string, projectSlugInput *string, chatS
 	return v
 }
 
-// NewSubmitFeedbackPayload builds a chat service submitFeedback endpoint
-// payload.
-func NewSubmitFeedbackPayload(body *SubmitFeedbackRequestBody, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.SubmitFeedbackPayload {
-	v := &chat.SubmitFeedbackPayload{
-		ID:       *body.ID,
-		Feedback: *body.Feedback,
-	}
+// NewListChatsWithResolutionsPayload builds a chat service
+// listChatsWithResolutions endpoint payload.
+func NewListChatsWithResolutionsPayload(externalUserID *string, resolutionStatus *string, limit int, offset int, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsWithResolutionsPayload {
+	v := &chat.ListChatsWithResolutionsPayload{}
+	v.ExternalUserID = externalUserID
+	v.ResolutionStatus = resolutionStatus
+	v.Limit = limit
+	v.Offset = offset
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -1864,23 +1927,6 @@ func NewSubmitFeedbackPayload(body *SubmitFeedbackRequestBody, sessionToken *str
 func ValidateGenerateTitleRequestBody(body *GenerateTitleRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	return
-}
-
-// ValidateSubmitFeedbackRequestBody runs the validations defined on
-// SubmitFeedbackRequestBody
-func ValidateSubmitFeedbackRequestBody(body *SubmitFeedbackRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Feedback == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("feedback", "body"))
-	}
-	if body.Feedback != nil {
-		if !(*body.Feedback == "success" || *body.Feedback == "failure") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feedback", *body.Feedback, []any{"success", "failure"}))
-		}
 	}
 	return
 }
