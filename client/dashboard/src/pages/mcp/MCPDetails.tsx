@@ -143,7 +143,14 @@ export function MCPDetailPage() {
   // Tab state controlled by URL hash - initialize directly from hash
   const [activeTab, setActiveTab] = useState<string>(() => {
     const hash = window.location.hash.slice(1); // Remove the '#'
-    const validTabs = ["overview", "tools", "resources", "prompts", "settings", "authentication"];
+    const validTabs = [
+      "overview",
+      "tools",
+      "resources",
+      "prompts",
+      "settings",
+      "authentication",
+    ];
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
 
@@ -158,7 +165,14 @@ export function MCPDetailPage() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1);
-      const validTabs = ["overview", "tools", "resources", "prompts", "settings", "authentication"];
+      const validTabs = [
+        "overview",
+        "tools",
+        "resources",
+        "prompts",
+        "settings",
+        "authentication",
+      ];
       if (hash && validTabs.includes(hash)) {
         setActiveTab(hash);
       }
