@@ -3,7 +3,7 @@ import {
   DateRangeSelect,
   DateRangePreset,
   getDateRange,
-} from "@/pages/metrics/date-range-select";
+} from "./date-range-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
@@ -369,7 +369,7 @@ export default function ObservabilityOverview() {
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold">Observability Overview</h1>
+              <h1 className="text-xl font-semibold">Insights</h1>
               <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500">
                 Beta
               </span>

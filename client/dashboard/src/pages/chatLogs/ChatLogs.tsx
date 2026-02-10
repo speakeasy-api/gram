@@ -7,7 +7,8 @@ import { ChatLogsFilters } from "./ChatLogsFilters";
 import { ChatLogsTable } from "./ChatLogsTable";
 
 export default function ChatLogs() {
-  const [selectedChat, setSelectedChat] = useState<ChatOverviewWithResolutions | null>(null);
+  const [selectedChat, setSelectedChat] =
+    useState<ChatOverviewWithResolutions | null>(null);
   const [externalCustomerId, setExternalCustomerId] = useState<string>("");
   const [resolutionStatus, setResolutionStatus] = useState<string>("");
 

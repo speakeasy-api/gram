@@ -28,12 +28,6 @@ export function ChatLogsFilters({
     onExternalCustomerIdChange(localSearch);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleSearch();
-    }
-  };
-
   const handleStatusChange = (value: string) => {
     // Convert "all" back to empty string for the API
     onResolutionStatusChange(value === "all" ? "" : value);
@@ -47,7 +41,6 @@ export function ChatLogsFilters({
           onChange={setLocalSearch}
           placeholder="Search traces by user, ID, or summary..."
           className="flex-1"
-          onKeyDown={handleKeyDown}
         />
         <Button onClick={handleSearch} variant="secondary" size="sm">
           <Icon name="search" className="size-4" />

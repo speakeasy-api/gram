@@ -16,7 +16,7 @@ function getTraceId(chatId: string): string {
 }
 
 function getOverallResolutionStatus(
-  resolutions: ChatResolution[]
+  resolutions: ChatResolution[],
 ): "success" | "failure" | "partial" | "unresolved" {
   if (resolutions.length === 0) return "unresolved";
 
@@ -34,16 +34,19 @@ function getAverageScore(resolutions: ChatResolution[]): number {
   return Math.round(sum / resolutions.length);
 }
 
-function getContextQuality(score: number): { label: string; variant: "success" | "warning" | "danger" } {
+function getContextQuality(score: number): {
+  label: string;
+  variant: "success" | "warning" | "destructive";
+} {
   if (score >= 80) return { label: "Good Context", variant: "success" };
   if (score >= 50) return { label: "Fair Context", variant: "warning" };
-  return { label: "Poor Context", variant: "danger" };
+  return { label: "Poor Context", variant: "destructive" };
 }
 
 export function ChatDetailPanel({
   chatId,
   resolutions,
-  onClose,
+  onClose: _onClose,
 }: ChatDetailPanelProps) {
   const { data: chat, isLoading } = useLoadChat({ id: chatId }, undefined, {});
 
@@ -59,7 +62,8 @@ export function ChatDetailPanel({
   const averageScore = getAverageScore(resolutions);
   const contextQuality = getContextQuality(averageScore);
   const duration = Math.round(
-    (new Date(chat.updatedAt).getTime() - new Date(chat.createdAt).getTime()) / 1000
+    (new Date(chat.updatedAt).getTime() - new Date(chat.createdAt).getTime()) /
+      1000,
   );
 
   // Count tool calls (messages with tool role)
@@ -81,10 +85,20 @@ export function ChatDetailPanel({
           <h2 className="text-xl font-semibold">{getTraceId(chatId)}</h2>
           {status !== "unresolved" && (
             <Badge
-              variant={status === "success" ? "success" : status === "failure" ? "danger" : "warning"}
+              variant={
+                status === "success"
+                  ? "success"
+                  : status === "failure"
+                    ? "destructive"
+                    : "warning"
+              }
             >
-              <Icon name="check-circle" className="size-3" />
-              {status === "success" ? "Resolved" : status === "failure" ? "Failed" : "Partial"}
+              <Icon name="circle-check" className="size-3" />
+              {status === "success"
+                ? "Resolved"
+                : status === "failure"
+                  ? "Failed"
+                  : "Partial"}
             </Badge>
           )}
         </div>
@@ -99,7 +113,9 @@ export function ChatDetailPanel({
         <div className="grid grid-cols-2 gap-x-8 gap-y-4">
           <div>
             <div className="text-xs text-muted-foreground mb-1">User ID:</div>
-            <div className="text-sm font-medium">{chat.externalUserId || "anonymous"}</div>
+            <div className="text-sm font-medium">
+              {chat.externalUserId || "anonymous"}
+            </div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground mb-1">Duration:</div>
@@ -110,19 +126,25 @@ export function ChatDetailPanel({
             <div className="text-sm font-medium">{chat.messages.length}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground mb-1">Tool Calls:</div>
+            <div className="text-xs text-muted-foreground mb-1">
+              Tool Calls:
+            </div>
             <div className="text-sm font-medium">{toolCalls}</div>
           </div>
           {resolutions.length > 0 && (
             <>
               <div>
-                <div className="text-xs text-muted-foreground mb-1">Resolution Score:</div>
+                <div className="text-xs text-muted-foreground mb-1">
+                  Resolution Score:
+                </div>
                 <div className="text-sm font-medium">{averageScore}%</div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground mb-1">Context Quality:</div>
-                <Badge variant={contextQuality.variant} size="sm">
-                  <Icon name="check-circle" className="size-3" />
+                <div className="text-xs text-muted-foreground mb-1">
+                  Context Quality:
+                </div>
+                <Badge variant={contextQuality.variant}>
+                  <Icon name="circle-check" className="size-3" />
                   {contextQuality.label}
                 </Badge>
               </div>
@@ -136,17 +158,18 @@ export function ChatDetailPanel({
         <div className="p-6 border-b">
           <Stack direction="vertical" gap={3}>
             {resolutions.map((resolution) => (
-              <div
-                key={resolution.id}
-                className="flex items-start gap-4"
-              >
+              <div key={resolution.id} className="flex items-start gap-4">
                 <CircularProgress
                   score={resolution.score}
-                  status={resolution.resolution as "success" | "failure" | "partial"}
+                  status={
+                    resolution.resolution as "success" | "failure" | "partial"
+                  }
                   size="sm"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium mb-1">{resolution.userGoal}</div>
+                  <div className="text-sm font-medium mb-1">
+                    {resolution.userGoal}
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {resolution.resolutionNotes}
                   </div>
@@ -188,7 +211,10 @@ export function ChatDetailPanel({
                   )}
                   {message.role === "tool" && (
                     <div className="size-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                      <Icon name="zap" className="size-4 text-primary-foreground" />
+                      <Icon
+                        name="zap"
+                        className="size-4 text-primary-foreground"
+                      />
                     </div>
                   )}
 
@@ -198,7 +224,8 @@ export function ChatDetailPanel({
                         {message.role}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {message.createdAt && format(new Date(message.createdAt), "HH:mm:ss")}
+                        {message.createdAt &&
+                          format(new Date(message.createdAt), "HH:mm:ss")}
                       </span>
                     </div>
                     <div
@@ -206,12 +233,16 @@ export function ChatDetailPanel({
                         "p-3 rounded-lg text-sm",
                         message.role === "user" && "bg-primary/5",
                         message.role === "assistant" && "bg-muted/50",
-                        message.role === "tool" && "bg-background border"
+                        message.role === "tool" && "bg-background border",
                       )}
                     >
-                      {message.role === "tool" && typeof message.content === "object" && message.content !== null ? (
+                      {message.role === "tool" &&
+                      typeof message.content === "object" &&
+                      message.content !== null ? (
                         <div>
-                          <div className="text-xs font-semibold mb-2">Parameters:</div>
+                          <div className="text-xs font-semibold mb-2">
+                            Parameters:
+                          </div>
                           <pre className="text-xs overflow-x-auto">
                             {JSON.stringify(message.content, null, 2)}
                           </pre>

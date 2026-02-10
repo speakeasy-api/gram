@@ -46,7 +46,10 @@ export function CircularProgress({
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           strokeLinecap="round"
-          className={cn("fill-none transition-all duration-300", colorMap[status])}
+          className={cn(
+            "fill-none transition-all duration-300",
+            colorMap[status],
+          )}
         />
       </svg>
       <span className="absolute text-xs font-medium">{score}%</span>
