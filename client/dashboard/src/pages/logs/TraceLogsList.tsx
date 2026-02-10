@@ -5,6 +5,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
+import { USE_DUMMY_DATA, DUMMY_LOGS_BY_TRACE } from "./Logs";
 
 interface TraceLogsListProps {
   traceId: string;
@@ -35,16 +36,40 @@ export function TraceLogsList({
           },
         }),
       ),
-    enabled: isExpanded,
+    enabled: isExpanded && !USE_DUMMY_DATA,
   });
 
   if (!isExpanded) {
     return null;
   }
 
+  // Use dummy data if enabled
+  if (USE_DUMMY_DATA) {
+    const dummyLogs = DUMMY_LOGS_BY_TRACE[traceId] ?? [];
+    if (dummyLogs.length === 0) {
+      return (
+        <div className="px-4 py-3 pl-12 text-sm text-muted-foreground bg-muted/30">
+          No spans found for this trace
+        </div>
+      );
+    }
+    return (
+      <div className="bg-muted/30">
+        {dummyLogs.map((log, index) => (
+          <ChildLogRow
+            key={log.id}
+            log={log}
+            isLast={index === dummyLogs.length - 1}
+            onClick={() => onLogClick(log)}
+          />
+        ))}
+      </div>
+    );
+  }
+
   if (isPending) {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 pl-12 text-muted-foreground bg-surface-secondary-default">
+      <div className="flex items-center gap-2 px-4 py-3 pl-12 text-muted-foreground bg-muted/30">
         <Icon name="loader-circle" className="size-4 animate-spin" />
         <span className="text-sm">Loading spans...</span>
       </div>
@@ -53,8 +78,8 @@ export function TraceLogsList({
 
   if (error) {
     return (
-      <div className="px-4 py-3 pl-12 bg-surface-secondary-default">
-        <span className="text-sm text-destructive-default">
+      <div className="px-4 py-3 pl-12 bg-muted/30">
+        <span className="text-sm text-destructive">
           Failed to load spans: {error.message}
         </span>
       </div>
@@ -65,14 +90,14 @@ export function TraceLogsList({
 
   if (logs.length === 0) {
     return (
-      <div className="px-4 py-3 pl-12 text-sm text-muted-foreground bg-surface-secondary-default">
+      <div className="px-4 py-3 pl-12 text-sm text-muted-foreground bg-muted/30">
         No spans found for this trace
       </div>
     );
   }
 
   return (
-    <div className="bg-surface-secondary-default">
+    <div className="bg-muted/30">
       {logs.map((log, index) => (
         <ChildLogRow
           key={log.id}
@@ -94,7 +119,7 @@ interface ChildLogRowProps {
 function ChildLogRow({ log, isLast, onClick }: ChildLogRowProps) {
   return (
     <div
-      className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-surface-default transition-colors group"
+      className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-background transition-colors group"
       onClick={onClick}
     >
       {/* Timestamp - same width as parent for alignment */}
@@ -133,14 +158,14 @@ function getSeverityBadgeClass(severity?: string): string {
   switch (severity?.toUpperCase()) {
     case "ERROR":
     case "FATAL":
-      return "bg-destructive-softest text-destructive-default";
+      return "bg-rose-500/15 text-rose-600 dark:text-rose-400";
     case "WARN":
     case "WARNING":
-      return "bg-warning-softest text-warning-default";
+      return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
     case "DEBUG":
-      return "bg-surface-secondary-default text-muted-foreground";
+      return "bg-muted text-muted-foreground";
     case "INFO":
     default:
-      return "bg-primary-softest text-primary-default";
+      return "bg-blue-500/15 text-blue-600 dark:text-blue-400";
   }
 }

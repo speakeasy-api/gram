@@ -35,7 +35,7 @@ export function TraceRow({
     <div className="border-b border-border/50 last:border-b-0">
       {/* Parent trace row */}
       <div
-        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-secondary-default transition-colors"
+        className="flex items-center gap-3 px-5 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={onToggle}
       >
         {/* Timestamp */}
@@ -55,7 +55,7 @@ export function TraceRow({
         {/* Icon + Source badge + Tool name */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <ToolIcon className="size-4 shrink-0" strokeWidth={1.5} />
-          <span className="shrink-0 px-1.5 py-0.5 text-xs font-medium rounded bg-surface-secondary-default text-muted-foreground">
+          <span className="shrink-0 px-1.5 py-0.5 text-xs font-medium rounded bg-muted text-muted-foreground">
             {sourceName}
           </span>
           <span className="text-sm font-mono truncate">{toolName}</span>
