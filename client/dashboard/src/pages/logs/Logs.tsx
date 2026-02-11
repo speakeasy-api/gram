@@ -212,6 +212,7 @@ function LogsContent() {
           onChange={setSearchInput}
           placeholder="Search by tool URN"
           className="max-w-md"
+          disabled={!logsEnabled}
         />
       </div>
 
