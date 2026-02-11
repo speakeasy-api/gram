@@ -407,10 +407,10 @@ export default function CatalogDetail() {
           </div>
         </div>
         <AddServerDialog
-          server={server}
+          servers={[server]}
           open={showAddDialog}
           onOpenChange={setShowAddDialog}
-          onServerAdded={() => refetchDeployment()}
+          onServersAdded={() => refetchDeployment()}
         />
       </Page.Body>
     </Page>
