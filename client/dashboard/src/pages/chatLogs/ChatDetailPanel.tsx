@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CodeBlock } from "@/components/ui/code-block";
 import type {
   ChatResolution,
   TelemetryLogRecord,
@@ -546,23 +547,17 @@ export function ChatDetailPanel({
                         </div>
                         <div
                           className={cn(
-                            "p-3 rounded-lg text-sm",
-                            message.role === "user" && "bg-primary/5",
-                            message.role === "assistant" && "bg-muted/50",
+                            "rounded-lg text-sm overflow-hidden",
+                            message.role === "user" && "bg-primary/5 p-3",
+                            message.role === "assistant" && "bg-muted/50 p-3",
                             message.role === "tool" && "bg-background border",
                           )}
                         >
-                          {message.role === "tool" &&
-                          typeof message.content === "object" &&
-                          message.content !== null ? (
-                            <div>
-                              <div className="text-xs font-semibold mb-2">
-                                Parameters:
-                              </div>
-                              <pre className="text-xs overflow-x-auto">
-                                {JSON.stringify(message.content, null, 2)}
-                              </pre>
-                            </div>
+                          {message.role === "tool" ? (
+                            <CodeBlock
+                              content={message.content}
+                              maxHeight={300}
+                            />
                           ) : (
                             <div className="whitespace-pre-wrap">
                               {typeof message.content === "string"
