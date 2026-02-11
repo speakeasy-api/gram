@@ -5,7 +5,7 @@ import { codeToHtml } from "shiki";
 
 /** Max characters to send through shiki — above this we skip highlighting. */
 const SHIKI_CHAR_LIMIT = 8_000;
-/** Max lines shown in the collapsed preview */
+/** Max lines shown in the collapsed preview. */
 const PREVIEW_LINE_LIMIT = 50;
 
 function truncateToLines(text: string, maxLines: number) {
@@ -44,6 +44,80 @@ function CopyButton({ content }: { content: string }) {
   );
 }
 
+/** Syntax highlighted code block - matches Elements SyntaxHighlightedCode */
+function SyntaxHighlightedCode({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
+  const [highlightedCode, setHighlightedCode] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  const preview = useMemo(
+    () => truncateToLines(text, PREVIEW_LINE_LIMIT),
+    [text],
+  );
+  const displayText = expanded ? text : preview.text;
+  const canHighlight = displayText.length <= SHIKI_CHAR_LIMIT;
+
+  useEffect(() => {
+    setHighlightedCode(null);
+    if (!canHighlight) return;
+    let cancelled = false;
+    codeToHtml(displayText, {
+      lang: "json",
+      theme: "github-dark-default",
+      rootStyle: "background-color: transparent;",
+      transformers: [
+        {
+          pre(node) {
+            node.properties.class =
+              "w-full py-3 px-4 max-h-[300px] overflow-y-auto whitespace-pre-wrap text-left text-sm";
+          },
+        },
+      ],
+    }).then((html) => {
+      if (!cancelled) setHighlightedCode(html);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [displayText, canHighlight]);
+
+  const showMoreButton = preview.truncated && !expanded && (
+    <button
+      type="button"
+      onClick={() => setExpanded(true)}
+      className="w-full bg-slate-800/90 px-4 py-2 text-left text-xs text-slate-400 transition-colors hover:text-slate-200"
+    >
+      Show all {preview.totalLines} lines…
+    </button>
+  );
+
+  if (!canHighlight || !highlightedCode) {
+    return (
+      <div className={cn("w-full", className)}>
+        <pre className="max-h-[300px] w-full overflow-y-auto bg-slate-800/90 px-4 py-3 text-sm whitespace-pre-wrap text-slate-100">
+          {displayText}
+        </pre>
+        {showMoreButton}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("w-full", className)}>
+      <div
+        className="w-full bg-slate-800/90"
+        dangerouslySetInnerHTML={{ __html: highlightedCode }}
+      />
+      {showMoreButton}
+    </div>
+  );
+}
+
 interface CodeBlockProps {
   /** The content to display - can be string or object (will be JSON stringified) */
   content: string | Record<string, unknown> | unknown;
@@ -57,16 +131,7 @@ interface CodeBlockProps {
   maxHeight?: number;
 }
 
-export function CodeBlock({
-  content,
-  title,
-  defaultExpanded = false,
-  className,
-  maxHeight = 300,
-}: CodeBlockProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const [highlightedCode, setHighlightedCode] = useState<string | null>(null);
-
+export function CodeBlock({ content, title, className }: CodeBlockProps) {
   // Format the content as a string (always JSON for this use case)
   const formattedContent = useMemo(() => {
     if (typeof content === "string") {
@@ -80,46 +145,6 @@ export function CodeBlock({
     return JSON.stringify(content, null, 2);
   }, [content]);
 
-  const preview = useMemo(
-    () => truncateToLines(formattedContent, PREVIEW_LINE_LIMIT),
-    [formattedContent],
-  );
-
-  const displayText = expanded ? formattedContent : preview.text;
-  const canExpand = preview.truncated && !expanded;
-  const canHighlight = displayText.length <= SHIKI_CHAR_LIMIT;
-  const remainingLines = preview.totalLines - PREVIEW_LINE_LIMIT;
-
-  // Syntax highlighting with Shiki
-  useEffect(() => {
-    setHighlightedCode(null);
-    if (!canHighlight) return;
-
-    let cancelled = false;
-    codeToHtml(displayText, {
-      lang: "json",
-      theme: "github-dark-default",
-      structure: "inline",
-    }).then((html) => {
-      if (!cancelled) setHighlightedCode(html);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [displayText, canHighlight]);
-
-  const showMoreButton = canExpand && (
-    <button
-      type="button"
-      onClick={() => setExpanded(true)}
-      className="w-full bg-slate-900 px-4 py-2 text-left text-xs text-slate-400 transition-colors hover:text-slate-200 hover:bg-slate-800 flex items-center gap-1"
-    >
-      <ChevronDownIcon className="size-3" />
-      See {remainingLines} more lines…
-    </button>
-  );
-
   return (
     <div className={cn("w-full rounded-lg overflow-hidden", className)}>
       {title && (
@@ -129,33 +154,13 @@ export function CodeBlock({
         </div>
       )}
       <div className="relative">
-        {highlightedCode ? (
-          <pre
-            className={cn(
-              "bg-slate-800/90 px-4 py-3 text-sm font-mono whitespace-pre-wrap break-all overflow-y-auto",
-              !title && "rounded-t-lg",
-            )}
-            style={{ maxHeight: `${maxHeight}px` }}
-            dangerouslySetInnerHTML={{ __html: highlightedCode }}
-          />
-        ) : (
-          <pre
-            className={cn(
-              "bg-slate-800/90 px-4 py-3 text-sm text-slate-100 font-mono whitespace-pre-wrap break-all overflow-y-auto",
-              !title && "rounded-t-lg",
-            )}
-            style={{ maxHeight: `${maxHeight}px` }}
-          >
-            {displayText}
-          </pre>
-        )}
+        <SyntaxHighlightedCode text={formattedContent} />
         {!title && (
           <div className="absolute top-2 right-2">
             <CopyButton content={formattedContent} />
           </div>
         )}
       </div>
-      {showMoreButton}
     </div>
   );
 }
