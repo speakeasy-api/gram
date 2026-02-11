@@ -35,6 +35,8 @@ interface InsightsSidebarProps {
   defaultExpanded?: boolean;
   /** Context information to pass to the chat (like current date range) */
   contextInfo?: string;
+  /** Hide the trigger button (e.g., when logs are disabled) */
+  hideTrigger?: boolean;
   /** Main content to render alongside the sidebar */
   children: React.ReactNode;
 }
@@ -49,6 +51,7 @@ export function InsightsSidebar({
   suggestions = [],
   defaultExpanded = false,
   contextInfo,
+  hideTrigger = false,
   children,
 }: InsightsSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
@@ -99,18 +102,20 @@ When the user asks about "current period", "selected period", "this timeframe", 
           {children}
         </div>
 
-        {/* Toggle button - shows when collapsed */}
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className={cn(
-            "fixed right-0 top-1/2 -translate-y-1/2 z-40 flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2.5 rounded-l-lg shadow-lg hover:bg-primary/90 transition-all duration-300 group",
-            isExpanded && "opacity-0 pointer-events-none",
-          )}
-          aria-label="Open AI Insights"
-        >
-          <Wand2 className="size-4" />
-          <span className="text-sm font-medium">Ask AI</span>
-        </button>
+        {/* Toggle button - shows when collapsed and not hidden */}
+        {!hideTrigger && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className={cn(
+              "fixed right-0 top-1/2 -translate-y-1/2 z-40 flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2.5 rounded-l-lg shadow-lg hover:bg-primary/90 transition-all duration-300 group",
+              isExpanded && "opacity-0 pointer-events-none",
+            )}
+            aria-label="Open AI Insights"
+          >
+            <Wand2 className="size-4" />
+            <span className="text-sm font-medium">Ask AI</span>
+          </button>
+        )}
 
         {/* Sidebar panel - fixed position that slides in */}
         <div

@@ -3,6 +3,8 @@ import {
   useInsightsState,
 } from "@/components/insights-sidebar";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
+import { Page } from "@/components/page-layout";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { cn } from "@/lib/utils";
@@ -25,7 +27,6 @@ import {
   getDateRange,
 } from "../observability/date-range-select";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -285,6 +286,7 @@ export default function ChatLogs() {
       title="How can I help you debug?"
       subtitle="Search chat sessions, analyze failures, or explore logs"
       contextInfo={dateRangeContext}
+      hideTrigger={isLogsDisabled}
       suggestions={[
         {
           title: "Failed Chats",
@@ -390,122 +392,156 @@ function ChatLogsContent({
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
 
-  return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
-      {/* Header section */}
-      <div className="p-6 border-b shrink-0">
-        <div
-          className={cn(
-            "flex gap-4 mb-4 transition-all duration-300",
-            isInsightsOpen
-              ? "flex-col items-stretch"
-              : "flex-row items-center justify-between",
-          )}
-        >
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold mb-1">Logs</h1>
-            <p className="text-sm text-muted-foreground">
-              View and debug individual chat conversations
-            </p>
-          </div>
-          <div className="flex-shrink-0">
-            <DateRangeSelect
-              value={dateRange}
-              onValueChange={setDateRangeParam}
-              customRange={customRange}
-              onClearCustomRange={clearCustomRange}
-              disabled={isLogsDisabled}
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <ChatLogsFilters
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-            resolutionStatus={resolutionStatus}
-            onResolutionStatusChange={setResolutionStatus}
-            disabled={isLogsDisabled}
-          />
-          <div className="flex items-center gap-2 ml-auto">
-            <Select
-              value={sortField}
-              onValueChange={(v) => setSortField(v as SortField)}
-              disabled={isLogsDisabled}
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="chronological">Chronological</SelectItem>
-                <SelectItem value="messageCount">Message Count</SelectItem>
-                <SelectItem value="score">Score</SelectItem>
-              </SelectContent>
-            </Select>
-            <button
-              type="button"
-              onClick={toggleSortOrder}
-              disabled={isLogsDisabled}
-              className="shrink-0 inline-flex items-center justify-center size-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:pointer-events-none"
-              title={sortOrder === "desc" ? "Descending" : "Ascending"}
-            >
-              {sortOrder === "desc" ? (
-                <ArrowDownIcon className="size-4" />
-              ) : (
-                <ArrowUpIcon className="size-4" />
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Content section */}
-      <div className="flex-1 overflow-y-auto min-h-0 relative">
-        {isLogsDisabled && (
-          <>
-            {/* Placeholder skeleton behind overlay */}
-            <div className="pointer-events-none select-none" aria-hidden="true">
-              <div className="sticky top-0 z-10">
-                <ScoreLegend />
+  if (isLogsDisabled) {
+    return (
+      <div className="h-full overflow-hidden flex flex-col">
+        <Page>
+          <Page.Header>
+            <Page.Header.Breadcrumbs fullWidth />
+          </Page.Header>
+          <Page.Body fullWidth className="space-y-6">
+            <div className="flex flex-col gap-1 min-w-0">
+              <h1 className="text-xl font-semibold">Chat Sessions</h1>
+              <p className="text-sm text-muted-foreground">
+                View and debug individual chat conversations
+              </p>
+            </div>
+            <div className="flex-1 relative">
+              <div
+                className="pointer-events-none select-none h-full"
+                aria-hidden="true"
+              >
+                <ObservabilitySkeleton />
               </div>
-              <ChatLogsSkeleton />
+              <EnableLoggingOverlay onEnabled={onLogsEnabled} />
             </div>
-            <EnableLoggingOverlay onEnabled={onLogsEnabled} />
-          </>
-        )}
-        {!isLogsDisabled && (
-          <>
-            <div className="sticky top-0 z-10">
-              <ScoreLegend />
-            </div>
-            <ChatLogsTable
-              chats={chats}
-              selectedChatId={selectedChat?.id}
-              onSelectChat={setSelectedChat}
-              isLoading={isLoading}
-              error={error}
-            />
-          </>
-        )}
+          </Page.Body>
+        </Page>
       </div>
+    );
+  }
 
-      {/* Sticky pagination at bottom */}
-      {!isLogsDisabled && (hasMore || offset > 0) && (
-        <div className="p-4 flex justify-center items-center gap-4 border-t bg-background shrink-0">
-          <Button
-            onClick={() => setOffset(Math.max(0, offset - limit))}
-            disabled={offset === 0}
-          >
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground tabular-nums">
-            Page {Math.floor(offset / limit) + 1}
-            {total > 0 && ` of ${Math.ceil(total / limit)}`}
-          </span>
-          <Button onClick={() => setOffset(offset + limit)} disabled={!hasMore}>
-            Next
-          </Button>
-        </div>
-      )}
+  return (
+    <>
+      <div className="h-full overflow-hidden flex flex-col">
+        <Page>
+          <Page.Header>
+            <Page.Header.Breadcrumbs fullWidth />
+          </Page.Header>
+          <Page.Body fullWidth noPadding overflowHidden>
+            <div className="flex flex-col flex-1 min-h-0 w-full">
+              {/* Header section */}
+              <div className="px-8 py-4 shrink-0">
+                <div
+                  className={cn(
+                    "flex gap-4 mb-4 transition-all duration-300",
+                    isInsightsOpen
+                      ? "flex-col items-stretch"
+                      : "flex-row items-center justify-between",
+                  )}
+                >
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <h1 className="text-xl font-semibold">Chat Sessions</h1>
+                    <p className="text-sm text-muted-foreground">
+                      View and debug individual chat conversations
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0">
+                    <DateRangeSelect
+                      value={dateRange}
+                      onValueChange={setDateRangeParam}
+                      customRange={customRange}
+                      onClearCustomRange={clearCustomRange}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <ChatLogsFilters
+                    searchQuery={searchQuery}
+                    onSearchQueryChange={setSearchQuery}
+                    resolutionStatus={resolutionStatus}
+                    onResolutionStatusChange={setResolutionStatus}
+                  />
+                  <div className="flex items-center gap-2 ml-auto">
+                    <Select
+                      value={sortField}
+                      onValueChange={(v) => setSortField(v as SortField)}
+                    >
+                      <SelectTrigger className="w-[160px]">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="chronological">
+                          Chronological
+                        </SelectItem>
+                        <SelectItem value="messageCount">
+                          Message Count
+                        </SelectItem>
+                        <SelectItem value="score">Score</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <button
+                      type="button"
+                      onClick={toggleSortOrder}
+                      className="shrink-0 inline-flex items-center justify-center size-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                      title={sortOrder === "desc" ? "Descending" : "Ascending"}
+                    >
+                      {sortOrder === "desc" ? (
+                        <ArrowDownIcon className="size-4" />
+                      ) : (
+                        <ArrowUpIcon className="size-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Content section - full width */}
+              <div className="flex-1 overflow-hidden min-h-0 border-t">
+                <div className="h-full flex flex-col bg-background overflow-hidden">
+                  {/* Score legend header */}
+                  <div className="shrink-0">
+                    <ScoreLegend />
+                  </div>
+
+                  {/* Scrollable chat list */}
+                  <div className="overflow-y-auto flex-1">
+                    <ChatLogsTable
+                      chats={chats}
+                      selectedChatId={selectedChat?.id}
+                      onSelectChat={setSelectedChat}
+                      isLoading={isLoading}
+                      error={error}
+                    />
+                  </div>
+
+                  {/* Sticky pagination at bottom */}
+                  {(hasMore || offset > 0) && (
+                    <div className="p-4 flex justify-center items-center gap-4 border-t bg-background shrink-0">
+                      <Button
+                        onClick={() => setOffset(Math.max(0, offset - limit))}
+                        disabled={offset === 0}
+                      >
+                        Previous
+                      </Button>
+                      <span className="text-sm text-muted-foreground tabular-nums">
+                        Page {Math.floor(offset / limit) + 1}
+                        {total > 0 && ` of ${Math.ceil(total / limit)}`}
+                      </span>
+                      <Button
+                        onClick={() => setOffset(offset + limit)}
+                        disabled={!hasMore}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Page.Body>
+        </Page>
+      </div>
 
       {/* Right side: Slide-out drawer */}
       <Drawer
@@ -523,23 +559,6 @@ function ChatLogsContent({
           )}
         </DrawerContent>
       </Drawer>
-    </div>
-  );
-}
-
-function ChatLogsSkeleton() {
-  return (
-    <div className="divide-y">
-      {Array.from({ length: 12 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 px-4 py-4">
-          <Skeleton className="size-14 rounded-full" />
-          <div className="flex-1 space-y-2.5">
-            <Skeleton className="h-5 w-64" />
-            <Skeleton className="h-4 w-40" />
-          </div>
-          <Skeleton className="h-5 w-24" />
-        </div>
-      ))}
-    </div>
+    </>
   );
 }

@@ -4,13 +4,13 @@ import {
   useInsightsState,
 } from "@/components/insights-sidebar";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import {
   DateRangeSelect,
   DateRangePreset,
   getDateRange,
 } from "./date-range-select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryListFilterOptions } from "@gram/client/funcs/telemetryListFilterOptions";
@@ -441,6 +441,7 @@ export default function ObservabilityOverview() {
       title="What would you like to know?"
       subtitle="Ask about metrics, trends, or performance insights"
       contextInfo={dateRangeContext}
+      hideTrigger={isLogsDisabled}
       suggestions={[
         {
           title: "Resolution Summary",
@@ -614,24 +615,23 @@ function ObservabilityContent({
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
 
-  if (isPending && !isLogsDisabled) {
-    return <LoadingSkeleton />;
-  }
-
-  if (error && !isLogsDisabled) {
-    return <ErrorState error={error} />;
-  }
-
-  // When disabled, show the skeleton underneath with an overlay on top
   if (isLogsDisabled) {
     return (
       <div className="relative">
         <div className="pointer-events-none select-none" aria-hidden="true">
-          <LoadingSkeleton />
+          <ObservabilitySkeleton />
         </div>
         <EnableLoggingOverlay onEnabled={refetch} />
       </div>
     );
+  }
+
+  if (isPending) {
+    return <ObservabilitySkeleton />;
+  }
+
+  if (error) {
+    return <ErrorState error={error} />;
   }
 
   if (!data) {
@@ -1903,32 +1903,6 @@ function ToolBarList({
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="rounded-lg border border-border bg-card p-5">
-            <Skeleton className="h-4 w-24 mb-3" />
-            <Skeleton className="h-9 w-32" />
-          </div>
-        ))}
-      </div>
-      <div className="rounded-lg border border-border bg-card p-6">
-        <Skeleton className="h-72 w-full" />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-lg border border-border bg-card p-6">
-          <Skeleton className="h-64 w-full" />
-        </div>
-        <div className="rounded-lg border border-border bg-card p-6">
-          <Skeleton className="h-64 w-full" />
-        </div>
-      </div>
     </div>
   );
 }
