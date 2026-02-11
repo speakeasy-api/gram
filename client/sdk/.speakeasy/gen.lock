@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 1bb5051458652e48d2e0a16aba7e8936
+  docChecksum: a7c466d68a3eb817c8f2c9ed69e2e757
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.26.24
-  configChecksum: 3cc142917d9c026b7c82df5f3f070d55
+  releaseVersion: 0.26.25
+  configChecksum: 549996342ef417c590cd646550c6008e
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -199,7 +199,7 @@ trackedFiles:
   docs/models/components/externalmcptool.md:
     last_write_checksum: sha1:719b8eb5236a84fd95fcc4c72d4f4eeaa77c065d
   docs/models/components/externalmcptooldefinition.md:
-    last_write_checksum: sha1:cedcdd7bf458b1bdeb961ab54c52720652a2c98d
+    last_write_checksum: sha1:0f5fdcce07070c7499d2532ca0d9ce55b501729c
   docs/models/components/externaloauthserver.md:
     last_write_checksum: sha1:f90079b3fceeb40341231cd999bccdbc330eb879
   docs/models/components/externaloauthserverform.md:
@@ -219,7 +219,7 @@ trackedFiles:
   docs/models/components/functionresourcedefinition.md:
     last_write_checksum: sha1:12fe3c7eb54330deb25ee717c1e51f57e7d0fe6b
   docs/models/components/functiontooldefinition.md:
-    last_write_checksum: sha1:85863cecd0319358d06001e2e3f334160df183a4
+    last_write_checksum: sha1:ff81e54eae9686ee3009acb3aed25416c707e3d8
   docs/models/components/generatetitleresponsebody.md:
     last_write_checksum: sha1:38ee2cf743b12e9ffa968731732b84116e7d4da8
   docs/models/components/getactivedeploymentresult.md:
@@ -237,9 +237,9 @@ trackedFiles:
   docs/models/components/getmcpmetadataresponsebody.md:
     last_write_checksum: sha1:9b86c4be9501099f26c719416628dff6b1b969dc
   docs/models/components/getmetricssummaryresult.md:
-    last_write_checksum: sha1:9988c8610e8d7c1653b84c9430f76b490afc084f
+    last_write_checksum: sha1:a89018c9c21d442a8139d8d6698029b4e749ea2f
   docs/models/components/getobservabilityoverviewpayload.md:
-    last_write_checksum: sha1:4760242612a3548581440790d8c6bbe5796a533d
+    last_write_checksum: sha1:7efe8e79fa7802c9fecc6850fc1014171631d653
   docs/models/components/getobservabilityoverviewresult.md:
     last_write_checksum: sha1:b4f319b1c022c2adc260045ed25016f132b0b2b2
   docs/models/components/getprojectmetricssummarypayload.md:
@@ -255,11 +255,11 @@ trackedFiles:
   docs/models/components/getusermetricssummarypayload.md:
     last_write_checksum: sha1:366cd9772a0ab886fc4aeb9e8750c0cf4cac1532
   docs/models/components/getusermetricssummaryresult.md:
-    last_write_checksum: sha1:8e07c6fe5dec6fb8a92ce904a5c2700cc339e9e2
+    last_write_checksum: sha1:f891f8c2c84e85c95630bb9924fa0f7ffe978900
   docs/models/components/httpmethod.md:
     last_write_checksum: sha1:f4bf8618fef5279a71cd413d3f6ca989ab29e766
   docs/models/components/httptooldefinition.md:
-    last_write_checksum: sha1:f766bc6fab7f2d8d1aea22e7804c77f957893c92
+    last_write_checksum: sha1:f3cffac1cdd92d5b8a8a4cacc7439d50aff4b290
   docs/models/components/inforesponsebody.md:
     last_write_checksum: sha1:366c66e87000e6b895f19b1aafb01f5c48201ae9
   docs/models/components/instancemcpserver.md:
@@ -357,9 +357,9 @@ trackedFiles:
   docs/models/components/projectentry.md:
     last_write_checksum: sha1:da161baebd2aba92835558137dcb6e601b36451e
   docs/models/components/projectsummary.md:
-    last_write_checksum: sha1:1f439dc8e31e705736c98733344676cba023420e
+    last_write_checksum: sha1:fbde9001c2b9e7d6af4c69e6b747210a174adaac
   docs/models/components/prompttemplate.md:
-    last_write_checksum: sha1:7f8d0e9bb551a626514b2178f7a6baaa706a260a
+    last_write_checksum: sha1:87faf16a61d68dbc09869f3952373aa91b939cc2
   docs/models/components/prompttemplateentry.md:
     last_write_checksum: sha1:2567ef3cd571550ffa62fbfcbbd028e11b43ca03
   docs/models/components/prompttemplatekind.md:
@@ -462,6 +462,8 @@ trackedFiles:
     last_write_checksum: sha1:7ebee0c91aa261b1af9d397dd0e1b6a07a331766
   docs/models/components/tool.md:
     last_write_checksum: sha1:af7b82453778152fc3bfa3cae721e4e93c1c959f
+  docs/models/components/toolannotations.md:
+    last_write_checksum: sha1:cfb3f615e75717616f385d78ad41ee94ed6019f1
   docs/models/components/toolcallsummary.md:
     last_write_checksum: sha1:cd7f4d02eb9156c7cbccf0edff2a4b27d50a6f9e
   docs/models/components/toolentry.md:
@@ -479,7 +481,7 @@ trackedFiles:
   docs/models/components/toolusage.md:
     last_write_checksum: sha1:8e7c7baf87404355b4ba6b0cc6ae83b688cfa009
   docs/models/components/toolvariation.md:
-    last_write_checksum: sha1:57c6d263baad9d0ac0885c17ddcc5f72f4619854
+    last_write_checksum: sha1:daf9ad86e5cd7fc8e343c09afcd225b2b9d802ca
   docs/models/components/transporttype.md:
     last_write_checksum: sha1:4aaef16ec5507a930d20ecf30f656ed4e1cb7990
   docs/models/components/type.md:
@@ -517,7 +519,7 @@ trackedFiles:
   docs/models/components/upsertallowedoriginresult.md:
     last_write_checksum: sha1:13b8ea35470e5018a12d1a922ae28f08c7b5d0b0
   docs/models/components/upsertglobaltoolvariationform.md:
-    last_write_checksum: sha1:a82bf5c29d6772f22a8d9d556d1d87d61d2df4f9
+    last_write_checksum: sha1:dbc2f90b2e889c10e3377a2cdb711d68db82683d
   docs/models/components/upsertglobaltoolvariationresult.md:
     last_write_checksum: sha1:a149a67059894f2c29a2653cd9fa5a66d7bbf31e
   docs/models/components/usagetiers.md:
@@ -907,7 +909,7 @@ trackedFiles:
   docs/models/operations/listchatssecurityoption2.md:
     last_write_checksum: sha1:ac4329bd5c3d3cd40d37cbce5ac96671d710c3cc
   docs/models/operations/listchatswithresolutionsrequest.md:
-    last_write_checksum: sha1:ef6277f2f01da7418f02f0697c6559e2751fb111
+    last_write_checksum: sha1:56204d35c89b8e6d9c95a1dc1cede3c30e426181
   docs/models/operations/listchatswithresolutionssecurity.md:
     last_write_checksum: sha1:7e130e49b8de4408cc9f7dc45f57459f9789ef64
   docs/models/operations/listchatswithresolutionssecurityoption1.md:
@@ -1180,6 +1182,10 @@ trackedFiles:
     last_write_checksum: sha1:a7a826c692075194ff1513b52eaaa94f8b1a21c3
   docs/models/operations/slackloginsecurity.md:
     last_write_checksum: sha1:36cb7ab047a19d839501a5ee82402dde6405e2dd
+  docs/models/operations/sortby.md:
+    last_write_checksum: sha1:e634b96c47cd8768b661409c7a207a8766551ef0
+  docs/models/operations/sortorder.md:
+    last_write_checksum: sha1:4196564e695de57c938e01fd76df0f97b7f19a6b
   docs/models/operations/sourcekind.md:
     last_write_checksum: sha1:a4ca4292630a5bf1a467a5d107dab84bde0d2028
   docs/models/operations/submitfeedbackrequest.md:
@@ -1354,11 +1360,11 @@ trackedFiles:
     pristine_git_object: 8a33dbb4b9cb9cefaa43e10ddf535cbcd13c9e72
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:50771b10e395ae229580fd27c5ae153bad6ca7ea
+    last_write_checksum: sha1:ac28ad1a45eadf4a816c138b630d497a9c4a6edc
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:f145c8350e7b520245f5bc477ffc9728d37ea2b8
+    last_write_checksum: sha1:f1868442d104b6bff6150557d3b28dbae39eb183
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1406,7 +1412,7 @@ trackedFiles:
     pristine_git_object: 240c833a1610bdeb2f8ce95cd89efb0c393ef214
   src/funcs/assetsServeOpenAPIv3.ts:
     id: 505ec90ecaa1
-    last_write_checksum: sha1:16f5e896928838b087e92752ed6094fbce3e445e
+    last_write_checksum: sha1:1f6a2edf458db6d50e45c1efa9d64e77fd3eeb42
     pristine_git_object: 3ce057453a111c2bcebd8481d8e92403d00150bf
   src/funcs/assetsUploadChatAttachment.ts:
     id: 2666ceb491db
@@ -1461,7 +1467,7 @@ trackedFiles:
     last_write_checksum: sha1:815f691eb96b8448fd648fc4d8b929adb53faaf0
     pristine_git_object: 814ef1470b3208dac27bc0c097002de03dbda395
   src/funcs/chatListChatsWithResolutions.ts:
-    last_write_checksum: sha1:614c25cb7caa4d7b0d05453d0b1659d590fd6520
+    last_write_checksum: sha1:3481069670bd064bb4ebe703f42467f091760250
   src/funcs/chatLoad.ts:
     id: 79e579c74f00
     last_write_checksum: sha1:725126bca4f22e08188b1fb4281ce8ceb6b2cac6
@@ -1824,7 +1830,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:f9d6bb861f44663aa89db856ee82a0b2f67389f2
+    last_write_checksum: sha1:ff972f43d7f0abf91ee80a8e837e21a8a7e83326
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2104,7 +2110,7 @@ trackedFiles:
     last_write_checksum: sha1:0cfbec0404b0d5dfd65c03b4449917c3544dafe4
   src/models/components/externalmcptooldefinition.ts:
     id: 232f234ebbac
-    last_write_checksum: sha1:06be01058f8945745e6cbe20b43d5d413eb8b096
+    last_write_checksum: sha1:f9f8ff70fdb0e3a24b697c338b889792b45a25dc
     pristine_git_object: bb9012a061a6caaba94c9bb5d89398600900f011
   src/models/components/externaloauthserver.ts:
     id: 19e382e414ba
@@ -2130,7 +2136,7 @@ trackedFiles:
     pristine_git_object: bf43ba5d4978f8b2cf1d169e71dc53b6ea96f6b4
   src/models/components/functiontooldefinition.ts:
     id: 6dfa614f7fa6
-    last_write_checksum: sha1:ddc7ab67444549f83cb2ff3e85c76a8afa449ba1
+    last_write_checksum: sha1:8b4ee240ba8f883ec281a2f2f83f0565377e213b
     pristine_git_object: 84f75d6992f3ea91d0144f003138b23d79de3a51
   src/models/components/generatetitleresponsebody.ts:
     id: 198c538ce22f
@@ -2167,7 +2173,7 @@ trackedFiles:
   src/models/components/getmetricssummaryresult.ts:
     last_write_checksum: sha1:dafecc54363b690b5c24c722046bcc63e5497603
   src/models/components/getobservabilityoverviewpayload.ts:
-    last_write_checksum: sha1:0e322856b92c190a2a89507ae7fa65c4bdaafd30
+    last_write_checksum: sha1:ea0f4993ac88766618150a99d1c05cc475aa0970
   src/models/components/getobservabilityoverviewresult.ts:
     last_write_checksum: sha1:b04c59b162b34067cd201fddf662b40ace5cc774
   src/models/components/getprojectmetricssummarypayload.ts:
@@ -2194,11 +2200,11 @@ trackedFiles:
     last_write_checksum: sha1:7b09c3c85b99a42b6f0d7e5a113f95824b7245f5
   src/models/components/httptooldefinition.ts:
     id: 4530c9b75199
-    last_write_checksum: sha1:e4dac5df70aa9b47d8ee8dd5851e4dbfafb32708
+    last_write_checksum: sha1:7ac3c3935785e965cebb96667dbb85bcd9977e0d
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:74b0b8ed292ca87e0fe2cf2cd46eaadeac5ded6e
+    last_write_checksum: sha1:950ff839c1fddface0669cdcd3a70ffccba7ea32
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -2363,10 +2369,10 @@ trackedFiles:
     last_write_checksum: sha1:9fa7330ec4db76e3ad1a86e9b71bdf52c0b59420
     pristine_git_object: efbdce295e06ad98f0ff2796b7f27a1b5068b5ad
   src/models/components/projectsummary.ts:
-    last_write_checksum: sha1:c8b60786424d4949587283a8095c8d704afa8093
+    last_write_checksum: sha1:ef4c1293f88c56dbb6357f74507a5c73dce02534
   src/models/components/prompttemplate.ts:
     id: b2a85200498e
-    last_write_checksum: sha1:cced12e17f96dae53d833872a673ae5557f64fc9
+    last_write_checksum: sha1:7dfff20ae4ba1a2ab7ee1526e97fd5be682a4f0b
     pristine_git_object: d71dc15d3ed6a648f64781a05129a6e7e82bd067
   src/models/components/prompttemplateentry.ts:
     id: 2e0bddad1e58
@@ -2508,6 +2514,8 @@ trackedFiles:
     id: 03d25d0a5e59
     last_write_checksum: sha1:13dd8bf4c5a471b077b330502172f6bd535530f7
     pristine_git_object: 8bd2381f84d46de7f29ac025618ff110d86ea004
+  src/models/components/toolannotations.ts:
+    last_write_checksum: sha1:70ee958b7d8214d507eb6c83daa4f7e673d99b41
   src/models/components/toolcallsummary.ts:
     id: 240c70fb9551
     last_write_checksum: sha1:74d3fb5f1178edb59b509b48b2b79adb7e897ffd
@@ -2534,7 +2542,7 @@ trackedFiles:
     last_write_checksum: sha1:40cf004739ef8e2ec8266cdcf41b1225a293dc09
   src/models/components/toolvariation.ts:
     id: 6e3433d12529
-    last_write_checksum: sha1:6df4e0a970545e59ec49cc551d1528788a60bab7
+    last_write_checksum: sha1:ca65a6dc49372371858e95db7fff0118ee855682
     pristine_git_object: 0a5713c489b317bd226e36163c30f9d71082f933
   src/models/components/updateenvironmentrequestbody.ts:
     id: 238a2dbcc80b
@@ -2590,7 +2598,7 @@ trackedFiles:
     pristine_git_object: d55d8dabb1ae77cf59092a48037dbdf0bc10efff
   src/models/components/upsertglobaltoolvariationform.ts:
     id: 9199a7e2105e
-    last_write_checksum: sha1:e51d6d4e4930eb2c3fe7c97f6a0b31e931cfe5ef
+    last_write_checksum: sha1:2e528444b2df461a21d203f20a0b2562998e5ede
     pristine_git_object: d17a501044e005fbf42a6f0920ada623b30e75f4
   src/models/components/upsertglobaltoolvariationresult.ts:
     id: 9ecefd4e7ace
@@ -2867,7 +2875,7 @@ trackedFiles:
     last_write_checksum: sha1:527fe55193948e1e4f972f749afdae81bc1637bd
     pristine_git_object: ae806c76bc527b24fab19883a174e5a94f065fe2
   src/models/operations/listchatswithresolutions.ts:
-    last_write_checksum: sha1:8a8736d2b71b7500addb0760bcfc681f44ff9bab
+    last_write_checksum: sha1:d61ff9d72bf6a29dec7184470f0ab4d1b863084b
   src/models/operations/listdeployments.ts:
     id: 3c413d710db1
     last_write_checksum: sha1:427b1d34ff2886f11761358f771d4bc316faceea
@@ -3397,9 +3405,9 @@ trackedFiles:
     last_write_checksum: sha1:4296c9e2d9e0e658743349149c61fe6d88cee251
     pristine_git_object: bea716c86a525c16fb766cc3d523b64bcd0e67b6
   src/react-query/listChatsWithResolutions.core.ts:
-    last_write_checksum: sha1:66d093bd111e46cfd42024da7f8125deddeda30c
+    last_write_checksum: sha1:44b0b122e433a1b328c1462d24f99df7b015831b
   src/react-query/listChatsWithResolutions.ts:
-    last_write_checksum: sha1:7b2f0ca474a5c0e8f0a12228deef4cd7f949238f
+    last_write_checksum: sha1:e16d86c7364818e44f0d22913e10425c68a69bad
   src/react-query/listDeployments.core.ts:
     id: 0a5b3d2b85c8
     last_write_checksum: sha1:96adc67fb218011ee756405621a24084c9df5ad2
@@ -4485,6 +4493,7 @@ examples:
       responses:
         "200":
           application/json: "x-file: example.file"
+          '*/*': "x-file: example.file"
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5081,7 +5090,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"enabled": true, "metrics": {"avg_chat_duration_ms": 3341.18, "avg_tokens_per_request": 587.65, "avg_tool_duration_ms": 1165.55, "distinct_models": 768743, "distinct_providers": 313601, "finish_reason_stop": 929616, "finish_reason_tool_calls": 398086, "first_seen_unix_nano": "331046", "last_seen_unix_nano": "334118", "models": [], "tool_call_failure": 19163, "tool_call_success": 208955, "tools": [], "total_chat_requests": 618442, "total_chats": 302313, "total_input_tokens": 630857, "total_output_tokens": 804335, "total_tokens": 929964, "total_tool_calls": 536628}}
+          application/json: {"enabled": true, "metrics": {"avg_chat_duration_ms": 3341.18, "avg_chat_resolution_score": 3310.46, "avg_tokens_per_request": 587.65, "avg_tool_duration_ms": 1165.55, "chat_resolution_abandoned": 334118, "chat_resolution_failure": 58765, "chat_resolution_partial": 116555, "chat_resolution_success": 768743, "distinct_models": 768743, "distinct_providers": 313601, "finish_reason_stop": 929616, "finish_reason_tool_calls": 398086, "first_seen_unix_nano": "331046", "last_seen_unix_nano": "334118", "models": [], "tool_call_failure": 19163, "tool_call_success": 208955, "tools": [], "total_chat_requests": 618442, "total_chats": 302313, "total_input_tokens": 630857, "total_output_tokens": 804335, "total_tokens": 929964, "total_tool_calls": 536628}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5114,7 +5123,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"enabled": true, "metrics": {"avg_chat_duration_ms": 719.48, "avg_tokens_per_request": 2261.2, "avg_tool_duration_ms": 7422.06, "distinct_models": 12857, "distinct_providers": 512991, "finish_reason_stop": 485562, "finish_reason_tool_calls": 528228, "first_seen_unix_nano": "50574", "last_seen_unix_nano": "883619", "models": [{"count": 444554, "name": "<value>"}], "tool_call_failure": 740752, "tool_call_success": 495299, "tools": [{"count": 22149, "failure_count": 937327, "success_count": 364001, "urn": "<value>"}], "total_chat_requests": 605771, "total_chats": 156800, "total_input_tokens": 133513, "total_output_tokens": 204831, "total_tokens": 63502, "total_tool_calls": 158236}}
+          application/json: {"enabled": true, "metrics": {"avg_chat_duration_ms": 719.48, "avg_chat_resolution_score": 313.41, "avg_tokens_per_request": 2261.2, "avg_tool_duration_ms": 7422.06, "chat_resolution_abandoned": 71948, "chat_resolution_failure": 226120, "chat_resolution_partial": 742206, "chat_resolution_success": 12857, "distinct_models": 12857, "distinct_providers": 512991, "finish_reason_stop": 485562, "finish_reason_tool_calls": 528228, "first_seen_unix_nano": "50574", "last_seen_unix_nano": "883619", "models": [{"count": 444554, "name": "<value>"}], "tool_call_failure": 740752, "tool_call_success": 495299, "tools": [{"count": 22149, "failure_count": 937327, "success_count": 364001, "urn": "<value>"}], "total_chat_requests": 605771, "total_chats": 156800, "total_input_tokens": 133513, "total_output_tokens": 204831, "total_tokens": 63502, "total_tool_calls": 158236}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5125,6 +5134,8 @@ examples:
         query:
           limit: 50
           offset: 0
+          sort_by: "created_at"
+          sort_order: "desc"
       responses:
         "200":
           application/json: {"chats": [{"created_at": "2024-03-12T14:08:15.680Z", "id": "<id>", "num_messages": 236956, "resolutions": [{"created_at": "2024-12-29T23:05:18.944Z", "id": "7388f705-63e1-45b3-9e77-6296c7937c05", "message_ids": ["abc-123", "def-456"], "resolution": "failure", "resolution_notes": "<value>", "score": 789128, "user_goal": "<value>"}], "title": "<value>", "updated_at": "2026-08-30T11:51:39.615Z"}], "total": 52256}

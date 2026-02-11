@@ -149,7 +149,7 @@ func BuildCreditUsagePayload(chatCreditUsageSessionToken string, chatCreditUsage
 
 // BuildListChatsWithResolutionsPayload builds the payload for the chat
 // listChatsWithResolutions endpoint from CLI flags.
-func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch string, chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
+func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch string, chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSortBy string, chatListChatsWithResolutionsSortOrder string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -226,6 +226,30 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch str
 			}
 		}
 	}
+	var sortBy string
+	{
+		if chatListChatsWithResolutionsSortBy != "" {
+			sortBy = chatListChatsWithResolutionsSortBy
+			if !(sortBy == "created_at" || sortBy == "num_messages" || sortBy == "score") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"created_at", "num_messages", "score"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sortOrder string
+	{
+		if chatListChatsWithResolutionsSortOrder != "" {
+			sortOrder = chatListChatsWithResolutionsSortOrder
+			if !(sortOrder == "asc" || sortOrder == "desc") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_order", sortOrder, []any{"asc", "desc"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if chatListChatsWithResolutionsSessionToken != "" {
@@ -252,6 +276,8 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch str
 	v.To = to
 	v.Limit = limit
 	v.Offset = offset
+	v.SortBy = sortBy
+	v.SortOrder = sortOrder
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

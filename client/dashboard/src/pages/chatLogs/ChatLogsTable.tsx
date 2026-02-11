@@ -1,5 +1,6 @@
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
 import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   resolutionBgColors,
   resolutionStrokeColors,
@@ -262,22 +263,23 @@ export function ChatLogsTable({
             )}
           >
             <div className="flex items-center gap-5">
-              {/* Left: Score ring or status indicator */}
+              {/* Left: Score ring or N/A indicator */}
               <div className="shrink-0">
                 {hasResolutions ? (
                   <ScoreRing score={averageScore} status={status} size={44} />
                 ) : (
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="size-[44px] rounded-full bg-muted/50 flex items-center justify-center">
-                      <Icon
-                        name="message-circle"
-                        className="size-5 text-muted-foreground/60"
-                      />
+                  <SimpleTooltip tooltip="This session hasn't been analyzed yet. Scores are generated automatically after a conversation ends.">
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="size-[44px] rounded-full border-[3px] border-muted-foreground/30 flex items-center justify-center">
+                        <span className="text-[10px] font-semibold text-muted-foreground">
+                          N/A
+                        </span>
+                      </div>
+                      <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">
+                        Score
+                      </span>
                     </div>
-                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 font-medium">
-                      &nbsp;
-                    </span>
-                  </div>
+                  </SimpleTooltip>
                 )}
               </div>
 

@@ -54,6 +54,8 @@ export function buildListChatsWithResolutionsQuery(
       to: request?.to,
       limit: request?.limit,
       offset: request?.offset,
+      sortBy: request?.sortBy,
+      sortOrder: request?.sortOrder,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
       gramChatSession: request?.gramChatSession,
@@ -91,6 +93,8 @@ export function queryKeyListChatsWithResolutions(
     to?: Date | undefined;
     limit?: number | undefined;
     offset?: number | undefined;
+    sortBy?: operations.SortBy | undefined;
+    sortOrder?: operations.SortOrder | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramChatSession?: string | undefined;

@@ -103,6 +103,8 @@ async function $do(
     "offset": payload?.offset,
     "resolution_status": payload?.resolution_status,
     "search": payload?.search,
+    "sort_by": payload?.sort_by,
+    "sort_order": payload?.sort_order,
     "to": payload?.to,
   });
 

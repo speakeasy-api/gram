@@ -7,13 +7,17 @@ import { cn } from "@/lib/utils";
 import { resolutionBgColors } from "@/lib/resolution-colors";
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
 import { FeatureName } from "@gram/client/models/components";
+import {
+  SortBy,
+  SortOrder as ApiSortOrder,
+} from "@gram/client/models/operations/listchatswithresolutions";
 import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import {
   useListChatsWithResolutions,
   useFeaturesSetMutation,
 } from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { ChatDetailPanel } from "./ChatDetailPanel";
 import { ChatLogsFilters } from "./ChatLogsFilters";
@@ -35,6 +39,22 @@ import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
 
 type SortField = "chronological" | "messageCount" | "score";
 type SortOrder = "asc" | "desc";
+
+// Map frontend sort field to API sort field
+function toApiSortBy(field: SortField): SortBy {
+  switch (field) {
+    case "chronological":
+      return SortBy.CreatedAt;
+    case "messageCount":
+      return SortBy.NumMessages;
+    case "score":
+      return SortBy.Score;
+  }
+}
+
+function toApiSortOrder(order: SortOrder): ApiSortOrder {
+  return order === "asc" ? ApiSortOrder.Asc : ApiSortOrder.Desc;
+}
 
 // Reusable score indicator with colored dot
 function ScoreIndicator({
@@ -224,6 +244,8 @@ export default function ChatLogs() {
       resolutionStatus: resolutionStatus || undefined,
       from: timeRange.from,
       to: timeRange.to,
+      sortBy: toApiSortBy(sortField),
+      sortOrder: toApiSortOrder(sortOrder),
       limit,
       offset,
     },
@@ -272,39 +294,15 @@ export default function ChatLogs() {
     });
   };
 
-  const rawChats = data?.chats ?? [];
-  const hasMore = rawChats.length === limit;
-
-  // Helper to get average score from resolutions
-  const getAverageScore = (
-    resolutions: ChatOverviewWithResolutions["resolutions"],
-  ) => {
-    if (resolutions.length === 0) return 0;
-    const sum = resolutions.reduce((acc, r) => acc + r.score, 0);
-    return sum / resolutions.length;
-  };
-
-  // Sort chats based on selected sort field and order
-  const chats = useMemo(() => {
-    const sorted = [...rawChats].sort((a, b) => {
-      let comparison = 0;
-      switch (sortField) {
-        case "chronological":
-          comparison =
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-          break;
-        case "messageCount":
-          comparison = b.numMessages - a.numMessages;
-          break;
-        case "score":
-          comparison =
-            getAverageScore(b.resolutions) - getAverageScore(a.resolutions);
-          break;
-      }
-      return sortOrder === "desc" ? comparison : -comparison;
-    });
-    return sorted;
-  }, [rawChats, sortField, sortOrder]);
+  // Chats are sorted server-side via sortBy/sortOrder params
+  const chats = data?.chats ?? [];
+  // Keep total stable across page changes to avoid flickering
+  const lastTotalRef = useRef(0);
+  if (data?.total !== undefined && data.total > 0) {
+    lastTotalRef.current = data.total;
+  }
+  const total = lastTotalRef.current;
+  const hasMore = chats.length === limit;
 
   // Format date range for copilot context
   const dateRangeContext = useMemo(() => {
@@ -372,6 +370,7 @@ export default function ChatLogs() {
         offset={offset}
         setOffset={setOffset}
         limit={limit}
+        total={total}
       />
     </InsightsSidebar>
   );
@@ -404,6 +403,7 @@ function ChatLogsContent({
   offset,
   setOffset,
   limit,
+  total,
 }: {
   dateRange: DateRangePreset;
   setDateRangeParam: (preset: DateRangePreset) => void;
@@ -430,6 +430,7 @@ function ChatLogsContent({
   offset: number;
   setOffset: (offset: number) => void;
   limit: number;
+  total: number;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
 
@@ -563,26 +564,31 @@ function ChatLogsContent({
               isLoading={isLoading}
               error={error}
             />
-
-            {(hasMore || offset > 0) && (
-              <div className="p-4 flex justify-center gap-2">
-                <Button
-                  onClick={() => setOffset(Math.max(0, offset - limit))}
-                  disabled={offset === 0}
-                >
-                  Previous
-                </Button>
-                <Button
-                  onClick={() => setOffset(offset + limit)}
-                  disabled={!hasMore}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
           </>
         )}
       </div>
+
+      {/* Sticky pagination at bottom */}
+      {!isDisabled && (hasMore || offset > 0) && (
+        <div className="p-4 flex justify-center items-center gap-4 border-t bg-background shrink-0">
+          <Button
+            onClick={() => setOffset(Math.max(0, offset - limit))}
+            disabled={offset === 0}
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground tabular-nums">
+            Page {Math.floor(offset / limit) + 1}
+            {total > 0 && ` of ${Math.ceil(total / limit)}`}
+          </span>
+          <Button
+            onClick={() => setOffset(offset + limit)}
+            disabled={!hasMore}
+          >
+            Next
+          </Button>
+        </div>
+      )}
 
       {/* Right side: Slide-out drawer */}
       <Drawer

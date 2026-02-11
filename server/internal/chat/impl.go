@@ -360,6 +360,8 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		FromTime:         fromTime,
 		ToTime:           toTime,
 		ResolutionStatus: resolutionStatus,
+		SortBy:           payload.SortBy,
+		SortOrder:        payload.SortOrder,
 		PageLimit:        int32(limit),  //nolint:gosec // limit is bounded by validation above
 		PageOffset:       int32(offset), //nolint:gosec // offset is controlled by client pagination
 	})
