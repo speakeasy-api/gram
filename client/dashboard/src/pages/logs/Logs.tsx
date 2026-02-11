@@ -212,7 +212,7 @@ function LogsContent() {
       {/* Content section */}
       <div className="flex-1 overflow-hidden relative min-h-0">
         {isLogsDisabled && (
-          <div className="relative">
+          <>
             {/* Placeholder skeleton behind overlay */}
             <div
               className="pointer-events-none select-none flex flex-col bg-background"
@@ -227,7 +227,7 @@ function LogsContent() {
               <LogsSkeleton />
             </div>
             <EnableLoggingOverlay onEnabled={refetch} />
-          </div>
+          </>
         )}
         {!isLogsDisabled && (
           <div className="h-full flex flex-col bg-background">

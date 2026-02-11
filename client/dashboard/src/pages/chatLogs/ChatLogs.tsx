@@ -459,9 +459,9 @@ function ChatLogsContent({
       </div>
 
       {/* Content section */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto min-h-0 relative">
         {isLogsDisabled && (
-          <div className="relative">
+          <>
             {/* Placeholder skeleton behind overlay */}
             <div className="pointer-events-none select-none" aria-hidden="true">
               <div className="sticky top-0 z-10">
@@ -470,7 +470,7 @@ function ChatLogsContent({
               <ChatLogsSkeleton />
             </div>
             <EnableLoggingOverlay onEnabled={onLogsEnabled} />
-          </div>
+          </>
         )}
         {!isLogsDisabled && (
           <>
