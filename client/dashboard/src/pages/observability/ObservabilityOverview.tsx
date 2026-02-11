@@ -14,9 +14,7 @@ import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryListFilterOptions } from "@gram/client/funcs/telemetryListFilterOptions";
 import { useGramContext } from "@gram/client/react-query/_context";
-import {
-  useFeaturesSetMutation,
-} from "@gram/client/react-query";
+import { useFeaturesSetMutation } from "@gram/client/react-query";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
@@ -412,6 +410,7 @@ export default function ObservabilityOverview() {
         }),
       ),
     placeholderData: keepPreviousData,
+    throwOnError: false,
   });
 
   // Format date range for copilot context
@@ -605,10 +604,6 @@ function ObservabilityContent({
     return <ErrorState error={error} />;
   }
 
-  if (!data && !isDisabled) {
-    return null;
-  }
-
   // When disabled, show the skeleton underneath with an overlay on top
   if (isDisabled) {
     return (
@@ -619,6 +614,10 @@ function ObservabilityContent({
         <EnableLoggingOverlay onEnabled={refetch} />
       </div>
     );
+  }
+
+  if (!data) {
+    return null;
   }
 
   const {
@@ -1955,9 +1954,7 @@ function EnableLoggingOverlay({ onEnabled }: { onEnabled: () => void }) {
           />
         </div>
         <div>
-          <h3 className="text-lg font-semibold mb-1">
-            Enable Logging
-          </h3>
+          <h3 className="text-lg font-semibold mb-1">Enable Logging</h3>
           <p className="text-sm text-muted-foreground">
             Turn on logging to start collecting telemetry data for your
             organization. This will record tool call traces, chat sessions, and

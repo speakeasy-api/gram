@@ -6,7 +6,12 @@ import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import { resolutionBgColors } from "@/lib/resolution-colors";
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
-import { useListChatsWithResolutions } from "@gram/client/react-query";
+import { FeatureName } from "@gram/client/models/components";
+import { ServiceError } from "@gram/client/models/errors/serviceerror";
+import {
+  useListChatsWithResolutions,
+  useFeaturesSetMutation,
+} from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useState, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router";
@@ -177,14 +182,59 @@ export default function ChatLogs() {
     [updateSearchParams],
   );
 
-  const { data, isLoading, error } = useListChatsWithResolutions({
-    search: searchQuery || undefined,
-    resolutionStatus: resolutionStatus || undefined,
-    from: timeRange.from,
-    to: timeRange.to,
-    limit,
-    offset,
-  });
+  const { data, isLoading, error, refetch } = useListChatsWithResolutions(
+    {
+      search: searchQuery || undefined,
+      resolutionStatus: resolutionStatus || undefined,
+      from: timeRange.from,
+      to: timeRange.to,
+      limit,
+      offset,
+    },
+    undefined, // security
+    {
+      throwOnError: false,
+    },
+  );
+
+  // Check for 404 error indicating logs are disabled
+  const isDisabled: boolean =
+    (error instanceof ServiceError && error.statusCode === 404) ||
+    !!(
+      error &&
+      "statusCode" in error &&
+      (error as { statusCode: number }).statusCode === 404
+    );
+
+  const [logsMutationError, setLogsMutationError] = useState<string | null>(
+    null,
+  );
+  const { mutateAsync: setLogsFeature, status: logsMutationStatus } =
+    useFeaturesSetMutation({
+      onSuccess: () => {
+        setLogsMutationError(null);
+        refetch();
+      },
+      onError: (err) => {
+        const message =
+          err instanceof Error ? err.message : "Failed to enable logging";
+        setLogsMutationError(message);
+      },
+    });
+
+  const isMutatingLogs = logsMutationStatus === "pending";
+
+  const handleEnableLogs = () => {
+    setLogsMutationError(null);
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.Logs,
+          enabled: true,
+        },
+      },
+    });
+  };
 
   const chats = data?.chats ?? [];
   const hasMore = chats.length === limit;
@@ -243,6 +293,10 @@ export default function ChatLogs() {
         setSelectedChat={setSelectedChat}
         isLoading={isLoading}
         error={error}
+        isDisabled={isDisabled}
+        isMutatingLogs={isMutatingLogs}
+        logsMutationError={logsMutationError}
+        onEnableLogs={handleEnableLogs}
         hasMore={hasMore}
         offset={offset}
         setOffset={setOffset}
@@ -267,6 +321,10 @@ function ChatLogsContent({
   setSelectedChat,
   isLoading,
   error,
+  isDisabled,
+  isMutatingLogs,
+  logsMutationError,
+  onEnableLogs,
   hasMore,
   offset,
   setOffset,
@@ -285,6 +343,10 @@ function ChatLogsContent({
   setSelectedChat: (chat: ChatOverviewWithResolutions | null) => void;
   isLoading: boolean;
   error: Error | null;
+  isDisabled: boolean;
+  isMutatingLogs: boolean;
+  logsMutationError: string | null;
+  onEnableLogs: () => void;
   hasMore: boolean;
   offset: number;
   setOffset: (offset: number) => void;
@@ -329,32 +391,84 @@ function ChatLogsContent({
 
       {/* Content section */}
       <div className="flex-1 overflow-y-auto relative min-h-0">
-        <div className="sticky top-0 z-10">
-          <ScoreLegend />
-        </div>
-        <ChatLogsTable
-          chats={chats}
-          selectedChatId={selectedChat?.id}
-          onSelectChat={setSelectedChat}
-          isLoading={isLoading}
-          error={error}
-        />
-
-        {(hasMore || offset > 0) && (
-          <div className="p-4 flex justify-center gap-2">
-            <Button
-              onClick={() => setOffset(Math.max(0, offset - limit))}
-              disabled={offset === 0}
-            >
-              Previous
-            </Button>
-            <Button
-              onClick={() => setOffset(offset + limit)}
-              disabled={!hasMore}
-            >
-              Next
-            </Button>
+        {isDisabled ? (
+          <div className="relative h-full">
+            {/* Placeholder content behind overlay */}
+            <div className="pointer-events-none select-none" aria-hidden="true">
+              <div className="sticky top-0 z-10">
+                <ScoreLegend />
+              </div>
+              <ChatLogsTable
+                chats={[]}
+                selectedChatId={undefined}
+                onSelectChat={() => {}}
+                isLoading={true}
+                error={null}
+              />
+            </div>
+            {/* Overlay */}
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/70 backdrop-blur-[2px]">
+              <div className="flex flex-col items-center gap-4 max-w-md text-center p-8">
+                <div className="size-14 rounded-full bg-muted flex items-center justify-center">
+                  <Icon
+                    name="message-circle"
+                    className="size-7 text-muted-foreground"
+                  />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold mb-1">Enable Logging</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Turn on logging to start capturing chat sessions and
+                    conversation data. This will allow you to review and debug
+                    individual chat interactions.
+                  </p>
+                </div>
+                <Button onClick={onEnableLogs} disabled={isMutatingLogs}>
+                  <Button.LeftIcon>
+                    <Icon name="activity" className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>
+                    {isMutatingLogs ? "Enabling..." : "Enable Logging"}
+                  </Button.Text>
+                </Button>
+                {logsMutationError && (
+                  <span className="text-sm text-destructive">
+                    {logsMutationError}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
+        ) : (
+          <>
+            <div className="sticky top-0 z-10">
+              <ScoreLegend />
+            </div>
+            <ChatLogsTable
+              chats={chats}
+              selectedChatId={selectedChat?.id}
+              onSelectChat={setSelectedChat}
+              isLoading={isLoading}
+              error={error}
+            />
+
+            {(hasMore || offset > 0) && (
+              <div className="p-4 flex justify-center gap-2">
+                <Button
+                  onClick={() => setOffset(Math.max(0, offset - limit))}
+                  disabled={offset === 0}
+                >
+                  Previous
+                </Button>
+                <Button
+                  onClick={() => setOffset(offset + limit)}
+                  disabled={!hasMore}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 

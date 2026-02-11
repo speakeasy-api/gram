@@ -105,7 +105,9 @@ function LogsContent() {
 
   // Flatten all pages into a single array of traces
   const allTraces = data?.pages.flatMap((page) => page.toolCalls) ?? [];
-  const logsEnabled = data?.pages[0]?.enabled ?? true;
+  const isDisabled404 =
+    error instanceof ServiceError && error.statusCode === 404;
+  const logsEnabled = isDisabled404 ? false : (data?.pages[0]?.enabled ?? true);
 
   const [logsMutationError, setLogsMutationError] = useState<string | null>(
     null,
@@ -189,6 +191,20 @@ function LogsContent() {
               Browse raw tool call traces and telemetry data
             </p>
           </div>
+          {logsEnabled && (
+            <div className="shrink-0">
+              <Button
+                onClick={() => handleSetLogs(false)}
+                disabled={isMutatingLogs}
+                size="sm"
+                variant="secondary"
+              >
+                <Button.Text>
+                  {isMutatingLogs ? "Updating..." : "Disable Logs"}
+                </Button.Text>
+              </Button>
+            </div>
+          )}
         </div>
         {/* Search Row */}
         <SearchBar
@@ -242,37 +258,11 @@ function LogsContent() {
 
           {/* Footer */}
           {allTraces.length > 0 && (
-            <div className="flex items-center justify-between gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+            <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
               <span>
                 {allTraces.length} {allTraces.length === 1 ? "trace" : "traces"}
                 {hasNextPage && " • Scroll to load more"}
               </span>
-              {logsEnabled ? (
-                <Button
-                  onClick={() => handleSetLogs(false)}
-                  disabled={isMutatingLogs}
-                  size="sm"
-                  variant="secondary"
-                >
-                  <Button.Text>
-                    {isMutatingLogs ? "Updating..." : "Disable Logs"}
-                  </Button.Text>
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => handleSetLogs(true)}
-                  disabled={isMutatingLogs}
-                  size="sm"
-                  variant="secondary"
-                >
-                  <Button.LeftIcon>
-                    <Icon name="test-tube-diagonal" className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>
-                    {isMutatingLogs ? "Updating..." : "Enable Logs"}
-                  </Button.Text>
-                </Button>
-              )}
             </div>
           )}
         </div>

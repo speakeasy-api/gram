@@ -561,6 +561,14 @@ async function seedObservabilityData(init: {
     "The operation was successful. Here's what happened:",
   ];
 
+  const SYSTEM_PROMPTS = [
+    "You are a helpful AI assistant with access to various tools. You can help users manage their GitHub repositories, send Slack messages, query databases, and more. Always be concise and helpful.",
+    "You are an enterprise assistant for Acme Corp. You have access to internal tools and databases. Follow company policies and maintain confidentiality. Be professional and efficient.",
+    "You are a technical support agent. Help users troubleshoot issues with their integrations. Ask clarifying questions when needed. Provide step-by-step instructions.",
+    "You are a data analyst assistant. You can query databases, generate reports, and visualize data. Always explain your methodology and assumptions.",
+    "You are a project management assistant. Help users track tasks, manage deadlines, and coordinate with team members. Keep responses organized and actionable.",
+  ];
+
   // Generate chat data
   const now = Date.now();
   const msPerDay = 24 * 60 * 60 * 1000;
@@ -607,6 +615,16 @@ async function seedObservabilityData(init: {
     // Generate 2-6 messages per chat
     const numMessages = 2 + Math.floor(Math.random() * 5);
     let msgTime = chatTime;
+
+    // Add system message at the start (80% of chats have system prompts)
+    if (Math.random() < 0.8) {
+      const systemPrompt =
+        SYSTEM_PROMPTS[Math.floor(Math.random() * SYSTEM_PROMPTS.length)];
+      messageValues.push(
+        `('${chatId}', '${projectId}', 'system', '${systemPrompt.replace(/'/g, "''")}', 'gpt-4', '${msgTime.toISOString()}')`,
+      );
+      msgTime = new Date(msgTime.getTime() + 100); // Tiny increment for system message
+    }
 
     for (let j = 0; j < numMessages; j++) {
       const role = j % 2 === 0 ? "user" : "assistant";
