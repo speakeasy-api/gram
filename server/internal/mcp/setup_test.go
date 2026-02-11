@@ -127,7 +127,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	temporalClient, devserver := infra.NewTemporalClient(t)
 	t.Cleanup(func() {
 		temporalClient.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
+		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
 	})
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
@@ -206,7 +206,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	temporalClient, devserver := infra.NewTemporalClient(t)
 	t.Cleanup(func() {
 		temporalClient.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
+		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
 	})
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
