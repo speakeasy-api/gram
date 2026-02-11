@@ -11,9 +11,6 @@ Developer-friendly & type-safe Typescript SDK specifically catered to leverage _
 
 <br /><br />
 
-> [!IMPORTANT]
-> This SDK is not yet ready for production use. To complete setup please follow the steps outlined in your [workspace](https://app.speakeasy.com/org/speakeasy-self/speakeasy-self). Delete this section before > publishing to a package manager.
-
 <!-- Start Summary [summary] -->
 ## Summary
 
@@ -37,17 +34,12 @@ Gram API Description: Gram is the tools platform for AI agents
   * [Custom HTTP Client](#custom-http-client)
   * [Debugging](#debugging)
 * [Development](#development)
-  * [Maturity](#maturity)
   * [Contributions](#contributions)
 
 <!-- End Table of Contents [toc] -->
 
 <!-- Start SDK Installation [installation] -->
 ## SDK Installation
-
-> [!TIP]
-> To finish publishing your SDK to npm and others you must [run your first generation action](https://www.speakeasy.com/docs/github-setup#step-by-step-guide).
-
 
 The SDK can be installed with either [npm](https://www.npmjs.com/), [pnpm](https://pnpm.io/), [bun](https://bun.sh/) or [yarn](https://classic.yarnpkg.com/en/) package managers.
 
@@ -458,11 +450,6 @@ popular asynchronous state management library.
 To learn about this feature and how to get started, check
 [REACT_QUERY.md](./REACT_QUERY.md).
 
-> [!WARNING]
->
-> This feature is currently in **preview** and is subject to breaking changes
-> within the current major version of the SDK as we gather user feedback on it.
-
 <details>
 
 <summary>Available React hooks</summary>
@@ -851,12 +838,6 @@ You can also enable a default debug logger by setting an environment variable `G
 <!-- Placeholder for Future Speakeasy SDK Sections -->
 
 # Development
-
-## Maturity
-
-This SDK is in beta, and there may be breaking changes between versions without a major version update. Therefore, we recommend pinning usage
-to a specific package version. This way, you can install the same version each time without breaking changes unless you are intentionally
-looking for the latest version.
 
 ## Contributions
 
