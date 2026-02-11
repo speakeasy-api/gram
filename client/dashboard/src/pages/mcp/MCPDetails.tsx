@@ -185,12 +185,15 @@ export function MCPDetailPage() {
   const mcpOAuthConfig = toolset
     ? getExternalMcpOAuthConfig(toolset.rawTools)
     : undefined;
-  const { data: oauthStatus } = useExternalMcpOAuthStatus(toolset?.id, {
-    slug: mcpOAuthConfig?.slug,
-    enabled: !!mcpOAuthConfig,
-  });
+  const { data: oauthStatus, isLoading: oauthStatusLoading } =
+    useExternalMcpOAuthStatus(toolset?.id, {
+      slug: mcpOAuthConfig?.slug,
+      enabled: !!mcpOAuthConfig,
+    });
   const oauthNotConnected =
-    !!mcpOAuthConfig && oauthStatus?.status !== "authenticated";
+    !!mcpOAuthConfig &&
+    !oauthStatusLoading &&
+    oauthStatus?.status !== "authenticated";
 
   if (isLoading || !toolset) {
     return <MCPLoading />;
