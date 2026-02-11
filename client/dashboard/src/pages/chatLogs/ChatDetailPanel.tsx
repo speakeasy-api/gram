@@ -538,8 +538,15 @@ export function ChatDetailPanel({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-sm font-semibold capitalize">
-                            {message.role}
+                            {message.role === "tool"
+                              ? "Tool Result"
+                              : message.role}
                           </span>
+                          {message.toolCallId && (
+                            <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                              {message.toolCallId}
+                            </code>
+                          )}
                           <span className="text-xs text-muted-foreground">
                             {message.createdAt &&
                               format(new Date(message.createdAt), "HH:mm:ss")}
