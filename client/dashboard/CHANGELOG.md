@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.28.0
+
+### Minor Changes
+
+- 514fce6: Improve observability chat logs with server-side sorting (sort_by/sort_order params), sticky pagination with page count, N/A score indicator with tooltip for unscored sessions, Shiki syntax highlighting for code blocks, character-based truncation with "Show more" button, System Prompt tab in chat detail panel, and Tool Result labeling for tool messages.
+- 9df7d84: Add observability features including telemetry logs, traces, chat logs with AI-powered resolution analysis, and an overview dashboard with time-series metrics.
+- ab5142f: fix UI bug where the openapi spec provided by URL upload is not fetched, leading to a blank preview.
+
+### Patch Changes
+
+- 292eab4: Add system prompt instruction to treat 4xx HTTP responses as errors in AI observability analysis.
+- Updated dependencies [514fce6]
+  - @gram/client@0.27.0
+
 ## 0.27.9
 
 ### Patch Changes
