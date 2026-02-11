@@ -267,7 +267,7 @@ export default function ChatLogs() {
   const [logsMutationError, setLogsMutationError] = useState<string | null>(
     null,
   );
-  const { mutateAsync: setLogsFeature, status: logsMutationStatus } =
+  const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
       onSuccess: () => {
         setLogsMutationError(null);
@@ -581,10 +581,7 @@ function ChatLogsContent({
             Page {Math.floor(offset / limit) + 1}
             {total > 0 && ` of ${Math.ceil(total / limit)}`}
           </span>
-          <Button
-            onClick={() => setOffset(offset + limit)}
-            disabled={!hasMore}
-          >
+          <Button onClick={() => setOffset(offset + limit)} disabled={!hasMore}>
             Next
           </Button>
         </div>

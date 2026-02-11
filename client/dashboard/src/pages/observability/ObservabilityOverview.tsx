@@ -1934,7 +1934,7 @@ function LoadingSkeleton() {
 
 function EnableLoggingOverlay({ onEnabled }: { onEnabled: () => void }) {
   const [mutationError, setMutationError] = useState<string | null>(null);
-  const { mutateAsync: setLogsFeature, status: mutationStatus } =
+  const { mutate: setLogsFeature, status: mutationStatus } =
     useFeaturesSetMutation({
       onSuccess: () => {
         setMutationError(null);
