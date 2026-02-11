@@ -61,14 +61,18 @@ export function InsightsSidebar({
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
 
   // Build system prompt with context info
+  const baseInstructions = `You are a helpful assistant for analyzing observability data.
+
+Important: When analyzing logs and errors, treat all 4xx HTTP status codes (400, 401, 403, 404, etc.) as errors, even though they are technically client errors rather than server errors. From the user's perspective, these responses often indicate problems that need attention (authentication failures, misconfigured requests, missing resources, etc.).`;
+
   const systemPrompt = contextInfo
-    ? `You are a helpful assistant for analyzing observability data.
+    ? `${baseInstructions}
 
 Current dashboard context:
 ${contextInfo}
 
 When the user asks about "current period", "selected period", "this timeframe", or similar, use the date range from the context above. Do not ask the user to specify a date range if it's already provided in the context.`
-    : undefined;
+    : baseInstructions;
 
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
