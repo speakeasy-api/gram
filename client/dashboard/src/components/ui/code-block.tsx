@@ -1,7 +1,10 @@
 import { cn } from "@/lib/utils";
 import { CheckIcon, CopyIcon, ChevronDownIcon } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { codeToHtml } from "shiki";
 
+/** Max characters to send through shiki — above this we skip highlighting. */
+const SHIKI_CHAR_LIMIT = 8_000;
 /** Max lines shown in the collapsed preview */
 const PREVIEW_LINE_LIMIT = 50;
 
@@ -62,8 +65,9 @@ export function CodeBlock({
   maxHeight = 300,
 }: CodeBlockProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [highlightedCode, setHighlightedCode] = useState<string | null>(null);
 
-  // Format the content as a string
+  // Format the content as a string (always JSON for this use case)
   const formattedContent = useMemo(() => {
     if (typeof content === "string") {
       // Try to parse and re-format if it's JSON
@@ -83,6 +87,38 @@ export function CodeBlock({
 
   const displayText = expanded ? formattedContent : preview.text;
   const canExpand = preview.truncated && !expanded;
+  const canHighlight = displayText.length <= SHIKI_CHAR_LIMIT;
+  const remainingLines = preview.totalLines - PREVIEW_LINE_LIMIT;
+
+  // Syntax highlighting with Shiki
+  useEffect(() => {
+    setHighlightedCode(null);
+    if (!canHighlight) return;
+
+    let cancelled = false;
+    codeToHtml(displayText, {
+      lang: "json",
+      theme: "github-dark-default",
+      structure: "inline",
+    }).then((html) => {
+      if (!cancelled) setHighlightedCode(html);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [displayText, canHighlight]);
+
+  const showMoreButton = canExpand && (
+    <button
+      type="button"
+      onClick={() => setExpanded(true)}
+      className="w-full bg-slate-900 px-4 py-2 text-left text-xs text-slate-400 transition-colors hover:text-slate-200 hover:bg-slate-800 flex items-center gap-1"
+    >
+      <ChevronDownIcon className="size-3" />
+      See {remainingLines} more lines…
+    </button>
+  );
 
   return (
     <div className={cn("w-full rounded-lg overflow-hidden", className)}>
@@ -93,31 +129,33 @@ export function CodeBlock({
         </div>
       )}
       <div className="relative">
-        <pre
-          className={cn(
-            "bg-slate-800/90 px-4 py-3 text-sm text-slate-100 font-mono whitespace-pre-wrap break-all overflow-y-auto",
-            !title && "rounded-t-lg",
-          )}
-          style={{ maxHeight: `${maxHeight}px` }}
-        >
-          {displayText}
-        </pre>
+        {highlightedCode ? (
+          <pre
+            className={cn(
+              "bg-slate-800/90 px-4 py-3 text-sm font-mono whitespace-pre-wrap break-all overflow-y-auto",
+              !title && "rounded-t-lg",
+            )}
+            style={{ maxHeight: `${maxHeight}px` }}
+            dangerouslySetInnerHTML={{ __html: highlightedCode }}
+          />
+        ) : (
+          <pre
+            className={cn(
+              "bg-slate-800/90 px-4 py-3 text-sm text-slate-100 font-mono whitespace-pre-wrap break-all overflow-y-auto",
+              !title && "rounded-t-lg",
+            )}
+            style={{ maxHeight: `${maxHeight}px` }}
+          >
+            {displayText}
+          </pre>
+        )}
         {!title && (
           <div className="absolute top-2 right-2">
             <CopyButton content={formattedContent} />
           </div>
         )}
       </div>
-      {canExpand && (
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          className="w-full bg-slate-900 px-4 py-2 text-left text-xs text-slate-400 transition-colors hover:text-slate-200 hover:bg-slate-800 flex items-center gap-1"
-        >
-          <ChevronDownIcon className="size-3" />
-          Show all {preview.totalLines} lines…
-        </button>
-      )}
+      {showMoreButton}
     </div>
   );
 }

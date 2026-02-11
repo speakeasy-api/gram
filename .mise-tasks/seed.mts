@@ -569,23 +569,124 @@ async function seedObservabilityData(init: {
     "You are a project management assistant. Help users track tasks, manage deadlines, and coordinate with team members. Keep responses organized and actionable.",
   ];
 
-  // Sample tool call outputs with realistic JSON content
-  const TOOL_OUTPUTS = [
-    {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            repositories: [
-              { name: "api-gateway", language: "Go", stars: 245, updated_at: "2024-01-15T10:30:00Z" },
-              { name: "web-dashboard", language: "TypeScript", stars: 89, updated_at: "2024-01-14T15:45:00Z" },
-              { name: "ml-pipeline", language: "Python", stars: 156, updated_at: "2024-01-13T09:20:00Z" },
-            ],
-            total_count: 3,
-          }),
+  // Helper to generate large arrays for testing truncation
+  function generateLargeRepositoryList(count: number) {
+    const languages = ["Go", "TypeScript", "Python", "Rust", "Java", "Ruby", "C++", "JavaScript"];
+    const repos = [];
+    for (let i = 0; i < count; i++) {
+      repos.push({
+        id: `repo-${i + 1}`,
+        name: `project-${["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"][i % 8]}-${Math.floor(i / 8) + 1}`,
+        full_name: `acme-corp/project-${i + 1}`,
+        description: `This is a comprehensive ${languages[i % languages.length]} project for handling ${["data processing", "API management", "user authentication", "payment processing", "analytics", "monitoring", "notifications", "scheduling"][i % 8]}`,
+        language: languages[i % languages.length],
+        stars: Math.floor(Math.random() * 1000),
+        forks: Math.floor(Math.random() * 200),
+        open_issues: Math.floor(Math.random() * 50),
+        watchers: Math.floor(Math.random() * 500),
+        default_branch: "main",
+        visibility: i % 3 === 0 ? "public" : "private",
+        created_at: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
+        pushed_at: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+        topics: ["backend", "api", languages[i % languages.length].toLowerCase()],
+        license: { key: "mit", name: "MIT License" },
+        permissions: { admin: true, push: true, pull: true },
+      });
+    }
+    return repos;
+  }
+
+  function generateLargeLogEntries(count: number) {
+    const levels = ["DEBUG", "INFO", "WARN", "ERROR"];
+    const services = ["api-gateway", "auth-service", "payment-processor", "notification-worker", "analytics-pipeline"];
+    const messages = [
+      "Request received from client",
+      "Processing authentication token",
+      "Database query executed successfully",
+      "Cache miss - fetching from primary store",
+      "Rate limit check passed",
+      "Request payload validated",
+      "Initiating downstream API call",
+      "Response serialization complete",
+      "Metric recorded for monitoring",
+      "Audit log entry created",
+      "Connection pool status: healthy",
+      "Memory usage within threshold",
+      "CPU utilization normal",
+      "Garbage collection completed",
+      "Health check endpoint accessed",
+    ];
+    const logs = [];
+    const baseTime = Date.now();
+    for (let i = 0; i < count; i++) {
+      logs.push({
+        timestamp: new Date(baseTime - (count - i) * 100).toISOString(),
+        level: levels[Math.floor(Math.random() * levels.length)],
+        service: services[Math.floor(Math.random() * services.length)],
+        message: messages[Math.floor(Math.random() * messages.length)],
+        trace_id: `trace-${Math.random().toString(36).substring(2, 15)}`,
+        span_id: `span-${Math.random().toString(36).substring(2, 10)}`,
+        request_id: `req-${Math.random().toString(36).substring(2, 12)}`,
+        user_id: `user-${Math.floor(Math.random() * 1000)}`,
+        duration_ms: Math.floor(Math.random() * 500),
+        metadata: {
+          host: `server-${Math.floor(Math.random() * 10) + 1}.prod.example.com`,
+          region: ["us-east-1", "us-west-2", "eu-west-1"][Math.floor(Math.random() * 3)],
+          version: `v${Math.floor(Math.random() * 3) + 1}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 20)}`,
         },
-      ],
-    },
+      });
+    }
+    return logs;
+  }
+
+  function generateLargeOrderList(count: number) {
+    const statuses = ["pending", "processing", "shipped", "delivered", "cancelled"];
+    const customers = ["Acme Corp", "TechStart Inc", "Global Services", "DataFlow LLC", "CloudNine Solutions", "NextGen Systems", "Pioneer Tech", "Quantum Labs"];
+    const orders = [];
+    for (let i = 0; i < count; i++) {
+      const itemCount = Math.floor(Math.random() * 5) + 1;
+      const items = [];
+      for (let j = 0; j < itemCount; j++) {
+        items.push({
+          sku: `SKU-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+          name: `Product ${j + 1}`,
+          quantity: Math.floor(Math.random() * 10) + 1,
+          unit_price: Math.floor(Math.random() * 500) + 10,
+          discount: Math.random() > 0.7 ? Math.floor(Math.random() * 20) : 0,
+        });
+      }
+      orders.push({
+        id: `ORD-${String(i + 1).padStart(6, "0")}`,
+        customer: {
+          name: customers[Math.floor(Math.random() * customers.length)],
+          email: `contact@${customers[Math.floor(Math.random() * customers.length)].toLowerCase().replace(/\s+/g, "")}.com`,
+          phone: `+1-555-${String(Math.floor(Math.random() * 10000)).padStart(4, "0")}`,
+        },
+        items,
+        subtotal: items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0),
+        tax: Math.floor(Math.random() * 100),
+        shipping: Math.floor(Math.random() * 50),
+        total: 0,
+        status: statuses[Math.floor(Math.random() * statuses.length)],
+        shipping_address: {
+          street: `${Math.floor(Math.random() * 9999) + 1} Main St`,
+          city: ["New York", "San Francisco", "Chicago", "Austin", "Seattle"][Math.floor(Math.random() * 5)],
+          state: ["NY", "CA", "IL", "TX", "WA"][Math.floor(Math.random() * 5)],
+          zip: String(Math.floor(Math.random() * 90000) + 10000),
+          country: "US",
+        },
+        created_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+    }
+    return orders;
+  }
+
+  // Sample tool call outputs with realistic JSON content
+  // Includes both short and very long outputs to test truncation
+  const TOOL_OUTPUTS = [
+    // SHORT OUTPUT - simple response
     {
       content: [
         {
@@ -599,21 +700,46 @@ async function seedObservabilityData(init: {
         },
       ],
     },
+    // LONG OUTPUT - 30 repositories (~600+ lines when formatted)
     {
       content: [
         {
           type: "text",
           text: JSON.stringify({
-            orders: [
-              { id: "ORD-001", customer: "Acme Corp", total: 1250.00, status: "shipped" },
-              { id: "ORD-002", customer: "TechStart Inc", total: 890.50, status: "processing" },
-              { id: "ORD-003", customer: "Global Services", total: 3420.00, status: "delivered" },
-            ],
-            pagination: { page: 1, per_page: 10, total: 156 },
+            repositories: generateLargeRepositoryList(30),
+            total_count: 30,
+            pagination: { page: 1, per_page: 30, total_pages: 1 },
           }),
         },
       ],
     },
+    // LONG OUTPUT - 80 log entries (~1000+ lines when formatted)
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            logs: generateLargeLogEntries(80),
+            total_entries: 80,
+            query: { start_time: "2024-01-15T00:00:00Z", end_time: "2024-01-15T23:59:59Z", level: "all" },
+          }),
+        },
+      ],
+    },
+    // LONG OUTPUT - 20 orders with items (~600+ lines when formatted)
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            orders: generateLargeOrderList(20),
+            pagination: { page: 1, per_page: 20, total: 156 },
+            summary: { total_revenue: 125000, average_order_value: 2500 },
+          }),
+        },
+      ],
+    },
+    // MEDIUM OUTPUT - deployment with detailed logs
     {
       content: [
         {
@@ -627,11 +753,17 @@ async function seedObservabilityData(init: {
               completed_at: "2024-01-15T08:05:32Z",
               commit_sha: "a1b2c3d4e5f6",
               logs_url: "https://logs.example.com/deploy-789xyz",
+              stages: [
+                { name: "build", status: "success", duration_seconds: 45, logs: generateLargeLogEntries(10) },
+                { name: "test", status: "success", duration_seconds: 120, logs: generateLargeLogEntries(15) },
+                { name: "deploy", status: "success", duration_seconds: 30, logs: generateLargeLogEntries(8) },
+              ],
             },
           }),
         },
       ],
     },
+    // SHORT OUTPUT - ticket created
     {
       content: [
         {
@@ -644,39 +776,6 @@ async function seedObservabilityData(init: {
             priority: "High",
             assignee: "john.doe@example.com",
             url: "https://jira.example.com/browse/JIRA-4521",
-          }),
-        },
-      ],
-    },
-    {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            logs: [
-              { timestamp: "2024-01-15T10:00:01Z", level: "INFO", message: "Request received", trace_id: "abc123" },
-              { timestamp: "2024-01-15T10:00:02Z", level: "DEBUG", message: "Processing payload", trace_id: "abc123" },
-              { timestamp: "2024-01-15T10:00:03Z", level: "ERROR", message: "Database connection timeout", trace_id: "abc123" },
-              { timestamp: "2024-01-15T10:00:04Z", level: "INFO", message: "Retry attempt 1", trace_id: "abc123" },
-              { timestamp: "2024-01-15T10:00:05Z", level: "INFO", message: "Request completed", trace_id: "abc123" },
-            ],
-            total_entries: 5,
-          }),
-        },
-      ],
-    },
-    {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            feedback_summary: {
-              period: "2024-01-08 to 2024-01-14",
-              total_responses: 234,
-              average_rating: 4.2,
-              sentiment: { positive: 156, neutral: 52, negative: 26 },
-              top_themes: ["fast support", "easy to use", "needs more features"],
-            },
           }),
         },
       ],
@@ -822,10 +921,20 @@ async function seedObservabilityData(init: {
     const dbPassword = process.env.DB_PASSWORD || "gram";
     const dbName = process.env.DB_NAME || "gram";
 
-    await $`PGPASSWORD=${dbPassword} psql -h ${dbHost} -p ${dbPort} -U ${dbUser} -d ${dbName} -c ${pgSQL}`.quiet();
-    log.info(`Inserted ${NUM_CHATS} chats with messages into PostgreSQL`);
-  } catch (e) {
-    log.warn(`Failed to seed PostgreSQL: ${e}`);
+    // Write SQL to temp file to avoid E2BIG (arg list too long) error
+    const tmpFile = path.join(process.cwd(), ".seed-observability.sql");
+    await fs.writeFile(tmpFile, pgSQL, "utf-8");
+
+    try {
+      await $`PGPASSWORD=${dbPassword} psql -h ${dbHost} -p ${dbPort} -U ${dbUser} -d ${dbName} -f ${tmpFile}`.quiet();
+      log.info(`Inserted ${NUM_CHATS} chats with messages into PostgreSQL`);
+    } finally {
+      // Clean up temp file
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.warn(`Failed to seed PostgreSQL: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`);
   }
 
   // Build ClickHouse insert for telemetry logs
