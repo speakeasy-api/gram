@@ -230,8 +230,8 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch str
 	{
 		if chatListChatsWithResolutionsSortBy != "" {
 			sortBy = chatListChatsWithResolutionsSortBy
-			if !(sortBy == "created_at" || sortBy == "num_messages" || sortBy == "score") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"created_at", "num_messages", "score"}))
+			if !(sortBy == "created_at" || sortBy == "num_messages" || sortBy == "score" || sortBy == "resolution_time") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"created_at", "num_messages", "score", "resolution_time"}))
 			}
 			if err != nil {
 				return nil, err

@@ -226,13 +226,14 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 		for _, chat := range chats {
 			result = append(result, &gen.ChatOverview{
-				ID:             chat.ID.String(),
-				UserID:         nil,
-				ExternalUserID: &chat.ExternalUserID.String,
-				Title:          chat.Title.String,
-				NumMessages:    int(chat.NumMessages),
-				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
+				ID:               chat.ID.String(),
+				UserID:           nil,
+				ExternalUserID:   &chat.ExternalUserID.String,
+				Title:            chat.Title.String,
+				NumMessages:      int(chat.NumMessages),
+				ResolutionTimeMs: nil,
+				CreatedAt:        chat.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:        chat.UpdatedAt.Time.Format(time.RFC3339),
 			})
 		}
 
@@ -248,13 +249,14 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 		for _, chat := range chats {
 			result = append(result, &gen.ChatOverview{
-				ID:             chat.ID.String(),
-				UserID:         &chat.UserID.String,
-				ExternalUserID: nil,
-				Title:          chat.Title.String,
-				NumMessages:    int(chat.NumMessages),
-				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
+				ID:               chat.ID.String(),
+				UserID:           &chat.UserID.String,
+				ExternalUserID:   nil,
+				Title:            chat.Title.String,
+				NumMessages:      int(chat.NumMessages),
+				ResolutionTimeMs: nil,
+				CreatedAt:        chat.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:        chat.UpdatedAt.Time.Format(time.RFC3339),
 			})
 		}
 
@@ -276,13 +278,14 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 	for _, chat := range chats {
 		result = append(result, &gen.ChatOverview{
-			ID:             chat.ID.String(),
-			UserID:         &chat.UserID.String,
-			ExternalUserID: nil,
-			Title:          chat.Title.String,
-			NumMessages:    int(chat.NumMessages),
-			CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
+			ID:               chat.ID.String(),
+			UserID:           &chat.UserID.String,
+			ExternalUserID:   nil,
+			Title:            chat.Title.String,
+			NumMessages:      int(chat.NumMessages),
+			ResolutionTimeMs: nil,
+			CreatedAt:        chat.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:        chat.UpdatedAt.Time.Format(time.RFC3339),
 		})
 	}
 
@@ -378,15 +381,24 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 
 		// If this is the first row for this chat, create the chat entry
 		if _, exists := chatMap[chatID]; !exists {
+			// Extract resolution_time_ms from interface{} - only set if > 0
+			var resolutionTimeMs *int64
+			if row.ResolutionTimeMs != nil {
+				if val, ok := row.ResolutionTimeMs.(int64); ok && val > 0 {
+					resolutionTimeMs = &val
+				}
+			}
+
 			chatMap[chatID] = &gen.ChatOverviewWithResolutions{
-				ID:             chatID,
-				Title:          row.Title.String,
-				UserID:         conv.FromPGText[string](row.UserID),
-				ExternalUserID: conv.FromPGText[string](row.ExternalUserID),
-				NumMessages:    int(row.NumMessages),
-				CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
-				Resolutions:    make([]*gen.ChatResolution, 0),
+				ID:               chatID,
+				Title:            row.Title.String,
+				UserID:           conv.FromPGText[string](row.UserID),
+				ExternalUserID:   conv.FromPGText[string](row.ExternalUserID),
+				NumMessages:      int(row.NumMessages),
+				ResolutionTimeMs: resolutionTimeMs,
+				CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+				Resolutions:      make([]*gen.ChatResolution, 0),
 			}
 			chatOrder = append(chatOrder, chatID)
 		}
@@ -490,14 +502,15 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	}
 
 	return &gen.Chat{
-		ID:             chat.ID.String(),
-		Title:          chat.Title.String,
-		UserID:         &chat.UserID.String,
-		ExternalUserID: &chat.ExternalUserID.String,
-		NumMessages:    len(messages),
-		CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
-		Messages:       resultMessages,
+		ID:               chat.ID.String(),
+		Title:            chat.Title.String,
+		UserID:           &chat.UserID.String,
+		ExternalUserID:   &chat.ExternalUserID.String,
+		NumMessages:      len(messages),
+		ResolutionTimeMs: nil,
+		CreatedAt:        chat.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:        chat.UpdatedAt.Time.Format(time.RFC3339),
+		Messages:         resultMessages,
 	}, nil
 }
 

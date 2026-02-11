@@ -55,6 +55,17 @@ function formatDuration(chat: ChatOverviewWithResolutions): string {
     : `${minutes}m`;
 }
 
+function formatResolutionTime(ms: number | null | undefined): string | null {
+  if (ms == null || ms <= 0) return null;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return remainingSeconds > 0
+    ? `${minutes}m ${remainingSeconds}s`
+    : `${minutes}m`;
+}
+
 // Subtle copy button - always visible
 function CopyButton({
   value,
@@ -316,7 +327,8 @@ export function ChatLogsTable({
                   </span>
                   <span className="flex items-center gap-1.5">
                     <Icon name="timer" className="size-4 opacity-60" />
-                    {formatDuration(chat)}
+                    {formatResolutionTime(chat.resolutionTimeMs) ??
+                      formatDuration(chat)}
                   </span>
                   <span className="flex items-center gap-1.5">
                     <Icon name="message-square" className="size-4 opacity-60" />

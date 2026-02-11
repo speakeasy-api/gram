@@ -454,7 +454,8 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 					countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls,
 					countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls,
 					avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_tool_latency_ms,
-					avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms
+					avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms,
+					avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms
 				FROM telemetry_logs
 				WHERE gram_project_id = ?
 					AND time_unix_nano >= ?
@@ -472,7 +473,8 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 			coalesce(d.total_tool_calls, 0) as total_tool_calls,
 			coalesce(d.failed_tool_calls, 0) as failed_tool_calls,
 			coalesce(d.avg_tool_latency_ms, 0) as avg_tool_latency_ms,
-			coalesce(d.avg_session_duration_ms, 0) as avg_session_duration_ms
+			coalesce(d.avg_session_duration_ms, 0) as avg_session_duration_ms,
+			coalesce(d.avg_resolution_time_ms, 0) as avg_resolution_time_ms
 		FROM buckets b
 		LEFT JOIN data d ON b.bucket_time_unix_nano = d.bucket_time_unix_nano
 		ORDER BY b.bucket_time_unix_nano ASC

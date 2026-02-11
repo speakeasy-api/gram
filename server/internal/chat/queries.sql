@@ -240,7 +240,15 @@ WITH limited_chats AS (
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
-    ) as avg_score
+    ) as avg_score,
+    COALESCE(
+      (
+        SELECT EXTRACT(EPOCH FROM (MIN(cr.created_at) - c.created_at)) * 1000
+        FROM chat_resolutions cr
+        WHERE cr.chat_id = c.id
+      )::bigint,
+      0
+    ) as resolution_time_ms
   FROM chats c
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
@@ -273,6 +281,8 @@ WITH limited_chats AS (
     CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'asc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END ASC NULLS LAST,
     CASE WHEN @sort_by = 'score' AND @sort_order = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
     CASE WHEN @sort_by = 'score' AND @sort_order = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
+    CASE WHEN @sort_by = 'resolution_time' AND @sort_order = 'desc' THEN (SELECT EXTRACT(EPOCH FROM (MIN(cr.created_at) - c.created_at)) FROM chat_resolutions cr WHERE cr.chat_id = c.id) END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'resolution_time' AND @sort_order = 'asc' THEN (SELECT EXTRACT(EPOCH FROM (MIN(cr.created_at) - c.created_at)) FROM chat_resolutions cr WHERE cr.chat_id = c.id) END ASC NULLS LAST,
     c.created_at DESC
   LIMIT @page_limit
   OFFSET @page_offset
@@ -286,6 +296,7 @@ SELECT
     lc.updated_at,
     lc.num_messages,
     lc.avg_score,
+    lc.resolution_time_ms,
     cr.id as resolution_id,
     cr.user_goal,
     cr.resolution,
@@ -309,6 +320,8 @@ ORDER BY
     CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'asc' THEN lc.num_messages END ASC NULLS LAST,
     CASE WHEN @sort_by = 'score' AND @sort_order = 'desc' THEN lc.avg_score END DESC NULLS LAST,
     CASE WHEN @sort_by = 'score' AND @sort_order = 'asc' THEN lc.avg_score END ASC NULLS LAST,
+    CASE WHEN @sort_by = 'resolution_time' AND @sort_order = 'desc' THEN lc.resolution_time_ms END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'resolution_time' AND @sort_order = 'asc' THEN lc.resolution_time_ms END ASC NULLS LAST,
     lc.created_at DESC,
     cr.created_at DESC;
 

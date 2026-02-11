@@ -81,7 +81,7 @@ export function ChatLogsFilters({
       <SearchBar
         value={localSearch}
         onChange={setLocalSearch}
-        placeholder="Search by chat ID, user ID, or title..."
+        placeholder="Search chats..."
         className="flex-1"
         disabled={disabled}
       />

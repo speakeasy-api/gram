@@ -2571,6 +2571,7 @@ func unmarshalTimeSeriesBucketResponseBodyToTelemetryTimeSeriesBucket(v *TimeSer
 		FailedToolCalls:      *v.FailedToolCalls,
 		AvgToolLatencyMs:     *v.AvgToolLatencyMs,
 		AvgSessionDurationMs: *v.AvgSessionDurationMs,
+		AvgResolutionTimeMs:  *v.AvgResolutionTimeMs,
 	}
 
 	return res

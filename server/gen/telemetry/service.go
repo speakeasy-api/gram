@@ -549,6 +549,8 @@ type TimeSeriesBucket struct {
 	AvgToolLatencyMs float64
 	// Average session duration in milliseconds
 	AvgSessionDurationMs float64
+	// Average resolution time in milliseconds for successfully resolved chats
+	AvgResolutionTimeMs float64
 }
 
 // Summary information for a tool call

@@ -1008,8 +1008,8 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		} else {
 			sortBy = "created_at"
 		}
-		if !(sortBy == "created_at" || sortBy == "num_messages" || sortBy == "score") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"created_at", "num_messages", "score"}))
+		if !(sortBy == "created_at" || sortBy == "num_messages" || sortBy == "score" || sortBy == "resolution_time") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"created_at", "num_messages", "score", "resolution_time"}))
 		}
 		sortOrderRaw := qp.Get("sort_order")
 		if sortOrderRaw != "" {
@@ -1458,13 +1458,14 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 // *ChatOverviewResponseBody from a value of type *chat.ChatOverview.
 func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *ChatOverviewResponseBody {
 	res := &ChatOverviewResponseBody{
-		ID:             v.ID,
-		Title:          v.Title,
-		UserID:         v.UserID,
-		ExternalUserID: v.ExternalUserID,
-		NumMessages:    v.NumMessages,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:               v.ID,
+		Title:            v.Title,
+		UserID:           v.UserID,
+		ExternalUserID:   v.ExternalUserID,
+		NumMessages:      v.NumMessages,
+		ResolutionTimeMs: v.ResolutionTimeMs,
+		CreatedAt:        v.CreatedAt,
+		UpdatedAt:        v.UpdatedAt,
 	}
 
 	return res
@@ -1494,13 +1495,14 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 // of type *chat.ChatOverviewWithResolutions.
 func marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponseBody(v *chat.ChatOverviewWithResolutions) *ChatOverviewWithResolutionsResponseBody {
 	res := &ChatOverviewWithResolutionsResponseBody{
-		ID:             v.ID,
-		Title:          v.Title,
-		UserID:         v.UserID,
-		ExternalUserID: v.ExternalUserID,
-		NumMessages:    v.NumMessages,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:               v.ID,
+		Title:            v.Title,
+		UserID:           v.UserID,
+		ExternalUserID:   v.ExternalUserID,
+		NumMessages:      v.NumMessages,
+		ResolutionTimeMs: v.ResolutionTimeMs,
+		CreatedAt:        v.CreatedAt,
+		UpdatedAt:        v.UpdatedAt,
 	}
 	if v.Resolutions != nil {
 		res.Resolutions = make([]*ChatResolutionResponseBody, len(v.Resolutions))

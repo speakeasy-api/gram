@@ -2454,6 +2454,7 @@ func marshalTelemetryTimeSeriesBucketToTimeSeriesBucketResponseBody(v *telemetry
 		FailedToolCalls:      v.FailedToolCalls,
 		AvgToolLatencyMs:     v.AvgToolLatencyMs,
 		AvgSessionDurationMs: v.AvgSessionDurationMs,
+		AvgResolutionTimeMs:  v.AvgResolutionTimeMs,
 	}
 
 	return res

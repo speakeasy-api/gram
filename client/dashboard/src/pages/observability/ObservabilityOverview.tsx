@@ -751,15 +751,31 @@ function ObservabilityContent({
               to={to}
             />
           </div>
-          <SessionDurationChart
-            data={timeSeries ?? []}
-            timeRangeMs={timeRangeMs}
-            title="Avg Session Duration Over Time"
-            onTimeRangeSelect={onTimeRangeSelect}
-            isLoading={isRefetching}
-            from={from}
-            to={to}
-          />
+          <div
+            className={cn(
+              "grid gap-4",
+              isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+            )}
+          >
+            <SessionDurationChart
+              data={timeSeries ?? []}
+              timeRangeMs={timeRangeMs}
+              title="Avg Session Duration Over Time"
+              onTimeRangeSelect={onTimeRangeSelect}
+              isLoading={isRefetching}
+              from={from}
+              to={to}
+            />
+            <ResolutionTimeChart
+              data={timeSeries ?? []}
+              timeRangeMs={timeRangeMs}
+              title="Avg Resolution Time Over Time"
+              onTimeRangeSelect={onTimeRangeSelect}
+              isLoading={isRefetching}
+              from={from}
+              to={to}
+            />
+          </div>
         </div>
       </section>
 
@@ -1814,6 +1830,140 @@ function SessionDurationChart({
       </div>
       <p className="text-xs text-muted-foreground mt-3">
         Values are rolled up and averaged across the time window interval
+      </p>
+    </div>
+  );
+}
+
+function ResolutionTimeChart({
+  data,
+  timeRangeMs,
+  title,
+  onTimeRangeSelect,
+  isLoading,
+  from,
+  to,
+}: {
+  data: Array<{
+    bucketTimeUnixNano?: string;
+    avgResolutionTimeMs?: number;
+  }>;
+  timeRangeMs: number;
+  title: string;
+  onTimeRangeSelect?: (from: Date, to: Date) => void;
+  isLoading?: boolean;
+  from: Date;
+  to: Date;
+}) {
+  const labels = data.map((d) => {
+    const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
+    const date = new Date(timestamp);
+    return formatChartLabel(date, timeRangeMs);
+  });
+
+  // Convert ms to seconds for display
+  const rawData = data.map((d) => (d.avgResolutionTimeMs ?? 0) / 1000);
+  const durationData = smoothData(rawData);
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        label: " Avg Resolution Time",
+        data: durationData,
+        borderColor: "#10b981",
+        backgroundColor: "rgba(16, 185, 129, 0.1)",
+        pointBackgroundColor: "#10b981",
+        fill: true,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      },
+    ],
+  };
+
+  const formatDuration = (seconds: number) => {
+    if (seconds >= 60) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.round(seconds % 60);
+      return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+    }
+    return `${seconds.toFixed(1)}s`;
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: "index" as const,
+      intersect: false,
+    },
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        titleColor: "#fff",
+        bodyColor: "#e5e7eb",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        borderWidth: 1,
+        padding: 12,
+        boxPadding: 4,
+        usePointStyle: true,
+        callbacks: {
+          label: (context: TooltipItem<"line">) => {
+            const value = context.parsed.y ?? 0;
+            return ` Avg Resolution Time: ${formatDuration(value)}`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: true,
+          color: "rgba(128, 128, 128, 0.1)",
+          lineWidth: 1,
+        },
+        ticks: {
+          maxTicksLimit: 8,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        grid: {
+          color: "rgba(128, 128, 128, 0.2)",
+        },
+        ticks: {
+          callback: (value: number | string) => {
+            const num = typeof value === "string" ? parseFloat(value) : value;
+            return formatDuration(num);
+          },
+        },
+      },
+    },
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <ViewChatsLink from={from} to={to} />
+      </div>
+      <div className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded">
+            <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+        <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
+          <Line data={chartData} options={options} />
+        </ChartWithSelection>
+      </div>
+      <p className="text-xs text-muted-foreground mt-3">
+        Average time to first successful resolution for resolved chats
       </p>
     </div>
   );

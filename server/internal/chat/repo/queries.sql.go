@@ -735,7 +735,15 @@ WITH limited_chats AS (
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
-    ) as avg_score
+    ) as avg_score,
+    COALESCE(
+      (
+        SELECT EXTRACT(EPOCH FROM (MIN(cr.created_at) - c.created_at)) * 1000
+        FROM chat_resolutions cr
+        WHERE cr.chat_id = c.id
+      )::bigint,
+      0
+    ) as resolution_time_ms
   FROM chats c
   WHERE c.project_id = $3
     AND c.deleted IS FALSE
@@ -768,6 +776,8 @@ WITH limited_chats AS (
     CASE WHEN $1 = 'num_messages' AND $2 = 'asc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END ASC NULLS LAST,
     CASE WHEN $1 = 'score' AND $2 = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
     CASE WHEN $1 = 'score' AND $2 = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
+    CASE WHEN $1 = 'resolution_time' AND $2 = 'desc' THEN (SELECT EXTRACT(EPOCH FROM (MIN(cr.created_at) - c.created_at)) FROM chat_resolutions cr WHERE cr.chat_id = c.id) END DESC NULLS LAST,
+    CASE WHEN $1 = 'resolution_time' AND $2 = 'asc' THEN (SELECT EXTRACT(EPOCH FROM (MIN(cr.created_at) - c.created_at)) FROM chat_resolutions cr WHERE cr.chat_id = c.id) END ASC NULLS LAST,
     c.created_at DESC
   LIMIT $10
   OFFSET $9
@@ -781,6 +791,7 @@ SELECT
     lc.updated_at,
     lc.num_messages,
     lc.avg_score,
+    lc.resolution_time_ms,
     cr.id as resolution_id,
     cr.user_goal,
     cr.resolution,
@@ -804,6 +815,8 @@ ORDER BY
     CASE WHEN $1 = 'num_messages' AND $2 = 'asc' THEN lc.num_messages END ASC NULLS LAST,
     CASE WHEN $1 = 'score' AND $2 = 'desc' THEN lc.avg_score END DESC NULLS LAST,
     CASE WHEN $1 = 'score' AND $2 = 'asc' THEN lc.avg_score END ASC NULLS LAST,
+    CASE WHEN $1 = 'resolution_time' AND $2 = 'desc' THEN lc.resolution_time_ms END DESC NULLS LAST,
+    CASE WHEN $1 = 'resolution_time' AND $2 = 'asc' THEN lc.resolution_time_ms END ASC NULLS LAST,
     lc.created_at DESC,
     cr.created_at DESC
 `
@@ -830,6 +843,7 @@ type ListChatsWithResolutionsRow struct {
 	UpdatedAt           pgtype.Timestamptz
 	NumMessages         int32
 	AvgScore            interface{}
+	ResolutionTimeMs    interface{}
 	ResolutionID        uuid.NullUUID
 	UserGoal            pgtype.Text
 	Resolution          pgtype.Text
@@ -868,6 +882,7 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 			&i.UpdatedAt,
 			&i.NumMessages,
 			&i.AvgScore,
+			&i.ResolutionTimeMs,
 			&i.ResolutionID,
 			&i.UserGoal,
 			&i.Resolution,

@@ -148,7 +148,7 @@ var _ = Service("chat", func() {
 				Minimum(0)
 			})
 			Attribute("sort_by", String, "Field to sort by", func() {
-				Enum("created_at", "num_messages", "score")
+				Enum("created_at", "num_messages", "score", "resolution_time")
 				Default("created_at")
 			})
 			Attribute("sort_order", String, "Sort order", func() {
@@ -224,6 +224,7 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("user_id", String, "The ID of the user who created the chat")
 	Attribute("external_user_id", String, "The ID of the external user who created the chat")
 	Attribute("num_messages", Int, "The number of messages in the chat")
+	Attribute("resolution_time_ms", Int64, "Time to first resolution in milliseconds (null if unresolved)")
 	Attribute("created_at", String, func() {
 		Description("When the chat was created.")
 		Format(FormatDateTime)

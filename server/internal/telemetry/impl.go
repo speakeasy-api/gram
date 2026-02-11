@@ -911,6 +911,7 @@ func toTimeSeriesBuckets(buckets []repo.TimeSeriesBucket) []*telem_gen.TimeSerie
 			FailedToolCalls:      int64(b.FailedToolCalls),
 			AvgToolLatencyMs:     sanitizeFloat64(b.AvgToolLatencyMs),
 			AvgSessionDurationMs: sanitizeFloat64(b.AvgSessionDurationMs),
+			AvgResolutionTimeMs:  sanitizeFloat64(b.AvgResolutionTimeMs),
 		}
 	}
 	return result

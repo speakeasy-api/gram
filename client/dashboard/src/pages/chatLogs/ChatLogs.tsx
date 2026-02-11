@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
 
-type SortField = "chronological" | "messageCount" | "score";
+type SortField = "chronological" | "messageCount" | "score" | "resolutionTime";
 type SortOrder = "asc" | "desc";
 
 // Map frontend sort field to API sort field
@@ -48,6 +48,8 @@ function toApiSortBy(field: SortField): SortBy {
       return SortBy.NumMessages;
     case "score":
       return SortBy.Score;
+    case "resolutionTime":
+      return SortBy.ResolutionTime;
   }
 }
 
@@ -141,7 +143,9 @@ export default function ChatLogs() {
   // Derive state from URL
   const dateRange: DateRangePreset = isValidPreset(urlRange) ? urlRange : "30d";
   const sortField: SortField =
-    urlSort === "messageCount" || urlSort === "score"
+    urlSort === "messageCount" ||
+    urlSort === "score" ||
+    urlSort === "resolutionTime"
       ? urlSort
       : "chronological";
   const sortOrder: SortOrder = urlOrder === "asc" ? "asc" : "desc";
@@ -479,6 +483,9 @@ function ChatLogsContent({
                           Message Count
                         </SelectItem>
                         <SelectItem value="score">Score</SelectItem>
+                        <SelectItem value="resolutionTime">
+                          Resolution Time
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                     <button

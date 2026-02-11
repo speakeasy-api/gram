@@ -27,6 +27,7 @@ export const SortBy = {
   CreatedAt: "created_at",
   NumMessages: "num_messages",
   Score: "score",
+  ResolutionTime: "resolution_time",
 } as const;
 /**
  * Field to sort by

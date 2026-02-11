@@ -2648,6 +2648,7 @@ paths:
               - created_at
               - num_messages
               - score
+              - resolution_time
             type: string
         - allowEmptyValue: true
           description: Sort order
@@ -12294,6 +12295,10 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        resolution_time_ms:
+          type: integer
+          description: Time to first resolution in milliseconds (null if unresolved)
+          format: int64
         title:
           type: string
           description: The title of the chat
@@ -12367,6 +12372,10 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        resolution_time_ms:
+          type: integer
+          description: Time to first resolution in milliseconds (null if unresolved)
+          format: int64
         title:
           type: string
           description: The title of the chat
@@ -12399,6 +12408,10 @@ components:
         num_messages:
           type: integer
           description: The number of messages in the chat
+          format: int64
+        resolution_time_ms:
+          type: integer
+          description: Time to first resolution in milliseconds (null if unresolved)
           format: int64
         resolutions:
           type: array
@@ -16625,6 +16638,10 @@ components:
           type: integer
           description: Abandoned chat sessions in this bucket
           format: int64
+        avg_resolution_time_ms:
+          type: number
+          description: Average resolution time in milliseconds for successfully resolved chats
+          format: double
         avg_session_duration_ms:
           type: number
           description: Average session duration in milliseconds
@@ -16672,6 +16689,7 @@ components:
         - failed_tool_calls
         - avg_tool_latency_ms
         - avg_session_duration_ms
+        - avg_resolution_time_ms
     Tool:
       type: object
       properties:
