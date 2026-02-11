@@ -20,19 +20,17 @@ interface EffectiveAnnotations {
 function getEffectiveAnnotations(tool: Tool): EffectiveAnnotations | null {
   if (tool.type !== "http" && tool.type !== "function") return null;
 
-  // The annotation hint fields may not yet be present on the SDK types
-  // (they are being added as part of AGE-1348). Access them defensively.
-  const t = tool as Record<string, unknown>;
-  const v = (t.variation ?? {}) as Record<string, unknown>;
+  const a = tool.annotations;
+  const v = tool.variation;
 
-  const readOnly = Boolean(v.readOnlyHint ?? t.readOnlyHint ?? false);
+  const readOnly = Boolean(v?.readOnlyHint ?? a?.readOnlyHint ?? false);
   const destructive = Boolean(
-    v.destructiveHint ?? t.destructiveHint ?? false,
+    v?.destructiveHint ?? a?.destructiveHint ?? false,
   );
   const idempotent = Boolean(
-    v.idempotentHint ?? t.idempotentHint ?? false,
+    v?.idempotentHint ?? a?.idempotentHint ?? false,
   );
-  const openWorld = Boolean(v.openWorldHint ?? t.openWorldHint ?? false);
+  const openWorld = Boolean(v?.openWorldHint ?? a?.openWorldHint ?? false);
 
   return { readOnly, destructive, idempotent, openWorld };
 }
