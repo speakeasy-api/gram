@@ -378,6 +378,7 @@ function ChatLogsContent({
               onValueChange={setDateRangeParam}
               customRange={customRange}
               onClearCustomRange={clearCustomRange}
+              disabled={isDisabled}
             />
           </div>
         </div>
@@ -386,6 +387,7 @@ function ChatLogsContent({
           onSearchQueryChange={setSearchQuery}
           resolutionStatus={resolutionStatus}
           onResolutionStatusChange={setResolutionStatus}
+          disabled={isDisabled}
         />
       </div>
 

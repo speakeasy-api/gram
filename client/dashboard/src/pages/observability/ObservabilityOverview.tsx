@@ -85,12 +85,14 @@ function FilterBar({
   selectedValue,
   onValueChange,
   options,
+  disabled,
 }: {
   dimension: FilterDimension;
   onDimensionChange: (dimension: FilterDimension) => void;
   selectedValue: string | null;
   onValueChange: (value: string | null) => void;
   options: Array<{ id: string; label: string; count: number }>;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -100,7 +102,9 @@ function FilterBar({
     : `All ${dimension === "api_key" ? "API Keys" : "Users"}`;
 
   return (
-    <div className="flex items-center gap-2">
+    <div
+      className={`flex items-center gap-2 ${disabled ? "opacity-50 pointer-events-none" : ""}`}
+    >
       <span className="text-sm text-muted-foreground font-medium hidden 2xl:inline">
         Filter by
       </span>
@@ -114,6 +118,7 @@ function FilterBar({
             <button
               key={value}
               onClick={() => onDimensionChange(value)}
+              disabled={disabled}
               className={`
                 h-7 px-3 text-sm font-medium transition-all duration-150 rounded
                 ${
@@ -121,6 +126,7 @@ function FilterBar({
                     ? "bg-white dark:bg-gray-900 text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }
+                disabled:cursor-not-allowed
               `}
             >
               {label}
@@ -130,12 +136,15 @@ function FilterBar({
 
         {/* Integrated searchable dropdown - always visible */}
         <div className="w-px h-5 bg-border/50 mx-1" />
-        <Popover open={dimension !== "all" && open} onOpenChange={setOpen}>
+        <Popover
+          open={dimension !== "all" && !disabled && open}
+          onOpenChange={setOpen}
+        >
           <PopoverTrigger asChild>
             <button
-              disabled={dimension === "all"}
+              disabled={dimension === "all" || disabled}
               className={`h-7 min-w-[140px] flex items-center justify-between gap-2 text-sm px-2 rounded transition-colors ${
-                dimension === "all"
+                dimension === "all" || disabled
                   ? "opacity-40 cursor-not-allowed"
                   : "hover:bg-muted/50"
               }`}
@@ -413,6 +422,9 @@ export default function ObservabilityOverview() {
     throwOnError: false,
   });
 
+  // Check if logs are disabled (404 response)
+  const isDisabled = error instanceof ServiceError && error.statusCode === 404;
+
   // Format date range for copilot context
   const dateRangeContext = useMemo(() => {
     const formatDate = (d: Date) =>
@@ -466,6 +478,7 @@ export default function ObservabilityOverview() {
             onDateRangeChange={setDateRangeParam}
             customRange={customRange}
             onClearCustomRange={clearCustomRange}
+            disabled={isDisabled}
           />
 
           <ObservabilityContent
@@ -496,6 +509,7 @@ function InsightsPageHeader({
   onDateRangeChange,
   customRange,
   onClearCustomRange,
+  disabled,
 }: {
   filterDimension: FilterDimension;
   onFilterDimensionChange: (d: FilterDimension) => void;
@@ -506,6 +520,7 @@ function InsightsPageHeader({
   onDateRangeChange: (preset: DateRangePreset) => void;
   customRange: { from: Date; to: Date } | null;
   onClearCustomRange: () => void;
+  disabled?: boolean;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
 
@@ -541,12 +556,14 @@ function InsightsPageHeader({
           selectedValue={selectedFilterValue}
           onValueChange={onSelectedFilterValueChange}
           options={filterOptions}
+          disabled={disabled}
         />
         <DateRangeSelect
           value={dateRange}
           onValueChange={onDateRangeChange}
           customRange={customRange}
           onClearCustomRange={onClearCustomRange}
+          disabled={disabled}
         />
       </div>
     </div>
