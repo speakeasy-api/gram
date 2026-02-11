@@ -268,7 +268,7 @@ export function ChatLogsTable({
             onClick={() => onSelectChat(chat)}
             className={cn(
               "w-full text-left px-5 py-4 transition-all duration-150",
-              "hover:bg-muted/50",
+              "bg-card hover:bg-muted/50",
               "focus:outline-none focus-visible:bg-muted/50",
               isSelected && "bg-primary/[0.03] hover:bg-primary/[0.05]",
             )}
