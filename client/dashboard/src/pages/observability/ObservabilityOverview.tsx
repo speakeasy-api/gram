@@ -769,7 +769,7 @@ function ObservabilityContent({
             <ResolutionTimeChart
               data={timeSeries ?? []}
               timeRangeMs={timeRangeMs}
-              title="Avg Resolution Time Over Time"
+              title="Avg Resolution Time"
               onTimeRangeSelect={onTimeRangeSelect}
               isLoading={isRefetching}
               from={from}
@@ -1963,7 +1963,7 @@ function ResolutionTimeChart({
         </ChartWithSelection>
       </div>
       <p className="text-xs text-muted-foreground mt-3">
-        Average time to first successful resolution for resolved chats
+        Average time from chat start to first successful resolution
       </p>
     </div>
   );

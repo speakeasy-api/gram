@@ -442,6 +442,22 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 				FROM numbers(toUInt64(ceil((%d - %d) / %d)) + 1)
 				WHERE %d + (number * %d) <= %d
 			),
+			-- Calculate per-chat resolution times (time from first event to resolution)
+			chat_resolution_times AS (
+				SELECT
+					gram_chat_id,
+					min(time_unix_nano) as chat_start_time,
+					minIf(time_unix_nano, evaluation_score_label = 'success') as resolution_time,
+					argMinIf(time_unix_nano, time_unix_nano, evaluation_score_label = 'success') as resolution_bucket_time
+				FROM telemetry_logs
+				WHERE gram_project_id = ?
+					AND time_unix_nano >= ?
+					AND time_unix_nano <= ?
+					AND gram_chat_id != ''
+					%s
+				GROUP BY gram_chat_id
+				HAVING resolution_time > 0
+			),
 			-- Aggregate actual data by bucket
 			data AS (
 				SELECT
@@ -454,13 +470,20 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 					countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls,
 					countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls,
 					avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_tool_latency_ms,
-					avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms,
-					avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms
+					avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms
 				FROM telemetry_logs
 				WHERE gram_project_id = ?
 					AND time_unix_nano >= ?
 					AND time_unix_nano <= ?
 					%s
+				GROUP BY bucket_time_unix_nano
+			),
+			-- Aggregate resolution times by bucket
+			resolution_data AS (
+				SELECT
+					toInt64(toStartOfInterval(fromUnixTimestamp64Nano(resolution_time), INTERVAL %d SECOND)) * 1000000000 as bucket_time_unix_nano,
+					avg((resolution_time - chat_start_time) / 1000000.0) as avg_resolution_time_ms
+				FROM chat_resolution_times
 				GROUP BY bucket_time_unix_nano
 			)
 		SELECT
@@ -474,20 +497,31 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 			coalesce(d.failed_tool_calls, 0) as failed_tool_calls,
 			coalesce(d.avg_tool_latency_ms, 0) as avg_tool_latency_ms,
 			coalesce(d.avg_session_duration_ms, 0) as avg_session_duration_ms,
-			coalesce(d.avg_resolution_time_ms, 0) as avg_resolution_time_ms
+			coalesce(r.avg_resolution_time_ms, 0) as avg_resolution_time_ms
 		FROM buckets b
 		LEFT JOIN data d ON b.bucket_time_unix_nano = d.bucket_time_unix_nano
+		LEFT JOIN resolution_data r ON b.bucket_time_unix_nano = r.bucket_time_unix_nano
 		ORDER BY b.bucket_time_unix_nano ASC
 	`,
 		alignedStart, intervalNanos, // First bucket and interval for generation
 		arg.TimeEnd, alignedStart, intervalNanos, // For calculating number of buckets
 		alignedStart, intervalNanos, arg.TimeEnd, // WHERE clause for bucket generation
+		buildOptionalFiltersSQL(arg.ExternalUserID, arg.APIKeyID), // Optional filters for chat_resolution_times
 		arg.IntervalSeconds, // INTERVAL for data aggregation
-		buildOptionalFiltersSQL(arg.ExternalUserID, arg.APIKeyID), // Optional filters - parameterized
+		buildOptionalFiltersSQL(arg.ExternalUserID, arg.APIKeyID), // Optional filters for data
+		arg.IntervalSeconds, // INTERVAL for resolution_data aggregation
 	)
 
 	queryArgs := []any{arg.GramProjectID, arg.TimeStart, arg.TimeEnd}
-	// Append optional filter values as parameterized args (in order)
+	// Append optional filter values for chat_resolution_times CTE
+	if arg.ExternalUserID != "" {
+		queryArgs = append(queryArgs, arg.ExternalUserID)
+	}
+	if arg.APIKeyID != "" {
+		queryArgs = append(queryArgs, arg.APIKeyID)
+	}
+	// Append same params for data CTE (project, time range, optional filters)
+	queryArgs = append(queryArgs, arg.GramProjectID, arg.TimeStart, arg.TimeEnd)
 	if arg.ExternalUserID != "" {
 		queryArgs = append(queryArgs, arg.ExternalUserID)
 	}
@@ -618,42 +652,85 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	sb := sq.Select(
-		// Chat metrics - count only chats with resolution analysis for accurate resolution rate
-		// total_chats = chats with any resolution event (success, failure, partial, abandoned)
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label != '') as total_chats",
-		// Resolved: chats with evaluation_score_label = 'success' (from resolution analysis)
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
-		// Failed: chats with evaluation_score_label = 'failure' (from resolution analysis)
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
-		// Resolution time: average duration from resolution analysis events (gen_ai.conversation.duration is set in resolution events)
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms",
-
-		// Tool metrics
-		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
-		"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls",
-		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_latency_ms",
-	).
-		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
-
-	// Optional filters
+	// Build optional filters clause
+	optionalFilters := ""
 	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		optionalFilters += " AND external_user_id = ?"
 	}
 	if arg.APIKeyID != "" {
-		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+		optionalFilters += " AND api_key_id = ?"
 	}
 
-	query, args, err := sb.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building overview summary query: %w", err)
+	// Use raw SQL with CTE to calculate true resolution time (time from first event to resolution)
+	query := fmt.Sprintf(`
+		WITH
+			-- Calculate per-chat resolution times (time from first event to resolution)
+			chat_resolution_times AS (
+				SELECT
+					gram_chat_id,
+					min(time_unix_nano) as chat_start_time,
+					minIf(time_unix_nano, evaluation_score_label = 'success') as resolution_time
+				FROM telemetry_logs
+				WHERE gram_project_id = ?
+					AND time_unix_nano >= ?
+					AND time_unix_nano <= ?
+					AND gram_chat_id != ''
+					%s
+				GROUP BY gram_chat_id
+				HAVING resolution_time > 0
+			),
+			-- Main metrics from telemetry_logs
+			main_metrics AS (
+				SELECT
+					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label != '') as total_chats,
+					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'success') as resolved_chats,
+					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'failure') as failed_chats,
+					avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms,
+					countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls,
+					countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls,
+					avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_latency_ms
+				FROM telemetry_logs
+				WHERE gram_project_id = ?
+					AND time_unix_nano >= ?
+					AND time_unix_nano <= ?
+					%s
+			),
+			-- Average resolution time from CTE
+			resolution_metrics AS (
+				SELECT avg((resolution_time - chat_start_time) / 1000000.0) as avg_resolution_time_ms
+				FROM chat_resolution_times
+			)
+		SELECT
+			m.total_chats,
+			m.resolved_chats,
+			m.failed_chats,
+			m.avg_session_duration_ms,
+			coalesce(r.avg_resolution_time_ms, 0) as avg_resolution_time_ms,
+			m.total_tool_calls,
+			m.failed_tool_calls,
+			m.avg_latency_ms
+		FROM main_metrics m
+		CROSS JOIN resolution_metrics r
+	`, optionalFilters, optionalFilters)
+
+	// Build query args
+	queryArgs := []any{arg.GramProjectID, arg.TimeStart, arg.TimeEnd}
+	if arg.ExternalUserID != "" {
+		queryArgs = append(queryArgs, arg.ExternalUserID)
+	}
+	if arg.APIKeyID != "" {
+		queryArgs = append(queryArgs, arg.APIKeyID)
+	}
+	// Duplicate for main_metrics CTE
+	queryArgs = append(queryArgs, arg.GramProjectID, arg.TimeStart, arg.TimeEnd)
+	if arg.ExternalUserID != "" {
+		queryArgs = append(queryArgs, arg.ExternalUserID)
+	}
+	if arg.APIKeyID != "" {
+		queryArgs = append(queryArgs, arg.APIKeyID)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
