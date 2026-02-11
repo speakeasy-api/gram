@@ -3,6 +3,7 @@ import {
   useInsightsState,
 } from "@/components/insights-sidebar";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { cn } from "@/lib/utils";
 import { resolutionBgColors } from "@/lib/resolution-colors";
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
@@ -11,7 +12,6 @@ import {
   SortBy,
   SortOrder as ApiSortOrder,
 } from "@gram/client/models/operations/listchatswithresolutions";
-import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import {
   useListChatsWithResolutions,
   useFeaturesSetMutation,
@@ -238,30 +238,24 @@ export default function ChatLogs() {
     setSortOrder(sortOrder === "desc" ? "asc" : "desc");
   }, [sortOrder, setSortOrder]);
 
-  const { data, isLoading, error, refetch } = useListChatsWithResolutions(
-    {
-      search: searchQuery || undefined,
-      resolutionStatus: resolutionStatus || undefined,
-      from: timeRange.from,
-      to: timeRange.to,
-      sortBy: toApiSortBy(sortField),
-      sortOrder: toApiSortOrder(sortOrder),
-      limit,
-      offset,
-    },
-    undefined, // security
-    {
-      throwOnError: false,
-    },
-  );
-
-  // Check for 404 error indicating logs are disabled
-  const isDisabled: boolean =
-    (error instanceof ServiceError && error.statusCode === 404) ||
-    !!(
-      error &&
-      "statusCode" in error &&
-      (error as { statusCode: number }).statusCode === 404
+  const { data, isLoading, error, refetch, isLogsDisabled } =
+    useLogsEnabledErrorCheck(
+      useListChatsWithResolutions(
+        {
+          search: searchQuery || undefined,
+          resolutionStatus: resolutionStatus || undefined,
+          from: timeRange.from,
+          to: timeRange.to,
+          sortBy: toApiSortBy(sortField),
+          sortOrder: toApiSortOrder(sortOrder),
+          limit,
+          offset,
+        },
+        undefined, // security
+        {
+          throwOnError: false,
+        },
+      ),
     );
 
   const [logsMutationError, setLogsMutationError] = useState<string | null>(
@@ -362,7 +356,7 @@ export default function ChatLogs() {
         setSelectedChat={setSelectedChat}
         isLoading={isLoading}
         error={error}
-        isDisabled={isDisabled}
+        isLogsDisabled={isLogsDisabled}
         isMutatingLogs={isMutatingLogs}
         logsMutationError={logsMutationError}
         onEnableLogs={handleEnableLogs}
@@ -395,7 +389,7 @@ function ChatLogsContent({
   setSelectedChat,
   isLoading,
   error,
-  isDisabled,
+  isLogsDisabled,
   isMutatingLogs,
   logsMutationError,
   onEnableLogs,
@@ -422,7 +416,7 @@ function ChatLogsContent({
   setSelectedChat: (chat: ChatOverviewWithResolutions | null) => void;
   isLoading: boolean;
   error: Error | null;
-  isDisabled: boolean;
+  isLogsDisabled: boolean;
   isMutatingLogs: boolean;
   logsMutationError: string | null;
   onEnableLogs: () => void;
@@ -458,7 +452,7 @@ function ChatLogsContent({
               onValueChange={setDateRangeParam}
               customRange={customRange}
               onClearCustomRange={clearCustomRange}
-              disabled={isDisabled}
+              disabled={isLogsDisabled}
             />
           </div>
         </div>
@@ -468,13 +462,13 @@ function ChatLogsContent({
             onSearchQueryChange={setSearchQuery}
             resolutionStatus={resolutionStatus}
             onResolutionStatusChange={setResolutionStatus}
-            disabled={isDisabled}
+            disabled={isLogsDisabled}
           />
           <div className="flex items-center gap-2 ml-auto">
             <Select
               value={sortField}
               onValueChange={(v) => setSortField(v as SortField)}
-              disabled={isDisabled}
+              disabled={isLogsDisabled}
             >
               <SelectTrigger className="w-[160px]">
                 <SelectValue placeholder="Sort by" />
@@ -488,7 +482,7 @@ function ChatLogsContent({
             <button
               type="button"
               onClick={toggleSortOrder}
-              disabled={isDisabled}
+              disabled={isLogsDisabled}
               className="shrink-0 inline-flex items-center justify-center size-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:pointer-events-none"
               title={sortOrder === "desc" ? "Descending" : "Ascending"}
             >
@@ -504,7 +498,7 @@ function ChatLogsContent({
 
       {/* Content section */}
       <div className="flex-1 overflow-y-auto relative min-h-0">
-        {isDisabled ? (
+        {isLogsDisabled ? (
           <div className="relative h-full">
             {/* Placeholder content behind overlay */}
             <div className="pointer-events-none select-none" aria-hidden="true">
@@ -569,7 +563,7 @@ function ChatLogsContent({
       </div>
 
       {/* Sticky pagination at bottom */}
-      {!isDisabled && (hasMore || offset > 0) && (
+      {!isLogsDisabled && (hasMore || offset > 0) && (
         <div className="p-4 flex justify-center items-center gap-4 border-t bg-background shrink-0">
           <Button
             onClick={() => setOffset(Math.max(0, offset - limit))}

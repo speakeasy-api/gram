@@ -10,7 +10,7 @@ import {
   getDateRange,
 } from "./date-range-select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ServiceError } from "@gram/client/models/errors/serviceerror";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryListFilterOptions } from "@gram/client/funcs/telemetryListFilterOptions";
 import { useGramContext } from "@gram/client/react-query/_context";
@@ -399,31 +399,31 @@ export default function ObservabilityOverview() {
     }
   }, [filterDimension, selectedFilterValue]);
 
-  const { data, isPending, isFetching, error, refetch } = useQuery({
-    queryKey: [
-      "observability",
-      "overview",
-      from.toISOString(),
-      to.toISOString(),
-      filterParams,
-    ],
-    queryFn: () =>
-      unwrapAsync(
-        telemetryGetObservabilityOverview(client, {
-          getObservabilityOverviewPayload: {
-            from,
-            to,
-            includeTimeSeries: true,
-            ...filterParams,
-          },
-        }),
-      ),
-    placeholderData: keepPreviousData,
-    throwOnError: false,
-  });
-
-  // Check if logs are disabled (404 response)
-  const isDisabled = error instanceof ServiceError && error.statusCode === 404;
+  const { data, isPending, isFetching, error, refetch, isLogsDisabled } =
+    useLogsEnabledErrorCheck(
+      useQuery({
+        queryKey: [
+          "observability",
+          "overview",
+          from.toISOString(),
+          to.toISOString(),
+          filterParams,
+        ],
+        queryFn: () =>
+          unwrapAsync(
+            telemetryGetObservabilityOverview(client, {
+              getObservabilityOverviewPayload: {
+                from,
+                to,
+                includeTimeSeries: true,
+                ...filterParams,
+              },
+            }),
+          ),
+        placeholderData: keepPreviousData,
+        throwOnError: false,
+      }),
+    );
 
   // Format date range for copilot context
   const dateRangeContext = useMemo(() => {
@@ -478,13 +478,14 @@ export default function ObservabilityOverview() {
             onDateRangeChange={setDateRangeParam}
             customRange={customRange}
             onClearCustomRange={clearCustomRange}
-            disabled={isDisabled}
+            disabled={isLogsDisabled}
           />
 
           <ObservabilityContent
             isPending={isPending}
             isFetching={isFetching}
             error={error}
+            isLogsDisabled={isLogsDisabled}
             data={data}
             dateRange={dateRange}
             customRange={customRange}
@@ -595,6 +596,7 @@ function ObservabilityContent({
   isPending,
   isFetching,
   error,
+  isLogsDisabled,
   data,
   dateRange,
   customRange,
@@ -604,6 +606,7 @@ function ObservabilityContent({
   isPending: boolean;
   isFetching: boolean;
   error: Error | null;
+  isLogsDisabled: boolean;
   data: GetObservabilityOverviewResult | undefined;
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
@@ -611,18 +614,17 @@ function ObservabilityContent({
   refetch: () => void;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
-  const isDisabled = error instanceof ServiceError && error.statusCode === 404;
 
-  if (isPending && !isDisabled) {
+  if (isPending && !isLogsDisabled) {
     return <LoadingSkeleton />;
   }
 
-  if (error && !isDisabled) {
+  if (error && !isLogsDisabled) {
     return <ErrorState error={error} />;
   }
 
   // When disabled, show the skeleton underneath with an overlay on top
-  if (isDisabled) {
+  if (isLogsDisabled) {
     return (
       <div className="relative">
         <div className="pointer-events-none select-none" aria-hidden="true">
