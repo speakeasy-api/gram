@@ -64,8 +64,12 @@ export function useObservabilityMcpConfig({
   }, [toolsets]);
 
   return useMemo(() => {
+    if (!projectSlug) {
+      throw new Error("No project slug found.");
+    }
+
     const baseConfig: Omit<ElementsConfig, "variant" | "welcome" | "theme"> = {
-      projectSlug: "ecommerce-api",
+      projectSlug,
       tools: {
         toolsToInclude,
       },
