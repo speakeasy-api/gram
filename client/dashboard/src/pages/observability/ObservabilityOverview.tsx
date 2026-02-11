@@ -14,13 +14,17 @@ import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryListFilterOptions } from "@gram/client/funcs/telemetryListFilterOptions";
 import { useGramContext } from "@gram/client/react-query/_context";
+import {
+  useFeaturesSetMutation,
+} from "@gram/client/react-query";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
+import { FeatureName } from "@gram/client/models/components";
 import { FilterType } from "@gram/client/models/components/listfilteroptionspayload";
 import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
-import { Icon, IconName } from "@speakeasy-api/moonshine";
+import { Button, Icon, IconName } from "@speakeasy-api/moonshine";
 import {
   Popover,
   PopoverContent,
@@ -388,7 +392,7 @@ export default function ObservabilityOverview() {
     }
   }, [filterDimension, selectedFilterValue]);
 
-  const { data, isPending, isFetching, error } = useQuery({
+  const { data, isPending, isFetching, error, refetch } = useQuery({
     queryKey: [
       "observability",
       "overview",
@@ -475,6 +479,7 @@ export default function ObservabilityOverview() {
             onTimeRangeSelect={(from, to) => {
               setCustomRangeParam(from, to);
             }}
+            refetch={refetch}
           />
         </Page.Body>
       </Page>
@@ -578,6 +583,7 @@ function ObservabilityContent({
   dateRange,
   customRange,
   onTimeRangeSelect,
+  refetch,
 }: {
   isPending: boolean;
   isFetching: boolean;
@@ -586,22 +592,33 @@ function ObservabilityContent({
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
   onTimeRangeSelect: (from: Date, to: Date) => void;
+  refetch: () => void;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
-  if (isPending) {
+  const isDisabled = error instanceof ServiceError && error.statusCode === 404;
+
+  if (isPending && !isDisabled) {
     return <LoadingSkeleton />;
   }
 
-  if (error instanceof ServiceError && error.statusCode === 404) {
-    return <DisabledState />;
-  }
-
-  if (error) {
+  if (error && !isDisabled) {
     return <ErrorState error={error} />;
   }
 
-  if (!data) {
+  if (!data && !isDisabled) {
     return null;
+  }
+
+  // When disabled, show the skeleton underneath with an overlay on top
+  if (isDisabled) {
+    return (
+      <div className="relative">
+        <div className="pointer-events-none select-none" aria-hidden="true">
+          <LoadingSkeleton />
+        </div>
+        <EnableLoggingOverlay onEnabled={refetch} />
+      </div>
+    );
   }
 
   const {
@@ -1899,18 +1916,80 @@ function LoadingSkeleton() {
   );
 }
 
-function DisabledState() {
+function EnableLoggingOverlay({ onEnabled }: { onEnabled: () => void }) {
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const { mutateAsync: setLogsFeature, status: mutationStatus } =
+    useFeaturesSetMutation({
+      onSuccess: () => {
+        setMutationError(null);
+        onEnabled();
+      },
+      onError: (err) => {
+        const message =
+          err instanceof Error ? err.message : "Failed to enable logging";
+        setMutationError(message);
+      },
+    });
+
+  const isMutating = mutationStatus === "pending";
+
+  const handleEnable = () => {
+    setMutationError(null);
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.Logs,
+          enabled: true,
+        },
+      },
+    });
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center py-16">
-      <Icon
-        name="chart-no-axes-combined"
-        className="size-12 text-muted-foreground mb-4"
-      />
-      <h3 className="text-lg font-medium mb-2">Observability Not Enabled</h3>
-      <p className="text-muted-foreground text-center max-w-md">
-        Enable logs for your organization to access observability metrics and
-        insights.
-      </p>
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/70 backdrop-blur-[2px] rounded-lg">
+      <div className="flex flex-col items-center gap-4 max-w-md text-center p-8">
+        <div className="size-14 rounded-full bg-muted flex items-center justify-center">
+          <Icon
+            name="chart-no-axes-combined"
+            className="size-7 text-muted-foreground"
+          />
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold mb-1">
+            Enable Logging
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Turn on logging to start collecting telemetry data for your
+            organization. This will record tool call traces, chat sessions, and
+            system metrics to power the observability dashboard.
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-muted/30 p-4 text-left w-full">
+          <div className="flex items-start gap-2">
+            <Icon
+              name="info"
+              className="size-4 text-muted-foreground mt-0.5 shrink-0"
+            />
+            <p className="text-xs text-muted-foreground">
+              When enabled, Gram will collect tool call payloads, response data,
+              and chat conversation logs for analysis. This data is stored
+              securely and used to generate the metrics and insights on this
+              page. You can disable logging at any time from the Logs page.
+            </p>
+          </div>
+        </div>
+        <Button onClick={handleEnable} disabled={isMutating}>
+          <Button.LeftIcon>
+            <Icon name="activity" className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>
+            {isMutating ? "Enabling..." : "Enable Logging"}
+          </Button.Text>
+        </Button>
+        {mutationError && (
+          <span className="text-sm text-destructive">{mutationError}</span>
+        )}
+      </div>
     </div>
   );
 }

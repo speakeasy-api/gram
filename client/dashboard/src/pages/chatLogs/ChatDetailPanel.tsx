@@ -484,7 +484,7 @@ export function ChatDetailPanel({
           {/* Chat Messages */}
           <div className="p-6">
             <Stack direction="vertical" gap={4}>
-              {chat.messages.map((message) => {
+              {chat.messages.filter((m) => m.role !== "system").map((message) => {
                 const resolution = messageResolutionMap.get(message.id);
 
                 return (

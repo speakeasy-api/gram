@@ -65,7 +65,7 @@ export function useObservabilityMcpConfig({
 
   return useMemo(() => {
     const baseConfig: Omit<ElementsConfig, "variant" | "welcome" | "theme"> = {
-      projectSlug: "kitchen-sink",
+      projectSlug: projectSlug ?? "",
       tools: {
         toolsToInclude,
       },
