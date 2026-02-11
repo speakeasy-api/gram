@@ -1,5 +1,11 @@
 # server
 
+## 0.23.0
+
+### Minor Changes
+
+- 9df7d84: Add observability features including telemetry logs, traces, chat logs with AI-powered resolution analysis, and an overview dashboard with time-series metrics.
+
 ## 0.22.5
 
 ### Patch Changes
