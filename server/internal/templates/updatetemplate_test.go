@@ -55,8 +55,8 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 	require.Equal(t, "prompt", result.Template.Kind, "template kind mismatch")
 	require.ElementsMatch(t, []string{"user", "assistant"}, result.Template.ToolsHint, "template tools hint mismatch")
 	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, result.Template.Schema, "template arguments mismatch")
-	require.Equal(t, created.Template.CreatedAt, result.Template.CreatedAt, "created at should not change")
-	// Note: UpdatedAt may or may not change depending on whether the update actually creates a new version
+	require.Equal(t, created.Template.HistoryID, result.Template.HistoryID, "history id should remain the same (same logical template)")
+	// Note: CreatedAt and UpdatedAt may change when updates create a new version (append-only versioning)
 
 	// Render the updated template to ensure the update version is used by the server
 	rendered, err := ti.service.RenderTemplateByID(ctx, &gen.RenderTemplateByIDPayload{
