@@ -1,548 +1,562 @@
 import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
-import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
-import { Server } from "@/pages/catalog/hooks";
+import type { Server } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query";
-import { Button, Combobox, Input, Stack } from "@speakeasy-api/moonshine";
-import { useMutation } from "@tanstack/react-query";
+import { Button, Input, Stack } from "@speakeasy-api/moonshine";
 import {
+  AlertCircle,
   ArrowRight,
+  Check,
+  Circle,
+  ExternalLink,
   Loader2,
   MessageCircle,
   Plug,
   Plus,
   Server as ServerIcon,
   Settings,
+  X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
+import {
+  type ExternalMcpReleaseState,
+  type ServerToolsetStatus,
+  useExternalMcpReleaseState,
+} from "./useExternalMcpReleaseState";
 
-function generateSlug(name: string): string {
-  const lastPart = name.split("/").pop() || name;
-  return lastPart
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-export function useAddServerMutation() {
-  const client = useSdkClient();
-  const { data: deploymentResult, refetch: refetchDeployment } =
-    useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-
-  const mutation = useMutation({
-    mutationFn: async ({
-      server,
-      toolsetName,
-    }: {
-      server: Server;
-      toolsetName: string;
-    }) => {
-      const slug = generateSlug(server.registrySpecifier);
-      let toolUrns = [`tools:externalmcp:${slug}:proxy`];
-      if (server.tools) {
-        toolUrns = server.tools.map(
-          (t) => `tools:externalmcp:${slug}:${t.name}`,
-        );
-      }
-
-      await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment?.id,
-          upsertExternalMcps: [
-            {
-              registryId: server.registryId,
-              name: toolsetName,
-              slug,
-              registryServerSpecifier: server.registrySpecifier,
-            },
-          ],
-        },
-      });
-
-      const toolset = await client.toolsets.create({
-        createToolsetRequestBody: {
-          name: toolsetName,
-          description:
-            server.description ?? `MCP server: ${server.registrySpecifier}`,
-          toolUrns,
-        },
-      });
-
-      await client.toolsets.updateBySlug({
-        slug: toolset.slug,
-        updateToolsetRequestBody: {
-          mcpEnabled: true,
-          mcpIsPublic: true,
-        },
-      });
-
-      // Fetch the toolset to get the generated mcpSlug
-      const updatedToolset = await client.toolsets.getBySlug({
-        slug: toolset.slug,
-      });
-
-      return {
-        slug: toolset.slug,
-        mcpSlug: updatedToolset.mcpSlug,
-      };
-    },
-  });
-
-  return { mutation, refetchDeployment };
-}
-
-interface AddServerDialogProps {
-  server: Server | null;
+export interface AddServerDialogProps {
+  servers: Server[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onServerAdded?: () => void;
+  onServersAdded?: () => void;
+  projectSlug?: string;
+  projectSelector?: React.ReactNode;
 }
 
 export function AddServerDialog({
-  server,
+  servers,
   open,
   onOpenChange,
-  onServerAdded,
+  onServersAdded,
+  projectSlug,
+  projectSelector,
 }: AddServerDialogProps) {
-  const routes = useRoutes();
-  const [desiredToolsetName, setDesiredToolsetName] = useState("");
-  const [createdServer, setCreatedServer] = useState<{
-    slug: string;
-    mcpSlug: string;
-  } | null>(null);
-  const { mutation: addServerMutation, refetchDeployment } =
-    useAddServerMutation();
+  const releaseState = useExternalMcpReleaseState({
+    servers,
+    projectSlug,
+  });
 
-  const displayName = server?.title ?? server?.registrySpecifier ?? "";
-
-  // Reset state when dialog closes
+  // Reset when dialog closes
   useEffect(() => {
     if (!open) {
-      setCreatedServer(null);
-      setDesiredToolsetName("");
-      addServerMutation.reset();
+      releaseState.reset();
     }
   }, [open]);
 
-  // Set default name when server changes
+  // Notify parent when all toolsets are done
+  const allToolsetsDone =
+    releaseState.toolsetStatuses.length > 0 &&
+    releaseState.toolsetStatuses.every(
+      (s) => s.status === "completed" || s.status === "failed",
+    );
+  const prevAllDoneRef = useRef(false);
   useEffect(() => {
-    if (server) {
-      setDesiredToolsetName(server.title ?? "");
+    if (allToolsetsDone && !prevAllDoneRef.current) {
+      prevAllDoneRef.current = true;
+      onServersAdded?.();
     }
-  }, [server]);
-
-  const handleSuccess = async (result: {
-    slug: string;
-    mcpSlug: string | undefined;
-  }) => {
-    await refetchDeployment();
-    onServerAdded?.();
-    if (result.mcpSlug) {
-      setCreatedServer({ slug: result.slug, mcpSlug: result.mcpSlug });
+    if (!allToolsetsDone) {
+      prevAllDoneRef.current = false;
     }
-  };
+  }, [allToolsetsDone]);
 
-  if (!server) return null;
+  if (servers.length === 0) return null;
+
+  const isSingle = servers.length === 1;
+  const title =
+    releaseState.phase === "complete"
+      ? "Added to Project"
+      : releaseState.phase === "error"
+        ? "Deployment Error"
+        : isSingle
+          ? "Add to Project"
+          : `Add ${servers.length} servers to project`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content className="gap-2">
         <Dialog.Header>
-          <Dialog.Title>Add to Project</Dialog.Title>
+          <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>
-            {createdServer ? "" : "Add this MCP server to your project."}
+            <PhaseDescription phase={releaseState.phase} isSingle={isSingle} />
           </Dialog.Description>
         </Dialog.Header>
-        {createdServer ? (
-          <div className="pb-2">
-            <Type small muted className="mb-3">
-              <span className="font-medium text-foreground">{displayName}</span>{" "}
-              has been added to your project.
-            </Type>
-            <Type className="font-medium mb-3">Next steps</Type>
-            <div className="grid grid-cols-2 gap-2">
-              <routes.sources.Link className="no-underline hover:no-underline">
-                <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
-                  <div className="w-8 h-8 rounded-md bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
-                    <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div className="flex-1">
-                    <Type className="text-sm font-medium no-underline">
-                      Add more sources
-                    </Type>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </routes.sources.Link>
-              <routes.elements.Link
-                className="no-underline hover:no-underline"
-                queryParams={{ toolset: createdServer.slug }}
-              >
-                <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
-                  <div className="w-8 h-8 rounded-md bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
-                    <MessageCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                  </div>
-                  <div className="flex-1">
-                    <Type className="text-sm font-medium no-underline">
-                      Deploy as chat
-                    </Type>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </routes.elements.Link>
-              <a
-                href={`${getServerURL()}/mcp/${createdServer.mcpSlug}/install`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="no-underline hover:no-underline"
-              >
-                <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
-                  <div className="w-8 h-8 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
-                    <Plug className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div className="flex-1">
-                    <Type className="text-sm font-medium no-underline">
-                      Connect via Claude, Cursor
-                    </Type>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </a>
-              <routes.mcp.details.Link
-                params={[createdServer.slug]}
-                className="no-underline hover:no-underline"
-              >
-                <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
-                  <div className="w-8 h-8 rounded-md bg-orange-500/10 dark:bg-orange-500/20 flex items-center justify-center shrink-0">
-                    <Settings className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <div className="flex-1">
-                    <Type className="text-sm font-medium no-underline">
-                      Configure MCP settings
-                    </Type>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </routes.mcp.details.Link>
-            </div>
-          </div>
-        ) : (
-          <AddServerForm
-            server={server}
-            desiredToolsetName={desiredToolsetName}
-            setDesiredToolsetName={setDesiredToolsetName}
-            addServerMutation={addServerMutation}
-            onCancel={() => onOpenChange(false)}
-            onSuccess={handleSuccess}
-          />
-        )}
+        <PhaseContent
+          releaseState={releaseState}
+          isSingle={isSingle}
+          projectSelector={projectSelector}
+          onClose={() => onOpenChange(false)}
+        />
       </Dialog.Content>
     </Dialog>
   );
 }
 
-type AddServerResult = { slug: string; mcpSlug: string | undefined };
-
-function AddServerForm({
-  server,
-  desiredToolsetName,
-  setDesiredToolsetName,
-  addServerMutation,
-  onCancel,
-  onSuccess,
+function PhaseDescription({
+  phase,
+  isSingle,
 }: {
-  server: Server;
-  desiredToolsetName: string;
-  setDesiredToolsetName: (name: string) => void;
-  addServerMutation: ReturnType<
-    typeof useMutation<
-      AddServerResult,
-      Error,
-      { server: Server; toolsetName: string }
-    >
-  >;
-  onCancel: () => void;
-  onSuccess: (result: AddServerResult) => void;
+  phase: ExternalMcpReleaseState["phase"];
+  isSingle: boolean;
 }) {
-  const handleSubmit = () => {
-    addServerMutation.mutate(
-      {
-        server,
-        toolsetName:
-          desiredToolsetName || server.title || server.registrySpecifier,
-      },
-      {
-        onSuccess,
-      },
-    );
-  };
+  switch (phase) {
+    case "configure":
+      return isSingle
+        ? "Add this MCP server to your project."
+        : "Configure and add these MCP servers to your project.";
+    case "deploying":
+      return "Deploying MCP server configuration...";
+    case "complete":
+      return "";
+    case "error":
+      return "";
+  }
+}
 
+function PhaseContent({
+  releaseState,
+  isSingle,
+  projectSelector,
+  onClose,
+}: {
+  releaseState: ExternalMcpReleaseState;
+  isSingle: boolean;
+  projectSelector?: React.ReactNode;
+  onClose: () => void;
+}) {
+  switch (releaseState.phase) {
+    case "configure":
+      return (
+        <ConfigurePhase
+          releaseState={releaseState}
+          isSingle={isSingle}
+          projectSelector={projectSelector}
+          onClose={onClose}
+        />
+      );
+    case "deploying":
+      return <DeployingPhase releaseState={releaseState} />;
+    case "complete":
+      return (
+        <CompletePhase
+          releaseState={releaseState}
+          isSingle={isSingle}
+          onClose={onClose}
+        />
+      );
+    case "error":
+      return <ErrorPhase releaseState={releaseState} onClose={onClose} />;
+  }
+}
+
+// --- Configure Phase ---
+
+function ConfigurePhase({
+  releaseState,
+  isSingle,
+  projectSelector,
+  onClose,
+}: {
+  releaseState: ExternalMcpReleaseState;
+  isSingle: boolean;
+  projectSelector?: React.ReactNode;
+  onClose: () => void;
+}) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !addServerMutation.isPending) {
+    if (e.key === "Enter" && releaseState.canDeploy) {
       e.preventDefault();
-      handleSubmit();
+      releaseState.startDeployment();
     }
   };
 
   return (
     <div onKeyDown={handleKeyDown}>
-      <div className="flex flex-col gap-2 py-4">
-        <Label>Source name</Label>
-        <Input
-          placeholder={server.title || server.registrySpecifier}
-          value={desiredToolsetName}
-          onChange={(e) => setDesiredToolsetName(e.target.value)}
-          disabled={addServerMutation.isPending}
-        />
-      </div>
+      <Stack gap={4} className="py-2">
+        {projectSelector}
+        {isSingle ? (
+          <SingleServerConfig releaseState={releaseState} />
+        ) : (
+          <BatchServerConfig releaseState={releaseState} />
+        )}
+      </Stack>
       <Dialog.Footer>
-        <Button
-          variant="tertiary"
-          onClick={onCancel}
-          disabled={addServerMutation.isPending}
-        >
+        <Button variant="tertiary" onClick={onClose}>
           Cancel
         </Button>
-        <Button disabled={addServerMutation.isPending} onClick={handleSubmit}>
-          {addServerMutation.isPending ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              <Button.Text>Adding...</Button.Text>
-            </>
-          ) : (
-            <Button.Text>Add</Button.Text>
-          )}
+        <Button
+          disabled={!releaseState.canDeploy}
+          onClick={() => releaseState.startDeployment()}
+        >
+          <Button.Text>Deploy</Button.Text>
         </Button>
       </Dialog.Footer>
     </div>
   );
 }
 
-// --- Batch add (multi-select) ---
-
-function useAddServersMutation() {
-  const client = useSdkClient();
-  const { refetch: refetchDeployment } = useLatestDeployment();
-
-  const mutation = useMutation({
-    mutationFn: async ({
-      servers,
-      projectSlug,
-    }: {
-      servers: Server[];
-      projectSlug: string;
-    }) => {
-      const reqOpts = {
-        headers: { "gram-project": projectSlug },
-      };
-
-      // Fetch the target project's latest deployment
-      const depResult = await client.deployments.latest(
-        undefined,
-        undefined,
-        reqOpts,
-      );
-      const deploymentId = depResult.deployment?.id;
-
-      // Evolve deployment with all selected MCPs in one call
-      await client.deployments.evolveDeployment(
-        {
-          evolveForm: {
-            deploymentId,
-            upsertExternalMcps: servers.map((server) => {
-              const slug = generateSlug(server.registrySpecifier);
-              return {
-                registryId: server.registryId,
-                name: server.title ?? server.registrySpecifier,
-                slug,
-                registryServerSpecifier: server.registrySpecifier,
-              };
-            }),
-          },
-        },
-        undefined,
-        reqOpts,
-      );
-
-      // Create a toolset for each server
-      for (const server of servers) {
-        const slug = generateSlug(server.registrySpecifier);
-        let toolUrns = [`tools:externalmcp:${slug}:proxy`];
-        if (server.tools) {
-          toolUrns = server.tools.map(
-            (t) => `tools:externalmcp:${slug}:${t.name}`,
-          );
-        }
-
-        const toolset = await client.toolsets.create(
-          {
-            createToolsetRequestBody: {
-              name: server.title ?? server.registrySpecifier,
-              description:
-                server.description ?? `MCP server: ${server.registrySpecifier}`,
-              toolUrns,
-            },
-          },
-          undefined,
-          reqOpts,
-        );
-
-        await client.toolsets.updateBySlug(
-          {
-            slug: toolset.slug,
-            updateToolsetRequestBody: {
-              mcpEnabled: true,
-              mcpIsPublic: true,
-            },
-          },
-          undefined,
-          reqOpts,
-        );
-      }
-
-      return servers.length;
-    },
-  });
-
-  return { mutation, refetchDeployment };
-}
-
-interface AddServersDialogProps {
-  servers: Server[];
-  projects: { value: string; label: string }[];
-  projectSlug: string;
-  onProjectChange: (slug: string) => void;
-  onCreateProject: (name: string) => void;
-  onGoToMCPs: () => void;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onServersAdded?: () => void;
-}
-
-export function AddServersDialog({
-  servers,
-  projects,
-  projectSlug,
-  onProjectChange,
-  onCreateProject,
-  onGoToMCPs,
-  open,
-  onOpenChange,
-  onServersAdded,
-}: AddServersDialogProps) {
-  const { mutation, refetchDeployment } = useAddServersMutation();
-  const [addedCount, setAddedCount] = useState(0);
-
-  const selectedLabel =
-    projects.find((p) => p.value === projectSlug)?.label ?? projectSlug;
-
-  useEffect(() => {
-    if (!open) {
-      setAddedCount(0);
-      mutation.reset();
-    }
-  }, [open]);
-
-  const handleAdd = () => {
-    mutation.mutate(
-      { servers, projectSlug },
-      {
-        onSuccess: async (count) => {
-          await refetchDeployment();
-          setAddedCount(count);
-          onServersAdded?.();
-        },
-      },
-    );
-  };
+function SingleServerConfig({
+  releaseState,
+}: {
+  releaseState: ExternalMcpReleaseState;
+}) {
+  const config = releaseState.serverConfigs[0];
+  if (!config) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content>
-        <Dialog.Header>
-          <Dialog.Title>
-            Add {servers.length} server{servers.length !== 1 ? "s" : ""} to
-            project
-          </Dialog.Title>
-          <Dialog.Description>
-            {addedCount > 0
-              ? `Successfully added ${addedCount} server${addedCount !== 1 ? "s" : ""} to ${selectedLabel}.`
-              : "Select a project and add these MCP servers to it."}
-          </Dialog.Description>
-        </Dialog.Header>
-        {addedCount > 0 ? (
+    <div className="flex flex-col gap-2">
+      <Label>Source name</Label>
+      <Input
+        placeholder={config.server.title || config.server.registrySpecifier}
+        value={config.name}
+        onChange={(e) =>
+          releaseState.updateServerConfig(0, { name: e.target.value })
+        }
+      />
+    </div>
+  );
+}
+
+function BatchServerConfig({
+  releaseState,
+}: {
+  releaseState: ExternalMcpReleaseState;
+}) {
+  return (
+    <div className="space-y-3 max-h-80 overflow-y-auto">
+      {releaseState.serverConfigs.map((config, index) => (
+        <div
+          key={config.server.registrySpecifier}
+          className="flex items-center gap-3 p-3 rounded-lg border"
+        >
+          <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center shrink-0">
+            {config.server.iconUrl ? (
+              <img
+                src={config.server.iconUrl}
+                alt=""
+                className="w-4 h-4 rounded"
+              />
+            ) : (
+              <ServerIcon className="w-3 h-3 text-muted-foreground" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <Input
+              placeholder={
+                config.server.title || config.server.registrySpecifier
+              }
+              value={config.name}
+              onChange={(e) =>
+                releaseState.updateServerConfig(index, {
+                  name: e.target.value,
+                })
+              }
+              className="text-sm"
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// --- Deploying Phase ---
+
+function DeployingPhase({
+  releaseState,
+}: {
+  releaseState: ExternalMcpReleaseState;
+}) {
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [releaseState.deploymentLogs.length]);
+
+  const statusText = (() => {
+    const s = releaseState.deploymentStatus;
+    if (!s || s === "created") return "Waiting for deployment to start...";
+    if (s === "pending") return "Processing deployment...";
+    return "Deploying...";
+  })();
+
+  return (
+    <div className="py-2 space-y-4">
+      <Stack direction="horizontal" gap={2} align="center">
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+        <Type small muted>
+          {statusText}
+        </Type>
+      </Stack>
+      {releaseState.deploymentLogs.length > 0 && (
+        <div className="rounded-lg border bg-muted/30 p-3 max-h-48 overflow-y-auto font-mono text-xs space-y-1">
+          {releaseState.deploymentLogs.map((log) => (
+            <div
+              key={log.id}
+              className={
+                log.event.includes("error") ? "text-destructive" : ""
+              }
+            >
+              {log.message}
+            </div>
+          ))}
+          <div ref={logsEndRef} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Complete Phase ---
+
+function CompletePhase({
+  releaseState,
+  onClose,
+}: {
+  releaseState: ExternalMcpReleaseState;
+  isSingle: boolean;
+  onClose: () => void;
+}) {
+  const allDone = releaseState.toolsetStatuses.every(
+    (s) => s.status === "completed" || s.status === "failed",
+  );
+
+  return (
+    <div className="pb-2 space-y-4">
+      {/* Toolset creation progress */}
+      <div>
+        <Type className="font-medium mb-2">Creating MCP servers</Type>
+        <div className="space-y-2">
+          {releaseState.toolsetStatuses.map((ts) => (
+            <ToolsetStatusRow key={ts.slug} status={ts} />
+          ))}
+        </div>
+      </div>
+
+      {/* Next steps — only shown when all toolsets are done */}
+      {allDone && (() => {
+        const firstCompleted = releaseState.toolsetStatuses.find(
+          (s) => s.status === "completed" && s.toolsetSlug && s.mcpSlug,
+        );
+        if (firstCompleted) {
+          return (
+            <SingleServerNextSteps
+              toolsetSlug={firstCompleted.toolsetSlug!}
+              mcpSlug={firstCompleted.mcpSlug!}
+            />
+          );
+        }
+        return (
           <Dialog.Footer>
-            <Button variant="tertiary" onClick={() => onOpenChange(false)}>
-              <Button.Text>Keep browsing</Button.Text>
-            </Button>
-            <Button onClick={onGoToMCPs}>
-              <Button.Text>Go to MCPs</Button.Text>
+            <Button variant="tertiary" onClick={onClose}>
+              <Button.Text>Close</Button.Text>
             </Button>
           </Dialog.Footer>
-        ) : (
-          <>
-            <Stack gap={4} className="py-2">
-              <Combobox
-                options={projects}
-                value={projectSlug}
-                onValueChange={(v) => v && onProjectChange(v)}
-                searchable
-                placeholder="Select project..."
-                createOptions={{
-                  handleCreate: onCreateProject,
-                }}
-              />
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {servers.map((s) => (
-                  <div
-                    key={s.registrySpecifier}
-                    className="flex items-center gap-2"
-                  >
-                    <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                      {s.iconUrl ? (
-                        <img
-                          src={s.iconUrl}
-                          alt=""
-                          className="w-4 h-4 rounded"
-                        />
-                      ) : (
-                        <ServerIcon className="w-3 h-3 text-muted-foreground" />
-                      )}
-                    </div>
-                    <Type small>{s.title ?? s.registrySpecifier}</Type>
-                  </div>
-                ))}
-              </div>
-            </Stack>
-            <Dialog.Footer>
-              <Button
-                variant="tertiary"
-                onClick={() => onOpenChange(false)}
-                disabled={mutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleAdd} disabled={mutation.isPending}>
-                {mutation.isPending ? (
-                  <Stack direction="horizontal" gap={2} align="center">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <Button.Text>Adding...</Button.Text>
-                  </Stack>
-                ) : (
-                  <Button.Text>
-                    Add {servers.length} server
-                    {servers.length !== 1 ? "s" : ""}
-                  </Button.Text>
-                )}
-              </Button>
-            </Dialog.Footer>
-          </>
+        );
+      })()}
+    </div>
+  );
+}
+
+function ToolsetStatusRow({ status }: { status: ServerToolsetStatus }) {
+  const routes = useRoutes();
+  const isCompleted = status.status === "completed" && status.toolsetSlug;
+
+  const content = (
+    <div className="flex items-center gap-3 p-2 rounded-lg border">
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <Type small className="truncate">
+          {status.name}
+        </Type>
+      </div>
+      <div className="flex items-center gap-2">
+        {isCompleted && (
+          <ArrowRight className="w-3 h-3 text-muted-foreground" />
         )}
-      </Dialog.Content>
-    </Dialog>
+        <ToolsetStatusIcon status={status.status} />
+      </div>
+    </div>
+  );
+
+  if (isCompleted) {
+    return (
+      <routes.mcp.details.Link
+        params={[status.toolsetSlug!]}
+        className="no-underline hover:no-underline block hover:opacity-80 transition-opacity"
+      >
+        {content}
+      </routes.mcp.details.Link>
+    );
+  }
+
+  return content;
+}
+
+function ToolsetStatusIcon({
+  status,
+}: {
+  status: ServerToolsetStatus["status"];
+}) {
+  switch (status) {
+    case "pending":
+      return <Circle className="w-4 h-4 text-muted-foreground shrink-0" />;
+    case "creating":
+      return (
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />
+      );
+    case "completed":
+      return <Check className="w-4 h-4 text-emerald-500 shrink-0" />;
+    case "failed":
+      return <X className="w-4 h-4 text-destructive shrink-0" />;
+  }
+}
+
+function SingleServerNextSteps({
+  toolsetSlug,
+  mcpSlug,
+}: {
+  toolsetSlug: string;
+  mcpSlug: string;
+}) {
+  const routes = useRoutes();
+
+  return (
+    <div>
+      <Type className="font-medium mb-2">Next steps</Type>
+      <div className="grid grid-cols-2 gap-2">
+        <routes.sources.Link className="no-underline hover:no-underline">
+          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
+            <div className="w-8 h-8 rounded-md bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
+              <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <Type className="text-sm font-medium no-underline">
+                Add more sources
+              </Type>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </routes.sources.Link>
+        <routes.elements.Link
+          className="no-underline hover:no-underline"
+          queryParams={{ toolset: toolsetSlug }}
+        >
+          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
+            <div className="w-8 h-8 rounded-md bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
+              <MessageCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div className="flex-1">
+              <Type className="text-sm font-medium no-underline">
+                Deploy as chat
+              </Type>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </routes.elements.Link>
+        <a
+          href={`${getServerURL()}/mcp/${mcpSlug}/install`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="no-underline hover:no-underline"
+        >
+          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
+            <div className="w-8 h-8 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+              <Plug className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="flex-1">
+              <Type className="text-sm font-medium no-underline">
+                Connect via Claude, Cursor
+              </Type>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </a>
+        <routes.mcp.details.Link
+          params={[toolsetSlug]}
+          className="no-underline hover:no-underline"
+        >
+          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
+            <div className="w-8 h-8 rounded-md bg-orange-500/10 dark:bg-orange-500/20 flex items-center justify-center shrink-0">
+              <Settings className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div className="flex-1">
+              <Type className="text-sm font-medium no-underline">
+                Configure MCP settings
+              </Type>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </routes.mcp.details.Link>
+      </div>
+    </div>
+  );
+}
+
+// --- Error Phase ---
+
+function ErrorPhase({
+  releaseState,
+  onClose,
+}: {
+  releaseState: ExternalMcpReleaseState;
+  onClose: () => void;
+}) {
+  const routes = useRoutes();
+
+  return (
+    <div className="py-2 space-y-4">
+      <div className="flex items-start gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5">
+        <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <Type className="font-medium text-destructive">
+            Deployment failed
+          </Type>
+          <Type small className="text-destructive/80 mt-1">
+            {releaseState.error ?? "An unexpected error occurred."}
+          </Type>
+        </div>
+      </div>
+      {releaseState.deploymentLogs.length > 0 && (
+        <div className="rounded-lg border bg-muted/30 p-3 max-h-48 overflow-y-auto font-mono text-xs space-y-1">
+          {releaseState.deploymentLogs.map((log) => (
+            <div
+              key={log.id}
+              className={
+                log.event.includes("error") ? "text-destructive" : ""
+              }
+            >
+              {log.message}
+            </div>
+          ))}
+        </div>
+      )}
+      <Dialog.Footer>
+        {releaseState.deploymentId && (
+          <routes.deployments.deployment.Link
+            params={[releaseState.deploymentId]}
+            className="no-underline hover:no-underline"
+          >
+            <Button variant="secondary">
+              <ExternalLink className="w-4 h-4" />
+              <Button.Text>View Deployment</Button.Text>
+            </Button>
+          </routes.deployments.deployment.Link>
+        )}
+        <Button variant="tertiary" onClick={onClose}>
+          <Button.Text>Close</Button.Text>
+        </Button>
+      </Dialog.Footer>
+    </div>
   );
 }

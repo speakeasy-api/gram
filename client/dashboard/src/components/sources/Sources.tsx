@@ -20,7 +20,14 @@ import {
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import { ChevronDown, Code, FileCode, Plus, Server } from "lucide-react";
+import {
+  ChevronDown,
+  CircleAlert,
+  Code,
+  FileCode,
+  Plus,
+  Server,
+} from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
@@ -28,19 +35,23 @@ import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard, SourceCardSkeleton } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
+import { FailedDeploymentModal } from "./FailedDeploymentModal";
+import { useFailedDeploymentSources } from "./useFailedDeploymentSources";
 import { ViewAssetDialogContent } from "./ViewAssetDialogContent";
 
 type DialogState =
   | { type: "closed" }
   | { type: "remove-source"; asset: NamedAsset }
   | { type: "upload-openapi"; documentSlug: string }
-  | { type: "view-asset"; asset: NamedAsset };
+  | { type: "view-asset"; asset: NamedAsset }
+  | { type: "failed-deployment" };
 
 interface DialogStore {
   dialogState: DialogState;
   openRemoveSource: (asset: NamedAsset) => void;
   openUploadOpenApi: (documentSlug: string) => void;
   openViewAsset: (asset: NamedAsset) => void;
+  openFailedDeployment: () => void;
   closeDialog: () => void;
 }
 
@@ -51,6 +62,8 @@ const useDialogStore = create<DialogStore>((set) => ({
   openUploadOpenApi: (documentSlug) =>
     set({ dialogState: { type: "upload-openapi", documentSlug } }),
   openViewAsset: (asset) => set({ dialogState: { type: "view-asset", asset } }),
+  openFailedDeployment: () =>
+    set({ dialogState: { type: "failed-deployment" } }),
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
 
@@ -98,11 +111,13 @@ export default function Sources() {
   const deployment = deploymentResult?.deployment;
 
   const assetsCausingFailure = useUnusedAssetIds();
+  const failedDeployment = useFailedDeploymentSources();
   const {
     dialogState,
     openRemoveSource,
     openUploadOpenApi,
     openViewAsset,
+    openFailedDeployment,
     closeDialog,
   } = useDialogStore();
   const deploymentIsEmpty = useDeploymentIsEmpty();
@@ -240,7 +255,21 @@ export default function Sources() {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title>Sources</Page.Section.Title>
+        <Page.Section.Title>
+          <span className="inline-flex items-center gap-2">
+            Sources
+            {failedDeployment.hasFailures && (
+              <button
+                type="button"
+                onClick={openFailedDeployment}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-sm font-medium text-destructive bg-destructive/10 hover:bg-destructive/20 transition-colors"
+              >
+                <CircleAlert className="size-4" />
+                <span>Deployment errors</span>
+              </button>
+            )}
+          </span>
+        </Page.Section.Title>
         <Page.Section.Description>
           {isFunctionsEnabled
             ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"
@@ -333,7 +362,10 @@ export default function Sources() {
             )}
           </div>
           <Dialog
-            open={dialogState.type !== "closed"}
+            open={
+              dialogState.type !== "closed" &&
+              dialogState.type !== "failed-deployment"
+            }
             onOpenChange={(open) => !open && closeDialog()}
           >
             <Dialog.Content
@@ -362,6 +394,19 @@ export default function Sources() {
               )}
             </Dialog.Content>
           </Dialog>
+          {failedDeployment.deployment && (
+            <FailedDeploymentModal
+              open={dialogState.type === "failed-deployment"}
+              onOpenChange={(open) => !open && closeDialog()}
+              failedSources={failedDeployment.failedSources}
+              generalErrors={failedDeployment.generalErrors}
+              deployment={failedDeployment.deployment}
+              onRedeploySuccess={() => {
+                closeDialog();
+                refetch();
+              }}
+            />
+          )}
         </Page.Section.Body>
       </Page.Section>
     </>
