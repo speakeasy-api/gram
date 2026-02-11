@@ -64,6 +64,8 @@ import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
+import { useExternalMcpOAuthStatus } from "@/components/mcp/ExternalMcpOAuthConnection";
+import { getExternalMcpOAuthConfig } from "@/pages/playground/PlaygroundAuth";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 
 export function MCPDetailsRoot() {
@@ -178,6 +180,17 @@ export function MCPDetailPage() {
     toolset?.defaultEnvironmentSlug || "default",
     mcpMetadataForBadge,
   );
+
+  // Check if external MCP OAuth is required but not connected
+  const mcpOAuthConfig = toolset
+    ? getExternalMcpOAuthConfig(toolset.rawTools)
+    : undefined;
+  const { data: oauthStatus } = useExternalMcpOAuthStatus(toolset?.id, {
+    slug: mcpOAuthConfig?.slug,
+    enabled: !!mcpOAuthConfig,
+  });
+  const oauthNotConnected =
+    !!mcpOAuthConfig && oauthStatus?.status !== "authenticated";
 
   if (isLoading || !toolset) {
     return <MCPLoading />;
@@ -329,7 +342,7 @@ export function MCPDetailPage() {
                 >
                   <span className="flex items-center gap-1.5">
                     Authentication
-                    {missingRequiredEnvVars > 0 && (
+                    {(missingRequiredEnvVars > 0 || oauthNotConnected) && (
                       <AlertTriangle className="h-3.5 w-3.5 text-warning" />
                     )}
                   </span>
