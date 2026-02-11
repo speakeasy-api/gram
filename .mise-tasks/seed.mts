@@ -569,6 +569,120 @@ async function seedObservabilityData(init: {
     "You are a project management assistant. Help users track tasks, manage deadlines, and coordinate with team members. Keep responses organized and actionable.",
   ];
 
+  // Sample tool call outputs with realistic JSON content
+  const TOOL_OUTPUTS = [
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            repositories: [
+              { name: "api-gateway", language: "Go", stars: 245, updated_at: "2024-01-15T10:30:00Z" },
+              { name: "web-dashboard", language: "TypeScript", stars: 89, updated_at: "2024-01-14T15:45:00Z" },
+              { name: "ml-pipeline", language: "Python", stars: 156, updated_at: "2024-01-13T09:20:00Z" },
+            ],
+            total_count: 3,
+          }),
+        },
+      ],
+    },
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            message_sent: true,
+            channel: "#general",
+            timestamp: "1705312200.000100",
+            message_id: "msg_abc123def456",
+          }),
+        },
+      ],
+    },
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            orders: [
+              { id: "ORD-001", customer: "Acme Corp", total: 1250.00, status: "shipped" },
+              { id: "ORD-002", customer: "TechStart Inc", total: 890.50, status: "processing" },
+              { id: "ORD-003", customer: "Global Services", total: 3420.00, status: "delivered" },
+            ],
+            pagination: { page: 1, per_page: 10, total: 156 },
+          }),
+        },
+      ],
+    },
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            deployment: {
+              id: "deploy-789xyz",
+              status: "success",
+              environment: "production",
+              started_at: "2024-01-15T08:00:00Z",
+              completed_at: "2024-01-15T08:05:32Z",
+              commit_sha: "a1b2c3d4e5f6",
+              logs_url: "https://logs.example.com/deploy-789xyz",
+            },
+          }),
+        },
+      ],
+    },
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            ticket_created: true,
+            ticket_id: "JIRA-4521",
+            project: "BACKEND",
+            summary: "API returns 500 on large payloads",
+            priority: "High",
+            assignee: "john.doe@example.com",
+            url: "https://jira.example.com/browse/JIRA-4521",
+          }),
+        },
+      ],
+    },
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            logs: [
+              { timestamp: "2024-01-15T10:00:01Z", level: "INFO", message: "Request received", trace_id: "abc123" },
+              { timestamp: "2024-01-15T10:00:02Z", level: "DEBUG", message: "Processing payload", trace_id: "abc123" },
+              { timestamp: "2024-01-15T10:00:03Z", level: "ERROR", message: "Database connection timeout", trace_id: "abc123" },
+              { timestamp: "2024-01-15T10:00:04Z", level: "INFO", message: "Retry attempt 1", trace_id: "abc123" },
+              { timestamp: "2024-01-15T10:00:05Z", level: "INFO", message: "Request completed", trace_id: "abc123" },
+            ],
+            total_entries: 5,
+          }),
+        },
+      ],
+    },
+    {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            feedback_summary: {
+              period: "2024-01-08 to 2024-01-14",
+              total_responses: 234,
+              average_rating: 4.2,
+              sentiment: { positive: 156, neutral: 52, negative: 26 },
+              top_themes: ["fast support", "easy to use", "needs more features"],
+            },
+          }),
+        },
+      ],
+    },
+  ];
+
   // Generate chat data
   const now = Date.now();
   const msPerDay = 24 * 60 * 60 * 1000;
@@ -640,6 +754,18 @@ async function seedObservabilityData(init: {
       messageValues.push(
         `('${chatId}', '${projectId}', '${role}', '${content.replace(/'/g, "''")}', 'gpt-4', '${msgTime.toISOString()}')`,
       );
+
+      // After assistant messages, 60% chance to add a tool call result
+      if (role === "assistant" && Math.random() < 0.6) {
+        const toolOutput =
+          TOOL_OUTPUTS[Math.floor(Math.random() * TOOL_OUTPUTS.length)];
+        const toolContent = JSON.stringify(toolOutput).replace(/'/g, "''");
+        msgTime = new Date(msgTime.getTime() + Math.random() * 5 * 1000); // 0-5 seconds later
+
+        messageValues.push(
+          `('${chatId}', '${projectId}', 'tool', '${toolContent}', 'gpt-4', '${msgTime.toISOString()}')`,
+        );
+      }
     }
 
     // Generate resolution (70% of chats have resolutions)
