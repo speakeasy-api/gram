@@ -3,14 +3,15 @@ import {
   InsightsSidebar,
   useInsightsState,
 } from "@/components/insights-sidebar";
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import {
   DateRangeSelect,
   DateRangePreset,
   getDateRange,
 } from "./date-range-select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ServiceError } from "@gram/client/models/errors/serviceerror";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryListFilterOptions } from "@gram/client/funcs/telemetryListFilterOptions";
 import { useGramContext } from "@gram/client/react-query/_context";
@@ -83,12 +84,14 @@ function FilterBar({
   selectedValue,
   onValueChange,
   options,
+  disabled,
 }: {
   dimension: FilterDimension;
   onDimensionChange: (dimension: FilterDimension) => void;
   selectedValue: string | null;
   onValueChange: (value: string | null) => void;
   options: Array<{ id: string; label: string; count: number }>;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -98,7 +101,9 @@ function FilterBar({
     : `All ${dimension === "api_key" ? "API Keys" : "Users"}`;
 
   return (
-    <div className="flex items-center gap-2">
+    <div
+      className={`flex items-center gap-2 ${disabled ? "opacity-50 pointer-events-none" : ""}`}
+    >
       <span className="text-sm text-muted-foreground font-medium hidden 2xl:inline">
         Filter by
       </span>
@@ -112,6 +117,7 @@ function FilterBar({
             <button
               key={value}
               onClick={() => onDimensionChange(value)}
+              disabled={disabled}
               className={`
                 h-7 px-3 text-sm font-medium transition-all duration-150 rounded
                 ${
@@ -119,6 +125,7 @@ function FilterBar({
                     ? "bg-white dark:bg-gray-900 text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }
+                disabled:cursor-not-allowed
               `}
             >
               {label}
@@ -128,12 +135,15 @@ function FilterBar({
 
         {/* Integrated searchable dropdown - always visible */}
         <div className="w-px h-5 bg-border/50 mx-1" />
-        <Popover open={dimension !== "all" && open} onOpenChange={setOpen}>
+        <Popover
+          open={dimension !== "all" && !disabled && open}
+          onOpenChange={setOpen}
+        >
           <PopoverTrigger asChild>
             <button
-              disabled={dimension === "all"}
+              disabled={dimension === "all" || disabled}
               className={`h-7 min-w-[140px] flex items-center justify-between gap-2 text-sm px-2 rounded transition-colors ${
-                dimension === "all"
+                dimension === "all" || disabled
                   ? "opacity-40 cursor-not-allowed"
                   : "hover:bg-muted/50"
               }`}
@@ -388,27 +398,31 @@ export default function ObservabilityOverview() {
     }
   }, [filterDimension, selectedFilterValue]);
 
-  const { data, isPending, isFetching, error } = useQuery({
-    queryKey: [
-      "observability",
-      "overview",
-      from.toISOString(),
-      to.toISOString(),
-      filterParams,
-    ],
-    queryFn: () =>
-      unwrapAsync(
-        telemetryGetObservabilityOverview(client, {
-          getObservabilityOverviewPayload: {
-            from,
-            to,
-            includeTimeSeries: true,
-            ...filterParams,
-          },
-        }),
-      ),
-    placeholderData: keepPreviousData,
-  });
+  const { data, isPending, isFetching, error, refetch, isLogsDisabled } =
+    useLogsEnabledErrorCheck(
+      useQuery({
+        queryKey: [
+          "observability",
+          "overview",
+          from.toISOString(),
+          to.toISOString(),
+          filterParams,
+        ],
+        queryFn: () =>
+          unwrapAsync(
+            telemetryGetObservabilityOverview(client, {
+              getObservabilityOverviewPayload: {
+                from,
+                to,
+                includeTimeSeries: true,
+                ...filterParams,
+              },
+            }),
+          ),
+        placeholderData: keepPreviousData,
+        throwOnError: false,
+      }),
+    );
 
   // Format date range for copilot context
   const dateRangeContext = useMemo(() => {
@@ -427,6 +441,7 @@ export default function ObservabilityOverview() {
       title="What would you like to know?"
       subtitle="Ask about metrics, trends, or performance insights"
       contextInfo={dateRangeContext}
+      hideTrigger={isLogsDisabled}
       suggestions={[
         {
           title: "Resolution Summary",
@@ -463,18 +478,21 @@ export default function ObservabilityOverview() {
             onDateRangeChange={setDateRangeParam}
             customRange={customRange}
             onClearCustomRange={clearCustomRange}
+            disabled={isLogsDisabled}
           />
 
           <ObservabilityContent
             isPending={isPending}
             isFetching={isFetching}
             error={error}
+            isLogsDisabled={isLogsDisabled}
             data={data}
             dateRange={dateRange}
             customRange={customRange}
             onTimeRangeSelect={(from, to) => {
               setCustomRangeParam(from, to);
             }}
+            refetch={refetch}
           />
         </Page.Body>
       </Page>
@@ -492,6 +510,7 @@ function InsightsPageHeader({
   onDateRangeChange,
   customRange,
   onClearCustomRange,
+  disabled,
 }: {
   filterDimension: FilterDimension;
   onFilterDimensionChange: (d: FilterDimension) => void;
@@ -502,6 +521,7 @@ function InsightsPageHeader({
   onDateRangeChange: (preset: DateRangePreset) => void;
   customRange: { from: Date; to: Date } | null;
   onClearCustomRange: () => void;
+  disabled?: boolean;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
 
@@ -537,12 +557,14 @@ function InsightsPageHeader({
           selectedValue={selectedFilterValue}
           onValueChange={onSelectedFilterValueChange}
           options={filterOptions}
+          disabled={disabled}
         />
         <DateRangeSelect
           value={dateRange}
           onValueChange={onDateRangeChange}
           customRange={customRange}
           onClearCustomRange={onClearCustomRange}
+          disabled={disabled}
         />
       </div>
     </div>
@@ -574,26 +596,38 @@ function ObservabilityContent({
   isPending,
   isFetching,
   error,
+  isLogsDisabled,
   data,
   dateRange,
   customRange,
   onTimeRangeSelect,
+  refetch,
 }: {
   isPending: boolean;
   isFetching: boolean;
   error: Error | null;
+  isLogsDisabled: boolean;
   data: GetObservabilityOverviewResult | undefined;
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
   onTimeRangeSelect: (from: Date, to: Date) => void;
+  refetch: () => void;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
-  if (isPending) {
-    return <LoadingSkeleton />;
+
+  if (isLogsDisabled) {
+    return (
+      <div className="relative">
+        <div className="pointer-events-none select-none" aria-hidden="true">
+          <ObservabilitySkeleton />
+        </div>
+        <EnableLoggingOverlay onEnabled={refetch} />
+      </div>
+    );
   }
 
-  if (error instanceof ServiceError && error.statusCode === 404) {
-    return <DisabledState />;
+  if (isPending) {
+    return <ObservabilitySkeleton />;
   }
 
   if (error) {
@@ -1869,48 +1903,6 @@ function ToolBarList({
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="rounded-lg border border-border bg-card p-5">
-            <Skeleton className="h-4 w-24 mb-3" />
-            <Skeleton className="h-9 w-32" />
-          </div>
-        ))}
-      </div>
-      <div className="rounded-lg border border-border bg-card p-6">
-        <Skeleton className="h-72 w-full" />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-lg border border-border bg-card p-6">
-          <Skeleton className="h-64 w-full" />
-        </div>
-        <div className="rounded-lg border border-border bg-card p-6">
-          <Skeleton className="h-64 w-full" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DisabledState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-16">
-      <Icon
-        name="chart-no-axes-combined"
-        className="size-12 text-muted-foreground mb-4"
-      />
-      <h3 className="text-lg font-medium mb-2">Observability Not Enabled</h3>
-      <p className="text-muted-foreground text-center max-w-md">
-        Enable logs for your organization to access observability metrics and
-        insights.
-      </p>
     </div>
   );
 }

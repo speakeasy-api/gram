@@ -724,35 +724,53 @@ func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserPara
 
 const listChatsWithResolutions = `-- name: ListChatsWithResolutions :many
 WITH limited_chats AS (
-  SELECT c.id, c.title, c.user_id, c.external_user_id, c.created_at, c.updated_at
+  SELECT
+    c.id,
+    c.title,
+    c.user_id,
+    c.external_user_id,
+    c.created_at,
+    c.updated_at,
+    (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer as num_messages,
+    COALESCE(
+      (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
+      0
+    ) as avg_score
   FROM chats c
-  WHERE c.project_id = $1
+  WHERE c.project_id = $3
     AND c.deleted IS FALSE
-    AND ($2 = '' OR c.external_user_id = $2)
-    AND ($3::timestamptz IS NULL OR c.created_at >= $3)
-    AND ($4::timestamptz IS NULL OR c.created_at <= $4)
+    AND ($4 = '' OR c.external_user_id = $4)
+    AND ($5::timestamptz IS NULL OR c.created_at >= $5)
+    AND ($6::timestamptz IS NULL OR c.created_at <= $6)
     AND (
-      $5 = ''
-      OR c.id::text ILIKE '%' || $5 || '%'
-      OR c.external_user_id ILIKE '%' || $5 || '%'
-      OR c.title ILIKE '%' || $5 || '%'
+      $7 = ''
+      OR c.id::text ILIKE '%' || $7 || '%'
+      OR c.external_user_id ILIKE '%' || $7 || '%'
+      OR c.title ILIKE '%' || $7 || '%'
     )
     AND (
-      $6 = ''
+      $8 = ''
       OR (
-        $6 = 'unresolved' AND NOT EXISTS (
+        $8 = 'unresolved' AND NOT EXISTS (
           SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
         )
       )
       OR (
-        $6 != 'unresolved' AND EXISTS (
-          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $6
+        $8 != 'unresolved' AND EXISTS (
+          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $8
         )
       )
     )
-  ORDER BY c.updated_at DESC
-  LIMIT $8
-  OFFSET $7
+  ORDER BY
+    CASE WHEN $1 = 'created_at' AND $2 = 'desc' THEN c.created_at END DESC NULLS LAST,
+    CASE WHEN $1 = 'created_at' AND $2 = 'asc' THEN c.created_at END ASC NULLS LAST,
+    CASE WHEN $1 = 'num_messages' AND $2 = 'desc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END DESC NULLS LAST,
+    CASE WHEN $1 = 'num_messages' AND $2 = 'asc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END ASC NULLS LAST,
+    CASE WHEN $1 = 'score' AND $2 = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
+    CASE WHEN $1 = 'score' AND $2 = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
+    c.created_at DESC
+  LIMIT $10
+  OFFSET $9
 )
 SELECT
     lc.id as chat_id,
@@ -761,12 +779,8 @@ SELECT
     lc.external_user_id,
     lc.created_at,
     lc.updated_at,
-    (
-        COALESCE(
-            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = lc.id),
-            0
-        )
-    )::integer as num_messages,
+    lc.num_messages,
+    lc.avg_score,
     cr.id as resolution_id,
     cr.user_goal,
     cr.resolution,
@@ -783,10 +797,20 @@ SELECT
     ) as message_ids
 FROM limited_chats lc
 LEFT JOIN chat_resolutions cr ON cr.chat_id = lc.id
-ORDER BY lc.updated_at DESC, cr.created_at DESC
+ORDER BY
+    CASE WHEN $1 = 'created_at' AND $2 = 'desc' THEN lc.created_at END DESC NULLS LAST,
+    CASE WHEN $1 = 'created_at' AND $2 = 'asc' THEN lc.created_at END ASC NULLS LAST,
+    CASE WHEN $1 = 'num_messages' AND $2 = 'desc' THEN lc.num_messages END DESC NULLS LAST,
+    CASE WHEN $1 = 'num_messages' AND $2 = 'asc' THEN lc.num_messages END ASC NULLS LAST,
+    CASE WHEN $1 = 'score' AND $2 = 'desc' THEN lc.avg_score END DESC NULLS LAST,
+    CASE WHEN $1 = 'score' AND $2 = 'asc' THEN lc.avg_score END ASC NULLS LAST,
+    lc.created_at DESC,
+    cr.created_at DESC
 `
 
 type ListChatsWithResolutionsParams struct {
+	SortBy           interface{}
+	SortOrder        interface{}
 	ProjectID        uuid.UUID
 	ExternalUserID   interface{}
 	FromTime         pgtype.Timestamptz
@@ -805,6 +829,7 @@ type ListChatsWithResolutionsRow struct {
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	NumMessages         int32
+	AvgScore            interface{}
 	ResolutionID        uuid.NullUUID
 	UserGoal            pgtype.Text
 	Resolution          pgtype.Text
@@ -816,6 +841,8 @@ type ListChatsWithResolutionsRow struct {
 
 func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWithResolutionsParams) ([]ListChatsWithResolutionsRow, error) {
 	rows, err := q.db.Query(ctx, listChatsWithResolutions,
+		arg.SortBy,
+		arg.SortOrder,
 		arg.ProjectID,
 		arg.ExternalUserID,
 		arg.FromTime,
@@ -840,6 +867,7 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.NumMessages,
+			&i.AvgScore,
 			&i.ResolutionID,
 			&i.UserGoal,
 			&i.Resolution,

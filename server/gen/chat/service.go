@@ -219,6 +219,10 @@ type ListChatsWithResolutionsPayload struct {
 	Limit int
 	// Pagination offset
 	Offset int
+	// Field to sort by
+	SortBy string
+	// Sort order
+	SortOrder string
 }
 
 // ListChatsWithResolutionsResult is the result type of the chat service

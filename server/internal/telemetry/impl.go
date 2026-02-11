@@ -103,6 +103,19 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 	return s.chatSessions.Authorize(ctx, token)
 }
 
+// CheckLogsEnabled returns whether logs are enabled for the given organization.
+// Returns an error suitable for returning from API endpoints if logs are disabled.
+func (s *Service) CheckLogsEnabled(ctx context.Context, organizationID string) error {
+	enabled, err := s.logsEnabled(ctx, organizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+	if !enabled {
+		return oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+	return nil
+}
+
 // SearchLogs retrieves unified telemetry logs with pagination.
 func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsPayload) (res *telem_gen.SearchLogsResult, err error) {
 	var from, to *string

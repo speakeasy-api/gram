@@ -2,13 +2,21 @@ import {
   InsightsSidebar,
   useInsightsState,
 } from "@/components/insights-sidebar";
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
+import { Page } from "@/components/page-layout";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { cn } from "@/lib/utils";
 import { resolutionBgColors } from "@/lib/resolution-colors";
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
+import {
+  SortBy,
+  SortOrder as ApiSortOrder,
+} from "@gram/client/models/operations/listchatswithresolutions";
 import { useListChatsWithResolutions } from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { ChatDetailPanel } from "./ChatDetailPanel";
 import { ChatLogsFilters } from "./ChatLogsFilters";
@@ -19,6 +27,33 @@ import {
   getDateRange,
 } from "../observability/date-range-select";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
+
+type SortField = "chronological" | "messageCount" | "score";
+type SortOrder = "asc" | "desc";
+
+// Map frontend sort field to API sort field
+function toApiSortBy(field: SortField): SortBy {
+  switch (field) {
+    case "chronological":
+      return SortBy.CreatedAt;
+    case "messageCount":
+      return SortBy.NumMessages;
+    case "score":
+      return SortBy.Score;
+  }
+}
+
+function toApiSortOrder(order: SortOrder): ApiSortOrder {
+  return order === "asc" ? ApiSortOrder.Asc : ApiSortOrder.Desc;
+}
 
 // Reusable score indicator with colored dot
 function ScoreIndicator({
@@ -100,9 +135,16 @@ export default function ChatLogs() {
   const urlTo = searchParams.get("to");
   const urlSearch = searchParams.get("search");
   const urlStatus = searchParams.get("status");
+  const urlSort = searchParams.get("sort") as SortField | null;
+  const urlOrder = searchParams.get("order") as SortOrder | null;
 
   // Derive state from URL
   const dateRange: DateRangePreset = isValidPreset(urlRange) ? urlRange : "30d";
+  const sortField: SortField =
+    urlSort === "messageCount" || urlSort === "score"
+      ? urlSort
+      : "chronological";
+  const sortOrder: SortOrder = urlOrder === "asc" ? "asc" : "desc";
 
   const customRange = useMemo(() => {
     if (urlFrom && urlTo) {
@@ -177,17 +219,54 @@ export default function ChatLogs() {
     [updateSearchParams],
   );
 
-  const { data, isLoading, error } = useListChatsWithResolutions({
-    search: searchQuery || undefined,
-    resolutionStatus: resolutionStatus || undefined,
-    from: timeRange.from,
-    to: timeRange.to,
-    limit,
-    offset,
-  });
+  const setSortField = useCallback(
+    (value: SortField) => {
+      updateSearchParams({ sort: value === "chronological" ? null : value });
+    },
+    [updateSearchParams],
+  );
 
+  const setSortOrder = useCallback(
+    (value: SortOrder) => {
+      updateSearchParams({ order: value === "desc" ? null : value });
+    },
+    [updateSearchParams],
+  );
+
+  const toggleSortOrder = useCallback(() => {
+    setSortOrder(sortOrder === "desc" ? "asc" : "desc");
+  }, [sortOrder, setSortOrder]);
+
+  const { data, isLoading, error, refetch, isLogsDisabled } =
+    useLogsEnabledErrorCheck(
+      useListChatsWithResolutions(
+        {
+          search: searchQuery || undefined,
+          resolutionStatus: resolutionStatus || undefined,
+          from: timeRange.from,
+          to: timeRange.to,
+          sortBy: toApiSortBy(sortField),
+          sortOrder: toApiSortOrder(sortOrder),
+          limit,
+          offset,
+        },
+        undefined, // security
+        {
+          throwOnError: false,
+        },
+      ),
+    );
+
+  // Chats are sorted server-side via sortBy/sortOrder params
   const chats = data?.chats ?? [];
-  const hasMore = chats.length === limit;
+  // Keep total stable across page changes to avoid flickering
+  const lastTotalRef = useRef(0);
+  if (data?.total !== undefined && data.total > 0) {
+    lastTotalRef.current = data.total;
+  }
+  const total = lastTotalRef.current;
+  const hasMore =
+    total > 0 ? offset + chats.length < total : chats.length === limit;
 
   // Format date range for copilot context
   const dateRangeContext = useMemo(() => {
@@ -208,6 +287,7 @@ export default function ChatLogs() {
       title="How can I help you debug?"
       subtitle="Search chat sessions, analyze failures, or explore logs"
       contextInfo={dateRangeContext}
+      hideTrigger={isLogsDisabled}
       suggestions={[
         {
           title: "Failed Chats",
@@ -238,15 +318,22 @@ export default function ChatLogs() {
         setSearchQuery={setSearchQuery}
         resolutionStatus={resolutionStatus}
         setResolutionStatus={setResolutionStatus}
+        sortField={sortField}
+        setSortField={setSortField}
+        sortOrder={sortOrder}
+        toggleSortOrder={toggleSortOrder}
         chats={chats}
         selectedChat={selectedChat}
         setSelectedChat={setSelectedChat}
         isLoading={isLoading}
         error={error}
+        isLogsDisabled={isLogsDisabled}
+        onLogsEnabled={refetch}
         hasMore={hasMore}
         offset={offset}
         setOffset={setOffset}
         limit={limit}
+        total={total}
       />
     </InsightsSidebar>
   );
@@ -262,15 +349,22 @@ function ChatLogsContent({
   setSearchQuery,
   resolutionStatus,
   setResolutionStatus,
+  sortField,
+  setSortField,
+  sortOrder,
+  toggleSortOrder,
   chats,
   selectedChat,
   setSelectedChat,
   isLoading,
   error,
+  isLogsDisabled,
+  onLogsEnabled,
   hasMore,
   offset,
   setOffset,
   limit,
+  total,
 }: {
   dateRange: DateRangePreset;
   setDateRangeParam: (preset: DateRangePreset) => void;
@@ -280,82 +374,174 @@ function ChatLogsContent({
   setSearchQuery: (value: string) => void;
   resolutionStatus: string;
   setResolutionStatus: (value: string) => void;
+  sortField: SortField;
+  setSortField: (value: SortField) => void;
+  sortOrder: SortOrder;
+  toggleSortOrder: () => void;
   chats: ChatOverviewWithResolutions[];
   selectedChat: ChatOverviewWithResolutions | null;
   setSelectedChat: (chat: ChatOverviewWithResolutions | null) => void;
   isLoading: boolean;
   error: Error | null;
+  isLogsDisabled: boolean;
+  onLogsEnabled: () => void;
   hasMore: boolean;
   offset: number;
   setOffset: (offset: number) => void;
   limit: number;
+  total: number;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
 
-  return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
-      {/* Header section */}
-      <div className="p-6 border-b shrink-0">
-        <div
-          className={cn(
-            "flex gap-4 mb-4 transition-all duration-300",
-            isInsightsOpen
-              ? "flex-col items-stretch"
-              : "flex-row items-center justify-between",
-          )}
-        >
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold mb-1">Logs</h1>
-            <p className="text-sm text-muted-foreground">
-              View and debug individual chat conversations
-            </p>
-          </div>
-          <div className="flex-shrink-0">
-            <DateRangeSelect
-              value={dateRange}
-              onValueChange={setDateRangeParam}
-              customRange={customRange}
-              onClearCustomRange={clearCustomRange}
-            />
-          </div>
-        </div>
-        <ChatLogsFilters
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          resolutionStatus={resolutionStatus}
-          onResolutionStatusChange={setResolutionStatus}
-        />
+  if (isLogsDisabled) {
+    return (
+      <div className="h-full overflow-hidden flex flex-col">
+        <Page>
+          <Page.Header>
+            <Page.Header.Breadcrumbs fullWidth />
+          </Page.Header>
+          <Page.Body fullWidth className="space-y-6">
+            <div className="flex flex-col gap-1 min-w-0">
+              <h1 className="text-xl font-semibold">Chat Sessions</h1>
+              <p className="text-sm text-muted-foreground">
+                View and debug individual chat conversations
+              </p>
+            </div>
+            <div className="flex-1 relative">
+              <div
+                className="pointer-events-none select-none h-full"
+                aria-hidden="true"
+              >
+                <ObservabilitySkeleton />
+              </div>
+              <EnableLoggingOverlay onEnabled={onLogsEnabled} />
+            </div>
+          </Page.Body>
+        </Page>
       </div>
+    );
+  }
 
-      {/* Content section */}
-      <div className="flex-1 overflow-y-auto relative min-h-0">
-        <div className="sticky top-0 z-10">
-          <ScoreLegend />
-        </div>
-        <ChatLogsTable
-          chats={chats}
-          selectedChatId={selectedChat?.id}
-          onSelectChat={setSelectedChat}
-          isLoading={isLoading}
-          error={error}
-        />
+  return (
+    <>
+      <div className="h-full overflow-hidden flex flex-col">
+        <Page>
+          <Page.Header>
+            <Page.Header.Breadcrumbs fullWidth />
+          </Page.Header>
+          <Page.Body fullWidth noPadding overflowHidden>
+            <div className="flex flex-col flex-1 min-h-0 w-full">
+              {/* Header section */}
+              <div className="px-8 py-4 shrink-0">
+                <div
+                  className={cn(
+                    "flex gap-4 mb-4 transition-all duration-300",
+                    isInsightsOpen
+                      ? "flex-col items-stretch"
+                      : "flex-row items-center justify-between",
+                  )}
+                >
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <h1 className="text-xl font-semibold">Chat Sessions</h1>
+                    <p className="text-sm text-muted-foreground">
+                      View and debug individual chat conversations
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0">
+                    <DateRangeSelect
+                      value={dateRange}
+                      onValueChange={setDateRangeParam}
+                      customRange={customRange}
+                      onClearCustomRange={clearCustomRange}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <ChatLogsFilters
+                    searchQuery={searchQuery}
+                    onSearchQueryChange={setSearchQuery}
+                    resolutionStatus={resolutionStatus}
+                    onResolutionStatusChange={setResolutionStatus}
+                  />
+                  <div className="flex items-center gap-2 ml-auto">
+                    <Select
+                      value={sortField}
+                      onValueChange={(v) => setSortField(v as SortField)}
+                    >
+                      <SelectTrigger className="w-[160px]">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="chronological">
+                          Chronological
+                        </SelectItem>
+                        <SelectItem value="messageCount">
+                          Message Count
+                        </SelectItem>
+                        <SelectItem value="score">Score</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <button
+                      type="button"
+                      onClick={toggleSortOrder}
+                      className="shrink-0 inline-flex items-center justify-center size-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                      title={sortOrder === "desc" ? "Descending" : "Ascending"}
+                    >
+                      {sortOrder === "desc" ? (
+                        <ArrowDownIcon className="size-4" />
+                      ) : (
+                        <ArrowUpIcon className="size-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-        {(hasMore || offset > 0) && (
-          <div className="p-4 flex justify-center gap-2">
-            <Button
-              onClick={() => setOffset(Math.max(0, offset - limit))}
-              disabled={offset === 0}
-            >
-              Previous
-            </Button>
-            <Button
-              onClick={() => setOffset(offset + limit)}
-              disabled={!hasMore}
-            >
-              Next
-            </Button>
-          </div>
-        )}
+              {/* Content section - full width */}
+              <div className="flex-1 overflow-hidden min-h-0 border-t">
+                <div className="h-full flex flex-col bg-background overflow-hidden">
+                  {/* Score legend header */}
+                  <div className="shrink-0">
+                    <ScoreLegend />
+                  </div>
+
+                  {/* Scrollable chat list */}
+                  <div className="overflow-y-auto flex-1">
+                    <ChatLogsTable
+                      chats={chats}
+                      selectedChatId={selectedChat?.id}
+                      onSelectChat={setSelectedChat}
+                      isLoading={isLoading}
+                      error={error}
+                    />
+                  </div>
+
+                  {/* Sticky pagination at bottom */}
+                  {(hasMore || offset > 0) && (
+                    <div className="p-4 flex justify-center items-center gap-4 border-t bg-background shrink-0">
+                      <Button
+                        onClick={() => setOffset(Math.max(0, offset - limit))}
+                        disabled={offset === 0}
+                      >
+                        Previous
+                      </Button>
+                      <span className="text-sm text-muted-foreground tabular-nums">
+                        Page {Math.floor(offset / limit) + 1}
+                        {total > 0 && ` of ${Math.ceil(total / limit)}`}
+                      </span>
+                      <Button
+                        onClick={() => setOffset(offset + limit)}
+                        disabled={!hasMore}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Page.Body>
+        </Page>
       </div>
 
       {/* Right side: Slide-out drawer */}
@@ -374,6 +560,6 @@ function ChatLogsContent({
           )}
         </DrawerContent>
       </Drawer>
-    </div>
+    </>
   );
 }

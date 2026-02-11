@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CodeBlock } from "@/components/ui/code-block";
 import type {
   ChatResolution,
   TelemetryLogRecord,
@@ -309,6 +310,12 @@ export function ChatDetailPanel({
   // Count tool calls (messages with tool role)
   const toolCallsCount = chat.messages.filter((m) => m.role === "tool").length;
 
+  // Filter out system messages for display count
+  const nonSystemMessages = chat.messages.filter((m) => m.role !== "system");
+
+  // Get system messages for the System Prompt tab
+  const systemMessages = chat.messages.filter((m) => m.role === "system");
+
   // Create a map of message IDs to resolution info for showing breakpoints
   const messageResolutionMap = new Map<string, ChatResolution>();
   resolutions.forEach((res) => {
@@ -391,6 +398,15 @@ export function ChatDetailPanel({
               </span>
             )}
           </TabsTrigger>
+          {systemMessages.length > 0 && (
+            <TabsTrigger
+              value="system"
+              className="relative rounded-none border-0 border-b-2 border-transparent shadow-none px-4 py-3 data-[state=active]:border-b-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+            >
+              <Icon name="settings" className="size-4 mr-2" />
+              System Prompt
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Overview Tab */}
@@ -420,7 +436,7 @@ export function ChatDetailPanel({
                   Messages:
                 </div>
                 <div className="text-sm font-medium">
-                  {chat.messages.length}
+                  {nonSystemMessages.length}
                 </div>
               </div>
               <div>
@@ -484,7 +500,7 @@ export function ChatDetailPanel({
           {/* Chat Messages */}
           <div className="p-6">
             <Stack direction="vertical" gap={4}>
-              {chat.messages.map((message) => {
+              {nonSystemMessages.map((message) => {
                 const resolution = messageResolutionMap.get(message.id);
 
                 return (
@@ -522,8 +538,15 @@ export function ChatDetailPanel({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-sm font-semibold capitalize">
-                            {message.role}
+                            {message.role === "tool"
+                              ? "Tool Result"
+                              : message.role}
                           </span>
+                          {message.toolCallId && (
+                            <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                              {message.toolCallId}
+                            </code>
+                          )}
                           <span className="text-xs text-muted-foreground">
                             {message.createdAt &&
                               format(new Date(message.createdAt), "HH:mm:ss")}
@@ -531,23 +554,17 @@ export function ChatDetailPanel({
                         </div>
                         <div
                           className={cn(
-                            "p-3 rounded-lg text-sm",
-                            message.role === "user" && "bg-primary/5",
-                            message.role === "assistant" && "bg-muted/50",
+                            "rounded-lg text-sm overflow-hidden",
+                            message.role === "user" && "bg-primary/5 p-3",
+                            message.role === "assistant" && "bg-muted/50 p-3",
                             message.role === "tool" && "bg-background border",
                           )}
                         >
-                          {message.role === "tool" &&
-                          typeof message.content === "object" &&
-                          message.content !== null ? (
-                            <div>
-                              <div className="text-xs font-semibold mb-2">
-                                Parameters:
-                              </div>
-                              <pre className="text-xs overflow-x-auto">
-                                {JSON.stringify(message.content, null, 2)}
-                              </pre>
-                            </div>
+                          {message.role === "tool" ? (
+                            <CodeBlock
+                              content={message.content}
+                              maxHeight={300}
+                            />
                           ) : (
                             <div className="whitespace-pre-wrap">
                               {typeof message.content === "string"
@@ -588,6 +605,43 @@ export function ChatDetailPanel({
             error={logsError as Error | null}
           />
         </TabsContent>
+
+        {/* System Prompt Tab */}
+        {systemMessages.length > 0 && (
+          <TabsContent
+            value="system"
+            className="flex-1 overflow-y-auto m-0 data-[state=inactive]:hidden"
+          >
+            <div className="p-6">
+              <Stack direction="vertical" gap={4}>
+                {systemMessages.map((message) => (
+                  <div key={message.id}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="size-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                        <Icon name="settings" className="size-4" />
+                      </div>
+                      <span className="text-sm font-semibold">
+                        System Prompt
+                      </span>
+                      {message.createdAt && (
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(message.createdAt), "HH:mm:ss")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-4 rounded-lg bg-muted/30 border">
+                      <pre className="text-sm whitespace-pre-wrap font-mono">
+                        {typeof message.content === "string"
+                          ? message.content
+                          : JSON.stringify(message.content, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                ))}
+              </Stack>
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

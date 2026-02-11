@@ -42,6 +42,7 @@ interface ChatLogsFiltersProps {
   onSearchQueryChange: (value: string) => void;
   resolutionStatus: string;
   onResolutionStatusChange: (value: string) => void;
+  disabled?: boolean;
 }
 
 export function ChatLogsFilters({
@@ -49,6 +50,7 @@ export function ChatLogsFilters({
   onSearchQueryChange,
   resolutionStatus,
   onResolutionStatusChange,
+  disabled,
 }: ChatLogsFiltersProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
@@ -81,13 +83,15 @@ export function ChatLogsFilters({
         onChange={setLocalSearch}
         placeholder="Search by chat ID, user ID, or title..."
         className="flex-1"
+        disabled={disabled}
       />
 
       <Select
         value={resolutionStatus || "all"}
         onValueChange={handleStatusChange}
+        disabled={disabled}
       >
-        <SelectTrigger className="w-[180px]">
+        <SelectTrigger className="w-[180px]" disabled={disabled}>
           <SelectValue placeholder="All Statuses" />
         </SelectTrigger>
         <SelectContent className="w-[280px]">
