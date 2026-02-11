@@ -2,10 +2,12 @@ import {
   InsightsSidebar,
   useInsightsState,
 } from "@/components/insights-sidebar";
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { SearchBar } from "@/components/ui/search-bar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { cn } from "@/lib/utils";
-import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls";
 import {
   FeatureName,
@@ -85,50 +87,41 @@ function LogsContent() {
     isFetching,
     isFetchingNextPage,
     refetch,
-  } = useInfiniteQuery({
-    queryKey: ["tool-calls", searchQuery],
-    queryFn: ({ pageParam }) =>
-      unwrapAsync(
-        telemetrySearchToolCalls(client, {
-          searchToolCallsPayload: {
-            filter: searchQuery ? { gramUrn: searchQuery } : undefined,
-            cursor: pageParam,
-            limit: perPage,
-            sort: "desc",
-          },
-        }),
-      ),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    throwOnError: false,
-  });
+    isLogsDisabled,
+  } = useLogsEnabledErrorCheck(
+    useInfiniteQuery({
+      queryKey: ["tool-calls", searchQuery],
+      queryFn: ({ pageParam }) =>
+        unwrapAsync(
+          telemetrySearchToolCalls(client, {
+            searchToolCallsPayload: {
+              filter: searchQuery ? { gramUrn: searchQuery } : undefined,
+              cursor: pageParam,
+              limit: perPage,
+              sort: "desc",
+            },
+          }),
+        ),
+      initialPageParam: undefined as string | undefined,
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      throwOnError: false,
+    }),
+  );
 
   // Flatten all pages into a single array of traces
   const allTraces = data?.pages.flatMap((page) => page.toolCalls) ?? [];
-  const isDisabled404 =
-    error instanceof ServiceError && error.statusCode === 404;
-  const logsEnabled = isDisabled404 ? false : (data?.pages[0]?.enabled ?? true);
+  const logsEnabled = !isLogsDisabled && (data?.pages[0]?.enabled ?? true);
 
-  const [logsMutationError, setLogsMutationError] = useState<string | null>(
-    null,
-  );
-  const { mutateAsync: setLogsFeature, status: logsMutationStatus } =
+  const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
       onSuccess: () => {
-        setLogsMutationError(null);
         refetch();
-      },
-      onError: (err) => {
-        const message =
-          err instanceof Error ? err.message : "Failed to update logs";
-        setLogsMutationError(message);
       },
     });
 
   const isMutatingLogs = logsMutationStatus === "pending";
 
   const handleSetLogs = (enabled: boolean) => {
-    setLogsMutationError(null);
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
@@ -218,55 +211,71 @@ function LogsContent() {
 
       {/* Content section */}
       <div className="flex-1 overflow-hidden relative min-h-0">
-        {/* Trace list container */}
-        <div className="h-full flex flex-col bg-background">
-          {/* Loading indicator */}
-          {isFetching && allTraces.length > 0 && (
-            <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
-              <div className="h-full bg-primary animate-pulse" />
+        {isLogsDisabled && (
+          <div className="relative">
+            {/* Placeholder skeleton behind overlay */}
+            <div
+              className="pointer-events-none select-none flex flex-col bg-background"
+              aria-hidden="true"
+            >
+              <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+                <div className="shrink-0 w-[150px]">Timestamp</div>
+                <div className="shrink-0 w-5" />
+                <div className="flex-1">Source / Tool</div>
+                <div className="shrink-0 w-16 text-right">Status</div>
+              </div>
+              <LogsSkeleton />
             </div>
-          )}
-
-          {/* Header */}
-          <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-            <div className="shrink-0 w-[150px]">Timestamp</div>
-            <div className="shrink-0 w-5" />
-            <div className="flex-1">Source / Tool</div>
-            <div className="shrink-0 w-16 text-right">Status</div>
+            <EnableLoggingOverlay onEnabled={refetch} />
           </div>
+        )}
+        {!isLogsDisabled && (
+          <div className="h-full flex flex-col bg-background">
+            {/* Loading indicator */}
+            {isFetching && allTraces.length > 0 && (
+              <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
+                <div className="h-full bg-primary animate-pulse" />
+              </div>
+            )}
 
-          {/* Scrollable trace list */}
-          <div
-            ref={containerRef}
-            className="overflow-y-auto flex-1"
-            onScroll={handleScroll}
-          >
-            <TraceListContent
-              error={error}
-              isLoading={isLoading}
-              logsEnabled={logsEnabled}
-              allTraces={allTraces}
-              searchQuery={searchQuery}
-              expandedTraceId={expandedTraceId}
-              isFetchingNextPage={isFetchingNextPage}
-              isMutatingLogs={isMutatingLogs}
-              logsMutationError={logsMutationError}
-              onEnableLogs={() => handleSetLogs(true)}
-              onToggleExpand={toggleExpand}
-              onLogClick={handleLogClick}
-            />
-          </div>
-
-          {/* Footer */}
-          {allTraces.length > 0 && (
-            <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
-              <span>
-                {allTraces.length} {allTraces.length === 1 ? "trace" : "traces"}
-                {hasNextPage && " • Scroll to load more"}
-              </span>
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+              <div className="shrink-0 w-[150px]">Timestamp</div>
+              <div className="shrink-0 w-5" />
+              <div className="flex-1">Source / Tool</div>
+              <div className="shrink-0 w-16 text-right">Status</div>
             </div>
-          )}
-        </div>
+
+            {/* Scrollable trace list */}
+            <div
+              ref={containerRef}
+              className="overflow-y-auto flex-1"
+              onScroll={handleScroll}
+            >
+              <TraceListContent
+                error={error}
+                isLoading={isLoading}
+                allTraces={allTraces}
+                searchQuery={searchQuery}
+                expandedTraceId={expandedTraceId}
+                isFetchingNextPage={isFetchingNextPage}
+                onToggleExpand={toggleExpand}
+                onLogClick={handleLogClick}
+              />
+            </div>
+
+            {/* Footer */}
+            {allTraces.length > 0 && (
+              <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+                <span>
+                  {allTraces.length}{" "}
+                  {allTraces.length === 1 ? "trace" : "traces"}
+                  {hasNextPage && " • Scroll to load more"}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Log Detail Sheet */}
@@ -282,40 +291,22 @@ function LogsContent() {
 function TraceListContent({
   error,
   isLoading,
-  logsEnabled,
   allTraces,
   searchQuery,
   expandedTraceId,
   isFetchingNextPage,
-  isMutatingLogs,
-  logsMutationError,
-  onEnableLogs,
   onToggleExpand,
   onLogClick,
 }: {
   error: Error | null;
   isLoading: boolean;
-  logsEnabled: boolean;
   allTraces: ToolCallSummary[];
   searchQuery: string | null;
   expandedTraceId: string | null;
   isFetchingNextPage: boolean;
-  isMutatingLogs: boolean;
-  logsMutationError: string | null;
-  onEnableLogs: () => void;
   onToggleExpand: (traceId: string) => void;
   onLogClick: (log: TelemetryLogRecord) => void;
 }) {
-  if (error instanceof ServiceError && error.statusCode === 404) {
-    return (
-      <LogsDisabledState
-        onEnableLogs={onEnableLogs}
-        isMutating={isMutatingLogs}
-        mutationError={logsMutationError}
-      />
-    );
-  }
-
   if (error) {
     return (
       <LogsError
@@ -333,15 +324,6 @@ function TraceListContent({
   }
 
   if (allTraces.length === 0) {
-    if (!logsEnabled) {
-      return (
-        <LogsDisabledState
-          onEnableLogs={onEnableLogs}
-          isMutating={isMutatingLogs}
-          mutationError={logsMutationError}
-        />
-      );
-    }
     return <LogsEmptyState searchQuery={searchQuery} />;
   }
 
@@ -364,49 +346,6 @@ function TraceListContent({
         </div>
       )}
     </>
-  );
-}
-
-function LogsDisabledState({
-  onEnableLogs,
-  isMutating,
-  mutationError,
-}: {
-  onEnableLogs: () => void;
-  isMutating: boolean;
-  mutationError: string | null;
-}) {
-  return (
-    <div className="py-12 text-center text-muted-foreground">
-      <div className="flex flex-col items-center gap-3">
-        <div className="size-12 rounded-full bg-muted flex items-center justify-center mb-2">
-          <Icon name="scroll-text" className="size-6 text-muted-foreground" />
-        </div>
-        <span className="font-medium text-foreground">
-          Logs are disabled for your organization
-        </span>
-        <span className="text-sm max-w-sm">
-          Enable logs to capture tool call traces and telemetry data for
-          debugging and analysis.
-        </span>
-        <Button
-          onClick={onEnableLogs}
-          disabled={isMutating}
-          size="sm"
-          className="mt-2"
-        >
-          <Button.LeftIcon>
-            <Icon name="test-tube-diagonal" className="size-4" />
-          </Button.LeftIcon>
-          <Button.Text>
-            {isMutating ? "Enabling..." : "Enable Logs"}
-          </Button.Text>
-        </Button>
-        {mutationError && (
-          <span className="text-sm text-destructive">{mutationError}</span>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -449,6 +388,24 @@ function LogsEmptyState({ searchQuery }: { searchQuery: string | null }) {
             : "Traces will appear here when tool calls are made"}
         </span>
       </div>
+    </div>
+  );
+}
+
+function LogsSkeleton() {
+  return (
+    <div className="flex-1 divide-y">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 px-5 py-4">
+          <Skeleton className="h-5 w-[150px]" />
+          <Skeleton className="size-5" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-5 w-64" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+          <Skeleton className="h-6 w-20" />
+        </div>
+      ))}
     </div>
   );
 }

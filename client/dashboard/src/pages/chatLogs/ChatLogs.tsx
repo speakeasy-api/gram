@@ -2,20 +2,17 @@ import {
   InsightsSidebar,
   useInsightsState,
 } from "@/components/insights-sidebar";
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { cn } from "@/lib/utils";
 import { resolutionBgColors } from "@/lib/resolution-colors";
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
-import { FeatureName } from "@gram/client/models/components";
 import {
   SortBy,
   SortOrder as ApiSortOrder,
 } from "@gram/client/models/operations/listchatswithresolutions";
-import {
-  useListChatsWithResolutions,
-  useFeaturesSetMutation,
-} from "@gram/client/react-query";
+import { useListChatsWithResolutions } from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router";
@@ -28,6 +25,7 @@ import {
   getDateRange,
 } from "../observability/date-range-select";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -258,36 +256,6 @@ export default function ChatLogs() {
       ),
     );
 
-  const [logsMutationError, setLogsMutationError] = useState<string | null>(
-    null,
-  );
-  const { mutate: setLogsFeature, status: logsMutationStatus } =
-    useFeaturesSetMutation({
-      onSuccess: () => {
-        setLogsMutationError(null);
-        refetch();
-      },
-      onError: (err) => {
-        const message =
-          err instanceof Error ? err.message : "Failed to enable logging";
-        setLogsMutationError(message);
-      },
-    });
-
-  const isMutatingLogs = logsMutationStatus === "pending";
-
-  const handleEnableLogs = () => {
-    setLogsMutationError(null);
-    setLogsFeature({
-      request: {
-        setProductFeatureRequestBody: {
-          featureName: FeatureName.Logs,
-          enabled: true,
-        },
-      },
-    });
-  };
-
   // Chats are sorted server-side via sortBy/sortOrder params
   const chats = data?.chats ?? [];
   // Keep total stable across page changes to avoid flickering
@@ -357,9 +325,7 @@ export default function ChatLogs() {
         isLoading={isLoading}
         error={error}
         isLogsDisabled={isLogsDisabled}
-        isMutatingLogs={isMutatingLogs}
-        logsMutationError={logsMutationError}
-        onEnableLogs={handleEnableLogs}
+        onLogsEnabled={refetch}
         hasMore={hasMore}
         offset={offset}
         setOffset={setOffset}
@@ -390,9 +356,7 @@ function ChatLogsContent({
   isLoading,
   error,
   isLogsDisabled,
-  isMutatingLogs,
-  logsMutationError,
-  onEnableLogs,
+  onLogsEnabled,
   hasMore,
   offset,
   setOffset,
@@ -417,9 +381,7 @@ function ChatLogsContent({
   isLoading: boolean;
   error: Error | null;
   isLogsDisabled: boolean;
-  isMutatingLogs: boolean;
-  logsMutationError: string | null;
-  onEnableLogs: () => void;
+  onLogsEnabled: () => void;
   hasMore: boolean;
   offset: number;
   setOffset: (offset: number) => void;
@@ -497,56 +459,20 @@ function ChatLogsContent({
       </div>
 
       {/* Content section */}
-      <div className="flex-1 overflow-y-auto relative min-h-0">
-        {isLogsDisabled ? (
-          <div className="relative h-full">
-            {/* Placeholder content behind overlay */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {isLogsDisabled && (
+          <div className="relative">
+            {/* Placeholder skeleton behind overlay */}
             <div className="pointer-events-none select-none" aria-hidden="true">
               <div className="sticky top-0 z-10">
                 <ScoreLegend />
               </div>
-              <ChatLogsTable
-                chats={[]}
-                selectedChatId={undefined}
-                onSelectChat={() => {}}
-                isLoading={true}
-                error={null}
-              />
+              <ChatLogsSkeleton />
             </div>
-            {/* Overlay */}
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/70 backdrop-blur-[2px]">
-              <div className="flex flex-col items-center gap-4 max-w-md text-center p-8">
-                <div className="size-14 rounded-full bg-muted flex items-center justify-center">
-                  <Icon
-                    name="message-circle"
-                    className="size-7 text-muted-foreground"
-                  />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold mb-1">Enable Logging</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Turn on logging to start capturing chat sessions and
-                    conversation data. This will allow you to review and debug
-                    individual chat interactions.
-                  </p>
-                </div>
-                <Button onClick={onEnableLogs} disabled={isMutatingLogs}>
-                  <Button.LeftIcon>
-                    <Icon name="activity" className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>
-                    {isMutatingLogs ? "Enabling..." : "Enable Logging"}
-                  </Button.Text>
-                </Button>
-                {logsMutationError && (
-                  <span className="text-sm text-destructive">
-                    {logsMutationError}
-                  </span>
-                )}
-              </div>
-            </div>
+            <EnableLoggingOverlay onEnabled={onLogsEnabled} />
           </div>
-        ) : (
+        )}
+        {!isLogsDisabled && (
           <>
             <div className="sticky top-0 z-10">
               <ScoreLegend />
@@ -597,6 +523,23 @@ function ChatLogsContent({
           )}
         </DrawerContent>
       </Drawer>
+    </div>
+  );
+}
+
+function ChatLogsSkeleton() {
+  return (
+    <div className="divide-y">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4 px-4 py-4">
+          <Skeleton className="size-14 rounded-full" />
+          <div className="flex-1 space-y-2.5">
+            <Skeleton className="h-5 w-64" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+          <Skeleton className="h-5 w-24" />
+        </div>
+      ))}
     </div>
   );
 }
