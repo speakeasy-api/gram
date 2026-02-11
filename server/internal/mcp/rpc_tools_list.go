@@ -29,13 +29,12 @@ type toolsListResult struct {
 }
 
 type toolListEntry struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	InputSchema json.RawMessage   `json:"inputSchema,omitempty,omitzero"`
+	Name        string                       `json:"name"`
+	Description string                       `json:"description"`
+	InputSchema json.RawMessage              `json:"inputSchema,omitempty,omitzero"`
 	Annotations *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
-	Meta        map[string]any    `json:"_meta,omitempty"`
+	Meta        map[string]any               `json:"_meta,omitempty"`
 }
-
 
 func handleToolsList(
 	ctx context.Context,
@@ -165,6 +164,7 @@ func buildToolListEntries(
 			})
 		}
 	}
+
 	for _, tool := range toolset.Tools {
 		if !conv.IsProxyTool(tool) {
 			if entry := toolToListEntry(tool); entry != nil {
@@ -188,6 +188,10 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 	toolEntry, err := conv.ToToolListEntry(tool)
 	if err != nil {
 		return nil
+	}
+
+	if toolEntry.Annotations != nil {
+		println("\n\n\n\ntoolEntry.Annotations", toolEntry.Name, toolEntry.Annotations.Title, toolEntry.Annotations.ReadOnlyHint, toolEntry.Annotations.DestructiveHint, toolEntry.Annotations.IdempotentHint, toolEntry.Annotations.OpenWorldHint)
 	}
 
 	return &toolListEntry{

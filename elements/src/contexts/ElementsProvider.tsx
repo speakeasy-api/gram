@@ -36,6 +36,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   convertToModelMessages,
+  ModelMessage,
   smoothStream,
   stepCountIs,
   streamText,
@@ -119,6 +120,29 @@ function mergeInternalSystemPromptWith(
 
   Utilities:
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
+}
+
+/**
+ * Converts UI messages to model messages, adding back in the ids that the AI SDK strips
+ */
+function convertMessagesToModelMessages(messages: UIMessage[]): (ModelMessage & { id: string })[] {
+  // This works around AI SDK bug where these fields cause validation failures
+  const cleanedMessages = cleanMessagesForModel(messages.map(message => ({
+    ...message,
+    dontStrip: true,
+  })))
+
+  // The AI SDK strips message ids for some reason, so we need to convert one by one
+  // so that we can re-add the message ids without losing the mapping
+  // This works because convertToModelMessages is 1 -> many
+  const convertedOneByOne = cleanedMessages.flatMap((m) => convertToModelMessages([m]).map((m2) => ({
+    ...m2,
+    id: m.id,
+  })))
+
+  console.log('convertedOneByOne', convertedOneByOne)
+
+  return convertedOneByOne
 }
 
 /**
@@ -359,20 +383,13 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           : openRouterModel!.chat(model)
 
         try {
-          // This works around AI SDK bug where these fields cause validation failures
-          const cleanedMessages = cleanMessagesForModel(messages)
-          const modelMessages = convertToModelMessages(cleanedMessages)
-
-          // For some reason, the AI SDK strips the ids from the messages in convertToModelMessages, so we need to add them back in
-          const modelMessagesWithIds = modelMessages.map((message, index) => ({
-            ...message,
-            id: messages[index].id,
-          }))
+          const modelMessages = convertMessagesToModelMessages(messages)
+          console.log('modelMessages', modelMessages)
 
           const result = streamText({
             system: systemPrompt,
             model: modelToUse,
-            messages: modelMessagesWithIds,
+            messages: modelMessages,
             tools,
             stopWhen: stepCountIs(10),
             experimental_transform: smoothStream({ delayInMs: 15 }),

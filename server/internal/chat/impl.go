@@ -730,15 +730,20 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				}
 			}()
 		} else {
-			msg := "no message ID"
+			msg := "no response captor"
 			if respCaptorWithTracking != nil {
+				msg = "no message ID"
 				msg += "; model: " + respCaptorWithTracking.model
 				msg += "; org ID: " + respCaptorWithTracking.orgID
 				msg += "; project ID: " + respCaptorWithTracking.projectID.String()
 				msg += "; chat ID: " + respCaptorWithTracking.chatID.String()
 				msg += fmt.Sprintf("; isStreaming: %t", respCaptorWithTracking.isStreaming)
 			}
-			s.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(errors.New(msg)))
+
+			// This happens when you dont have a chat ID, but for internal Gram usage we dont care
+			if source != billing.ModelUsageSourceGram {
+				s.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(errors.New(msg)))
+			}
 		}
 	}()
 
