@@ -243,40 +243,42 @@ export default function Home() {
         </div>
 
         {/* Featured Servers Section */}
-        <div className="mt-10">
-          <Stack
-            direction="horizontal"
-            justify="space-between"
-            align="center"
-            className="mb-4"
-          >
-            <h2 className="text-lg font-semibold">
-              Featured Third-Party Servers
-            </h2>
-            <routes.catalog.Link>
-              <span className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
-                Browse all <ArrowRight className="w-4 h-4" />
-              </span>
-            </routes.catalog.Link>
-          </Stack>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {isLoading &&
-              [...Array(6)].map((_, i) => (
-                <Skeleton key={i} className="h-[140px] rounded-xl" />
-              ))}
-            {!isLoading &&
-              featuredServers.map((server) => (
-                <FeaturedServerCard
-                  key={server.registrySpecifier}
-                  server={server}
-                  detailHref={routes.catalog.detail.href(
-                    encodeURIComponent(server.registrySpecifier),
-                  )}
-                  externalMcps={externalMcps}
-                />
-              ))}
+        {(isLoading || featuredServers.length > 0) && (
+          <div className="mt-10">
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+              className="mb-4"
+            >
+              <h2 className="text-lg font-semibold">
+                Featured Third-Party Servers
+              </h2>
+              <routes.catalog.Link>
+                <span className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
+                  Browse all <ArrowRight className="w-4 h-4" />
+                </span>
+              </routes.catalog.Link>
+            </Stack>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {isLoading &&
+                [...Array(6)].map((_, i) => (
+                  <Skeleton key={i} className="h-[140px] rounded-xl" />
+                ))}
+              {!isLoading &&
+                featuredServers.map((server) => (
+                  <FeaturedServerCard
+                    key={server.registrySpecifier}
+                    server={server}
+                    detailHref={routes.catalog.detail.href(
+                      encodeURIComponent(server.registrySpecifier),
+                    )}
+                    externalMcps={externalMcps}
+                  />
+                ))}
+            </div>
           </div>
-        </div>
+        )}
       </Page.Body>
     </Page>
   );
