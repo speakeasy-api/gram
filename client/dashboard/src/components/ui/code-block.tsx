@@ -5,18 +5,18 @@ import { codeToHtml } from "shiki";
 
 /** Max characters to send through shiki — above this we skip highlighting. */
 const SHIKI_CHAR_LIMIT = 8_000;
-/** Max lines shown in the collapsed preview. */
-const PREVIEW_LINE_LIMIT = 50;
+/** Max characters shown in the collapsed preview. */
+const PREVIEW_CHAR_LIMIT = 2_000;
 
-function truncateToLines(text: string, maxLines: number) {
-  let pos = 0;
-  for (let i = 0; i < maxLines; i++) {
-    const next = text.indexOf("\n", pos);
-    if (next === -1) return { text, truncated: false, totalLines: i + 1 };
-    pos = next + 1;
+function truncateToChars(text: string, maxChars: number) {
+  if (text.length <= maxChars) {
+    return { text, truncated: false, totalChars: text.length };
   }
-  const totalLines = text.split("\n").length;
-  return { text: text.slice(0, pos), truncated: true, totalLines };
+  return {
+    text: text.slice(0, maxChars),
+    truncated: true,
+    totalChars: text.length,
+  };
 }
 
 function CopyButton({ content }: { content: string }) {
@@ -56,11 +56,12 @@ function SyntaxHighlightedCode({
   const [expanded, setExpanded] = useState(false);
 
   const preview = useMemo(
-    () => truncateToLines(text, PREVIEW_LINE_LIMIT),
+    () => truncateToChars(text, PREVIEW_CHAR_LIMIT),
     [text],
   );
   const displayText = expanded ? text : preview.text;
   const canHighlight = displayText.length <= SHIKI_CHAR_LIMIT;
+  const remainingChars = preview.totalChars - PREVIEW_CHAR_LIMIT;
 
   useEffect(() => {
     setHighlightedCode(null);
@@ -92,7 +93,7 @@ function SyntaxHighlightedCode({
       onClick={() => setExpanded(true)}
       className="w-full bg-slate-800/90 px-4 py-2 text-left text-xs text-slate-400 transition-colors hover:text-slate-200"
     >
-      Show all {preview.totalLines} lines…
+      Show {remainingChars.toLocaleString()} more characters…
     </button>
   );
 
