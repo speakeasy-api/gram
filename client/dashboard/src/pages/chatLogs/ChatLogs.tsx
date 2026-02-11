@@ -24,6 +24,17 @@ import {
   getDateRange,
 } from "../observability/date-range-select";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
+
+type SortField = "chronological" | "messageCount" | "score";
+type SortOrder = "asc" | "desc";
 
 // Reusable score indicator with colored dot
 function ScoreIndicator({
@@ -105,9 +116,16 @@ export default function ChatLogs() {
   const urlTo = searchParams.get("to");
   const urlSearch = searchParams.get("search");
   const urlStatus = searchParams.get("status");
+  const urlSort = searchParams.get("sort") as SortField | null;
+  const urlOrder = searchParams.get("order") as SortOrder | null;
 
   // Derive state from URL
   const dateRange: DateRangePreset = isValidPreset(urlRange) ? urlRange : "30d";
+  const sortField: SortField =
+    urlSort === "messageCount" || urlSort === "score"
+      ? urlSort
+      : "chronological";
+  const sortOrder: SortOrder = urlOrder === "asc" ? "asc" : "desc";
 
   const customRange = useMemo(() => {
     if (urlFrom && urlTo) {
@@ -182,6 +200,24 @@ export default function ChatLogs() {
     [updateSearchParams],
   );
 
+  const setSortField = useCallback(
+    (value: SortField) => {
+      updateSearchParams({ sort: value === "chronological" ? null : value });
+    },
+    [updateSearchParams],
+  );
+
+  const setSortOrder = useCallback(
+    (value: SortOrder) => {
+      updateSearchParams({ order: value === "desc" ? null : value });
+    },
+    [updateSearchParams],
+  );
+
+  const toggleSortOrder = useCallback(() => {
+    setSortOrder(sortOrder === "desc" ? "asc" : "desc");
+  }, [sortOrder, setSortOrder]);
+
   const { data, isLoading, error, refetch } = useListChatsWithResolutions(
     {
       search: searchQuery || undefined,
@@ -236,8 +272,39 @@ export default function ChatLogs() {
     });
   };
 
-  const chats = data?.chats ?? [];
-  const hasMore = chats.length === limit;
+  const rawChats = data?.chats ?? [];
+  const hasMore = rawChats.length === limit;
+
+  // Helper to get average score from resolutions
+  const getAverageScore = (
+    resolutions: ChatOverviewWithResolutions["resolutions"],
+  ) => {
+    if (resolutions.length === 0) return 0;
+    const sum = resolutions.reduce((acc, r) => acc + r.score, 0);
+    return sum / resolutions.length;
+  };
+
+  // Sort chats based on selected sort field and order
+  const chats = useMemo(() => {
+    const sorted = [...rawChats].sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case "chronological":
+          comparison =
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          break;
+        case "messageCount":
+          comparison = b.numMessages - a.numMessages;
+          break;
+        case "score":
+          comparison =
+            getAverageScore(b.resolutions) - getAverageScore(a.resolutions);
+          break;
+      }
+      return sortOrder === "desc" ? comparison : -comparison;
+    });
+    return sorted;
+  }, [rawChats, sortField, sortOrder]);
 
   // Format date range for copilot context
   const dateRangeContext = useMemo(() => {
@@ -288,6 +355,10 @@ export default function ChatLogs() {
         setSearchQuery={setSearchQuery}
         resolutionStatus={resolutionStatus}
         setResolutionStatus={setResolutionStatus}
+        sortField={sortField}
+        setSortField={setSortField}
+        sortOrder={sortOrder}
+        toggleSortOrder={toggleSortOrder}
         chats={chats}
         selectedChat={selectedChat}
         setSelectedChat={setSelectedChat}
@@ -316,6 +387,10 @@ function ChatLogsContent({
   setSearchQuery,
   resolutionStatus,
   setResolutionStatus,
+  sortField,
+  setSortField,
+  sortOrder,
+  toggleSortOrder,
   chats,
   selectedChat,
   setSelectedChat,
@@ -338,6 +413,10 @@ function ChatLogsContent({
   setSearchQuery: (value: string) => void;
   resolutionStatus: string;
   setResolutionStatus: (value: string) => void;
+  sortField: SortField;
+  setSortField: (value: SortField) => void;
+  sortOrder: SortOrder;
+  toggleSortOrder: () => void;
   chats: ChatOverviewWithResolutions[];
   selectedChat: ChatOverviewWithResolutions | null;
   setSelectedChat: (chat: ChatOverviewWithResolutions | null) => void;
@@ -382,13 +461,44 @@ function ChatLogsContent({
             />
           </div>
         </div>
-        <ChatLogsFilters
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          resolutionStatus={resolutionStatus}
-          onResolutionStatusChange={setResolutionStatus}
-          disabled={isDisabled}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <ChatLogsFilters
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            resolutionStatus={resolutionStatus}
+            onResolutionStatusChange={setResolutionStatus}
+            disabled={isDisabled}
+          />
+          <div className="flex items-center gap-2 ml-auto">
+            <Select
+              value={sortField}
+              onValueChange={(v) => setSortField(v as SortField)}
+              disabled={isDisabled}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="chronological">Chronological</SelectItem>
+                <SelectItem value="messageCount">Message Count</SelectItem>
+                <SelectItem value="score">Score</SelectItem>
+              </SelectContent>
+            </Select>
+            <button
+              type="button"
+              onClick={toggleSortOrder}
+              disabled={isDisabled}
+              className="shrink-0 inline-flex items-center justify-center size-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:pointer-events-none"
+              title={sortOrder === "desc" ? "Descending" : "Ascending"}
+            >
+              {sortOrder === "desc" ? (
+                <ArrowDownIcon className="size-4" />
+              ) : (
+                <ArrowUpIcon className="size-4" />
+              )}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Content section */}
