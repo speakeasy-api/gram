@@ -25,8 +25,8 @@ import { Plugin } from '@/types/plugins'
 import {
   AssistantRuntimeProvider,
   AssistantTool,
-  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
   useAssistantState,
+  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
 } from '@assistant-ui/react'
 import {
   frontendTools as convertFrontendToolsToAISDKTools,
@@ -52,14 +52,14 @@ import {
   useState,
 } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { ElementsContext } from './contexts'
-import { ToolApprovalProvider } from './ToolApprovalContext'
+import { ChatIdContext } from './ChatIdContext'
 import {
   ConnectionStatusProvider,
   useConnectionStatusOptional,
 } from './ConnectionStatusContext'
+import { ElementsContext } from './contexts'
+import { ToolApprovalProvider } from './ToolApprovalContext'
 import { ToolExecutionProvider } from './ToolExecutionContext'
-import { ChatIdContext } from './ChatIdContext'
 
 /**
  * Extracts executable tools from frontend tool definitions.
@@ -331,10 +331,10 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         const openRouterModel = usingCustomModel
           ? null
           : createOpenRouter({
-              baseURL: apiUrl,
-              apiKey: 'unused, but must be set',
-              headers: headersWithChatId,
-            })
+            baseURL: apiUrl,
+            apiKey: 'unused, but must be set',
+            headers: headersWithChatId,
+          })
 
         if (config.languageModel) {
           console.log('Using custom language model', config.languageModel)
@@ -363,10 +363,16 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           const cleanedMessages = cleanMessagesForModel(messages)
           const modelMessages = convertToModelMessages(cleanedMessages)
 
+          // For some reason, the AI SDK strips the ids from the messages in convertToModelMessages, so we need to add them back in
+          const modelMessagesWithIds = modelMessages.map((message, index) => ({
+            ...message,
+            id: messages[index].id,
+          }))
+
           const result = streamText({
             system: systemPrompt,
             model: modelToUse,
-            messages: modelMessages,
+            messages: modelMessagesWithIds,
             tools,
             stopWhen: stepCountIs(10),
             experimental_transform: smoothStream({ delayInMs: 15 }),
@@ -626,7 +632,7 @@ const ElementsProviderWithHistory = ({
                   ROOT_SELECTOR,
                   (contextValue?.config.variant === 'standalone' ||
                     contextValue?.config.variant === 'sidecar') &&
-                    'h-full'
+                  'h-full'
                 )}
               >
                 {children}
@@ -678,7 +684,7 @@ const ElementsProviderWithoutHistory = ({
                 ROOT_SELECTOR,
                 (contextValue?.config.variant === 'standalone' ||
                   contextValue?.config.variant === 'sidecar') &&
-                  'h-full'
+                'h-full'
               )}
             >
               {children}
