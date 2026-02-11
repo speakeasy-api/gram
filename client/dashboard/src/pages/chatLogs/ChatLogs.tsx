@@ -265,7 +265,8 @@ export default function ChatLogs() {
     lastTotalRef.current = data.total;
   }
   const total = lastTotalRef.current;
-  const hasMore = chats.length === limit;
+  const hasMore =
+    total > 0 ? offset + chats.length < total : chats.length === limit;
 
   // Format date range for copilot context
   const dateRangeContext = useMemo(() => {
