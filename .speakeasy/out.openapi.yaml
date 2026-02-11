@@ -2638,6 +2638,29 @@ paths:
             minimum: 0
             type: integer
         - allowEmptyValue: true
+          description: Field to sort by
+          in: query
+          name: sort_by
+          schema:
+            default: created_at
+            description: Field to sort by
+            enum:
+              - created_at
+              - num_messages
+              - score
+            type: string
+        - allowEmptyValue: true
+          description: Sort order
+          in: query
+          name: sort_order
+          schema:
+            default: desc
+            description: Sort order
+            enum:
+              - asc
+              - desc
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -14110,10 +14133,6 @@ components:
           type: boolean
           description: 'Whether to include time series data (default: true)'
           default: true
-        interval_seconds:
-          type: integer
-          description: Optional time bucket interval in seconds. When provided, overrides automatic interval calculation. Useful for maintaining consistent granularity when zooming.
-          format: int64
         to:
           type: string
           description: End time in ISO 8601 format

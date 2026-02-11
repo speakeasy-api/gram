@@ -229,7 +229,18 @@ WHERE c.project_id = @project_id
 
 -- name: ListChatsWithResolutions :many
 WITH limited_chats AS (
-  SELECT c.id, c.title, c.user_id, c.external_user_id, c.created_at, c.updated_at
+  SELECT
+    c.id,
+    c.title,
+    c.user_id,
+    c.external_user_id,
+    c.created_at,
+    c.updated_at,
+    (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer as num_messages,
+    COALESCE(
+      (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
+      0
+    ) as avg_score
   FROM chats c
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
@@ -255,7 +266,14 @@ WITH limited_chats AS (
         )
       )
     )
-  ORDER BY c.updated_at DESC
+  ORDER BY
+    CASE WHEN @sort_by = 'created_at' AND @sort_order = 'desc' THEN c.created_at END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'created_at' AND @sort_order = 'asc' THEN c.created_at END ASC NULLS LAST,
+    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'asc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END ASC NULLS LAST,
+    CASE WHEN @sort_by = 'score' AND @sort_order = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'score' AND @sort_order = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
+    c.created_at DESC
   LIMIT @page_limit
   OFFSET @page_offset
 )
@@ -266,12 +284,8 @@ SELECT
     lc.external_user_id,
     lc.created_at,
     lc.updated_at,
-    (
-        COALESCE(
-            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = lc.id),
-            0
-        )
-    )::integer as num_messages,
+    lc.num_messages,
+    lc.avg_score,
     cr.id as resolution_id,
     cr.user_goal,
     cr.resolution,
@@ -288,7 +302,15 @@ SELECT
     ) as message_ids
 FROM limited_chats lc
 LEFT JOIN chat_resolutions cr ON cr.chat_id = lc.id
-ORDER BY lc.updated_at DESC, cr.created_at DESC;
+ORDER BY
+    CASE WHEN @sort_by = 'created_at' AND @sort_order = 'desc' THEN lc.created_at END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'created_at' AND @sort_order = 'asc' THEN lc.created_at END ASC NULLS LAST,
+    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN lc.num_messages END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'asc' THEN lc.num_messages END ASC NULLS LAST,
+    CASE WHEN @sort_by = 'score' AND @sort_order = 'desc' THEN lc.avg_score END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'score' AND @sort_order = 'asc' THEN lc.avg_score END ASC NULLS LAST,
+    lc.created_at DESC,
+    cr.created_at DESC;
 
 -- name: GetChatWithResolutions :one
 SELECT

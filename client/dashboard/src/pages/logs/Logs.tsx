@@ -2,10 +2,13 @@ import {
   InsightsSidebar,
   useInsightsState,
 } from "@/components/insights-sidebar";
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
+import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { cn } from "@/lib/utils";
-import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls";
 import {
   FeatureName,
@@ -27,6 +30,10 @@ import { TraceRow } from "./TraceRow";
 const perPage = 25;
 
 export default function LogsPage() {
+  return <LogsContent />;
+}
+
+function LogsContent() {
   // Copilot config - filter to logs-related tools only
   const logsToolFilter = useCallback(
     ({ toolName }: { toolName: string }) =>
@@ -36,37 +43,6 @@ export default function LogsPage() {
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: logsToolFilter,
   });
-
-  return (
-    <InsightsSidebar
-      mcpConfig={mcpConfig}
-      title="Explore Logs"
-      subtitle="Ask me about your logs! Powered by Elements + Gram MCP"
-      suggestions={[
-        {
-          title: "Failing Tool Calls",
-          label: "Summarize failing tool calls",
-          prompt: "Summarize failing tool calls",
-        },
-        {
-          title: "Visualize top tool calls",
-          label: "Plot tool call counts",
-          prompt: "Plot a chart of the top tool calls and their counts",
-        },
-        {
-          title: "Recent Errors",
-          label: "Find recent errors",
-          prompt: "Search for recent error logs and summarize what's happening",
-        },
-      ]}
-    >
-      <LogsContent />
-    </InsightsSidebar>
-  );
-}
-
-function LogsContent() {
-  const { isExpanded: isInsightsOpen } = useInsightsState();
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
@@ -85,48 +61,40 @@ function LogsContent() {
     isFetching,
     isFetchingNextPage,
     refetch,
-  } = useInfiniteQuery({
-    queryKey: ["tool-calls", searchQuery],
-    queryFn: ({ pageParam }) =>
-      unwrapAsync(
-        telemetrySearchToolCalls(client, {
-          searchToolCallsPayload: {
-            filter: searchQuery ? { gramUrn: searchQuery } : undefined,
-            cursor: pageParam,
-            limit: perPage,
-            sort: "desc",
-          },
-        }),
-      ),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    throwOnError: false,
-  });
+    isLogsDisabled,
+  } = useLogsEnabledErrorCheck(
+    useInfiniteQuery({
+      queryKey: ["tool-calls", searchQuery],
+      queryFn: ({ pageParam }) =>
+        unwrapAsync(
+          telemetrySearchToolCalls(client, {
+            searchToolCallsPayload: {
+              filter: searchQuery ? { gramUrn: searchQuery } : undefined,
+              cursor: pageParam,
+              limit: perPage,
+              sort: "desc",
+            },
+          }),
+        ),
+      initialPageParam: undefined as string | undefined,
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      throwOnError: false,
+    }),
+  );
 
   // Flatten all pages into a single array of traces
   const allTraces = data?.pages.flatMap((page) => page.toolCalls) ?? [];
-  const logsEnabled = data?.pages[0]?.enabled ?? true;
 
-  const [logsMutationError, setLogsMutationError] = useState<string | null>(
-    null,
-  );
-  const { mutateAsync: setLogsFeature, status: logsMutationStatus } =
+  const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
       onSuccess: () => {
-        setLogsMutationError(null);
         refetch();
-      },
-      onError: (err) => {
-        const message =
-          err instanceof Error ? err.message : "Failed to update logs";
-        setLogsMutationError(message);
       },
     });
 
   const isMutatingLogs = logsMutationStatus === "pending";
 
   const handleSetLogs = (enabled: boolean) => {
-    setLogsMutationError(null);
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
@@ -172,110 +140,227 @@ function LogsContent() {
   const isLoading = isFetching && allTraces.length === 0;
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
-      {/* Header section */}
-      <div className="p-6 border-b shrink-0">
-        <div
-          className={cn(
-            "flex gap-4 mb-4 transition-all duration-300",
-            isInsightsOpen
-              ? "flex-col items-stretch"
-              : "flex-row items-center justify-between",
-          )}
-        >
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold mb-1">Logs</h1>
-            <p className="text-sm text-muted-foreground">
-              Browse raw tool call traces and telemetry data
-            </p>
-          </div>
-        </div>
-        {/* Search Row */}
-        <SearchBar
-          value={searchInput}
-          onChange={setSearchInput}
-          placeholder="Search by tool URN"
-          className="max-w-md"
-        />
+    <InsightsSidebar
+      mcpConfig={mcpConfig}
+      title="Explore Logs"
+      subtitle="Ask me about your logs! Powered by Elements + Gram MCP"
+      hideTrigger={isLogsDisabled}
+      suggestions={[
+        {
+          title: "Failing Tool Calls",
+          label: "Summarize failing tool calls",
+          prompt: "Summarize failing tool calls",
+        },
+        {
+          title: "Visualize top tool calls",
+          label: "Plot tool call counts",
+          prompt: "Plot a chart of the top tool calls and their counts",
+        },
+        {
+          title: "Recent Errors",
+          label: "Find recent errors",
+          prompt: "Search for recent error logs and summarize what's happening",
+        },
+      ]}
+    >
+      <LogsInnerContent
+        isLogsDisabled={isLogsDisabled}
+        isLoading={isLoading}
+        isFetching={isFetching}
+        error={error}
+        allTraces={allTraces}
+        searchQuery={searchQuery}
+        searchInput={searchInput}
+        setSearchInput={setSearchInput}
+        expandedTraceId={expandedTraceId}
+        toggleExpand={toggleExpand}
+        selectedLog={selectedLog}
+        handleLogClick={handleLogClick}
+        setSelectedLog={setSelectedLog}
+        containerRef={containerRef}
+        handleScroll={handleScroll}
+        hasNextPage={hasNextPage}
+        isFetchingNextPage={isFetchingNextPage}
+        isMutatingLogs={isMutatingLogs}
+        handleSetLogs={handleSetLogs}
+        refetch={refetch}
+      />
+    </InsightsSidebar>
+  );
+}
+
+function LogsInnerContent({
+  isLogsDisabled,
+  isLoading,
+  isFetching,
+  error,
+  allTraces,
+  searchQuery,
+  searchInput,
+  setSearchInput,
+  expandedTraceId,
+  toggleExpand,
+  selectedLog,
+  handleLogClick,
+  setSelectedLog,
+  containerRef,
+  handleScroll,
+  hasNextPage,
+  isFetchingNextPage,
+  isMutatingLogs,
+  handleSetLogs,
+  refetch,
+}: {
+  isLogsDisabled: boolean;
+  isLoading: boolean;
+  isFetching: boolean;
+  error: Error | null;
+  allTraces: ToolCallSummary[];
+  searchQuery: string | null;
+  searchInput: string;
+  setSearchInput: (value: string) => void;
+  expandedTraceId: string | null;
+  toggleExpand: (traceId: string) => void;
+  selectedLog: TelemetryLogRecord | null;
+  handleLogClick: (log: TelemetryLogRecord) => void;
+  setSelectedLog: (log: TelemetryLogRecord | null) => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  handleScroll: (e: React.UIEvent<HTMLDivElement>) => void;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  isMutatingLogs: boolean;
+  handleSetLogs: (enabled: boolean) => void;
+  refetch: () => void;
+}) {
+  const { isExpanded: isInsightsOpen } = useInsightsState();
+
+  if (isLogsDisabled) {
+    return (
+      <div className="h-full overflow-hidden flex flex-col">
+        <Page>
+          <Page.Header>
+            <Page.Header.Breadcrumbs fullWidth />
+          </Page.Header>
+          <Page.Body fullWidth className="space-y-6">
+            <div className="flex flex-col gap-1 min-w-0">
+              <h1 className="text-xl font-semibold">Logs</h1>
+              <p className="text-sm text-muted-foreground">
+                Browse raw tool call traces and telemetry data
+              </p>
+            </div>
+            <div className="flex-1 relative">
+              <div
+                className="pointer-events-none select-none h-full"
+                aria-hidden="true"
+              >
+                <ObservabilitySkeleton />
+              </div>
+              <EnableLoggingOverlay onEnabled={refetch} />
+            </div>
+          </Page.Body>
+        </Page>
       </div>
+    );
+  }
 
-      {/* Content section */}
-      <div className="flex-1 overflow-hidden relative min-h-0">
-        {/* Trace list container */}
-        <div className="h-full flex flex-col bg-background">
-          {/* Loading indicator */}
-          {isFetching && allTraces.length > 0 && (
-            <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
-              <div className="h-full bg-primary animate-pulse" />
-            </div>
-          )}
-
-          {/* Header */}
-          <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-            <div className="shrink-0 w-[150px]">Timestamp</div>
-            <div className="shrink-0 w-5" />
-            <div className="flex-1">Source / Tool</div>
-            <div className="shrink-0 w-16 text-right">Status</div>
-          </div>
-
-          {/* Scrollable trace list */}
-          <div
-            ref={containerRef}
-            className="overflow-y-auto flex-1"
-            onScroll={handleScroll}
-          >
-            <TraceListContent
-              error={error}
-              isLoading={isLoading}
-              logsEnabled={logsEnabled}
-              allTraces={allTraces}
-              searchQuery={searchQuery}
-              expandedTraceId={expandedTraceId}
-              isFetchingNextPage={isFetchingNextPage}
-              isMutatingLogs={isMutatingLogs}
-              logsMutationError={logsMutationError}
-              onEnableLogs={() => handleSetLogs(true)}
-              onToggleExpand={toggleExpand}
-              onLogClick={handleLogClick}
-            />
-          </div>
-
-          {/* Footer */}
-          {allTraces.length > 0 && (
-            <div className="flex items-center justify-between gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
-              <span>
-                {allTraces.length} {allTraces.length === 1 ? "trace" : "traces"}
-                {hasNextPage && " • Scroll to load more"}
-              </span>
-              {logsEnabled ? (
-                <Button
-                  onClick={() => handleSetLogs(false)}
-                  disabled={isMutatingLogs}
-                  size="sm"
-                  variant="secondary"
+  return (
+    <>
+      <div className="h-full overflow-hidden flex flex-col">
+        <Page>
+          <Page.Header>
+            <Page.Header.Breadcrumbs fullWidth />
+          </Page.Header>
+          <Page.Body fullWidth noPadding overflowHidden>
+            <div className="flex flex-col flex-1 min-h-0 w-full">
+              {/* Header section */}
+              <div className="px-8 py-4 shrink-0">
+                <div
+                  className={cn(
+                    "flex gap-4 mb-4 transition-all duration-300",
+                    isInsightsOpen
+                      ? "flex-col items-stretch"
+                      : "flex-row items-center justify-between",
+                  )}
                 >
-                  <Button.Text>
-                    {isMutatingLogs ? "Updating..." : "Disable Logs"}
-                  </Button.Text>
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => handleSetLogs(true)}
-                  disabled={isMutatingLogs}
-                  size="sm"
-                  variant="secondary"
-                >
-                  <Button.LeftIcon>
-                    <Icon name="test-tube-diagonal" className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>
-                    {isMutatingLogs ? "Updating..." : "Enable Logs"}
-                  </Button.Text>
-                </Button>
-              )}
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <h1 className="text-xl font-semibold">Logs</h1>
+                    <p className="text-sm text-muted-foreground">
+                      Browse raw tool call traces and telemetry data
+                    </p>
+                  </div>
+                  <div className="shrink-0">
+                    <Button
+                      onClick={() => handleSetLogs(false)}
+                      disabled={isMutatingLogs}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      <Button.Text>
+                        {isMutatingLogs ? "Updating..." : "Disable Logs"}
+                      </Button.Text>
+                    </Button>
+                  </div>
+                </div>
+                {/* Search Row */}
+                <SearchBar
+                  value={searchInput}
+                  onChange={setSearchInput}
+                  placeholder="Search by tool URN"
+                  className="max-w-md"
+                />
+              </div>
+
+              {/* Content section - full width */}
+              <div className="flex-1 overflow-hidden min-h-0 border-t">
+                <div className="h-full flex flex-col bg-background">
+                  {/* Loading indicator */}
+                  {isFetching && allTraces.length > 0 && (
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
+                      <div className="h-full bg-primary animate-pulse" />
+                    </div>
+                  )}
+
+                  {/* Header */}
+                  <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+                    <div className="shrink-0 w-[150px]">Timestamp</div>
+                    <div className="shrink-0 w-5" />
+                    <div className="flex-1">Source / Tool</div>
+                    <div className="shrink-0 w-16 text-right">Status</div>
+                  </div>
+
+                  {/* Scrollable trace list */}
+                  <div
+                    ref={containerRef}
+                    className="overflow-y-auto flex-1"
+                    onScroll={handleScroll}
+                  >
+                    <TraceListContent
+                      error={error}
+                      isLoading={isLoading}
+                      allTraces={allTraces}
+                      searchQuery={searchQuery}
+                      expandedTraceId={expandedTraceId}
+                      isFetchingNextPage={isFetchingNextPage}
+                      onToggleExpand={toggleExpand}
+                      onLogClick={handleLogClick}
+                    />
+                  </div>
+
+                  {/* Footer */}
+                  {allTraces.length > 0 && (
+                    <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+                      <span>
+                        {allTraces.length}{" "}
+                        {allTraces.length === 1 ? "trace" : "traces"}
+                        {hasNextPage && " • Scroll to load more"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
-        </div>
+          </Page.Body>
+        </Page>
       </div>
 
       {/* Log Detail Sheet */}
@@ -284,47 +369,29 @@ function LogsContent() {
         open={!!selectedLog}
         onOpenChange={(open) => !open && setSelectedLog(null)}
       />
-    </div>
+    </>
   );
 }
 
 function TraceListContent({
   error,
   isLoading,
-  logsEnabled,
   allTraces,
   searchQuery,
   expandedTraceId,
   isFetchingNextPage,
-  isMutatingLogs,
-  logsMutationError,
-  onEnableLogs,
   onToggleExpand,
   onLogClick,
 }: {
   error: Error | null;
   isLoading: boolean;
-  logsEnabled: boolean;
   allTraces: ToolCallSummary[];
   searchQuery: string | null;
   expandedTraceId: string | null;
   isFetchingNextPage: boolean;
-  isMutatingLogs: boolean;
-  logsMutationError: string | null;
-  onEnableLogs: () => void;
   onToggleExpand: (traceId: string) => void;
   onLogClick: (log: TelemetryLogRecord) => void;
 }) {
-  if (error instanceof ServiceError && error.statusCode === 404) {
-    return (
-      <LogsDisabledState
-        onEnableLogs={onEnableLogs}
-        isMutating={isMutatingLogs}
-        mutationError={logsMutationError}
-      />
-    );
-  }
-
   if (error) {
     return (
       <LogsError
@@ -342,15 +409,6 @@ function TraceListContent({
   }
 
   if (allTraces.length === 0) {
-    if (!logsEnabled) {
-      return (
-        <LogsDisabledState
-          onEnableLogs={onEnableLogs}
-          isMutating={isMutatingLogs}
-          mutationError={logsMutationError}
-        />
-      );
-    }
     return <LogsEmptyState searchQuery={searchQuery} />;
   }
 
@@ -373,49 +431,6 @@ function TraceListContent({
         </div>
       )}
     </>
-  );
-}
-
-function LogsDisabledState({
-  onEnableLogs,
-  isMutating,
-  mutationError,
-}: {
-  onEnableLogs: () => void;
-  isMutating: boolean;
-  mutationError: string | null;
-}) {
-  return (
-    <div className="py-12 text-center text-muted-foreground">
-      <div className="flex flex-col items-center gap-3">
-        <div className="size-12 rounded-full bg-muted flex items-center justify-center mb-2">
-          <Icon name="scroll-text" className="size-6 text-muted-foreground" />
-        </div>
-        <span className="font-medium text-foreground">
-          Logs are disabled for your organization
-        </span>
-        <span className="text-sm max-w-sm">
-          Enable logs to capture tool call traces and telemetry data for
-          debugging and analysis.
-        </span>
-        <Button
-          onClick={onEnableLogs}
-          disabled={isMutating}
-          size="sm"
-          className="mt-2"
-        >
-          <Button.LeftIcon>
-            <Icon name="test-tube-diagonal" className="size-4" />
-          </Button.LeftIcon>
-          <Button.Text>
-            {isMutating ? "Enabling..." : "Enable Logs"}
-          </Button.Text>
-        </Button>
-        {mutationError && (
-          <span className="text-sm text-destructive">{mutationError}</span>
-        )}
-      </div>
-    </div>
   );
 }
 

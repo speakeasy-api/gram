@@ -295,6 +295,11 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	// Check if logs are enabled for this organization
+	if err := s.telemetryService.CheckLogsEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, fmt.Errorf("checking logs enabled: %w", err)
+	}
+
 	// If an external user ID is set, restrict to only their chats
 	// This prevents chat-session users from viewing other users' chats
 	if authCtx.ExternalUserID != "" {
@@ -355,6 +360,8 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		FromTime:         fromTime,
 		ToTime:           toTime,
 		ResolutionStatus: resolutionStatus,
+		SortBy:           payload.SortBy,
+		SortOrder:        payload.SortOrder,
 		PageLimit:        int32(limit),  //nolint:gosec // limit is bounded by validation above
 		PageOffset:       int32(offset), //nolint:gosec // offset is controlled by client pagination
 	})

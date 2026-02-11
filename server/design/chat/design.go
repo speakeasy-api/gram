@@ -147,6 +147,14 @@ var _ = Service("chat", func() {
 				Default(0)
 				Minimum(0)
 			})
+			Attribute("sort_by", String, "Field to sort by", func() {
+				Enum("created_at", "num_messages", "score")
+				Default("created_at")
+			})
+			Attribute("sort_order", String, "Sort order", func() {
+				Enum("asc", "desc")
+				Default("desc")
+			})
 		})
 
 		Result(ListChatsWithResolutionsResult)
@@ -160,6 +168,8 @@ var _ = Service("chat", func() {
 			Param("to")
 			Param("limit")
 			Param("offset")
+			Param("sort_by")
+			Param("sort_order")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()

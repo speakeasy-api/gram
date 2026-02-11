@@ -4,6 +4,7 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 
 export type ListChatsWithResolutionsSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -18,6 +19,31 @@ export type ListChatsWithResolutionsSecurity = {
   option1?: ListChatsWithResolutionsSecurityOption1 | undefined;
   option2?: ListChatsWithResolutionsSecurityOption2 | undefined;
 };
+
+/**
+ * Field to sort by
+ */
+export const SortBy = {
+  CreatedAt: "created_at",
+  NumMessages: "num_messages",
+  Score: "score",
+} as const;
+/**
+ * Field to sort by
+ */
+export type SortBy = ClosedEnum<typeof SortBy>;
+
+/**
+ * Sort order
+ */
+export const SortOrder = {
+  Asc: "asc",
+  Desc: "desc",
+} as const;
+/**
+ * Sort order
+ */
+export type SortOrder = ClosedEnum<typeof SortOrder>;
 
 export type ListChatsWithResolutionsRequest = {
   /**
@@ -48,6 +74,14 @@ export type ListChatsWithResolutionsRequest = {
    * Pagination offset
    */
   offset?: number | undefined;
+  /**
+   * Field to sort by
+   */
+  sortBy?: SortBy | undefined;
+  /**
+   * Sort order
+   */
+  sortOrder?: SortOrder | undefined;
   /**
    * Session header
    */
@@ -158,6 +192,14 @@ export function listChatsWithResolutionsSecurityToJSON(
 }
 
 /** @internal */
+export const SortBy$outboundSchema: z.ZodNativeEnum<typeof SortBy> = z
+  .nativeEnum(SortBy);
+
+/** @internal */
+export const SortOrder$outboundSchema: z.ZodNativeEnum<typeof SortOrder> = z
+  .nativeEnum(SortOrder);
+
+/** @internal */
 export type ListChatsWithResolutionsRequest$Outbound = {
   search?: string | undefined;
   external_user_id?: string | undefined;
@@ -166,6 +208,8 @@ export type ListChatsWithResolutionsRequest$Outbound = {
   to?: string | undefined;
   limit: number;
   offset: number;
+  sort_by: string;
+  sort_order: string;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -184,6 +228,8 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodType<
   to: z.date().transform(v => v.toISOString()).optional(),
   limit: z.number().int().default(50),
   offset: z.number().int().default(0),
+  sortBy: SortBy$outboundSchema.default("created_at"),
+  sortOrder: SortOrder$outboundSchema.default("desc"),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
   gramChatSession: z.string().optional(),
@@ -191,6 +237,8 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodType<
   return remap$(v, {
     externalUserId: "external_user_id",
     resolutionStatus: "resolution_status",
+    sortBy: "sort_by",
+    sortOrder: "sort_order",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
     gramChatSession: "Gram-Chat-Session",
