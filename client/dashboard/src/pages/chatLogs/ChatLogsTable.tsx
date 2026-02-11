@@ -325,10 +325,19 @@ export function ChatLogsTable({
                       <CopyButton value={chat.externalUserId} label="User ID" />
                     )}
                   </span>
+                  {formatResolutionTime(chat.resolutionTimeMs) && (
+                    <span className="flex items-center gap-1.5">
+                      <Icon name="clock" className="size-4 opacity-60" />
+                      <span className="text-muted-foreground/70">
+                        Resolved in{" "}
+                      </span>
+                      {formatResolutionTime(chat.resolutionTimeMs)}
+                    </span>
+                  )}
                   <span className="flex items-center gap-1.5">
                     <Icon name="timer" className="size-4 opacity-60" />
-                    {formatResolutionTime(chat.resolutionTimeMs) ??
-                      formatDuration(chat)}
+                    <span className="text-muted-foreground/70">Duration </span>
+                    {formatDuration(chat)}
                   </span>
                   <span className="flex items-center gap-1.5">
                     <Icon name="message-square" className="size-4 opacity-60" />
