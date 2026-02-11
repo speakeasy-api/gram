@@ -447,8 +447,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 				SELECT
 					gram_chat_id,
 					min(time_unix_nano) as chat_start_time,
-					minIf(time_unix_nano, evaluation_score_label = 'success') as resolution_time,
-					argMinIf(time_unix_nano, time_unix_nano, evaluation_score_label = 'success') as resolution_bucket_time
+					minIf(time_unix_nano, evaluation_score_label = 'success') as resolution_time
 				FROM telemetry_logs
 				WHERE gram_project_id = ?
 					AND time_unix_nano >= ?
@@ -487,7 +486,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 				GROUP BY bucket_time_unix_nano
 			)
 		SELECT
-			b.bucket_time_unix_nano,
+			b.bucket_time_unix_nano as bucket_time_unix_nano,
 			coalesce(d.total_chats, 0) as total_chats,
 			coalesce(d.resolved_chats, 0) as resolved_chats,
 			coalesce(d.failed_chats, 0) as failed_chats,
