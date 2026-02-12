@@ -162,3 +162,12 @@ PULSE_REGISTRY_KEY = "unset"
 ## Used for local development only
 ELEMENTS_STORYBOOK_PORT = "6007"
 VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:{{env.ELEMENTS_STORYBOOK_PORT}}"
+
+#########################
+## Polar configuration ##
+#########################
+POLAR_PRODUCT_ID_FREE = "cc768f24-c85a-4779-8863-030f1abc3f40"
+POLAR_PRODUCT_ID_PRO = "1361707d-e9c2-4693-91bd-0789fbc09d68"
+POLAR_METER_ID_TOOL_CALLS = "7ec16f6d-6189-4262-9898-c64bed7b8a91"
+POLAR_METER_ID_SERVERS = "af37f394-69c8-4d46-8308-9b92407ee52e"
+POLAR_METER_ID_CREDITS = "b96fda22-2147-4089-bedb-72c3304b17eb"

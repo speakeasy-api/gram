@@ -10,7 +10,7 @@ import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useSession } from "@/contexts/Auth";
+import { useIsAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { getServerURL } from "@/lib/utils";
@@ -43,6 +43,8 @@ const UsageSection = () => {
   const session = useSession();
   const [isCreditUpgradeModalOpen, setIsCreditUpgradeModalOpen] =
     useState(false);
+
+  const isAdmin = useIsAdmin();
 
   const { data: creditUsage } = useGetCreditUsage();
   const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
@@ -99,18 +101,28 @@ const UsageSection = () => {
                 label="Tool Calls"
                 tooltip="The number of tool calls processed this period across all your organization's MCP servers."
                 value={periodUsage.toolCalls}
-                included={periodUsage.maxToolCalls || 1000}
-                overageIncrement={periodUsage.maxToolCalls}
+                included={periodUsage.includedToolCalls || 1000}
+                overageIncrement={periodUsage.includedToolCalls}
                 noMax={session.gramAccountType === "enterprise"}
               />
               <UsageItem
                 label="Servers"
                 tooltip="The number of MCP servers enabled across your organization. Note that this shows the current number of enabled servers, but you will be billed on the maximum number active simultaneously during the billing period."
                 value={periodUsage.actualEnabledServerCount}
-                included={periodUsage.maxServers || 1}
+                included={periodUsage.includedServers || 1}
                 overageIncrement={1}
                 noMax={session.gramAccountType === "enterprise"}
               />
+              {isAdmin && (
+                <UsageItem
+                  label="Chat Based Credits (Polar) (ADMIN VIEW ONLY)"
+                  tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
+                  value={periodUsage.credits}
+                  included={periodUsage.includedCredits}
+                  overageIncrement={periodUsage.includedCredits}
+                  noMax={session.gramAccountType === "enterprise"}
+                />
+              )}
             </>
           ) : (
             <>
@@ -485,9 +497,8 @@ const UsageProgress = ({
       >
         {anyOverage
           ? `Included: ${included.toLocaleString()}`
-          : `${value.toLocaleString()} / ${
-              noMax ? "No limit" : included.toLocaleString()
-            }`}
+          : `${value.toLocaleString()} / ${noMax ? "No limit" : included.toLocaleString()
+          }`}
       </div>
 
       {/* Divider line and labels for overage */}

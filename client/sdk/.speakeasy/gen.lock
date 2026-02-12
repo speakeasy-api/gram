@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: a7c466d68a3eb817c8f2c9ed69e2e757
+  docChecksum: 82468aeccdce46798403492f3b85114a
   docVersion: 0.0.1
-  speakeasyVersion: 1.700.2
-  generationVersion: 2.801.2
-  releaseVersion: 0.26.25
-  configChecksum: 549996342ef417c590cd646550c6008e
+  speakeasyVersion: 1.708.0
+  generationVersion: 2.811.2
+  releaseVersion: 0.27.0
+  configChecksum: 3af11abb6307290a8a8ec08e71d32f2d
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -14,8 +14,8 @@ persistentEdits:
 features:
   typescript:
     additionalDependencies: 0.1.0
-    constsAndDefaults: 0.1.12
-    core: 3.26.23
+    constsAndDefaults: 0.1.13
+    core: 3.26.27
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -24,10 +24,10 @@ features:
     globalSecurityCallbacks: 0.1.0
     globalServerURLs: 2.83.0
     methodArguments: 0.1.2
-    methodSecurity: 2.82.6
+    methodSecurity: 2.82.7
     nameOverrides: 2.81.2
     reactQueryHooks: 0.2.4
-    responseFormat: 0.2.3
+    responseFormat: 0.3.0
     retries: 2.83.0
     sdkHooks: 0.4.0
     uploadStreams: 0.1.0
@@ -351,7 +351,7 @@ trackedFiles:
   docs/models/components/packageversion.md:
     last_write_checksum: sha1:0386d2f883da793ae516d6037c2e47ecd28e6494
   docs/models/components/periodusage.md:
-    last_write_checksum: sha1:39a240650606bf143da5ad31c75325ec137a8aa5
+    last_write_checksum: sha1:01e7f48b3f42ffe612cd94fbf9696eb668ea4a75
   docs/models/components/project.md:
     last_write_checksum: sha1:bc05548a6467968693c283d77abd22a9d89cc762
   docs/models/components/projectentry.md:
@@ -1360,11 +1360,11 @@ trackedFiles:
     pristine_git_object: 8a33dbb4b9cb9cefaa43e10ddf535cbcd13c9e72
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:ac28ad1a45eadf4a816c138b630d497a9c4a6edc
+    last_write_checksum: sha1:32e30041f17ff27d3f30bf801365e2800e004e76
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:f1868442d104b6bff6150557d3b28dbae39eb183
+    last_write_checksum: sha1:4ef6e424044a3d87acb4eff993b3314eff6207cd
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1830,7 +1830,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:ff972f43d7f0abf91ee80a8e837e21a8a7e83326
+    last_write_checksum: sha1:ebf62487993a8b5e5848205fe31120f39e2b85e3
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2358,7 +2358,7 @@ trackedFiles:
     pristine_git_object: 0e63a5efa72799bdafd99ca852cce56bf1dca1f4
   src/models/components/periodusage.ts:
     id: e1f3b6c09689
-    last_write_checksum: sha1:fced50e3078bb0a5845370e01000839c354cefd5
+    last_write_checksum: sha1:f96046ef5bfd4cff73c6d562af7d2dd1fd6b76a7
     pristine_git_object: 4a286780749a0b2b0d4c766dcc54bac809784f74
   src/models/components/project.ts:
     id: 0a0f965206a3
@@ -4583,7 +4583,7 @@ examples:
     speakeasy-default-get-period-usage:
       responses:
         "200":
-          application/json: {"actual_enabled_server_count": 754388, "max_servers": 754388, "max_tool_calls": 298053, "servers": 409506, "tool_calls": 709134}
+          application/json: {"actual_enabled_server_count": 754388, "credits": 754388, "has_active_subscription": true, "included_credits": 409506, "included_servers": 709134, "included_tool_calls": 639183, "servers": 409506, "tool_calls": 709134}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

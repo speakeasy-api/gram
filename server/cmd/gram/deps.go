@@ -381,6 +381,7 @@ func newBillingProvider(
 			ProductIDPro:     c.String("polar-product-id-pro"),
 			MeterIDToolCalls: c.String("polar-meter-id-tool-calls"),
 			MeterIDServers:   c.String("polar-meter-id-servers"),
+			MeterIDCredits:   c.String("polar-meter-id-credits"),
 		}
 		if err := catalog.Validate(); err != nil {
 			return nil, nil, fmt.Errorf("invalid polar catalog configuration: %w", err)

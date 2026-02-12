@@ -35,6 +35,7 @@ type Catalog struct {
 
 	MeterIDToolCalls string
 	MeterIDServers   string
+	MeterIDCredits   string
 }
 
 func (c *Catalog) Validate() error {
@@ -49,6 +50,9 @@ func (c *Catalog) Validate() error {
 	}
 	if c.MeterIDServers == "" {
 		return errors.New("missing servers meter id in catalog")
+	}
+	if c.MeterIDCredits == "" {
+		return errors.New("missing credits meter id in catalog")
 	}
 	return nil
 }
@@ -161,13 +165,8 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 		return fmt.Errorf("failed to delete customer state cache: %w", err)
 	}
 
-	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID, PeriodUsage: gen.PeriodUsage{
-		ToolCalls:                0,
-		MaxToolCalls:             0,
-		Servers:                  0,
-		MaxServers:               0,
-		ActualEnabledServerCount: 0,
-	}}); err != nil {
+	//nolint:exhaustruct // only the org id is needed
+	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID}); err != nil {
 		return fmt.Errorf("failed todelete period usage storage: %w", err)
 	}
 
@@ -565,15 +564,21 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 	usage := gen.PeriodUsage{
 		// Set to -1 so we can tell if we've failed to get the usage
 		ToolCalls:                -1,
-		MaxToolCalls:             -1,
+		IncludedToolCalls:        -1,
 		Servers:                  -1,
-		MaxServers:               -1,
-		ActualEnabledServerCount: 0, // Not related to polar, popualted elsewhere
+		IncludedServers:          -1,
+		Credits:                  -1,
+		IncludedCredits:          -1,
+		HasActiveSubscription:    false,
+		ActualEnabledServerCount: 0, // Not related to polar, populated elsewhere
 	}
 
 	if customer != nil {
-		var toolCallMeter *polarComponents.CustomerStateMeter
-		var serverMeter *polarComponents.CustomerStateMeter
+		var toolCallMeter, serverMeter, creditMeter *polarComponents.CustomerStateMeter
+
+		if len(customer.ActiveSubscriptions) >= 1 {
+			usage.HasActiveSubscription = true
+		}
 
 		for _, meter := range customer.ActiveMeters {
 			if meter.MeterID == p.catalog.MeterIDToolCalls {
@@ -581,6 +586,9 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			}
 			if meter.MeterID == p.catalog.MeterIDServers {
 				serverMeter = &meter
+			}
+			if meter.MeterID == p.catalog.MeterIDCredits {
+				creditMeter = &meter
 			}
 		}
 
@@ -592,14 +600,21 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			// Don't set these if they are 0. This can happen for orgs that subscribed but then cancelled.
 			// For those, we want to fall back to the free tier limits which will be pulled below if the maxes are still unset.
 			if toolCallMeter.CreditedUnits > 0 {
-				usage.MaxToolCalls = int(toolCallMeter.CreditedUnits)
+				usage.IncludedToolCalls = int(toolCallMeter.CreditedUnits)
 			}
 		}
 
 		if serverMeter != nil {
 			usage.Servers = int(serverMeter.ConsumedUnits)
 			if serverMeter.CreditedUnits > 0 {
-				usage.MaxServers = int(serverMeter.CreditedUnits)
+				usage.IncludedServers = int(serverMeter.CreditedUnits)
+			}
+		}
+
+		if creditMeter != nil {
+			usage.Credits = int(creditMeter.ConsumedUnits)
+			if creditMeter.CreditedUnits > 0 {
+				usage.IncludedCredits = int(creditMeter.CreditedUnits)
 			}
 		}
 	}
@@ -628,23 +643,34 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 		usage.Servers = int(serversRes.Total)
 	}
 
-	if usage.MaxToolCalls == -1 || usage.MaxServers == -1 {
+	if usage.Credits == -1 {
+		creditsRes, err := p.getMeterQuantitiesRaw(ctx, p.catalog.MeterIDCredits, orgID, time.Now().Add(-1*time.Hour*24*30), time.Now())
+		if err != nil {
+			return nil, fmt.Errorf("get credit usage: %w", err)
+		}
+
+		usage.Credits = int(creditsRes.Total)
+	}
+
+	if usage.IncludedToolCalls == -1 || usage.IncludedServers == -1 || usage.IncludedCredits == -1 {
 		freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
 		if err != nil {
 			return nil, fmt.Errorf("get free tier product: %w", err)
 		}
 
 		freeTierLimits := extractTierLimits(p.catalog, freeTierProduct)
-		if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
+		if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 || freeTierLimits.Credits == 0 {
 			return nil, fmt.Errorf(
-				"get free tier limits: missing limits (tool calls = %s, servers = %s)",
+				"get free tier limits: missing limits (tool calls = %s, servers = %s, credits = %s)",
 				conv.Ternary(freeTierLimits.ToolCalls == 0, "missing", "set"),
 				conv.Ternary(freeTierLimits.Servers == 0, "missing", "set"),
+				conv.Ternary(freeTierLimits.Credits == 0, "missing", "set"),
 			)
 		}
 
-		usage.MaxToolCalls = freeTierLimits.ToolCalls
-		usage.MaxServers = freeTierLimits.Servers
+		usage.IncludedToolCalls = freeTierLimits.ToolCalls
+		usage.IncludedServers = freeTierLimits.Servers
+		usage.IncludedCredits = freeTierLimits.Credits
 	}
 
 	return &usage, nil
@@ -732,8 +758,9 @@ func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (cpu s
 	return res.CustomerSession.CustomerPortalURL, nil
 }
 
-func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err error) {
+func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.get_usage_tiers")
+	var err error
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
