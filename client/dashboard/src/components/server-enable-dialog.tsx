@@ -36,13 +36,16 @@ export function ServerEnableDialog({
   };
 
   // Specifying that the account is not just in "free" tier, but also that it has no subscription on file to pay for overages
-  const isUnpaidAccount = session.gramAccountType === "free" && periodUsage && periodUsage.hasActiveSubscription === false;
-  const hasAdditionalIncludedServers = periodUsage && periodUsage.includedServers > periodUsage.actualEnabledServerCount;
+  const isUnpaidAccount =
+    session.gramAccountType === "free" &&
+    periodUsage &&
+    periodUsage.hasActiveSubscription === false;
+  const hasAdditionalIncludedServers =
+    periodUsage &&
+    periodUsage.includedServers > periodUsage.actualEnabledServerCount;
 
   const canEnable =
-    isUnpaidAccount && !currentlyEnabled
-      ? hasAdditionalIncludedServers
-      : true;
+    isUnpaidAccount && !currentlyEnabled ? hasAdditionalIncludedServers : true;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

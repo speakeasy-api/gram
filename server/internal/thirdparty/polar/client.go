@@ -668,9 +668,9 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			)
 		}
 
-		usage.IncludedToolCalls = freeTierLimits.ToolCalls
-		usage.IncludedServers = freeTierLimits.Servers
-		usage.IncludedCredits = freeTierLimits.Credits
+		usage.IncludedToolCalls = conv.Ternary(usage.IncludedToolCalls == -1, freeTierLimits.ToolCalls, usage.IncludedToolCalls)
+		usage.IncludedServers = conv.Ternary(usage.IncludedServers == -1, freeTierLimits.Servers, usage.IncludedServers)
+		usage.IncludedCredits = conv.Ternary(usage.IncludedCredits == -1, freeTierLimits.Credits, usage.IncludedCredits)
 	}
 
 	return &usage, nil
