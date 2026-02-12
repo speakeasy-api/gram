@@ -19,6 +19,11 @@ export interface SessionHandlerOptions {
    * @default 3600
    */
   expiresAfter?: number
+
+  /**
+   * Gram API key. If not provided, falls back to the `GRAM_API_KEY` environment variable.
+   */
+  apiKey?: string
 }
 
 export interface CreateSessionRequest {
@@ -52,7 +57,7 @@ export async function createChatSession(
       headers: {
         'Content-Type': 'application/json',
         'Gram-Project': request.projectSlug,
-        'Gram-Key': process.env.GRAM_API_KEY ?? '',
+        'Gram-Key': request.options.apiKey ?? process.env.GRAM_API_KEY ?? '',
       },
     })
 
