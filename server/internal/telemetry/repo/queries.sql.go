@@ -319,53 +319,53 @@ type GetMetricsSummaryParams struct {
 func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryParams) (*MetricsSummaryRow, error) {
 	sb := sq.Select(
 		// Activity timestamps
-		"min(time_unix_nano) AS first_seen_unix_nano",
-		"max(time_unix_nano) AS last_seen_unix_nano",
+		"min(first_seen_unix_nano) AS first_seen_unix_nano",
+		"max(last_seen_unix_nano) AS last_seen_unix_nano",
 
-		// Cardinality (exclude empty strings)
-		"uniqExactIf(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats",
-		"uniqExactIf(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') AS distinct_models",
-		"uniqExactIf(toString(attributes.gen_ai.provider.name), toString(attributes.gen_ai.provider.name) != '') AS distinct_providers",
+		// Cardinality
+		"uniqExactIfMerge(total_chats) AS total_chats",
+		"uniqExactIfMerge(distinct_models) AS distinct_models",
+		"uniqExactIfMerge(distinct_providers) AS distinct_providers",
 
-		// Token metrics (from chat completion events)
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_tokens",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_tokens_per_request",
+		// Token metrics
+		"sumIfMerge(total_input_tokens) AS total_input_tokens",
+		"sumIfMerge(total_output_tokens) AS total_output_tokens",
+		"sumIfMerge(total_tokens) AS total_tokens",
+		"avgIfMerge(avg_tokens_per_request) AS avg_tokens_per_request",
 
 		// Chat request metrics
-		"countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_chat_requests",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_chat_duration_ms",
+		"countIfMerge(total_chat_requests) AS total_chat_requests",
+		"avgIfMerge(avg_chat_duration_ms) AS avg_chat_duration_ms",
 
 		// Resolution status
-		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) AS finish_reason_stop",
-		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'tool_calls') > 0) AS finish_reason_tool_calls",
+		"countIfMerge(finish_reason_stop) AS finish_reason_stop",
+		"countIfMerge(finish_reason_tool_calls) AS finish_reason_tool_calls",
 
 		// Tool call metrics
-		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls",
-		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_call_success",
-		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_call_failure",
-		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS avg_tool_duration_ms",
+		"countIfMerge(total_tool_calls) AS total_tool_calls",
+		"countIfMerge(tool_call_success) AS tool_call_success",
+		"countIfMerge(tool_call_failure) AS tool_call_failure",
+		"avgIfMerge(avg_tool_duration_ms) AS avg_tool_duration_ms",
 
-		// Chat resolution metrics (from AI evaluation of chat outcomes)
-		"countIf(evaluation_score_label = 'success') AS chat_resolution_success",
-		"countIf(evaluation_score_label = 'failure') AS chat_resolution_failure",
-		"countIf(evaluation_score_label = 'partial') AS chat_resolution_partial",
-		"countIf(evaluation_score_label = 'abandoned') AS chat_resolution_abandoned",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.evaluation.score.value)), evaluation_score_label != '') AS avg_chat_resolution_score",
+		// Chat resolution metrics
+		"countIfMerge(chat_resolution_success) AS chat_resolution_success",
+		"countIfMerge(chat_resolution_failure) AS chat_resolution_failure",
+		"countIfMerge(chat_resolution_partial) AS chat_resolution_partial",
+		"countIfMerge(chat_resolution_abandoned) AS chat_resolution_abandoned",
+		"avgIfMerge(avg_chat_resolution_score) AS avg_chat_resolution_score",
 
-		// Model breakdown (map of model name -> count)
-		"sumMapIf(map(toString(attributes.gen_ai.response.model), toUInt64(1)), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') AS models",
+		// Model breakdown
+		"sumMapIfMerge(models) AS models",
 
-		// Tool breakdowns (maps of tool URN -> count)
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
+		// Tool breakdowns
+		"sumMapIfMerge(tool_counts) AS tool_counts",
+		"sumMapIfMerge(tool_success_counts) AS tool_success_counts",
+		"sumMapIfMerge(tool_failure_counts) AS tool_failure_counts",
 	).
-		From("telemetry_logs").
+		From("metrics_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
+		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
+		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -623,37 +623,18 @@ type GetOverviewSummaryParams struct {
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
+// When no filters are applied, reads from the pre-aggregated metrics_summaries MV.
+// Falls back to scanning telemetry_logs when external_user_id or api_key_id filters are set.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	sb := sq.Select(
-		// Chat metrics - count only chats with resolution analysis for accurate resolution rate
-		// total_chats = chats with any resolution event (success, failure, partial, abandoned)
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label != '') as total_chats",
-		// Resolved: chats with evaluation_score_label = 'success' (from resolution analysis)
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
-		// Failed: chats with evaluation_score_label = 'failure' (from resolution analysis)
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
-		// Resolution time: average duration from resolution analysis events (gen_ai.conversation.duration is set in resolution events)
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms",
+	hasFilters := arg.ExternalUserID != "" || arg.APIKeyID != ""
 
-		// Tool metrics
-		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
-		"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls",
-		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_latency_ms",
-	).
-		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
-
-	// Optional filters
-	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
-	}
-	if arg.APIKeyID != "" {
-		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+	var sb squirrel.SelectBuilder
+	if hasFilters {
+		sb = q.getOverviewSummaryRaw(arg)
+	} else {
+		sb = q.getOverviewSummaryMV(arg)
 	}
 
 	query, args, err := sb.ToSql()
@@ -690,6 +671,51 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 	}
 
 	return &summary, nil
+}
+
+// getOverviewSummaryMV builds a query against the pre-aggregated metrics_summaries table.
+func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) squirrel.SelectBuilder {
+	return sq.Select(
+		"uniqExactIfMerge(evaluated_chats) as total_chats",
+		"uniqExactIfMerge(resolved_chats) as resolved_chats",
+		"uniqExactIfMerge(failed_chats) as failed_chats",
+		"avgIfMerge(avg_chat_duration_ms) as avg_session_duration_ms",
+		"avgIfMerge(avg_resolution_time_ms) as avg_resolution_time_ms",
+		"countIfMerge(total_tool_calls) as total_tool_calls",
+		"countIfMerge(tool_call_failure) as failed_tool_calls",
+		"avgIfMerge(avg_tool_duration_ms) as avg_latency_ms",
+	).
+		From("metrics_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
+		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
+}
+
+// getOverviewSummaryRaw builds a query against the raw telemetry_logs table (used when filters are applied).
+func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.SelectBuilder {
+	sb := sq.Select(
+		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label != '') as total_chats",
+		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
+		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms",
+		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
+		"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls",
+		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_latency_ms",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd)
+
+	if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+	if arg.APIKeyID != "" {
+		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+	}
+
+	return sb
 }
 
 // ListChatsParams contains the parameters for listing chats.
