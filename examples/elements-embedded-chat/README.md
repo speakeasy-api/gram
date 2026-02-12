@@ -4,6 +4,13 @@ This example shows how to embed [Gram Elements](https://docs.getgram.ai) in a
 [TanStack Start](https://tanstack.com/start) app, where the host app handles
 authentication and passes the resulting credential to the Gram chat UI.
 
+> **Note:** This is a demonstration app. Several shortcuts have been taken that
+> are not suitable for production — the login endpoint accepts any credentials,
+> tokens are stored as plaintext in `localStorage`, and there is no session
+> expiry or CSRF protection. In a real app, replace the login flow with a proper
+> auth provider and use secure, httpOnly cookies or a similar mechanism for token
+> storage.
+
 ## Why this pattern?
 
 When you deploy a hosted MCP server through Gram, that server often needs
