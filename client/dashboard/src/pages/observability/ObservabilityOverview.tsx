@@ -97,6 +97,12 @@ function NoDataOverlay() {
   );
 }
 
+interface SetupRequiredModalProps {
+  open: boolean;
+  onClose: () => void;
+  onNavigateToElements: () => void;
+}
+
 /**
  * Modal shown when there's no data at all across any period,
  * prompting the user to set up Elements
@@ -105,11 +111,7 @@ function SetupRequiredModal({
   open,
   onClose,
   onNavigateToElements,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onNavigateToElements: () => void;
-}) {
+}: SetupRequiredModalProps) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <Dialog.Content className="sm:max-w-md">
@@ -728,20 +730,17 @@ function ObservabilityContent({
   const { isExpanded: isInsightsOpen, setIsExpanded } = useInsightsState();
   const [showSetupModal, setShowSetupModal] = useState(false);
 
-  // Check for total empty state (no data at all across any period)
-  const hasAnyData = useMemo(() => {
-    if (!data) return false;
+  // Check data availability for empty states
+  const { hasAnyData, currentWindowHasData } = useMemo(() => {
+    if (!data) return { hasAnyData: false, currentWindowHasData: false };
     // Check current period, comparison period, and time series
     const currentHasData = hasSummaryData(data.summary);
     const comparisonHasData = hasSummaryData(data.comparison);
     const timeSeriesHasData = hasTimeSeriesData(data.timeSeries ?? []);
-    return currentHasData || comparisonHasData || timeSeriesHasData;
-  }, [data]);
-
-  // Check if current time window has data
-  const currentWindowHasData = useMemo(() => {
-    if (!data) return false;
-    return hasTimeSeriesData(data.timeSeries ?? []);
+    return {
+      hasAnyData: currentHasData || comparisonHasData || timeSeriesHasData,
+      currentWindowHasData: timeSeriesHasData,
+    };
   }, [data]);
 
   // Show setup modal when data loads and there's no data at all

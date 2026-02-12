@@ -98,7 +98,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
 
   const contextValue = useMemo(
     () => ({ isExpanded, setIsExpanded }),
-    [isExpanded, setIsExpanded],
+    [isExpanded],
   );
 
   return (
