@@ -16,4 +16,6 @@ if [ -n "$ssl_key" ] && [ -n "$ssl_cert" ]; then
     args+=("--ssl-cert" "$ssl_cert")
 fi
 
+args+=("--port" "$ELEMENTS_STORYBOOK_PORT")
+
 exec pnpm --filter ./elements storybook "${args[@]}"

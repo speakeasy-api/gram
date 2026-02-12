@@ -20,10 +20,11 @@ dest="${usage_dir:?}/_gram_${usage_name:?}"
 git fetch
 git worktree add "${dest}" "${usage_branch:?}"
 
-[ -f ./mise.local.toml ] && cp ./mise.local.toml "${dest}"
 cd "${dest}"
 mise trust
 git checkout -b "${new_branch}"
+
+mise run git:workinit
 
 # resolve absolute path to dest
 dest=$(realpath "${dest}")

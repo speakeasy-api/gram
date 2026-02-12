@@ -78,9 +78,10 @@ GRAM_WORKER_CONTROL_PORT = "8082"
 GRAM_WORKER_CONTROL_ADDRESS = ":{{env.GRAM_WORKER_CONTROL_PORT}}"
 ## The following variable can be one of: local, test, prod
 GRAM_ENVIRONMENT = "local"
-GRAM_SERVER_URL = "https://localhost:{{env.GRAM_SERVER_PORT}}"
+GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
+GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
 GRAM_SITE_PORT = "5173"
-GRAM_SITE_URL = "https://localhost:{{env.GRAM_SITE_PORT}}"
+GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.

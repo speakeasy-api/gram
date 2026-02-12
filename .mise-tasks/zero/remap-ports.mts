@@ -4,13 +4,17 @@
 //MISE hide=true
 //MISE description="Finds available ports for any environment variables ending with `_PORT` in the `mise.toml` file and writes them to a new `mise.worktree.local.toml` file."
 
+//USAGE flag "--format <format>" default="mise" { choices "mise" "flat" }
+//USAGE flag "--file <file>" default="mise.worktree.local.toml" help="The file to write the environment variables to. If set to '-', the output will be written to stdout."
+
 /**
  * This script is responsible for finding available ports for any environment
  * variables ending with `_PORT` in the `mise.toml` file and writing them to a
- * new `mise.worktree.local.toml` file. Any environment variables that depend on
- * the `_PORT` variables will also need to be picked up and redeclared in the
- * same file since env var declarations are sensitive to config loading
- * precedence and order dependent within each config file.
+ * new env var config file. The output format (mise or flat) and destination
+ * file are configurable via flags, with support for writing to stdout. Any
+ * environment variables that depend on the `_PORT` variables will also need to
+ * be picked up and redeclared since env var declarations are sensitive to
+ * config loading precedence and order dependent within each config file.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -39,11 +43,27 @@ async function main() {
     );
   }
 
-  let env = "[env]\n";
-  env += finalVars.map(([key, value]) => `${key} = "${value}"`).join("\n");
-  env += "\n";
+  const format = process.env["usage_format"] ?? "mise";
+  let out = "";
+  switch (format) {
+    case "mise":
+      out = "[env]\n";
+      out += finalVars.map(([key, value]) => `${key} = "${value}"`).join("\n");
+      out += "\n";
+      break;
+    case "flat":
+      out = finalVars.map(([key, value]) => `${key}=${value}`).join("\n");
+      break;
+    default:
+      throw new Error(`Unsupported format: ${process.env["usage_format"]}`);
+  }
 
-  writeFileSync("mise.worktree.local.toml", env);
+  const file = process.env["usage_file"] ?? "mise.worktree.local.toml";
+  if (file === "-") {
+    console.log(out);
+  } else {
+    writeFileSync(file, out);
+  }
 }
 
 function findDependentEnvVars(

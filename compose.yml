@@ -1,6 +1,6 @@
 # Fixed project name so all git worktrees share the same infra containers
 # instead of each worktree creating its own set and causing port conflicts.
-name: gram
+name: ${COMPOSE_PROJECT_NAME:-gram}
 
 services:
   gram-db:
