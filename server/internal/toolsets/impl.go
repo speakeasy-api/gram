@@ -254,7 +254,7 @@ Return only a JSON array of skill descriptions, one for each tool.`, string(tool
 
 	// Call OpenRouter to get skill inferences
 	// Use a smaller max_tokens value to avoid credit issues
-	smallerMaxTokens := 200000
+	smallerMaxTokens := 2000
 	msg, err := s.chatClient.GetCompletion(
 		ctx,
 		authCtx.ActiveOrganizationID,
