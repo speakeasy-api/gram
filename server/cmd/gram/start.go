@@ -614,7 +614,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 
-			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
+			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), openRouter, baseChatClient)
 			authAuth := auth.New(logger, db, sessionManager)
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))

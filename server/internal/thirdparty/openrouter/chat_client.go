@@ -27,6 +27,7 @@ type ChatClient struct {
 
 const (
 	DefaultChatModel = "openai/gpt-4o"
+	DefaultMaxTokens = 4000
 )
 
 func NewChatClient(logger *slog.Logger, openRouter Provisioner) *ChatClient {
@@ -122,7 +123,7 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	return results, nil
 }
 
-func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemPrompt, prompt string, tools []Tool, usageSource billing.ModelUsageSource) (*or.Message, error) {
+func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemPrompt, prompt string, maxTokens *int, tools []Tool, usageSource billing.ModelUsageSource) (*or.Message, error) {
 	var messages []or.Message
 
 	// Optional system prompt
@@ -139,10 +140,17 @@ func (c *ChatClient) GetCompletion(ctx context.Context, orgID string, systemProm
 		Name:    nil,
 	}))
 
-	return c.GetCompletionFromMessages(ctx, orgID, "", messages, tools, nil, "", usageSource)
+	return c.GetCompletionFromMessages(ctx, orgID, "", messages, tools, nil, maxTokens, "", usageSource)
 }
 
-func (c *ChatClient) GetObjectCompletion(ctx context.Context, orgID string, projectID string, model string, systemPrompt string, prompt string, jsonSchema or.JSONSchemaConfig, usageSource billing.ModelUsageSource) (*or.Message, error) {
+func (c *ChatClient) GetObjectCompletion(ctx context.Context,
+	orgID string,
+	projectID string,
+	model string,
+	systemPrompt string,
+	prompt string,
+	jsonSchema or.JSONSchemaConfig,
+	usageSource billing.ModelUsageSource) (*or.Message, error) {
 	var messages []or.Message
 
 	// Optional system prompt
@@ -159,11 +167,11 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, orgID string, proj
 		Name:    nil,
 	}))
 
-	return c.getCompletionFromMessages(ctx, orgID, projectID, messages, nil, nil, model, &jsonSchema, usageSource)
+	return c.getCompletionFromMessages(ctx, orgID, projectID, messages, nil, nil, nil, model, &jsonSchema, usageSource)
 }
 
-func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, projectID string, messages []or.Message, tools []Tool, temperature *float64, model string, usageSource billing.ModelUsageSource) (*or.Message, error) {
-	return c.getCompletionFromMessages(ctx, orgID, projectID, messages, tools, temperature, model, nil, usageSource)
+func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string, projectID string, messages []or.Message, tools []Tool, temperature *float64, maxTokens *int, model string, usageSource billing.ModelUsageSource) (*or.Message, error) {
+	return c.getCompletionFromMessages(ctx, orgID, projectID, messages, tools, temperature, maxTokens, model, nil, usageSource)
 }
 
 func (c *ChatClient) getCompletionFromMessages(
@@ -173,6 +181,7 @@ func (c *ChatClient) getCompletionFromMessages(
 	messages []or.Message,
 	tools []Tool,
 	temperature *float64,
+	maxTokens *int,
 	model string,
 	jsonSchema *or.JSONSchemaConfig,
 	usageSource billing.ModelUsageSource,
@@ -188,6 +197,11 @@ func (c *ChatClient) getCompletionFromMessages(
 		temp = float32(*temperature)
 	}
 
+	if maxTokens == nil {
+		dmt := DefaultMaxTokens
+		maxTokens = &dmt
+	}
+
 	// Default model if not provided
 	modelToUse := model
 	if modelToUse == "" {
@@ -200,6 +214,7 @@ func (c *ChatClient) getCompletionFromMessages(
 		Stream:         false,
 		Tools:          tools,
 		Temperature:    temp,
+		MaxTokens:      maxTokens,
 		ResponseFormat: nil,
 	}
 

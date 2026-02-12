@@ -168,6 +168,7 @@ type OpenAIChatRequest struct {
 	Stream         bool               `json:"stream"`
 	Tools          []Tool             `json:"tools,omitempty"`
 	Temperature    float32            `json:"temperature,omitempty"`
+	MaxTokens      *int               `json:"max_tokens,omitempty"`
 	ResponseFormat *or.ResponseFormat `json:"response_format,omitempty"`
 }
 

@@ -80,6 +80,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, firstMessa
 		"Generate a concise title (3-6 words) for this conversation. Return only the title text, no quotes or explanation.",
 		firstMessage,
 		nil,
+		nil,
 		billing.ModelUsageSourceGram,
 	)
 	if err != nil {

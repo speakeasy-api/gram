@@ -112,7 +112,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := toolsets.NewService(logger, conn, sessionManager, nil)
+	svc := toolsets.NewService(logger, conn, sessionManager, nil, nil, nil)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
 	packagesSvc := packages.NewService(logger, conn, sessionManager)

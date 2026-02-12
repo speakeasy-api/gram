@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -40,6 +41,7 @@ import (
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -63,11 +65,13 @@ type Service struct {
 	oauthRepo       *oauthRepo.Queries
 	mcpmetadataRepo *mcpmetadataRepo.Queries
 	toolsetCache    cache.TypedCacheObject[mv.ToolsetBaseContents]
+	openRouter      openrouter.Provisioner
+	chatClient      *openrouter.ChatClient
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache, openRouter openrouter.Provisioner, chatClient *openrouter.ChatClient) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
@@ -83,6 +87,8 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		oauthRepo:       oauthRepo.New(db),
 		mcpmetadataRepo: mcpmetadataRepo.New(db),
 		toolsetCache:    cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		openRouter:      openRouter,
+		chatClient:      chatClient,
 	}
 }
 
@@ -207,11 +213,93 @@ func (s *Service) InferSkillsFromToolset(ctx context.Context, payload *gen.Infer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// TODO: Implement actual skill inference logic
-	// For now, return empty arrays
+	// List all toolsets for the project
+	listResult, err := s.ListToolsets(ctx, &gen.ListToolsetsPayload{
+		SessionToken:     payload.SessionToken,
+		ApikeyToken:      payload.ApikeyToken,
+		ProjectSlugInput: payload.ProjectSlugInput,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing toolsets: %w", err)
+	}
+
+	// Collect all tools from all toolsets
+	var allTools []*types.ToolEntry
+	for _, toolset := range listResult.Toolsets {
+		allTools = append(allTools, toolset.Tools...)
+	}
+
+	// If no tools, return empty result
+	if len(allTools) == 0 {
+		return &gen.InferSkillsResult{
+			Tools:  []*types.ToolEntry{},
+			Skills: []string{},
+		}, nil
+	}
+
+	// Format tools as JSON for the prompt
+	toolsJSON, err := json.Marshal(allTools) //nolint:musttag // ToolEntry is generated code without json tags
+	if err != nil {
+		return nil, fmt.Errorf("marshalling tools: %w", err)
+	}
+
+	// Construct the prompt for skill inference
+	systemPrompt := "You are an AI assistant that analyzes API tools and suggests skill descriptions. A skill is a high-level capability that can be built by combining one or more tools."
+	userPrompt := fmt.Sprintf(`Given the following API tools, suggest skills that could be created by combining these tools. For each tool, provide a skill description that explains what the tool enables users to do. Return a JSON array of strings, where each string is a skill description corresponding to each tool in order.
+
+Tools:
+%s
+
+Return only a JSON array of skill descriptions, one for each tool.`, string(toolsJSON))
+
+	// Call OpenRouter to get skill inferences
+	// Use a smaller max_tokens value to avoid credit issues
+	smallerMaxTokens := 200000
+	msg, err := s.chatClient.GetCompletion(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		systemPrompt,
+		userPrompt,
+		&smallerMaxTokens,
+		nil, // no tools
+		billing.ModelUsageSourceGram,
+	)
+	if err != nil {
+		// Try to extract a more detailed error message from OpenRouter errors
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "OpenRouter API error:") {
+			// Extract the JSON error body
+			if start := strings.Index(errMsg, "{"); start != -1 {
+				jsonStr := errMsg[start:]
+				var apiErr struct {
+					Error struct {
+						Message string `json:"message"`
+						Code    int    `json:"code"`
+					} `json:"error"`
+				}
+				if json.Unmarshal([]byte(jsonStr), &apiErr) == nil && apiErr.Error.Message != "" {
+					return nil, fmt.Errorf("OpenRouter API error: %s", apiErr.Error.Message)
+				}
+			}
+		}
+		return nil, fmt.Errorf("getting completion from chat client: %w", err)
+	}
+
+	// Parse the response
+	var skills []string
+	responseText := openrouter.GetText(*msg)
+	if responseText != "" {
+		// Try to parse as JSON array
+		if err := json.Unmarshal([]byte(responseText), &skills); err != nil {
+			// If parsing fails, treat the whole content as a single skill
+			s.logger.WarnContext(ctx, "failed to parse skills JSON, using raw content", attr.SlogError(err))
+			skills = []string{responseText}
+		}
+	}
+
 	return &gen.InferSkillsResult{
-		Tools:  []*types.ToolEntry{},
-		Skills: []string{},
+		Tools:  allTools,
+		Skills: skills,
 	}, nil
 }
 

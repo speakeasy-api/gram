@@ -1,5 +1,0 @@
-package skills
-
-import (
-	"fmt"
-)

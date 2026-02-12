@@ -134,7 +134,7 @@ func newTestAgentsService(t *testing.T) (context.Context, *testInstance) {
 	)
 
 	// Create supporting services
-	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, nil)
+	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, nil, nil, nil)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthogClient, testenv.DefaultSiteURL(t), mcpRegistryClient)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
 

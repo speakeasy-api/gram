@@ -145,7 +145,7 @@ func (c *ChatClient) AgentChat(
 	}
 
 	for {
-		msg, err := c.chatClient.GetCompletionFromMessages(ctx, orgID, projectID.String(), messages, toolDefs, opts.Temperature, opts.Model, billing.ModelUsageSourceAgents)
+		msg, err := c.chatClient.GetCompletionFromMessages(ctx, orgID, projectID.String(), messages, toolDefs, opts.Temperature, nil, opts.Model, billing.ModelUsageSourceAgents)
 		if err != nil {
 			return "", fmt.Errorf("failed to get completion: %w", err)
 		}
