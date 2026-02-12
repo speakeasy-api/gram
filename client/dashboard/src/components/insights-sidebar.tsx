@@ -6,13 +6,18 @@ import { useState, useMemo, createContext, useContext } from "react";
 import { cn } from "@/lib/utils";
 
 // Context for sidebar state
-const InsightsContext = createContext<{ isExpanded: boolean }>({
+const InsightsContext = createContext<{
+  isExpanded: boolean;
+  setIsExpanded: (expanded: boolean) => void;
+}>({
   isExpanded: false,
+  setIsExpanded: () => {},
 });
 
 /**
  * Hook to access the insights sidebar state.
- * Returns { isExpanded } to allow pages to adapt their layout.
+ * Returns { isExpanded, setIsExpanded } to allow pages to adapt their layout
+ * and control the sidebar.
  */
 export function useInsightsState() {
   return useContext(InsightsContext);
@@ -91,7 +96,10 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
   );
 
-  const contextValue = useMemo(() => ({ isExpanded }), [isExpanded]);
+  const contextValue = useMemo(
+    () => ({ isExpanded, setIsExpanded }),
+    [isExpanded, setIsExpanded],
+  );
 
   return (
     <InsightsContext.Provider value={contextValue}>
