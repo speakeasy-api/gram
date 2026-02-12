@@ -500,7 +500,7 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 }
 
 // This is used during auth, so keep it as lightweight as possible.
-func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.Tier, err error) {
+func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.Tier, hasActiveSubscription bool, err error) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer_tier", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
@@ -511,13 +511,13 @@ func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.
 
 	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	return p.extractCustomerTier(customerState)
 }
 
-func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (*billing.Tier, error) {
+func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (*billing.Tier, bool, error) {
 	if customerState != nil {
 		// Active enterprise subscriptions return earlier with the enterprise flag in the DB
 		if len(customerState.ActiveSubscriptions) >= 1 {
@@ -526,14 +526,14 @@ func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerStat
 			}
 			activeSubscription := customerState.ActiveSubscriptions[0]
 			if activeSubscription.ProductID == p.catalog.ProductIDBase {
-				return conv.Ptr(billing.TierBase), nil
+				return conv.Ptr(billing.TierBase), true, nil
 			}
 			// Fallback case for old accounts
-			return conv.Ptr(billing.TierPro), nil
+			return conv.Ptr(billing.TierPro), true, nil
 		}
 	}
 
-	return nil, nil
+	return nil, false, nil
 }
 
 func (p *Client) GetCustomer(ctx context.Context, orgID string) (c *billing.Customer, err error) {

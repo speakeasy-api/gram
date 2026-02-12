@@ -28,7 +28,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const teamUrl =
     organization?.userWorkspaceSlugs &&
-      organization.userWorkspaceSlugs.length > 0
+    organization.userWorkspaceSlugs.length > 0
       ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
       : "https://app.speakeasy.com";
 
@@ -90,10 +90,7 @@ const FreeTierExceededNotification = () => {
   });
   const routes = useRoutes();
 
-  if (
-    !usage ||
-    productTier !== "base"
-  ) {
+  if (!usage || productTier !== "base") {
     return null;
   }
 

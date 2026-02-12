@@ -20,9 +20,9 @@ import (
 )
 
 type localEnvFile map[string]struct {
-	UserEmail   string  `json:"user_email"`
-	DisplayName *string `json:"display_name"`
-	Admin       bool    `json:"admin"`
+	UserEmail     string  `json:"user_email"`
+	DisplayName   *string `json:"display_name"`
+	Admin         bool    `json:"admin"`
 	Organizations []struct {
 		OrganizationID   string `json:"organization_id"`
 		OrganizationName string `json:"organization_name"`
@@ -129,6 +129,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	}
 
 	authCtx.AccountType = orgMetadata.GramAccountType
+	authCtx.HasActiveSubscription = orgMetadata.HasActiveSubscription
 	authCtx.OrganizationSlug = orgMetadata.Slug
 	authCtx.Email = &email
 

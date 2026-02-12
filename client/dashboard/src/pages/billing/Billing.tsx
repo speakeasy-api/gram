@@ -324,27 +324,28 @@ const UsageTiers = () => {
                 ))}
               </ul>
             </Stack>
-            {tierLimits.includedBullets && tierLimits.includedBullets.length > 0 && (
-              <Stack gap={1}>
-                <Type
-                  mono
-                  muted
-                  small
-                  variant="subheading"
-                  className="font-medium uppercase"
-                >
-                  Included
-                </Type>
-                <ul className="list-inside space-y-1">
-                  {tierLimits.includedBullets.map((bullet) => (
-                    <li>
-                      <span className="text-muted-foreground/60">✓</span>{" "}
-                      {bullet}
-                    </li>
-                  ))}
-                </ul>
-              </Stack>
-            )}
+            {tierLimits.includedBullets &&
+              tierLimits.includedBullets.length > 0 && (
+                <Stack gap={1}>
+                  <Type
+                    mono
+                    muted
+                    small
+                    variant="subheading"
+                    className="font-medium uppercase"
+                  >
+                    Included
+                  </Type>
+                  <ul className="list-inside space-y-1">
+                    {tierLimits.includedBullets.map((bullet) => (
+                      <li>
+                        <span className="text-muted-foreground/60">✓</span>{" "}
+                        {bullet}
+                      </li>
+                    ))}
+                  </ul>
+                </Stack>
+              )}
             {tierLimits.addOnBullets && tierLimits.addOnBullets.length > 0 && (
               <Stack gap={1}>
                 <Type
@@ -394,12 +395,13 @@ const UsageTiers = () => {
                 active={productTier === "base" || productTier === "base_PAID"}
               />
               {/* Keep this so we can show it to users who are still on the old pricing tier */}
-              {productTier === "__deprecated__pro" && (<UsageCard
-                tier="__deprecated__pro"
-                tierLimits={usageTiers.pro}
-                previousTier="base"
-                active={productTier === "__deprecated__pro"}
-              />
+              {productTier === "__deprecated__pro" && (
+                <UsageCard
+                  tier="__deprecated__pro"
+                  tierLimits={usageTiers.pro}
+                  previousTier="base"
+                  active={productTier === "__deprecated__pro"}
+                />
               )}
               <UsageCard
                 tier="enterprise"
@@ -485,8 +487,9 @@ const UsageProgress = ({
       >
         {anyOverage
           ? `Included: ${included.toLocaleString()}`
-          : `${value.toLocaleString()} / ${noMax ? "No limit" : included.toLocaleString()
-          }`}
+          : `${value.toLocaleString()} / ${
+              noMax ? "No limit" : included.toLocaleString()
+            }`}
       </div>
 
       {/* Divider line and labels for overage */}

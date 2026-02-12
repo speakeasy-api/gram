@@ -19,7 +19,10 @@ import {
 } from "./Telemetry";
 
 // We don't include accountType here because it is actively confusing. See useProductTier
-type Session = Omit<InfoResponseBody, "userEmail" | "userId" | "isAdmin" | "gramAccountType"> & {
+type Session = Omit<
+  InfoResponseBody,
+  "userEmail" | "userId" | "isAdmin" | "gramAccountType"
+> & {
   user: User;
   session: string;
   organization: OrganizationEntry;
@@ -69,7 +72,7 @@ const emptyProject = {
   id: "",
   name: "",
   slug: "",
-  switchProject: () => { },
+  switchProject: () => {},
 };
 const ProjectContext = createContext<
   ProjectEntry & {

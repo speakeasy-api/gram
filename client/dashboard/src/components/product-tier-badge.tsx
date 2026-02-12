@@ -1,6 +1,10 @@
 import { ProductTier, useProductTier } from "@/hooks/useProductTier";
 
-export const ProductTierBadge = ({ tierOverride }: { tierOverride?: ProductTier }) => {
+export const ProductTierBadge = ({
+  tierOverride,
+}: {
+  tierOverride?: ProductTier;
+}) => {
   const productTier = useProductTier();
 
   const finalTier = tierOverride ?? productTier;

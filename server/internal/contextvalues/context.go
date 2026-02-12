@@ -9,17 +9,18 @@ import (
 type contextKey string
 
 type AuthContext struct {
-	ActiveOrganizationID string
-	UserID               string
-	ExternalUserID       string // Customer-provided user identifier (e.g., from chat session JWTs)
-	APIKeyID             string
-	SessionID            *string
-	ProjectID            *uuid.UUID
-	OrganizationSlug     string
-	Email                *string
-	AccountType          string
-	ProjectSlug          *string
-	APIKeyScopes         []string
+	ActiveOrganizationID  string
+	UserID                string
+	ExternalUserID        string // Customer-provided user identifier (e.g., from chat session JWTs)
+	APIKeyID              string
+	SessionID             *string
+	ProjectID             *uuid.UUID
+	OrganizationSlug      string
+	Email                 *string
+	AccountType           string
+	HasActiveSubscription bool
+	ProjectSlug           *string
+	APIKeyScopes          []string
 }
 
 type RequestContext struct {

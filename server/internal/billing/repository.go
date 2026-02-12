@@ -48,7 +48,7 @@ type WebhookProduct struct {
 
 type Repository interface {
 	GetCustomer(ctx context.Context, orgID string) (*Customer, error)
-	GetCustomerTier(ctx context.Context, orgID string) (*Tier, error)
+	GetCustomerTier(ctx context.Context, orgID string) (*Tier, bool, error)
 	GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error)
 	// this enforces that we can only get usage results from a stored value, specifically for hotpath usage with no outbound API call
 	GetStoredPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error)
