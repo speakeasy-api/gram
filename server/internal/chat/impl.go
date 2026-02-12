@@ -597,15 +597,18 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, nil, "model %s is not allowed", chatRequest.Model).Log(ctx, s.logger)
 	}
 
-	chatIDHeader := r.Header.Get("Gram-Chat-ID")
+	chatID := r.Header.Get("Gram-Chat-ID")
+	if chatID == "" {
+		chatID = uuid.New().String()
+	}
 
 	eventProperties["model"] = chatRequest.Model
-	eventProperties["chat_id"] = chatIDHeader
+	eventProperties["chat_id"] = chatID
 
 	respCaptor := w
 
-	if chatIDHeader != "" {
-		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata)
+	if chatID != "" {
+		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatID, chatRequest, metadata)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 		}
