@@ -15,6 +15,26 @@
       "import": "./dist/server.js",
       "require": "./dist/server.cjs"
     },
+    "./server/express": {
+      "types": "./dist/server/express.d.ts",
+      "import": "./dist/server/express.js",
+      "require": "./dist/server/express.cjs"
+    },
+    "./server/nextjs": {
+      "types": "./dist/server/nextjs.d.ts",
+      "import": "./dist/server/nextjs.js",
+      "require": "./dist/server/nextjs.cjs"
+    },
+    "./server/fastify": {
+      "types": "./dist/server/fastify.d.ts",
+      "import": "./dist/server/fastify.js",
+      "require": "./dist/server/fastify.cjs"
+    },
+    "./server/hono": {
+      "types": "./dist/server/hono.d.ts",
+      "import": "./dist/server/hono.js",
+      "require": "./dist/server/hono.cjs"
+    },
     "./plugins": {
       "types": "./dist/plugins/index.d.ts",
       "import": "./dist/plugins.js",
@@ -68,8 +88,13 @@
     "@assistant-ui/react-ai-sdk": "^1.1.16",
     "@assistant-ui/react-markdown": "^0.11.0",
     "@json-render/react": "^0.2.0",
+    "@types/express": "^4.17.0 || ^5.0.0",
+    "@types/node": ">=16",
     "@types/react": ">=16.8",
     "@types/react-dom": ">=16.8",
+    "express": "^4.17.0 || ^5.0.0",
+    "fastify": "^4.0.0 || ^5.0.0",
+    "hono": "^3.0.0 || ^4.0.0 || ^5.0.0",
     "motion": "^12.0.0",
     "react": ">=16.8",
     "react-dom": ">=16.8",
@@ -78,10 +103,25 @@
     "zustand": "^5.0.0"
   },
   "peerDependenciesMeta": {
+    "@types/express": {
+      "optional": true
+    },
+    "@types/node": {
+      "optional": true
+    },
     "@types/react": {
       "optional": true
     },
     "@types/react-dom": {
+      "optional": true
+    },
+    "express": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    },
+    "hono": {
       "optional": true
     },
     "motion": {
@@ -151,6 +191,7 @@
     "@storybook/addon-docs": "^10.0.8",
     "@storybook/react-vite": "^10.0.8",
     "@tailwindcss/vite": "^4.1.13",
+    "@types/express": "^5.0.6",
     "@types/lodash.merge": "^4.6.9",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-react": "^5.0.3",
@@ -161,6 +202,8 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "eslint-plugin-storybook": "^10.1.4",
     "eslint-plugin-unused-imports": "^4.3.0",
+    "fastify": "^5.7.4",
+    "hono": "^4.11.7",
     "lodash.merge": "^4.6.2",
     "motion": "^12.23.14",
     "msw": "^2.12.3",

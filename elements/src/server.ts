@@ -1,4 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'node:http'
+import { createChatSession, type SessionHandlerOptions } from './server/core'
 
 type ServerHandler<T> = (
   req: IncomingMessage,
@@ -23,67 +24,53 @@ interface ServerHandlers {
   session: ServerHandler<SessionHandlerOptions>
 }
 
+/**
+ * @deprecated Use framework-specific adapters instead:
+ * - `@gram-ai/elements/server/express` for Express
+ * - `@gram-ai/elements/server/nextjs` for Next.js App Router
+ * - `@gram-ai/elements/server/fastify` for Fastify
+ * - `@gram-ai/elements/server/hono` for Hono
+ */
 export const createElementsServerHandlers = (): ServerHandlers => {
   return {
     session: sessionHandler,
   }
 }
 
-interface SessionHandlerOptions {
-  /**
-   * The origin from which the token will be used
-   */
-  embedOrigin: string
-
-  /**
-   * Free-form user identifier
-   */
-  userIdentifier: string
-
-  /**
-   * Token expiration in seconds (max / default 3600)
-   * @default 3600
-   */
-  expiresAfter?: number
-}
+export type { SessionHandlerOptions }
 
 const sessionHandler: ServerHandler<SessionHandlerOptions> = async (
   req,
   res,
   options
 ) => {
-  const base = process.env.GRAM_API_URL ?? 'https://app.getgram.ai'
-  if (req.method === 'POST') {
-    const projectSlug = Array.isArray(req.headers['gram-project'])
-      ? req.headers['gram-project'][0]
-      : req.headers['gram-project']
-
-    fetch(base + '/rpc/chatSessions.create', {
-      method: 'POST',
-      body: JSON.stringify({
-        embed_origin: options?.embedOrigin,
-        user_identifier: options?.userIdentifier,
-        expires_after: options?.expiresAfter,
-      }),
-      headers: {
-        'Content-Type': 'application/json',
-        'Gram-Project': typeof projectSlug === 'string' ? projectSlug : '',
-        'Gram-Key': process.env.GRAM_API_KEY ?? '',
-      },
-    })
-      .then(async (response) => {
-        const body = await response.text()
-        res.writeHead(response.status, { 'Content-Type': 'application/json' })
-        res.end(body)
-      })
-      .catch((error) => {
-        console.error('Failed to create chat session:', error)
-        res.writeHead(500, { 'Content-Type': 'application/json' })
-        res.end(
-          JSON.stringify({
-            error: 'Failed to create chat session: ' + error.message,
-          })
-        )
-      })
+  if (req.method !== 'POST') {
+    res.writeHead(405, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'Method not allowed' }))
+    return
   }
+
+  const projectSlug = Array.isArray(req.headers['gram-project'])
+    ? req.headers['gram-project'][0]
+    : req.headers['gram-project']
+
+  if (!projectSlug || typeof projectSlug !== 'string') {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'Missing Gram-Project header' }))
+    return
+  }
+
+  if (!options) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'Missing session options' }))
+    return
+  }
+
+  const result = await createChatSession({
+    projectSlug,
+    options,
+  })
+
+  res.writeHead(result.status, result.headers)
+  res.end(result.body)
 }
