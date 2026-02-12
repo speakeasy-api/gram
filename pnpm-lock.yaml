@@ -65,6 +65,12 @@ importers:
       '@types/node':
         specifier: ^24.10.1
         version: 24.10.1
+      confbox:
+        specifier: ^0.2.2
+        version: 0.2.2
+      get-port-please:
+        specifier: ^3.2.0
+        version: 3.2.0
       prettier:
         specifier: ^3.6.2
         version: 3.7.4
@@ -4884,6 +4890,9 @@ packages:
   get-nonce@1.0.1:
     resolution: {integrity: sha512-FJhYRoDaiatfEkUK8HKlicmu/3SGFD51q3itKDGoSTysQJBnfOcxU5GxnhE1E6soB76MbT0MBtnKJuXyAx+96Q==}
     engines: {node: '>=6'}
+
+  get-port-please@3.2.0:
+    resolution: {integrity: sha512-I9QVvBw5U/hw3RmWpYKRumUeaDgxTPd401x364rLmWBJcOQ753eov1eTgzDqRG9bqFIfDc7gfzcQEWrUri3o1A==}
 
   get-proto@1.0.1:
     resolution: {integrity: sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==}
@@ -12403,6 +12412,8 @@ snapshots:
       math-intrinsics: 1.1.0
 
   get-nonce@1.0.1: {}
+
+  get-port-please@3.2.0: {}
 
   get-proto@1.0.1:
     dependencies:

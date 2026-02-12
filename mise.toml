@@ -70,18 +70,24 @@ TEMPORAL_ADDRESS = ":{{env.TEMPORAL_PORT}}"
 ## for simple production deployments although you are encouraged to run the gram
 ## server and worker as separate processes that can be scaled independently.
 GRAM_SINGLE_PROCESS = 0
-GRAM_SERVER_ADDRESS = ":8080"
-GRAM_CONTROL_ADDRESS = ":8081"
-GRAM_WORKER_CONTROL_ADDRESS = ":8082"
+GRAM_SERVER_PORT = "8080"
+GRAM_SERVER_ADDRESS = ":{{env.GRAM_SERVER_PORT}}"
+GRAM_CONTROL_PORT = "8081"
+GRAM_CONTROL_ADDRESS = ":{{env.GRAM_CONTROL_PORT}}"
+GRAM_WORKER_CONTROL_PORT = "8082"
+GRAM_WORKER_CONTROL_ADDRESS = ":{{env.GRAM_WORKER_CONTROL_PORT}}"
 ## The following variable can be one of: local, test, prod
 GRAM_ENVIRONMENT = "local"
-GRAM_SERVER_URL = "https://localhost:8080"
-GRAM_SITE_URL = "https://localhost:5173"
+GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
+GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
+GRAM_SITE_PORT = "5173"
+GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.
 GRAM_ENCRYPTION_KEY = "unset"
-GRAM_REDIS_CACHE_ADDR = "127.0.0.1:5445"
+GRAM_REDIS_CACHE_PORT = "5445"
+GRAM_REDIS_CACHE_ADDR = "127.0.0.1:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 OPENROUTER_DEV_KEY = "unset"
 ## The following two variables are used by Speakeasy staff developing against
@@ -97,7 +103,8 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 ##########################
 ## Observability config ##
 ##########################
-OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4317"
+OTLP_GRPC_PORT = "4317"
+OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:{{env.OTLP_GRPC_PORT}}"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1
@@ -113,8 +120,6 @@ GRAM_UNSAFE_LOCAL_ENV_PATH = "{{config_root}}/.local.env.json"
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
 VITE_DEV_HOSTNAMES = "localhost,gram.local"
 TEMPORAL_WEB_PORT = "8233"
-## The following variables configure the local opentelemetry stack
-OTLP_GRPC_PORT = "4317"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing
 ## flag settings. Check out flags.local.csv.example in the root of the repo for
@@ -155,4 +160,5 @@ PULSE_REGISTRY_KEY = "unset"
 ##############
 ## Elements ##
 ## Used for local development only
-VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:6006"
+ELEMENTS_STORYBOOK_PORT = "6007"
+VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:{{env.ELEMENTS_STORYBOOK_PORT}}"
