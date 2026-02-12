@@ -241,8 +241,6 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("trace_summaries.start_time_unix_nano >= ?", arg.TimeStart).
-		Where("trace_summaries.start_time_unix_nano <= ?", arg.TimeEnd).
 		Having("start_time_unix_nano >= ?", arg.TimeStart).
 		Having("start_time_unix_nano <= ?", arg.TimeEnd)
 
