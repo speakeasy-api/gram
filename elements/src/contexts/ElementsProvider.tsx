@@ -25,8 +25,8 @@ import { Plugin } from '@/types/plugins'
 import {
   AssistantRuntimeProvider,
   AssistantTool,
-  useAssistantState,
   unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
+  useAssistantState,
 } from '@assistant-ui/react'
 import {
   frontendTools as convertFrontendToolsToAISDKTools,
@@ -36,7 +36,6 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   convertToModelMessages,
-  ModelMessage,
   smoothStream,
   stepCountIs,
   streamText,
@@ -53,14 +52,14 @@ import {
   useState,
 } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { ChatIdContext } from './ChatIdContext'
+import { ElementsContext } from './contexts'
+import { ToolApprovalProvider } from './ToolApprovalContext'
 import {
   ConnectionStatusProvider,
   useConnectionStatusOptional,
 } from './ConnectionStatusContext'
-import { ElementsContext } from './contexts'
-import { ToolApprovalProvider } from './ToolApprovalContext'
 import { ToolExecutionProvider } from './ToolExecutionContext'
+import { ChatIdContext } from './ChatIdContext'
 
 /**
  * Extracts executable tools from frontend tool definitions.
@@ -120,29 +119,6 @@ function mergeInternalSystemPromptWith(
 
   Utilities:
   ${plugins.map((plugin) => `- ${plugin.language}: ${plugin.prompt}`).join('\n')}`
-}
-
-/**
- * Converts UI messages to model messages, adding back in the ids that the AI SDK strips
- */
-function convertMessagesToModelMessages(messages: UIMessage[]): (ModelMessage & { id: string })[] {
-  // This works around AI SDK bug where these fields cause validation failures
-  const cleanedMessages = cleanMessagesForModel(messages.map(message => ({
-    ...message,
-    dontStrip: true,
-  })))
-
-  // The AI SDK strips message ids for some reason, so we need to convert one by one
-  // so that we can re-add the message ids without losing the mapping
-  // This works because convertToModelMessages is 1 -> many
-  const convertedOneByOne = cleanedMessages.flatMap((m) => convertToModelMessages([m]).map((m2) => ({
-    ...m2,
-    id: m.id,
-  })))
-
-  console.log('convertedOneByOne', convertedOneByOne)
-
-  return convertedOneByOne
 }
 
 /**
@@ -355,10 +331,10 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         const openRouterModel = usingCustomModel
           ? null
           : createOpenRouter({
-            baseURL: apiUrl,
-            apiKey: 'unused, but must be set',
-            headers: headersWithChatId,
-          })
+              baseURL: apiUrl,
+              apiKey: 'unused, but must be set',
+              headers: headersWithChatId,
+            })
 
         if (config.languageModel) {
           console.log('Using custom language model', config.languageModel)
@@ -383,8 +359,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           : openRouterModel!.chat(model)
 
         try {
-          const modelMessages = convertMessagesToModelMessages(messages)
-          console.log('modelMessages', modelMessages)
+          // This works around AI SDK bug where these fields cause validation failures
+          const cleanedMessages = cleanMessagesForModel(messages)
+          const modelMessages = convertToModelMessages(cleanedMessages)
 
           const result = streamText({
             system: systemPrompt,
@@ -649,7 +626,7 @@ const ElementsProviderWithHistory = ({
                   ROOT_SELECTOR,
                   (contextValue?.config.variant === 'standalone' ||
                     contextValue?.config.variant === 'sidecar') &&
-                  'h-full'
+                    'h-full'
                 )}
               >
                 {children}
@@ -701,7 +678,7 @@ const ElementsProviderWithoutHistory = ({
                 ROOT_SELECTOR,
                 (contextValue?.config.variant === 'standalone' ||
                   contextValue?.config.variant === 'sidecar') &&
-                'h-full'
+                  'h-full'
               )}
             >
               {children}

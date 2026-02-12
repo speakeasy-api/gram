@@ -1,12 +1,12 @@
 import { useReplayContext } from '@/contexts/ReplayContext'
-import { useAssistantState } from '@assistant-ui/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useElements } from './useElements'
 import { getApiUrl } from '@/lib/api'
-import { useAuth } from './useAuth'
-import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { useAssistantState } from '@assistant-ui/react'
 import { generateObject } from 'ai'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
+import { useAuth } from './useAuth'
+import { useElements } from './useElements'
+import { useModel } from './useModel'
 
 export interface FollowOnSuggestion {
   id: string
@@ -45,6 +45,8 @@ export function useFollowOnSuggestions(): {
     auth: config.api,
     projectSlug: config.projectSlug,
   })
+
+  const model = useModel(SUGGESTIONS_MODEL)
 
   // Check if follow-up suggestions are enabled (default: true)
   // Disable in replay mode since we don't need AI-generated suggestions
@@ -104,15 +106,6 @@ export function useFollowOnSuggestions(): {
     setIsLoading(true)
 
     try {
-      // Create OpenRouter client
-      const openRouter = createOpenRouter({
-        baseURL: apiUrl,
-        apiKey: 'unused, but must be set',
-        headers: auth.headers,
-      })
-
-      const model = openRouter.chat(SUGGESTIONS_MODEL)
-
       // Check if the assistant is asking a question
       if (lastAssistantMessage) {
         try {

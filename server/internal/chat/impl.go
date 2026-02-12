@@ -521,6 +521,8 @@ func extractHTTPMetadata(r *http.Request) httpMetadata {
 
 	source := r.Header.Get(constants.HeaderSource)
 
+	println("\n\n\nMESSAGE WITH SOURCE: ", source)
+
 	return httpMetadata{
 		Origin:    origin,
 		UserAgent: userAgent,
@@ -552,9 +554,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		"origin":            metadata.Origin,
 	}
 
-	source := billing.ModelUsageSourcePlayground
-	if metadata.Source == "elements" {
-		source = billing.ModelUsageSourceElements
+	source := billing.ModelUsageSource(metadata.Source)
+	if source == "" {
+		source = billing.ModelUsageSourcePlayground
 	}
 
 	defer func() {
@@ -605,6 +607,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	respCaptor := w
 
 	if chatIDHeader != "" {
+		println("\n\n\n\nHAVE A CHAT ID")
 		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
@@ -730,7 +733,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				}
 			}()
 		} else {
-			msg := "no response captor"
+			msg := fmt.Sprintf("no response captor (source: %s)", source)
 			if respCaptorWithTracking != nil {
 				msg = "no message ID"
 				msg += "; model: " + respCaptorWithTracking.model
