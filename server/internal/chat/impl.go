@@ -559,9 +559,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		"origin":            metadata.Origin,
 	}
 
-	source := billing.ModelUsageSourcePlayground
-	if metadata.Source == "elements" {
-		source = billing.ModelUsageSourceElements
+	source := billing.ModelUsageSource(metadata.Source)
+	if source == "" {
+		source = billing.ModelUsageSourcePlayground
 	}
 
 	defer func() {
@@ -610,52 +610,62 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	eventProperties["chat_id"] = chatIDHeader
 
 	respCaptor := w
+	isFirstMessage := true
 
 	if chatIDHeader != "" {
 		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 		}
+		isFirstMessage = chatResult.IsFirstMessage
+	}
 
-		// Check if this is a streaming request
-		isStreaming := chatRequest.Stream
-
-		// Create a custom response writer to capture the response
-		respCaptor = &responseCaptor{
-			ResponseWriter:       w,
-			logger:               s.logger,
-			ctx:                  ctx,
-			isStreaming:          isStreaming,
-			orgID:                orgID,
-			chatID:               chatResult.ChatID,
-			projectID:            *authCtx.ProjectID,
-			repo:                 s.repo,
-			messageContent:       &strings.Builder{},
-			lineBuf:              &strings.Builder{},
-			accumulatedToolCalls: make(map[int]openrouter.ToolCall),
-			messageID:            "",
-			model:                "",
-			isDone:               false,
-			messageWritten:       false,
-			finishReason:         nil,
-			toolCallID:           "",
-			usage: openrouter.Usage{
-				PromptTokens:     0,
-				CompletionTokens: 0,
-				TotalTokens:      0,
-			},
-			usageSet:               false,
-			isFirstMessage:         chatResult.IsFirstMessage,
-			chatTitleGenerator:     s.chatTitleGenerator,
-			chatResolutionAnalyzer: s.chatResolutionAnalyzer,
-			// GenAI telemetry fields
-			telemetryService: s.telemetryService,
-			userID:           userID,
-			externalUserID:   authCtx.ExternalUserID,
-			startTime:        time.Now(),
-			httpMetadata:     metadata,
-			apiKeyID:         authCtx.APIKeyID,
+	chatID := uuid.Nil
+	if chatIDHeader != "" {
+		chatID, err = uuid.Parse(chatIDHeader)
+		if err != nil {
+			return oops.E(oops.CodeInvalid, err, "invalid chat ID").Log(ctx, s.logger)
 		}
+	}
+
+	// Check if this is a streaming request
+	isStreaming := chatRequest.Stream
+
+	// Create a custom response writer to capture the response
+	respCaptor = &responseCaptor{
+		ResponseWriter:       w,
+		logger:               s.logger,
+		ctx:                  ctx,
+		isStreaming:          isStreaming,
+		orgID:                orgID,
+		chatID:               chatID,
+		projectID:            *authCtx.ProjectID,
+		repo:                 s.repo,
+		messageContent:       &strings.Builder{},
+		lineBuf:              &strings.Builder{},
+		accumulatedToolCalls: make(map[int]openrouter.ToolCall),
+		messageID:            "",
+		model:                "",
+		isDone:               false,
+		messageWritten:       false,
+		finishReason:         nil,
+		toolCallID:           "",
+		usage: openrouter.Usage{
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
+		},
+		usageSet:               false,
+		isFirstMessage:         isFirstMessage,
+		chatTitleGenerator:     s.chatTitleGenerator,
+		chatResolutionAnalyzer: s.chatResolutionAnalyzer,
+		// GenAI telemetry fields
+		telemetryService: s.telemetryService,
+		userID:           userID,
+		externalUserID:   authCtx.ExternalUserID,
+		startTime:        time.Now(),
+		httpMetadata:     metadata,
+		apiKeyID:         authCtx.APIKeyID,
 	}
 
 	target, err := url.Parse(openrouter.OpenRouterBaseURL)
@@ -737,15 +747,20 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				}
 			}()
 		} else {
-			msg := "no message ID"
+			msg := fmt.Sprintf("no response captor (source: %s)", source)
 			if respCaptorWithTracking != nil {
+				msg = "no message ID"
 				msg += "; model: " + respCaptorWithTracking.model
 				msg += "; org ID: " + respCaptorWithTracking.orgID
 				msg += "; project ID: " + respCaptorWithTracking.projectID.String()
 				msg += "; chat ID: " + respCaptorWithTracking.chatID.String()
 				msg += fmt.Sprintf("; isStreaming: %t", respCaptorWithTracking.isStreaming)
 			}
-			s.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(errors.New(msg)))
+
+			// This happens when you dont have a chat ID, but for internal Gram usage we dont care
+			if source != billing.ModelUsageSourceGram {
+				s.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(errors.New(msg)))
+			}
 		}
 	}()
 
