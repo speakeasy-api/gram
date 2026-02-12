@@ -841,7 +841,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
-				fmt.Sprintf("%d chat based credits / month", freeIncludedCredits),
+				fmt.Sprintf("%d LLM credits / month", freeIncludedCredits),
 				"Slack community support",
 			},
 			AddOnBullets: []string{},
@@ -861,13 +861,13 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
-				fmt.Sprintf("%d chat based credits / month", proIncludedCredits),
+				fmt.Sprintf("%d LLM credits / month", proIncludedCredits),
 				"Email support",
 			},
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
 				fmt.Sprintf("%s / month / additional %d tool calls", formatPrice(toolCallPrice*float64(additionalToolCallsBlock)), additionalToolCallsBlock),
-				"$11 per 10 additional chat based credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
+				"$11 per 10 additional LLM credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
 		},
 		Enterprise: &gen.TierLimits{

@@ -1,9 +1,9 @@
-import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
+import { Button } from "@speakeasy-api/moonshine";
 import { CreditCard, Server } from "lucide-react";
 
 interface ServerEnableDialogProps {
@@ -23,7 +23,6 @@ export function ServerEnableDialog({
 }: ServerEnableDialogProps) {
   const session = useSession();
   const routes = useRoutes();
-  const isFreeAccount = session.gramAccountType === "free";
   const { data: periodUsage } = useGetPeriodUsage();
 
   const handleConfirm = () => {
@@ -36,9 +35,13 @@ export function ServerEnableDialog({
     onClose();
   };
 
+  // Specifying that the account is not just in "free" tier, but also that it has no subscription on file to pay for overages
+  const isUnpaidAccount = session.gramAccountType === "free" && periodUsage && periodUsage.hasActiveSubscription === false;
+  const hasAdditionalIncludedServers = periodUsage && periodUsage.includedServers > periodUsage.actualEnabledServerCount;
+
   const canEnable =
-    isFreeAccount && !currentlyEnabled
-      ? periodUsage && periodUsage.actualEnabledServerCount === 0
+    isUnpaidAccount && !currentlyEnabled
+      ? hasAdditionalIncludedServers
       : true;
 
   return (
