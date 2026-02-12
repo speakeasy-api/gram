@@ -1,15 +1,14 @@
-import { useSession } from "@/contexts/Auth";
+import { ProductTier, useProductTier } from "@/hooks/useProductTier";
 
-export type ProductTier = "free" | "pro" | "enterprise";
+export const ProductTierBadge = ({ tierOverride }: { tierOverride?: ProductTier }) => {
+  const productTier = useProductTier();
 
-export const ProductTierBadge = ({ tier }: { tier?: ProductTier }) => {
-  const session = useSession();
-
-  const finalTier = tier ?? (session.gramAccountType as ProductTier);
+  const finalTier = tierOverride ?? productTier;
 
   const name = {
-    free: "Free",
-    pro: "Pro",
+    base: "Base",
+    base_PAID: "Base",
+    __deprecated__pro: "Pro (Deprecated)",
     enterprise: "Enterprise",
   }[finalTier];
 
@@ -26,12 +25,17 @@ export const ProductTierBadge = ({ tier }: { tier?: ProductTier }) => {
 
 export const productTierColors = (tier: ProductTier) => {
   return {
-    free: {
+    base: {
       bg: "bg-neutral-600",
       text: "text-white",
       ring: "ring-neutral-600/50",
     },
-    pro: {
+    base_PAID: {
+      bg: "bg-violet-500",
+      text: "text-white",
+      ring: "ring-violet-500/50",
+    },
+    __deprecated__pro: {
       bg: "bg-violet-500",
       text: "text-white",
       ring: "ring-violet-500/50",

@@ -10,7 +10,7 @@ import (
 type Tier string
 
 const (
-	TierFree       Tier = "free"
+	TierBase       Tier = "free"
 	TierPro        Tier = "pro"
 	TierEnterprise Tier = "enterprise"
 )

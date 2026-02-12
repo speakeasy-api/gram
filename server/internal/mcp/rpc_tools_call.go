@@ -405,7 +405,7 @@ func resolveUserConfiguration(
 }
 
 func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {
-	if accountType != string(billing.TierFree) {
+	if accountType != string(billing.TierBase) {
 		return nil
 	}
 

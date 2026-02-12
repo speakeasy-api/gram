@@ -8,11 +8,12 @@ import {
   SidebarGroupLabel,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useOrganization, useSession } from "@/contexts/Auth";
+import { useOrganization } from "@/contexts/Auth";
+import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
-import { AlertTriangleIcon, MinusIcon, TestTube2Icon } from "lucide-react";
+import { MinusIcon, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { FeatureRequestModal } from "./FeatureRequestModal";
@@ -27,7 +28,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const teamUrl =
     organization?.userWorkspaceSlugs &&
-    organization.userWorkspaceSlugs.length > 0
+      organization.userWorkspaceSlugs.length > 0
       ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
       : "https://app.speakeasy.com";
 
@@ -83,7 +84,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 }
 
 const FreeTierExceededNotification = () => {
-  const session = useSession();
+  const productTier = useProductTier();
   const { data: usage } = useGetPeriodUsage(undefined, undefined, {
     throwOnError: false,
   });
@@ -91,9 +92,7 @@ const FreeTierExceededNotification = () => {
 
   if (
     !usage ||
-    !session ||
-    session.gramAccountType !== "free" ||
-    usage.hasActiveSubscription
+    productTier !== "base"
   ) {
     return null;
   }
@@ -105,24 +104,9 @@ const FreeTierExceededNotification = () => {
     return (
       <PersistentNotification variant="error">
         <Stack direction="vertical" gap={3} className="h-full">
-          <Stack direction="horizontal" align="center" gap={1}>
-            <AlertTriangleIcon className="w-4 h-4" />
-            <Type variant="subheading">Free tier exceeded</Type>
-          </Stack>
+          <Type variant="subheading">Limits exceeded</Type>
           <Type small>
-            You've used{" "}
-            <span className="font-medium">
-              {usage.toolCalls} / {usage.includedToolCalls} tool calls
-            </span>{" "}
-            and{" "}
-            <span className="font-medium">
-              {usage.servers} / {usage.includedServers} servers
-            </span>
-            .
-          </Type>
-          <Type small>
-            Your MCP server will be disabled soon. Upgrade to continue using
-            Gram.
+            Free tier limits exceeded. Upgrade to continue using Gram.
           </Type>
           <routes.billing.Link className="w-full mt-auto">
             <Button size="sm" className="w-full">
@@ -159,7 +143,7 @@ const PersistentNotification = ({
     <Button
       variant="ghost"
       size="icon"
-      className="absolute top-1 right-1 hover:bg-transparent"
+      className="absolute top-0 right-0 hover:bg-transparent"
       onClick={() => setIsMinimized(true)}
     >
       <MinusIcon className="w-4 h-4" />
@@ -167,7 +151,7 @@ const PersistentNotification = ({
   );
 
   let classes =
-    "absolute bottom-2 left-1/2 h-[236px] w-[236px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
+    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
   if (isMinimized) {
     classes +=
       "h-[12px] w-[12px] left-2 translate-x-0 cursor-pointer hover:scale-110";
