@@ -2,7 +2,7 @@ import type { Tool } from "@/lib/toolTypes";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Shield, AlertTriangle, Repeat, Globe } from "lucide-react";
 
-interface EffectiveAnnotations {
+interface ResolvedToolAnnotations {
   readOnly: boolean;
   destructive: boolean;
   idempotent: boolean;
@@ -10,33 +10,28 @@ interface EffectiveAnnotations {
 }
 
 /**
- * Extracts the effective annotation hints for a tool, merging base tool
- * annotations with variation overrides (variation wins when present).
+ * Resolves annotation hints for a tool by merging the base annotations with
+ * any variation overrides. Variation values take precedence when present;
+ * unset (nullish) variation fields fall through to the base annotation value.
  *
- * Only http and function tools support annotations per the MCP spec.
- * The annotation fields are nullable booleans on both the tool and its
- * variation -- NULL means "not set" / inherit from base.
+ * Returns null for tool types that don't carry annotations (prompt, external-mcp).
  */
-function getEffectiveAnnotations(tool: Tool): EffectiveAnnotations | null {
+function resolveToolAnnotations(tool: Tool): ResolvedToolAnnotations | null {
   if (tool.type !== "http" && tool.type !== "function") return null;
 
-  const a = tool.annotations;
-  const v = tool.variation;
+  const base = tool.annotations;
+  const override = tool.variation;
 
-  const readOnly = Boolean(v?.readOnlyHint ?? a?.readOnlyHint ?? false);
-  const destructive = Boolean(
-    v?.destructiveHint ?? a?.destructiveHint ?? false,
-  );
-  const idempotent = Boolean(
-    v?.idempotentHint ?? a?.idempotentHint ?? false,
-  );
-  const openWorld = Boolean(v?.openWorldHint ?? a?.openWorldHint ?? false);
-
-  return { readOnly, destructive, idempotent, openWorld };
+  return {
+    readOnly: Boolean(override?.readOnlyHint ?? base?.readOnlyHint),
+    destructive: Boolean(override?.destructiveHint ?? base?.destructiveHint),
+    idempotent: Boolean(override?.idempotentHint ?? base?.idempotentHint),
+    openWorld: Boolean(override?.openWorldHint ?? base?.openWorldHint),
+  };
 }
 
 export function AnnotationBadges({ tool }: { tool: Tool }) {
-  const annotations = getEffectiveAnnotations(tool);
+  const annotations = resolveToolAnnotations(tool);
   if (!annotations) return null;
 
   const { readOnly, destructive, idempotent, openWorld } = annotations;
