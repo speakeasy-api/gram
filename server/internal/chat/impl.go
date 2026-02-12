@@ -521,8 +521,6 @@ func extractHTTPMetadata(r *http.Request) httpMetadata {
 
 	source := r.Header.Get(constants.HeaderSource)
 
-	println("\n\n\nMESSAGE WITH SOURCE: ", source)
-
 	return httpMetadata{
 		Origin:    origin,
 		UserAgent: userAgent,
@@ -607,7 +605,6 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	respCaptor := w
 
 	if chatIDHeader != "" {
-		println("\n\n\n\nHAVE A CHAT ID")
 		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
