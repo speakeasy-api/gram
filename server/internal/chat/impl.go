@@ -597,61 +597,68 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, nil, "model %s is not allowed", chatRequest.Model).Log(ctx, s.logger)
 	}
 
-	chatID := r.Header.Get("Gram-Chat-ID")
-	if chatID == "" {
-		chatID = uuid.New().String()
-	}
+	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 
 	eventProperties["model"] = chatRequest.Model
-	eventProperties["chat_id"] = chatID
+	eventProperties["chat_id"] = chatIDHeader
 
 	respCaptor := w
+	isFirstMessage := true
 
-	if chatID != "" {
-		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatID, chatRequest, metadata)
+	if chatIDHeader != "" {
+		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 		}
+		isFirstMessage = chatResult.IsFirstMessage
+	}
 
-		// Check if this is a streaming request
-		isStreaming := chatRequest.Stream
-
-		// Create a custom response writer to capture the response
-		respCaptor = &responseCaptor{
-			ResponseWriter:       w,
-			logger:               s.logger,
-			ctx:                  ctx,
-			isStreaming:          isStreaming,
-			orgID:                orgID,
-			chatID:               chatResult.ChatID,
-			projectID:            *authCtx.ProjectID,
-			repo:                 s.repo,
-			messageContent:       &strings.Builder{},
-			lineBuf:              &strings.Builder{},
-			accumulatedToolCalls: make(map[int]openrouter.ToolCall),
-			messageID:            "",
-			model:                "",
-			isDone:               false,
-			messageWritten:       false,
-			finishReason:         nil,
-			toolCallID:           "",
-			usage: openrouter.Usage{
-				PromptTokens:     0,
-				CompletionTokens: 0,
-				TotalTokens:      0,
-			},
-			usageSet:               false,
-			isFirstMessage:         chatResult.IsFirstMessage,
-			chatTitleGenerator:     s.chatTitleGenerator,
-			chatResolutionAnalyzer: s.chatResolutionAnalyzer,
-			// GenAI telemetry fields
-			telemetryService: s.telemetryService,
-			userID:           userID,
-			externalUserID:   authCtx.ExternalUserID,
-			startTime:        time.Now(),
-			httpMetadata:     metadata,
-			apiKeyID:         authCtx.APIKeyID,
+	chatID := uuid.Nil
+	if chatIDHeader != "" {
+		chatID, err = uuid.Parse(chatIDHeader)
+		if err != nil {
+			return oops.E(oops.CodeInvalid, err, "invalid chat ID").Log(ctx, s.logger)
 		}
+	}
+
+	// Check if this is a streaming request
+	isStreaming := chatRequest.Stream
+
+	// Create a custom response writer to capture the response
+	respCaptor = &responseCaptor{
+		ResponseWriter:       w,
+		logger:               s.logger,
+		ctx:                  ctx,
+		isStreaming:          isStreaming,
+		orgID:                orgID,
+		chatID:               chatID,
+		projectID:            *authCtx.ProjectID,
+		repo:                 s.repo,
+		messageContent:       &strings.Builder{},
+		lineBuf:              &strings.Builder{},
+		accumulatedToolCalls: make(map[int]openrouter.ToolCall),
+		messageID:            "",
+		model:                "",
+		isDone:               false,
+		messageWritten:       false,
+		finishReason:         nil,
+		toolCallID:           "",
+		usage: openrouter.Usage{
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
+		},
+		usageSet:               false,
+		isFirstMessage:         isFirstMessage,
+		chatTitleGenerator:     s.chatTitleGenerator,
+		chatResolutionAnalyzer: s.chatResolutionAnalyzer,
+		// GenAI telemetry fields
+		telemetryService: s.telemetryService,
+		userID:           userID,
+		externalUserID:   authCtx.ExternalUserID,
+		startTime:        time.Now(),
+		httpMetadata:     metadata,
+		apiKeyID:         authCtx.APIKeyID,
 	}
 
 	target, err := url.Parse(openrouter.OpenRouterBaseURL)
