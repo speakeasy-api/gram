@@ -97,17 +97,18 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	}
 
 	authCtx := &contextvalues.AuthContext{
-		SessionID:            &session.SessionID,
-		ActiveOrganizationID: session.ActiveOrganizationID,
-		UserID:               session.UserID,
-		ExternalUserID:       "",
-		ProjectID:            nil,
-		OrganizationSlug:     "",
-		Email:                nil,
-		AccountType:          "",
-		ProjectSlug:          nil,
-		APIKeyScopes:         nil,
-		APIKeyID:             "",
+		SessionID:             &session.SessionID,
+		ActiveOrganizationID:  session.ActiveOrganizationID,
+		UserID:                session.UserID,
+		ExternalUserID:        "",
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "",
+		HasActiveSubscription: false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+		APIKeyID:              "",
 	}
 
 	if session.ActiveOrganizationID == "" {

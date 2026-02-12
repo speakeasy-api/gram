@@ -514,15 +514,15 @@ func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.
 		return nil, false, err
 	}
 
-	return p.extractCustomerTier(customerState)
+	return p.extractCustomerTier(ctx, customerState)
 }
 
-func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (*billing.Tier, bool, error) {
+func (p *Client) extractCustomerTier(ctx context.Context, customerState *polarComponents.CustomerState) (*billing.Tier, bool, error) {
 	if customerState != nil {
 		// Active enterprise subscriptions return earlier with the enterprise flag in the DB
 		if len(customerState.ActiveSubscriptions) >= 1 {
 			if len(customerState.ActiveSubscriptions) > 1 {
-				p.logger.Error("multiple active subscriptions found", attr.SlogOrganizationID(customerState.OrganizationID))
+				p.logger.ErrorContext(ctx, "multiple active subscriptions found", attr.SlogOrganizationID(customerState.OrganizationID))
 			}
 			activeSubscription := customerState.ActiveSubscriptions[0]
 			if activeSubscription.ProductID == p.catalog.ProductIDBase {
