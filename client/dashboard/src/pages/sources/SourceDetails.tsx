@@ -36,9 +36,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
+import { DeploymentsTable } from "../deployments/Deployments";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
 
 export default function SourceDetails() {
@@ -143,6 +144,7 @@ export default function SourceDetails() {
     if (isOpenAPI) {
       tabs.push("spec");
     }
+    tabs.push("deployments");
     tabs.push("settings");
     return tabs;
   }, [isOpenAPI, associatedToolsets.length]);
@@ -349,6 +351,12 @@ export default function SourceDetails() {
                     OpenAPI Specification
                   </TabsTrigger>
                 )}
+                <TabsTrigger
+                  value="deployments"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  Deployments
+                </TabsTrigger>
                 <TabsTrigger
                   value="settings"
                   className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
@@ -780,6 +788,15 @@ export default function SourceDetails() {
               )}
             </TabsContent>
           )}
+
+          {/* Deployments Tab */}
+          <TabsContent value="deployments" className="mt-0 flex-1">
+            <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+              <Suspense fallback={<div>Loading deployments...</div>}>
+                <DeploymentsTable />
+              </Suspense>
+            </div>
+          </TabsContent>
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="mt-0 flex-1">
