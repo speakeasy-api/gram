@@ -1,3 +1,6 @@
+-- Clear any data the MV captured between its creation and this backfill
+TRUNCATE TABLE metrics_summaries;
+
 -- Backfill metrics_summaries with existing telemetry_logs data
 INSERT INTO metrics_summaries
 SELECT
