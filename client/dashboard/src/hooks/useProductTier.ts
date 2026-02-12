@@ -24,7 +24,7 @@ export const useProductTier = () => {
       return "base_PAID";
     }
     return "base";
-  }, [periodUsage]);
+  }, [periodUsage, session.rawGramAccountType]);
 
   return productTier;
 };
