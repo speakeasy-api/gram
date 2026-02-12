@@ -311,6 +311,13 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"POLAR_METER_ID_SERVERS"},
 			Required: false,
 		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:     "polar-meter-id-credits",
+			Aliases:  []string{"polar.meter_id_credits"},
+			Usage:    "The ID of the credits meter in Polar",
+			EnvVars:  []string{"POLAR_METER_ID_CREDITS"},
+			Required: false,
+		}),
 		&cli.StringSliceFlag{
 			Name:     "disallowed-cidr-blocks",
 			Usage:    "List of CIDR blocks to block for SSRF protection",

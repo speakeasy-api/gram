@@ -330,9 +330,12 @@ func (s *StubClient) readPeriodUsage(orgID string) (*gen.PeriodUsage, error) {
 	tier := must.Value(s.GetUsageTiers(context.Background())).Pro
 	zero := &gen.PeriodUsage{
 		ToolCalls:                0,
-		MaxToolCalls:             tier.IncludedToolCalls,
+		IncludedToolCalls:        tier.IncludedToolCalls,
 		Servers:                  0,
-		MaxServers:               tier.IncludedServers,
+		IncludedServers:          tier.IncludedServers,
+		Credits:                  0,
+		IncludedCredits:          tier.IncludedCredits,
+		HasActiveSubscription:    false,
 		ActualEnabledServerCount: 0,
 	}
 

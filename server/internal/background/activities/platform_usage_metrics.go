@@ -162,7 +162,10 @@ func (f *FreeTierReportingUsageMetrics) Do(ctx context.Context, orgIDs []string)
 				slog.Int(logKeyServers, usage.Servers),
 			)
 
-			if org.GramAccountType == "free" && (usage.ToolCalls > usage.MaxToolCalls || usage.Servers > usage.MaxServers) {
+			anyOverage := usage.ToolCalls > usage.IncludedToolCalls || usage.Servers > usage.IncludedServers || usage.Credits > usage.IncludedCredits
+
+			// An org is over the free tier limits if it exceeds the included limits and does not have an active subscription (to pay for the overage)
+			if org.GramAccountType == "free" && anyOverage && !usage.HasActiveSubscription {
 				eventData := map[string]any{
 					"org_id":        org.ID,
 					"org_name":      org.Name,

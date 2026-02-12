@@ -17,14 +17,20 @@ import (
 type GetPeriodUsageResponseBody struct {
 	// The number of tool calls used
 	ToolCalls int `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
-	// The maximum number of tool calls allowed
-	MaxToolCalls int `form:"max_tool_calls" json:"max_tool_calls" xml:"max_tool_calls"`
+	// The number of tool calls included in the tier
+	IncludedToolCalls int `form:"included_tool_calls" json:"included_tool_calls" xml:"included_tool_calls"`
 	// The number of servers used, according to the Polar meter
 	Servers int `form:"servers" json:"servers" xml:"servers"`
-	// The maximum number of servers allowed
-	MaxServers int `form:"max_servers" json:"max_servers" xml:"max_servers"`
+	// The number of servers included in the tier
+	IncludedServers int `form:"included_servers" json:"included_servers" xml:"included_servers"`
 	// The number of servers enabled at the time of the request
 	ActualEnabledServerCount int `form:"actual_enabled_server_count" json:"actual_enabled_server_count" xml:"actual_enabled_server_count"`
+	// The number of credits used
+	Credits int `form:"credits" json:"credits" xml:"credits"`
+	// The number of credits included in the tier
+	IncludedCredits int `form:"included_credits" json:"included_credits" xml:"included_credits"`
+	// Whether the project has an active subscription
+	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
 }
 
 // GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
@@ -800,10 +806,13 @@ type TierLimitsResponseBody struct {
 func NewGetPeriodUsageResponseBody(res *usage.PeriodUsage) *GetPeriodUsageResponseBody {
 	body := &GetPeriodUsageResponseBody{
 		ToolCalls:                res.ToolCalls,
-		MaxToolCalls:             res.MaxToolCalls,
+		IncludedToolCalls:        res.IncludedToolCalls,
 		Servers:                  res.Servers,
-		MaxServers:               res.MaxServers,
+		IncludedServers:          res.IncludedServers,
 		ActualEnabledServerCount: res.ActualEnabledServerCount,
+		Credits:                  res.Credits,
+		IncludedCredits:          res.IncludedCredits,
+		HasActiveSubscription:    res.HasActiveSubscription,
 	}
 	return body
 }

@@ -15237,13 +15237,24 @@ components:
                     type: integer
                     description: The number of servers enabled at the time of the request
                     format: int64
-                max_servers:
+                credits:
                     type: integer
-                    description: The maximum number of servers allowed
+                    description: The number of credits used
                     format: int64
-                max_tool_calls:
+                has_active_subscription:
+                    type: boolean
+                    description: Whether the project has an active subscription
+                included_credits:
                     type: integer
-                    description: The maximum number of tool calls allowed
+                    description: The number of credits included in the tier
+                    format: int64
+                included_servers:
+                    type: integer
+                    description: The number of servers included in the tier
+                    format: int64
+                included_tool_calls:
+                    type: integer
+                    description: The number of tool calls included in the tier
                     format: int64
                 servers:
                     type: integer
@@ -15255,10 +15266,13 @@ components:
                     format: int64
             required:
                 - tool_calls
-                - max_tool_calls
+                - included_tool_calls
                 - servers
-                - max_servers
+                - included_servers
                 - actual_enabled_server_count
+                - credits
+                - included_credits
+                - has_active_subscription
         Project:
             type: object
             properties:
