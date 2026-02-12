@@ -51,6 +51,119 @@ import { Line } from "react-chartjs-2";
 import { ChevronRight } from "lucide-react";
 import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
+import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@speakeasy-api/moonshine";
+
+/**
+ * Check if time series has any meaningful data (non-zero values)
+ */
+function hasTimeSeriesData(
+  timeSeries: Array<{
+    totalChats?: number;
+    totalToolCalls?: number;
+  }>,
+): boolean {
+  if (!timeSeries || timeSeries.length === 0) return false;
+  return timeSeries.some(
+    (d) => (d.totalChats ?? 0) > 0 || (d.totalToolCalls ?? 0) > 0,
+  );
+}
+
+/**
+ * Check if summary has any data at all
+ */
+function hasSummaryData(summary?: {
+  totalChats?: number;
+  totalToolCalls?: number;
+}): boolean {
+  if (!summary) return false;
+  return (summary.totalChats ?? 0) > 0 || (summary.totalToolCalls ?? 0) > 0;
+}
+
+/**
+ * Overlay shown on charts when there's no data for the selected time range
+ */
+function NoDataOverlay() {
+  return (
+    <div className="absolute inset-0 bg-background/80 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center rounded">
+      <Icon
+        name="chart-line"
+        className="size-8 text-muted-foreground/50 mb-2"
+      />
+      <p className="text-sm text-muted-foreground">
+        No data for selected time range
+      </p>
+    </div>
+  );
+}
+
+interface SetupRequiredModalProps {
+  open: boolean;
+  onClose: () => void;
+  onNavigateToElements: () => void;
+}
+
+/**
+ * Modal shown when there's no data at all across any period,
+ * prompting the user to set up Elements
+ */
+function SetupRequiredModal({
+  open,
+  onClose,
+  onNavigateToElements,
+}: SetupRequiredModalProps) {
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <Dialog.Content className="sm:max-w-md">
+        <Dialog.Header className="text-center">
+          <div className="mx-auto size-14 rounded-full bg-muted flex items-center justify-center mb-2">
+            <Icon
+              name="message-circle"
+              className="size-7 text-muted-foreground"
+            />
+          </div>
+          <Dialog.Title className="text-center">
+            Get Started with Insights
+          </Dialog.Title>
+          <Dialog.Description className="text-center">
+            Start capturing chat sessions and tool metrics by integrating Gram
+            Elements into your application.
+          </Dialog.Description>
+        </Dialog.Header>
+        <div className="space-y-4 pt-2">
+          <div className="rounded-lg border border-border bg-muted/30 p-4">
+            <h4 className="text-sm font-medium mb-2">What you'll get:</h4>
+            <ul className="text-sm text-muted-foreground space-y-1.5">
+              <li className="flex items-center gap-2">
+                <Icon name="check" className="size-4 text-emerald-500" />
+                Chat resolution tracking and analytics
+              </li>
+              <li className="flex items-center gap-2">
+                <Icon name="check" className="size-4 text-emerald-500" />
+                Tool call performance metrics
+              </li>
+              <li className="flex items-center gap-2">
+                <Icon name="check" className="size-4 text-emerald-500" />
+                Session duration and latency insights
+              </li>
+            </ul>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Button className="w-full" onClick={onNavigateToElements}>
+              <Button.LeftIcon>
+                <Icon name="rocket" className="size-4" />
+              </Button.LeftIcon>
+              <Button.Text>Set Up Elements</Button.Text>
+            </Button>
+            <Button variant="tertiary" onClick={onClose} className="w-full">
+              <Button.Text>Maybe Later</Button.Text>
+            </Button>
+          </div>
+        </div>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
 
 function ViewChatsLink({ from, to }: { from: Date; to: Date }) {
   const routes = useRoutes();
@@ -613,7 +726,29 @@ function ObservabilityContent({
   onTimeRangeSelect: (from: Date, to: Date) => void;
   refetch: () => void;
 }) {
-  const { isExpanded: isInsightsOpen } = useInsightsState();
+  const routes = useRoutes();
+  const { isExpanded: isInsightsOpen, setIsExpanded } = useInsightsState();
+  const [showSetupModal, setShowSetupModal] = useState(false);
+
+  // Check data availability for empty states
+  const { hasAnyData, currentWindowHasData } = useMemo(() => {
+    if (!data) return { hasAnyData: false, currentWindowHasData: false };
+    // Check current period, comparison period, and time series
+    const currentHasData = hasSummaryData(data.summary);
+    const comparisonHasData = hasSummaryData(data.comparison);
+    const timeSeriesHasData = hasTimeSeriesData(data.timeSeries ?? []);
+    return {
+      hasAnyData: currentHasData || comparisonHasData || timeSeriesHasData,
+      currentWindowHasData: timeSeriesHasData,
+    };
+  }, [data]);
+
+  // Show setup modal when data loads and there's no data at all
+  React.useEffect(() => {
+    if (!isPending && data && !hasAnyData) {
+      setShowSetupModal(true);
+    }
+  }, [isPending, data, hasAnyData]);
 
   if (isLogsDisabled) {
     return (
@@ -664,6 +799,9 @@ function ObservabilityContent({
   // Calculate the actual time range for chart label formatting
   const { from, to } = customRange ?? getDateRange(dateRange);
   const timeRangeMs = to.getTime() - from.getTime();
+
+  // Show no data overlay on charts when current time window has no data
+  const showNoDataOverlay = !currentWindowHasData && !isRefetching;
 
   return (
     <div className="space-y-8">
@@ -740,6 +878,7 @@ function ObservabilityContent({
               isLoading={isRefetching}
               from={from}
               to={to}
+              showNoData={showNoDataOverlay}
             />
             <ResolutionStatusChart
               data={timeSeries ?? []}
@@ -749,6 +888,7 @@ function ObservabilityContent({
               isLoading={isRefetching}
               from={from}
               to={to}
+              showNoData={showNoDataOverlay}
             />
           </div>
           <SessionDurationChart
@@ -759,6 +899,7 @@ function ObservabilityContent({
             isLoading={isRefetching}
             from={from}
             to={to}
+            showNoData={showNoDataOverlay}
           />
         </div>
       </section>
@@ -773,6 +914,7 @@ function ObservabilityContent({
             title="Tool Calls & Errors"
             onTimeRangeSelect={onTimeRangeSelect}
             isLoading={isRefetching}
+            showNoData={showNoDataOverlay}
           />
           <div
             className={cn(
@@ -844,6 +986,20 @@ function ObservabilityContent({
           />
         </div>
       </section>
+
+      {/* Setup modal for total empty state */}
+      <SetupRequiredModal
+        open={showSetupModal}
+        onClose={() => {
+          setShowSetupModal(false);
+          setIsExpanded(false);
+        }}
+        onNavigateToElements={() => {
+          setShowSetupModal(false);
+          setIsExpanded(false);
+          routes.elements.goTo();
+        }}
+      />
     </div>
   );
 }
@@ -1189,6 +1345,7 @@ function ToolCallsChart({
   title,
   onTimeRangeSelect,
   isLoading,
+  showNoData,
 }: {
   data: Array<{
     bucketTimeUnixNano?: string;
@@ -1199,6 +1356,7 @@ function ToolCallsChart({
   title: string;
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
+  showNoData?: boolean;
 }) {
   const labels = data.map((d) => {
     const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
@@ -1315,6 +1473,7 @@ function ToolCallsChart({
             <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
+        {showNoData && <NoDataOverlay />}
         <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
           <Line data={chartData} options={options} />
         </ChartWithSelection>
@@ -1331,6 +1490,7 @@ function ResolvedChatsChart({
   isLoading,
   from,
   to,
+  showNoData,
 }: {
   data: Array<{
     bucketTimeUnixNano?: string;
@@ -1342,6 +1502,7 @@ function ResolvedChatsChart({
   title: string;
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
+  showNoData?: boolean;
   from: Date;
   to: Date;
 }) {
@@ -1444,6 +1605,7 @@ function ResolvedChatsChart({
             <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
+        {showNoData && <NoDataOverlay />}
         <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
           <Line data={chartData} options={options} />
         </ChartWithSelection>
@@ -1463,6 +1625,7 @@ function ResolutionStatusChart({
   isLoading,
   from,
   to,
+  showNoData,
 }: {
   data: Array<{
     bucketTimeUnixNano?: string;
@@ -1475,6 +1638,7 @@ function ResolutionStatusChart({
   title: string;
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
+  showNoData?: boolean;
   from: Date;
   to: Date;
 }) {
@@ -1674,6 +1838,7 @@ function ResolutionStatusChart({
             <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
+        {showNoData && <NoDataOverlay />}
         <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
           <Line data={chartData} options={options} />
         </ChartWithSelection>
@@ -1693,6 +1858,7 @@ function SessionDurationChart({
   isLoading,
   from,
   to,
+  showNoData,
 }: {
   data: Array<{
     bucketTimeUnixNano?: string;
@@ -1702,6 +1868,7 @@ function SessionDurationChart({
   title: string;
   onTimeRangeSelect?: (from: Date, to: Date) => void;
   isLoading?: boolean;
+  showNoData?: boolean;
   from: Date;
   to: Date;
 }) {
@@ -1808,6 +1975,7 @@ function SessionDurationChart({
             <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
+        {showNoData && <NoDataOverlay />}
         <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
           <Line data={chartData} options={options} />
         </ChartWithSelection>

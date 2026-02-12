@@ -27,16 +27,16 @@ export function useObservabilityMcpConfig({
   const isLocal = process.env.NODE_ENV === "development";
   const { session } = useSession();
 
-  // For local development, look up the gram-seed toolset in the kitchen-sink project
+  // For local development, look up the gram-seed toolset in the ecommerce-api project
   const { data: toolsets } = useListToolsets(
     {
-      gramProject: "kitchen-sink",
+      gramProject: "ecommerce-api",
     },
     undefined,
     {
       enabled: isLocal,
       headers: {
-        "gram-project": "kitchen-sink",
+        "gram-project": "ecommerce-api",
       },
     },
   );
@@ -64,8 +64,12 @@ export function useObservabilityMcpConfig({
   }, [toolsets]);
 
   return useMemo(() => {
+    if (!projectSlug) {
+      throw new Error("No project slug found.");
+    }
+
     const baseConfig: Omit<ElementsConfig, "variant" | "welcome" | "theme"> = {
-      projectSlug: "kitchen-sink",
+      projectSlug,
       tools: {
         toolsToInclude,
       },
