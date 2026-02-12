@@ -2116,6 +2116,8 @@ type TimeSeriesBucketResponseBody struct {
 	AvgToolLatencyMs float64 `form:"avg_tool_latency_ms" json:"avg_tool_latency_ms" xml:"avg_tool_latency_ms"`
 	// Average session duration in milliseconds
 	AvgSessionDurationMs float64 `form:"avg_session_duration_ms" json:"avg_session_duration_ms" xml:"avg_session_duration_ms"`
+	// Average resolution time in milliseconds for successfully resolved chats
+	AvgResolutionTimeMs float64 `form:"avg_resolution_time_ms" json:"avg_resolution_time_ms" xml:"avg_resolution_time_ms"`
 }
 
 // ToolMetricResponseBody is used to define fields on response body types.

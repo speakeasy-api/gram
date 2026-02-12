@@ -1484,13 +1484,14 @@ func DecodeSubmitFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, 
 // *chat.ChatOverview from a value of type *ChatOverviewResponseBody.
 func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponseBody) *chat.ChatOverview {
 	res := &chat.ChatOverview{
-		ID:             *v.ID,
-		Title:          *v.Title,
-		UserID:         v.UserID,
-		ExternalUserID: v.ExternalUserID,
-		NumMessages:    *v.NumMessages,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:               *v.ID,
+		Title:            *v.Title,
+		UserID:           v.UserID,
+		ExternalUserID:   v.ExternalUserID,
+		NumMessages:      *v.NumMessages,
+		ResolutionTimeMs: v.ResolutionTimeMs,
+		CreatedAt:        *v.CreatedAt,
+		UpdatedAt:        *v.UpdatedAt,
 	}
 
 	return res
@@ -1520,13 +1521,14 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 // type *ChatOverviewWithResolutionsResponseBody.
 func unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResolutions(v *ChatOverviewWithResolutionsResponseBody) *chat.ChatOverviewWithResolutions {
 	res := &chat.ChatOverviewWithResolutions{
-		ID:             *v.ID,
-		Title:          *v.Title,
-		UserID:         v.UserID,
-		ExternalUserID: v.ExternalUserID,
-		NumMessages:    *v.NumMessages,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:               *v.ID,
+		Title:            *v.Title,
+		UserID:           v.UserID,
+		ExternalUserID:   v.ExternalUserID,
+		NumMessages:      *v.NumMessages,
+		ResolutionTimeMs: v.ResolutionTimeMs,
+		CreatedAt:        *v.CreatedAt,
+		UpdatedAt:        *v.UpdatedAt,
 	}
 	res.Resolutions = make([]*chat.ChatResolution, len(v.Resolutions))
 	for i, val := range v.Resolutions {

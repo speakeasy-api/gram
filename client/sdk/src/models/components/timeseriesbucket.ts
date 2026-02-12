@@ -17,6 +17,10 @@ export type TimeSeriesBucket = {
    */
   abandonedChats: number;
   /**
+   * Average resolution time in milliseconds for successfully resolved chats
+   */
+  avgResolutionTimeMs: number;
+  /**
    * Average session duration in milliseconds
    */
   avgSessionDurationMs: number;
@@ -61,6 +65,7 @@ export const TimeSeriesBucket$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   abandoned_chats: z.number().int(),
+  avg_resolution_time_ms: z.number(),
   avg_session_duration_ms: z.number(),
   avg_tool_latency_ms: z.number(),
   bucket_time_unix_nano: z.string(),
@@ -73,6 +78,7 @@ export const TimeSeriesBucket$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "abandoned_chats": "abandonedChats",
+    "avg_resolution_time_ms": "avgResolutionTimeMs",
     "avg_session_duration_ms": "avgSessionDurationMs",
     "avg_tool_latency_ms": "avgToolLatencyMs",
     "bucket_time_unix_nano": "bucketTimeUnixNano",

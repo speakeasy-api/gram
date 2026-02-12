@@ -856,6 +856,7 @@ var TimeSeriesBucketType = Type("TimeSeriesBucket", func() {
 	Attribute("failed_tool_calls", Int64, "Failed tool calls in this bucket")
 	Attribute("avg_tool_latency_ms", Float64, "Average tool latency in milliseconds")
 	Attribute("avg_session_duration_ms", Float64, "Average session duration in milliseconds")
+	Attribute("avg_resolution_time_ms", Float64, "Average resolution time in milliseconds for successfully resolved chats")
 
 	Required(
 		"bucket_time_unix_nano",
@@ -868,6 +869,7 @@ var TimeSeriesBucketType = Type("TimeSeriesBucket", func() {
 		"failed_tool_calls",
 		"avg_tool_latency_ms",
 		"avg_session_duration_ms",
+		"avg_resolution_time_ms",
 	)
 })
 

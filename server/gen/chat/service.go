@@ -69,6 +69,8 @@ type Chat struct {
 	ExternalUserID *string
 	// The number of messages in the chat
 	NumMessages int
+	// Time to first resolution in milliseconds (null if unresolved)
+	ResolutionTimeMs *int64
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -109,6 +111,8 @@ type ChatOverview struct {
 	ExternalUserID *string
 	// The number of messages in the chat
 	NumMessages int
+	// Time to first resolution in milliseconds (null if unresolved)
+	ResolutionTimeMs *int64
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -129,6 +133,8 @@ type ChatOverviewWithResolutions struct {
 	ExternalUserID *string
 	// The number of messages in the chat
 	NumMessages int
+	// Time to first resolution in milliseconds (null if unresolved)
+	ResolutionTimeMs *int64
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.

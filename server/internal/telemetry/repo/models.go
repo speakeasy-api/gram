@@ -187,6 +187,7 @@ type TimeSeriesBucket struct {
 	FailedToolCalls      uint64  `ch:"failed_tool_calls"`
 	AvgToolLatencyMs     float64 `ch:"avg_tool_latency_ms"`
 	AvgSessionDurationMs float64 `ch:"avg_session_duration_ms"`
+	AvgResolutionTimeMs  float64 `ch:"avg_resolution_time_ms"`
 }
 
 // ToolMetric represents aggregated metrics for a single tool.

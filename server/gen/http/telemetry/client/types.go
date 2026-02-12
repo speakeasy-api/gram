@@ -2189,6 +2189,8 @@ type TimeSeriesBucketResponseBody struct {
 	AvgToolLatencyMs *float64 `form:"avg_tool_latency_ms,omitempty" json:"avg_tool_latency_ms,omitempty" xml:"avg_tool_latency_ms,omitempty"`
 	// Average session duration in milliseconds
 	AvgSessionDurationMs *float64 `form:"avg_session_duration_ms,omitempty" json:"avg_session_duration_ms,omitempty" xml:"avg_session_duration_ms,omitempty"`
+	// Average resolution time in milliseconds for successfully resolved chats
+	AvgResolutionTimeMs *float64 `form:"avg_resolution_time_ms,omitempty" json:"avg_resolution_time_ms,omitempty" xml:"avg_resolution_time_ms,omitempty"`
 }
 
 // ToolMetricResponseBody is used to define fields on response body types.
@@ -6688,6 +6690,9 @@ func ValidateTimeSeriesBucketResponseBody(body *TimeSeriesBucketResponseBody) (e
 	}
 	if body.AvgSessionDurationMs == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("avg_session_duration_ms", "body"))
+	}
+	if body.AvgResolutionTimeMs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("avg_resolution_time_ms", "body"))
 	}
 	return
 }

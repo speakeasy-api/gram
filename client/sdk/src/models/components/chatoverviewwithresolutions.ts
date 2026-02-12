@@ -33,6 +33,10 @@ export type ChatOverviewWithResolutions = {
    */
   numMessages: number;
   /**
+   * Time to first resolution in milliseconds (null if unresolved)
+   */
+  resolutionTimeMs?: number | undefined;
+  /**
    * List of resolutions for this chat
    */
   resolutions: Array<ChatResolution>;
@@ -60,6 +64,7 @@ export const ChatOverviewWithResolutions$inboundSchema: z.ZodType<
   external_user_id: z.string().optional(),
   id: z.string(),
   num_messages: z.number().int(),
+  resolution_time_ms: z.number().int().optional(),
   resolutions: z.array(ChatResolution$inboundSchema),
   title: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
@@ -69,6 +74,7 @@ export const ChatOverviewWithResolutions$inboundSchema: z.ZodType<
     "created_at": "createdAt",
     "external_user_id": "externalUserId",
     "num_messages": "numMessages",
+    "resolution_time_ms": "resolutionTimeMs",
     "updated_at": "updatedAt",
     "user_id": "userId",
   });

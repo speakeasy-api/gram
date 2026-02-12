@@ -55,6 +55,17 @@ function formatDuration(chat: ChatOverviewWithResolutions): string {
     : `${minutes}m`;
 }
 
+function formatResolutionTime(ms: number | null | undefined): string | null {
+  if (ms == null || ms <= 0) return null;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return remainingSeconds > 0
+    ? `${minutes}m ${remainingSeconds}s`
+    : `${minutes}m`;
+}
+
 // Subtle copy button - always visible
 function CopyButton({
   value,
@@ -257,7 +268,7 @@ export function ChatLogsTable({
             onClick={() => onSelectChat(chat)}
             className={cn(
               "w-full text-left px-5 py-4 transition-all duration-150",
-              "hover:bg-muted/50",
+              "bg-card hover:bg-muted/50",
               "focus:outline-none focus-visible:bg-muted/50",
               isSelected && "bg-primary/[0.03] hover:bg-primary/[0.05]",
             )}
@@ -314,8 +325,18 @@ export function ChatLogsTable({
                       <CopyButton value={chat.externalUserId} label="User ID" />
                     )}
                   </span>
+                  {formatResolutionTime(chat.resolutionTimeMs) && (
+                    <span className="flex items-center gap-1.5">
+                      <Icon name="clock" className="size-4 opacity-60" />
+                      <span className="text-muted-foreground/70">
+                        Resolved in{" "}
+                      </span>
+                      {formatResolutionTime(chat.resolutionTimeMs)}
+                    </span>
+                  )}
                   <span className="flex items-center gap-1.5">
                     <Icon name="timer" className="size-4 opacity-60" />
+                    <span className="text-muted-foreground/70">Duration </span>
                     {formatDuration(chat)}
                   </span>
                   <span className="flex items-center gap-1.5">

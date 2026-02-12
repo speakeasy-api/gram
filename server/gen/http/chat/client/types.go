@@ -52,6 +52,8 @@ type LoadChatResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
+	// Time to first resolution in milliseconds (null if unresolved)
+	ResolutionTimeMs *int64 `form:"resolution_time_ms,omitempty" json:"resolution_time_ms,omitempty" xml:"resolution_time_ms,omitempty"`
 	// When the chat was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
@@ -1197,6 +1199,8 @@ type ChatOverviewResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
+	// Time to first resolution in milliseconds (null if unresolved)
+	ResolutionTimeMs *int64 `form:"resolution_time_ms,omitempty" json:"resolution_time_ms,omitempty" xml:"resolution_time_ms,omitempty"`
 	// When the chat was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
@@ -1242,6 +1246,8 @@ type ChatOverviewWithResolutionsResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
+	// Time to first resolution in milliseconds (null if unresolved)
+	ResolutionTimeMs *int64 `form:"resolution_time_ms,omitempty" json:"resolution_time_ms,omitempty" xml:"resolution_time_ms,omitempty"`
 	// When the chat was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
@@ -1453,13 +1459,14 @@ func NewListChatsGatewayError(body *ListChatsGatewayErrorResponseBody) *goa.Serv
 // HTTP "OK" response.
 func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 	v := &chat.Chat{
-		ID:             *body.ID,
-		Title:          *body.Title,
-		UserID:         body.UserID,
-		ExternalUserID: body.ExternalUserID,
-		NumMessages:    *body.NumMessages,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:               *body.ID,
+		Title:            *body.Title,
+		UserID:           body.UserID,
+		ExternalUserID:   body.ExternalUserID,
+		NumMessages:      *body.NumMessages,
+		ResolutionTimeMs: body.ResolutionTimeMs,
+		CreatedAt:        *body.CreatedAt,
+		UpdatedAt:        *body.UpdatedAt,
 	}
 	v.Messages = make([]*chat.ChatMessage, len(body.Messages))
 	for i, val := range body.Messages {

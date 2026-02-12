@@ -26,6 +26,10 @@ export type ChatOverview = {
    */
   numMessages: number;
   /**
+   * Time to first resolution in milliseconds (null if unresolved)
+   */
+  resolutionTimeMs?: number | undefined;
+  /**
    * The title of the chat
    */
   title: string;
@@ -49,6 +53,7 @@ export const ChatOverview$inboundSchema: z.ZodType<
   external_user_id: z.string().optional(),
   id: z.string(),
   num_messages: z.number().int(),
+  resolution_time_ms: z.number().int().optional(),
   title: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   user_id: z.string().optional(),
@@ -57,6 +62,7 @@ export const ChatOverview$inboundSchema: z.ZodType<
     "created_at": "createdAt",
     "external_user_id": "externalUserId",
     "num_messages": "numMessages",
+    "resolution_time_ms": "resolutionTimeMs",
     "updated_at": "updatedAt",
     "user_id": "userId",
   });
