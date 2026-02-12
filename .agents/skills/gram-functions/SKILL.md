@@ -1,3 +1,14 @@
+---
+name: gram-functions
+description: A walkthrough of the Gram Functions feature in this codebase
+metadata:
+  relevant_files:
+    - "server/internal/functions/**/*.go"
+    - "server/internal/background/activities/deploy_function_runners.go"
+    - "server/internal/background/activities/reap_functions.go"
+    - "functions/**/*"
+---
+
 # Gram Functions
 
 Gram Functions is a serverless code execution feature that allows users to deploy custom JavaScript/TypeScript or Python code as callable tools within Gram deployments. Functions can be invoked by AI agents during conversations.
