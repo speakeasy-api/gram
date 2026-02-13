@@ -36,6 +36,10 @@ export default defineConfig({
         'server/nextjs': resolve(__dirname, 'src/server/nextjs.ts'),
         'server/fastify': resolve(__dirname, 'src/server/fastify.ts'),
         'server/hono': resolve(__dirname, 'src/server/hono.ts'),
+        'server/tanstack-start': resolve(
+          __dirname,
+          'src/server/tanstack-start.ts'
+        ),
         plugins: resolve(__dirname, 'src/plugins/index.ts'),
         'compat-plugin': resolve(__dirname, 'src/compat-plugin.ts'),
         'react-shim': resolve(__dirname, 'src/react-shim.ts'),
