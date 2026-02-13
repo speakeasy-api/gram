@@ -1228,6 +1228,70 @@ jobs:
         if: ${{ needs.changes.outputs.elements == 'true' && success() }}
         run: pnpm store prune
 
+  elements-examples:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [express, hono, fastify, nextjs, bun, tanstack-start]
+    steps:
+      - name: Skip if no elements changes exist
+        if: ${{ needs.changes.outputs.elements != 'true' }}
+        run: echo "No elements changes detected — skipping elements-examples (${{ matrix.example }})."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: jdx/mise-action@6d1e696aa24c1aa1bcc1adea0212707c71ab78a8 # v3.6.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: mise run github
+
+      - name: Cache PNPM
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Build elements library
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm build
+        working-directory: elements
+
+      - name: Type check
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm run check
+        working-directory: elements/examples/${{ matrix.example }}
+
+      - name: Build example
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm run build:example
+        working-directory: elements/examples/${{ matrix.example }}
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Prune PNPM store
+        if: ${{ needs.changes.outputs.elements == 'true' && success() }}
+        run: pnpm store prune
+
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [docker-build-server]

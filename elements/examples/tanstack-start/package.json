@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "build:example": "vite build"
   },
   "dependencies": {
     "@gram-ai/elements": "workspace:*",

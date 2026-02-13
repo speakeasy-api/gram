@@ -88,7 +88,8 @@
     "knip": "pnpm dlx knip",
     "knip:fix": "pnpm dlx knip --fix",
     "clean:cache": "rm -rf node_modules/.cache node_modules/.vite",
-    "test:examples": "pnpm --filter \"./examples/*\" run check"
+    "test:examples": "pnpm --filter \"./examples/*\" run check",
+    "build:examples": "pnpm --filter \"./examples/*\" run build:example"
   },
   "keywords": [],
   "author": "Adam Bull <adam@speakeasy.com>",
