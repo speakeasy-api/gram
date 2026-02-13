@@ -82,7 +82,8 @@
     "prepack": "pnpm build",
     "knip": "pnpm dlx knip",
     "knip:fix": "pnpm dlx knip --fix",
-    "clean:cache": "rm -rf node_modules/.cache node_modules/.vite"
+    "clean:cache": "rm -rf node_modules/.cache node_modules/.vite",
+    "test:examples": "pnpm --filter \"./examples/*\" run check"
   },
   "keywords": [],
   "author": "Adam Bull <adam@speakeasy.com>",
