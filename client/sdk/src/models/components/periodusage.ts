@@ -14,13 +14,25 @@ export type PeriodUsage = {
    */
   actualEnabledServerCount: number;
   /**
-   * The maximum number of servers allowed
+   * The number of credits used
    */
-  maxServers: number;
+  credits: number;
   /**
-   * The maximum number of tool calls allowed
+   * Whether the project has an active subscription
    */
-  maxToolCalls: number;
+  hasActiveSubscription: boolean;
+  /**
+   * The number of credits included in the tier
+   */
+  includedCredits: number;
+  /**
+   * The number of servers included in the tier
+   */
+  includedServers: number;
+  /**
+   * The number of tool calls included in the tier
+   */
+  includedToolCalls: number;
   /**
    * The number of servers used, according to the Polar meter
    */
@@ -38,15 +50,20 @@ export const PeriodUsage$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   actual_enabled_server_count: z.number().int(),
-  max_servers: z.number().int(),
-  max_tool_calls: z.number().int(),
+  credits: z.number().int(),
+  has_active_subscription: z.boolean(),
+  included_credits: z.number().int(),
+  included_servers: z.number().int(),
+  included_tool_calls: z.number().int(),
   servers: z.number().int(),
   tool_calls: z.number().int(),
 }).transform((v) => {
   return remap$(v, {
     "actual_enabled_server_count": "actualEnabledServerCount",
-    "max_servers": "maxServers",
-    "max_tool_calls": "maxToolCalls",
+    "has_active_subscription": "hasActiveSubscription",
+    "included_credits": "includedCredits",
+    "included_servers": "includedServers",
+    "included_tool_calls": "includedToolCalls",
     "tool_calls": "toolCalls",
   });
 });

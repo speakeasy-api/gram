@@ -89,13 +89,18 @@ const FreeTierExceededNotification = () => {
   });
   const routes = useRoutes();
 
-  if (!usage || !session || session.gramAccountType !== "free") {
+  if (
+    !usage ||
+    !session ||
+    session.gramAccountType !== "free" ||
+    usage.hasActiveSubscription
+  ) {
     return null;
   }
 
   if (
-    usage.toolCalls > usage.maxToolCalls ||
-    usage.servers > usage.maxServers
+    usage.toolCalls > usage.includedToolCalls ||
+    usage.servers > usage.includedServers
   ) {
     return (
       <PersistentNotification variant="error">
@@ -107,11 +112,11 @@ const FreeTierExceededNotification = () => {
           <Type small>
             You've used{" "}
             <span className="font-medium">
-              {usage.toolCalls} / {usage.maxToolCalls} tool calls
+              {usage.toolCalls} / {usage.includedToolCalls} tool calls
             </span>{" "}
             and{" "}
             <span className="font-medium">
-              {usage.servers} / {usage.maxServers} servers
+              {usage.servers} / {usage.includedServers} servers
             </span>
             .
           </Type>

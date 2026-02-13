@@ -7,11 +7,13 @@ import (
 type TierLimits struct {
 	ToolCalls int
 	Servers   int
+	Credits   int
 }
 
 func extractTierLimits(catalog *Catalog, product *polarComponents.Product) TierLimits {
 	toolCallLimit := 0
 	serversLimit := 0
+	creditsLimit := 0
 
 	for _, benefit := range product.Benefits {
 		if benefit.BenefitMeterCredit == nil {
@@ -24,10 +26,14 @@ func extractTierLimits(catalog *Catalog, product *polarComponents.Product) TierL
 		if benefitProperties.MeterID == catalog.MeterIDServers {
 			serversLimit = int(benefitProperties.Units)
 		}
+		if benefitProperties.MeterID == catalog.MeterIDCredits {
+			creditsLimit = int(benefitProperties.Units)
+		}
 	}
 
 	return TierLimits{
 		ToolCalls: toolCallLimit,
 		Servers:   serversLimit,
+		Credits:   creditsLimit,
 	}
 }

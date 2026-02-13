@@ -9,12 +9,18 @@ import (
 // PeriodUsage represents the usage of a project for a given period.
 var PeriodUsage = Type("PeriodUsage", func() {
 	Attribute("tool_calls", Int, "The number of tool calls used")
-	Attribute("max_tool_calls", Int, "The maximum number of tool calls allowed")
+	Attribute("included_tool_calls", Int, "The number of tool calls included in the tier")
+
 	Attribute("servers", Int, "The number of servers used, according to the Polar meter")
-	Attribute("max_servers", Int, "The maximum number of servers allowed")
+	Attribute("included_servers", Int, "The number of servers included in the tier")
 	Attribute("actual_enabled_server_count", Int, "The number of servers enabled at the time of the request")
 
-	Required("tool_calls", "max_tool_calls", "servers", "max_servers", "actual_enabled_server_count")
+	Attribute("credits", Int, "The number of credits used")
+	Attribute("included_credits", Int, "The number of credits included in the tier")
+
+	Attribute("has_active_subscription", Boolean, "Whether the project has an active subscription")
+
+	Required("tool_calls", "included_tool_calls", "servers", "included_servers", "actual_enabled_server_count", "credits", "included_credits", "has_active_subscription")
 })
 
 var TierLimits = Type("TierLimits", func() {
