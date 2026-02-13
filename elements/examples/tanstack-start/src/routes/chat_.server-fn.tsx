@@ -5,7 +5,7 @@ import type { ElementsConfig } from '@gram-ai/elements'
 import '@gram-ai/elements/elements.css'
 import { getSession } from '../session.functions'
 
-export const Route = createFileRoute('/chat/server-fn')({
+export const Route = createFileRoute('/chat_/server-fn')({
   component: ChatServerFnPage,
 })
 
