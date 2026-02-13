@@ -33,6 +33,7 @@ jobs:
       elements: ${{ steps.gates.outputs.elements }}
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
+      elements-examples: ${{ steps.list-elements-examples.outputs.examples }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
@@ -101,6 +102,11 @@ jobs:
           else
             echo "Plog jobs will be skipped."
           fi
+      - id: list-elements-examples
+        name: List elements examples
+        run: |
+          examples=$(ls -d elements/examples/*/package.json 2>/dev/null | xargs -I{} dirname {} | xargs -I{} basename {} | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "examples=$examples" >> $GITHUB_OUTPUT
 
   docker-build-server:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1234,7 +1240,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [express, hono, fastify, nextjs, bun, tanstack-start]
+        example: ${{ fromJSON(needs.changes.outputs.elements-examples) }}
     steps:
       - name: Skip if no elements changes exist
         if: ${{ needs.changes.outputs.elements != 'true' }}
