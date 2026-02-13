@@ -140,10 +140,11 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		ClonedFrom:         dep.ClonedFrom,
 		Packages:           dep.Packages,
 		Openapiv3Assets:    dep.Openapiv3Assets,
-		Openapiv3ToolCount: dep.Openapiv3ToolCount,
-		FunctionsToolCount: dep.FunctionsToolCount,
-		FunctionsAssets:    dep.FunctionsAssets,
-		ExternalMcps:       dep.ExternalMcps,
+		Openapiv3ToolCount:   dep.Openapiv3ToolCount,
+		FunctionsToolCount:   dep.FunctionsToolCount,
+		ExternalMcpToolCount: dep.ExternalMcpToolCount,
+		FunctionsAssets:       dep.FunctionsAssets,
+		ExternalMcps:          dep.ExternalMcps,
 	}, nil
 }
 
@@ -322,14 +323,16 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 	items := make([]*gen.DeploymentSummary, 0, len(rows))
 	for _, r := range rows {
 		items = append(items, &gen.DeploymentSummary{
-			ID:                  r.ID.String(),
-			UserID:              r.UserID,
-			Status:              r.Status,
-			CreatedAt:           r.CreatedAt.Time.Format(time.RFC3339),
-			Openapiv3AssetCount: r.Openapiv3AssetCount,
-			Openapiv3ToolCount:  r.Openapiv3ToolCount,
-			FunctionsAssetCount: r.FunctionsAssetCount,
-			FunctionsToolCount:  r.FunctionsToolCount,
+			ID:                    r.ID.String(),
+			UserID:                r.UserID,
+			Status:                r.Status,
+			CreatedAt:             r.CreatedAt.Time.Format(time.RFC3339),
+			Openapiv3AssetCount:   r.Openapiv3AssetCount,
+			Openapiv3ToolCount:    r.Openapiv3ToolCount,
+			FunctionsAssetCount:   r.FunctionsAssetCount,
+			FunctionsToolCount:    r.FunctionsToolCount,
+			ExternalMcpAssetCount: r.ExternalMcpAssetCount,
+			ExternalMcpToolCount:  r.ExternalMcpToolCount,
 		})
 	}
 

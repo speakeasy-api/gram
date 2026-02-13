@@ -222,7 +222,7 @@ var _ = Service("deployments", func() {
 })
 
 var DeploymentSummary = Type("DeploymentSummary", func() {
-	Required("id", "created_at", "user_id", "status", "openapiv3_asset_count", "openapiv3_tool_count", "functions_asset_count", "functions_tool_count")
+	Required("id", "created_at", "user_id", "status", "openapiv3_asset_count", "openapiv3_tool_count", "functions_asset_count", "functions_tool_count", "external_mcp_asset_count", "external_mcp_tool_count")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -249,6 +249,12 @@ var DeploymentSummary = Type("DeploymentSummary", func() {
 	})
 	Attribute("functions_tool_count", Int64, func() {
 		Description("The number of tools in the deployment generated from Functions.")
+	})
+	Attribute("external_mcp_asset_count", Int64, func() {
+		Description("The number of external MCP server assets.")
+	})
+	Attribute("external_mcp_tool_count", Int64, func() {
+		Description("The number of tools in the deployment generated from external MCP servers.")
 	})
 })
 

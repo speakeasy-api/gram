@@ -400,7 +400,7 @@ importers:
         version: 4.2.1
     devDependencies:
       '@eslint/js':
-        specifier: ^9.26.0
+        specifier: ^9.19.0
         version: 9.39.2
       '@tanstack/react-query':
         specifier: 'catalog:'
@@ -412,7 +412,7 @@ importers:
         specifier: 'catalog:'
         version: 19.2.3(@types/react@19.2.7)
       eslint:
-        specifier: ^9.26.0
+        specifier: ^9.19.0
         version: 9.39.2(jiti@2.6.1)
       globals:
         specifier: ^15.14.0

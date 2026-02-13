@@ -14,6 +14,14 @@ export type DeploymentSummary = {
    */
   createdAt: Date;
   /**
+   * The number of external MCP server assets.
+   */
+  externalMcpAssetCount: number;
+  /**
+   * The number of tools in the deployment generated from external MCP servers.
+   */
+  externalMcpToolCount: number;
+  /**
    * The number of Functions assets.
    */
   functionsAssetCount: number;
@@ -50,6 +58,8 @@ export const DeploymentSummary$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  external_mcp_asset_count: z.number().int(),
+  external_mcp_tool_count: z.number().int(),
   functions_asset_count: z.number().int(),
   functions_tool_count: z.number().int(),
   id: z.string(),
@@ -60,6 +70,8 @@ export const DeploymentSummary$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
+    "external_mcp_asset_count": "externalMcpAssetCount",
+    "external_mcp_tool_count": "externalMcpToolCount",
     "functions_asset_count": "functionsAssetCount",
     "functions_tool_count": "functionsToolCount",
     "openapiv3_asset_count": "openapiv3AssetCount",

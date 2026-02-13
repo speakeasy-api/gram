@@ -114,8 +114,10 @@ type GetDeploymentResponseBody struct {
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
-	// The number of tools in the deployment generated from OpenAPI documents.
+	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64 `form:"functions_tool_count" json:"functions_tool_count" xml:"functions_tool_count"`
+	// The number of tools in the deployment generated from external MCP servers.
+	ExternalMcpToolCount int64 `form:"external_mcp_tool_count" json:"external_mcp_tool_count" xml:"external_mcp_tool_count"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
@@ -1762,8 +1764,10 @@ type DeploymentResponseBody struct {
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
-	// The number of tools in the deployment generated from OpenAPI documents.
+	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64 `form:"functions_tool_count" json:"functions_tool_count" xml:"functions_tool_count"`
+	// The number of tools in the deployment generated from external MCP servers.
+	ExternalMcpToolCount int64 `form:"external_mcp_tool_count" json:"external_mcp_tool_count" xml:"external_mcp_tool_count"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
@@ -1792,6 +1796,10 @@ type DeploymentSummaryResponseBody struct {
 	FunctionsAssetCount int64 `form:"functions_asset_count" json:"functions_asset_count" xml:"functions_asset_count"`
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64 `form:"functions_tool_count" json:"functions_tool_count" xml:"functions_tool_count"`
+	// The number of external MCP server assets.
+	ExternalMcpAssetCount int64 `form:"external_mcp_asset_count" json:"external_mcp_asset_count" xml:"external_mcp_asset_count"`
+	// The number of tools in the deployment generated from external MCP servers.
+	ExternalMcpToolCount int64 `form:"external_mcp_tool_count" json:"external_mcp_tool_count" xml:"external_mcp_tool_count"`
 }
 
 // DeploymentLogEventResponseBody is used to define fields on response body
@@ -1871,21 +1879,22 @@ type AddPackageFormRequestBody struct {
 // of the "getDeployment" endpoint of the "deployments" service.
 func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDeploymentResponseBody {
 	body := &GetDeploymentResponseBody{
-		ID:                 res.ID,
-		OrganizationID:     res.OrganizationID,
-		ProjectID:          res.ProjectID,
-		UserID:             res.UserID,
-		CreatedAt:          res.CreatedAt,
-		Status:             res.Status,
-		IdempotencyKey:     res.IdempotencyKey,
-		GithubRepo:         res.GithubRepo,
-		GithubPr:           res.GithubPr,
-		GithubSha:          res.GithubSha,
-		ExternalID:         res.ExternalID,
-		ExternalURL:        res.ExternalURL,
-		ClonedFrom:         res.ClonedFrom,
-		Openapiv3ToolCount: res.Openapiv3ToolCount,
-		FunctionsToolCount: res.FunctionsToolCount,
+		ID:                   res.ID,
+		OrganizationID:       res.OrganizationID,
+		ProjectID:            res.ProjectID,
+		UserID:               res.UserID,
+		CreatedAt:            res.CreatedAt,
+		Status:               res.Status,
+		IdempotencyKey:       res.IdempotencyKey,
+		GithubRepo:           res.GithubRepo,
+		GithubPr:             res.GithubPr,
+		GithubSha:            res.GithubSha,
+		ExternalID:           res.ExternalID,
+		ExternalURL:          res.ExternalURL,
+		ClonedFrom:           res.ClonedFrom,
+		Openapiv3ToolCount:   res.Openapiv3ToolCount,
+		FunctionsToolCount:   res.FunctionsToolCount,
+		ExternalMcpToolCount: res.ExternalMcpToolCount,
 	}
 	if res.Openapiv3Assets != nil {
 		body.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(res.Openapiv3Assets))
