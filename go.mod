@@ -72,8 +72,8 @@ require (
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.4
 	goa.design/clue v1.2.4
-	goa.design/goa/v3 v3.24.2
-	goa.design/plugins/v3 v3.24.2
+	goa.design/goa/v3 v3.24.3
+	goa.design/plugins/v3 v3.24.3
 	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.41.0
 	golang.org/x/term v0.39.0
