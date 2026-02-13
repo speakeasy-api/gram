@@ -15,17 +15,27 @@ import (
 
 // Client is the "agents" service client.
 type Client struct {
-	CreateResponseEndpoint goa.Endpoint
-	GetResponseEndpoint    goa.Endpoint
-	DeleteResponseEndpoint goa.Endpoint
+	CreateResponseEndpoint        goa.Endpoint
+	GetResponseEndpoint           goa.Endpoint
+	DeleteResponseEndpoint        goa.Endpoint
+	CreateAgentDefinitionEndpoint goa.Endpoint
+	GetAgentDefinitionEndpoint    goa.Endpoint
+	ListAgentDefinitionsEndpoint  goa.Endpoint
+	UpdateAgentDefinitionEndpoint goa.Endpoint
+	DeleteAgentDefinitionEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "agents" service client given the endpoints.
-func NewClient(createResponse, getResponse, deleteResponse goa.Endpoint) *Client {
+func NewClient(createResponse, getResponse, deleteResponse, createAgentDefinition, getAgentDefinition, listAgentDefinitions, updateAgentDefinition, deleteAgentDefinition goa.Endpoint) *Client {
 	return &Client{
-		CreateResponseEndpoint: createResponse,
-		GetResponseEndpoint:    getResponse,
-		DeleteResponseEndpoint: deleteResponse,
+		CreateResponseEndpoint:        createResponse,
+		GetResponseEndpoint:           getResponse,
+		DeleteResponseEndpoint:        deleteResponse,
+		CreateAgentDefinitionEndpoint: createAgentDefinition,
+		GetAgentDefinitionEndpoint:    getAgentDefinition,
+		ListAgentDefinitionsEndpoint:  listAgentDefinitions,
+		UpdateAgentDefinitionEndpoint: updateAgentDefinition,
+		DeleteAgentDefinitionEndpoint: deleteAgentDefinition,
 	}
 }
 
@@ -88,5 +98,116 @@ func (c *Client) GetResponse(ctx context.Context, p *GetResponsePayload) (res *A
 //   - error: internal error
 func (c *Client) DeleteResponse(ctx context.Context, p *DeleteResponsePayload) (err error) {
 	_, err = c.DeleteResponseEndpoint(ctx, p)
+	return
+}
+
+// CreateAgentDefinition calls the "createAgentDefinition" endpoint of the
+// "agents" service.
+// CreateAgentDefinition may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateAgentDefinition(ctx context.Context, p *CreateAgentDefinitionPayload) (res *AgentDefinitionResult, err error) {
+	var ires any
+	ires, err = c.CreateAgentDefinitionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AgentDefinitionResult), nil
+}
+
+// GetAgentDefinition calls the "getAgentDefinition" endpoint of the "agents"
+// service.
+// GetAgentDefinition may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetAgentDefinition(ctx context.Context, p *GetAgentDefinitionPayload) (res *AgentDefinitionResult, err error) {
+	var ires any
+	ires, err = c.GetAgentDefinitionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AgentDefinitionResult), nil
+}
+
+// ListAgentDefinitions calls the "listAgentDefinitions" endpoint of the
+// "agents" service.
+// ListAgentDefinitions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListAgentDefinitions(ctx context.Context, p *ListAgentDefinitionsPayload) (res *ListAgentDefinitionsResult, err error) {
+	var ires any
+	ires, err = c.ListAgentDefinitionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAgentDefinitionsResult), nil
+}
+
+// UpdateAgentDefinition calls the "updateAgentDefinition" endpoint of the
+// "agents" service.
+// UpdateAgentDefinition may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateAgentDefinition(ctx context.Context, p *UpdateAgentDefinitionPayload) (res *AgentDefinitionResult, err error) {
+	var ires any
+	ires, err = c.UpdateAgentDefinitionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AgentDefinitionResult), nil
+}
+
+// DeleteAgentDefinition calls the "deleteAgentDefinition" endpoint of the
+// "agents" service.
+// DeleteAgentDefinition may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteAgentDefinition(ctx context.Context, p *DeleteAgentDefinitionPayload) (err error) {
+	_, err = c.DeleteAgentDefinitionEndpoint(ctx, p)
 	return
 }

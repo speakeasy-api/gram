@@ -21,3 +21,28 @@ func GetResponseAgentsPath() string {
 func DeleteResponseAgentsPath() string {
 	return "/rpc/agents.response"
 }
+
+// CreateAgentDefinitionAgentsPath returns the URL path to the agents service createAgentDefinition HTTP endpoint.
+func CreateAgentDefinitionAgentsPath() string {
+	return "/rpc/agents.create"
+}
+
+// GetAgentDefinitionAgentsPath returns the URL path to the agents service getAgentDefinition HTTP endpoint.
+func GetAgentDefinitionAgentsPath() string {
+	return "/rpc/agents.getByID"
+}
+
+// ListAgentDefinitionsAgentsPath returns the URL path to the agents service listAgentDefinitions HTTP endpoint.
+func ListAgentDefinitionsAgentsPath() string {
+	return "/rpc/agents.list"
+}
+
+// UpdateAgentDefinitionAgentsPath returns the URL path to the agents service updateAgentDefinition HTTP endpoint.
+func UpdateAgentDefinitionAgentsPath() string {
+	return "/rpc/agents.update"
+}
+
+// DeleteAgentDefinitionAgentsPath returns the URL path to the agents service deleteAgentDefinition HTTP endpoint.
+func DeleteAgentDefinitionAgentsPath() string {
+	return "/rpc/agents.delete"
+}

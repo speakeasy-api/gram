@@ -10,6 +10,7 @@ package agents
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -23,6 +24,16 @@ type Service interface {
 	GetResponse(context.Context, *GetResponsePayload) (res *AgentResponseOutput, err error)
 	// Deletes any response associated with a given agent run.
 	DeleteResponse(context.Context, *DeleteResponsePayload) (err error)
+	// Create a new agent definition.
+	CreateAgentDefinition(context.Context, *CreateAgentDefinitionPayload) (res *AgentDefinitionResult, err error)
+	// Get an agent definition by ID.
+	GetAgentDefinition(context.Context, *GetAgentDefinitionPayload) (res *AgentDefinitionResult, err error)
+	// List all agent definitions for a project.
+	ListAgentDefinitions(context.Context, *ListAgentDefinitionsPayload) (res *ListAgentDefinitionsResult, err error)
+	// Update an existing agent definition.
+	UpdateAgentDefinition(context.Context, *UpdateAgentDefinitionPayload) (res *AgentDefinitionResult, err error)
+	// Delete an agent definition.
+	DeleteAgentDefinition(context.Context, *DeleteAgentDefinitionPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -45,7 +56,37 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"createResponse", "getResponse", "deleteResponse"}
+var MethodNames = [8]string{"createResponse", "getResponse", "deleteResponse", "createAgentDefinition", "getAgentDefinition", "listAgentDefinitions", "updateAgentDefinition", "deleteAgentDefinition"}
+
+// AgentDefinitionResult is the result type of the agents service
+// createAgentDefinition method.
+type AgentDefinitionResult struct {
+	// The agent definition
+	AgentDefinition *AgentDefinitionView
+}
+
+type AgentDefinitionView struct {
+	// The ID of the agent definition
+	ID string
+	// The name of the agent
+	Name string
+	// The tool URN for this agent
+	ToolUrn string
+	// The default model
+	Model string
+	// The display title
+	Title *string
+	// The tool description
+	Description string
+	// The system prompt
+	Instruction string
+	// The tool URNs this agent can invoke
+	Tools []string
+	// When the agent was created
+	CreatedAt string
+	// When the agent was last updated
+	UpdatedAt string
+}
 
 // The agent response output
 type AgentResponseOutput struct {
@@ -111,6 +152,26 @@ type AgentToolset struct {
 	EnvironmentSlug string
 }
 
+// CreateAgentDefinitionPayload is the payload type of the agents service
+// createAgentDefinition method.
+type CreateAgentDefinitionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The name of the agent, used as the corresponding tool name
+	Name types.Slug
+	// The default model to use for this agent
+	Model string
+	// The display title when presented in UIs
+	Title *string
+	// The tool description for this agent when presented as a tool
+	Description string
+	// The system prompt for the agent
+	Instruction string
+	// The tool URNs this agent can invoke
+	Tools []string
+}
+
 // CreateResponsePayload is the payload type of the agents service
 // createResponse method.
 type CreateResponsePayload struct {
@@ -136,6 +197,16 @@ type CreateResponsePayload struct {
 	Store *bool
 }
 
+// DeleteAgentDefinitionPayload is the payload type of the agents service
+// deleteAgentDefinition method.
+type DeleteAgentDefinitionPayload struct {
+	// The ID of the agent definition to delete
+	ID               string
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // DeleteResponsePayload is the payload type of the agents service
 // deleteResponse method.
 type DeleteResponsePayload struct {
@@ -145,6 +216,16 @@ type DeleteResponsePayload struct {
 	ResponseID string
 }
 
+// GetAgentDefinitionPayload is the payload type of the agents service
+// getAgentDefinition method.
+type GetAgentDefinitionPayload struct {
+	// The ID of the agent definition
+	ID               string
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // GetResponsePayload is the payload type of the agents service getResponse
 // method.
 type GetResponsePayload struct {
@@ -152,6 +233,41 @@ type GetResponsePayload struct {
 	ProjectSlugInput *string
 	// The ID of the response to retrieve
 	ResponseID string
+}
+
+// ListAgentDefinitionsPayload is the payload type of the agents service
+// listAgentDefinitions method.
+type ListAgentDefinitionsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListAgentDefinitionsResult is the result type of the agents service
+// listAgentDefinitions method.
+type ListAgentDefinitionsResult struct {
+	// The list of agent definitions
+	AgentDefinitions []*AgentDefinitionView
+}
+
+// UpdateAgentDefinitionPayload is the payload type of the agents service
+// updateAgentDefinition method.
+type UpdateAgentDefinitionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the agent definition to update
+	ID string
+	// The default model to use for this agent
+	Model *string
+	// The display title when presented in UIs
+	Title *string
+	// The tool description for this agent when presented as a tool
+	Description *string
+	// The system prompt for the agent
+	Instruction *string
+	// The tool URNs this agent can invoke
+	Tools []string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
