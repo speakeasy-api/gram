@@ -89,8 +89,8 @@ func doSkills(c *cli.Context) error {
 		return fmt.Errorf("could not infer skills from toolset: %w", err)
 	}
 
-	fmt.Printf("Tools: %v\n", result.Tools)
-	fmt.Printf("Skills: %v\n", result.Skills)
+	fmt.Printf("Tools count: %d\n", len(result.Tools))
+	fmt.Printf("Skills count: %d\n", len(result.Skills))
 
 	// Create temporary directory for the plugin
 	tmpDir, err := os.MkdirTemp("", "claude-plugin-*")

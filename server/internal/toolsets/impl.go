@@ -289,18 +289,80 @@ Return only a JSON array of skill descriptions, one for each tool.`, string(tool
 	var skills []string
 	responseText := openrouter.GetText(*msg)
 	if responseText != "" {
+		// Strip markdown code fences if present
+		responseText = strings.TrimSpace(responseText)
+
+		// Remove opening code fence
+		if after, found := strings.CutPrefix(responseText, "```json"); found {
+			responseText = after
+		} else if after, found := strings.CutPrefix(responseText, "```"); found {
+			responseText = after
+		}
+
+		// Remove closing code fence
+		if idx := strings.LastIndex(responseText, "```"); idx != -1 {
+			responseText = responseText[:idx]
+		}
+
+		responseText = strings.TrimSpace(responseText)
+
+		// Debug: log what we're about to parse
+		s.logger.InfoContext(ctx, "attempting to parse response",
+			slog.String("response_preview", responseText[:min(300, len(responseText))]),
+			slog.Int("response_length", len(responseText)))
+
 		// Try to parse as JSON array
 		if err := json.Unmarshal([]byte(responseText), &skills); err != nil {
-			// If parsing fails, treat the whole content as a single skill
-			s.logger.WarnContext(ctx, "failed to parse skills JSON, using raw content", attr.SlogError(err))
-			skills = []string{responseText}
+			// Maybe it's a nested array? Try parsing as [][]string
+			var nestedSkills [][]string
+			if err2 := json.Unmarshal([]byte(responseText), &nestedSkills); err2 == nil && len(nestedSkills) > 0 {
+				// Flatten the nested array - take the first inner array
+				skills = nestedSkills[0]
+				s.logger.InfoContext(ctx, "unwrapped nested skills array", slog.Int("count", len(skills)))
+			} else {
+				// If all parsing fails, treat the whole content as a single skill
+				s.logger.WarnContext(ctx, "failed to parse skills JSON, using raw content", attr.SlogError(err))
+				skills = []string{responseText}
+			}
+		} else {
+			s.logger.InfoContext(ctx, "successfully parsed skills as flat array",
+				slog.Int("count", len(skills)),
+				slog.String("first_skill_preview", func() string {
+					if len(skills) > 0 {
+						return skills[0][:min(100, len(skills[0]))]
+					}
+					return "no skills"
+				}()))
+
+			// Check if we accidentally got a JSON string instead of parsed array
+			if len(skills) == 1 && strings.HasPrefix(skills[0], "[") {
+				// Try to parse the string as JSON
+				var innerSkills []string
+				if err2 := json.Unmarshal([]byte(skills[0]), &innerSkills); err2 == nil {
+					skills = innerSkills
+					s.logger.InfoContext(ctx, "unwrapped string-encoded JSON array", slog.Int("count", len(skills)))
+				}
+			}
 		}
 	}
 
-	return &gen.InferSkillsResult{
+	result := &gen.InferSkillsResult{
 		Tools:  allTools,
 		Skills: skills,
-	}, nil
+	}
+
+	// Debug: log what we're returning
+	s.logger.InfoContext(ctx, "returning skills result",
+		slog.Int("tools_count", len(result.Tools)),
+		slog.Int("skills_count", len(result.Skills)),
+		slog.Any("first_skill", func() string {
+			if len(result.Skills) > 0 {
+				return result.Skills[0]
+			}
+			return "no skills"
+		}()))
+
+	return result, nil
 }
 
 func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*types.Toolset, error) {
