@@ -47,7 +47,7 @@ function ChatPage() {
           },
         })
         const data = await response.json()
-        return data.token
+        return data.client_token
       },
     },
   }
