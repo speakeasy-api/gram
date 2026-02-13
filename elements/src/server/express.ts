@@ -31,9 +31,7 @@ import { createChatSession, type SessionHandlerOptions } from './core'
 export function createExpressHandler(
   options:
     | SessionHandlerOptions
-    | ((
-        req: Request
-      ) => SessionHandlerOptions | Promise<SessionHandlerOptions>)
+    | ((req: Request) => SessionHandlerOptions | Promise<SessionHandlerOptions>)
 ) {
   return async (req: Request, res: Response) => {
     const projectSlug = Array.isArray(req.headers['gram-project'])
