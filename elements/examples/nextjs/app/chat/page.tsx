@@ -52,9 +52,11 @@ export default function ChatPage() {
         </button>
       </header>
       <div className="flex-1 overflow-hidden">
-        <GramElementsProvider config={config}>
-          <Chat />
-        </GramElementsProvider>
+        <div className="h-full">
+          <GramElementsProvider config={config}>
+            <Chat />
+          </GramElementsProvider>
+        </div>
       </div>
     </div>
   )
