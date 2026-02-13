@@ -1,0 +1,42 @@
+{
+  "name": "elements-express-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:client\"",
+    "dev:server": "tsx watch server.ts",
+    "dev:client": "vite --port 3000",
+    "build": "vite build",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gram-ai/elements": "workspace:*",
+    "@assistant-ui/react": "^0.11.58",
+    "@assistant-ui/react-ai-sdk": "^1.1.21",
+    "@assistant-ui/react-markdown": "^0.11.10",
+    "@json-render/react": "^0.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "motion": "^12.23.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.6.0",
+    "remark-gfm": "^4.0.1",
+    "shiki": "^3.22.0",
+    "tailwindcss": "^4.0.6",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.2",
+    "vite": "^7.1.7"
+  }
+}

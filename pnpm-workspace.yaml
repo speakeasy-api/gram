@@ -10,6 +10,7 @@ packages:
   - docs
   - evaluation
   - elements
+  - elements/examples/*
 
 catalog:
   '@ai-sdk/openai': ^2.0.0
