@@ -487,8 +487,9 @@ const UsageProgress = ({
       >
         {anyOverage
           ? `Included: ${included.toLocaleString()}`
-          : `${value.toLocaleString()} / ${noMax ? "No limit" : included.toLocaleString()
-          }`}
+          : `${value.toLocaleString()} / ${
+              noMax ? "No limit" : included.toLocaleString()
+            }`}
       </div>
 
       {/* Divider line and labels for overage */}
