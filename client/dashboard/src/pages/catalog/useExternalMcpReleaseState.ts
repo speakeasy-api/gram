@@ -16,11 +16,7 @@ function generateSlug(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export type ReleasePhase =
-  | "configure"
-  | "deploying"
-  | "complete"
-  | "error";
+export type ReleasePhase = "configure" | "deploying" | "complete" | "error";
 
 export interface ServerConfig {
   server: Server;
@@ -85,9 +81,9 @@ export function useExternalMcpReleaseState({
   const [phase, setPhase] = useState<ReleasePhase>("configure");
   const [serverConfigs, setServerConfigs] = useState<ServerConfig[]>([]);
   const [deploymentId, setDeploymentId] = useState<string | undefined>();
-  const [toolsetStatuses, setToolsetStatuses] = useState<
-    ServerToolsetStatus[]
-  >([]);
+  const [toolsetStatuses, setToolsetStatuses] = useState<ServerToolsetStatus[]>(
+    [],
+  );
   const [error, setError] = useState<string | undefined>();
 
   // Track whether we've already transitioned from deploying to complete
