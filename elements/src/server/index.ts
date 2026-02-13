@@ -20,6 +20,7 @@ export { createExpressHandler } from './express'
 export { createNextHandler } from './nextjs'
 export { createFastifyHandler } from './fastify'
 export { createHonoHandler } from './hono'
+export { createBunHandler } from './bun'
 export {
   createTanStackStartHandler,
   createTanStackStartSessionFn,

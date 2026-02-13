@@ -30,6 +30,7 @@ interface ServerHandlers {
  * - `@gram-ai/elements/server/nextjs` for Next.js App Router
  * - `@gram-ai/elements/server/fastify` for Fastify
  * - `@gram-ai/elements/server/hono` for Hono
+ * - `@gram-ai/elements/server/bun` for Bun
  */
 export const createElementsServerHandlers = (): ServerHandlers => {
   return {

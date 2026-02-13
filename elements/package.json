@@ -35,6 +35,11 @@
       "import": "./dist/server/hono.js",
       "require": "./dist/server/hono.cjs"
     },
+    "./server/bun": {
+      "types": "./dist/server/bun.d.ts",
+      "import": "./dist/server/bun.js",
+      "require": "./dist/server/bun.cjs"
+    },
     "./server/tanstack-start": {
       "types": "./dist/server/tanstack-start.d.ts",
       "import": "./dist/server/tanstack-start.js",

@@ -36,6 +36,7 @@ export default defineConfig({
         'server/nextjs': resolve(__dirname, 'src/server/nextjs.ts'),
         'server/fastify': resolve(__dirname, 'src/server/fastify.ts'),
         'server/hono': resolve(__dirname, 'src/server/hono.ts'),
+        'server/bun': resolve(__dirname, 'src/server/bun.ts'),
         'server/tanstack-start': resolve(
           __dirname,
           'src/server/tanstack-start.ts'
