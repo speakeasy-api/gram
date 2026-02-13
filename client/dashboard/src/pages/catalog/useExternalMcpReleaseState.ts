@@ -51,6 +51,10 @@ export interface ExternalMcpReleaseState {
   startDeployment: () => Promise<void>;
   reset: () => void;
   error?: string;
+  /** Registry specifiers of servers already in the target project */
+  existingSpecifiers: Set<string>;
+  /** Target project slug (for cross-project navigation) */
+  projectSlug?: string;
 }
 
 interface UseExternalMcpReleaseStateOptions {
@@ -67,6 +71,16 @@ export function useExternalMcpReleaseState({
     projectSlug ? { gramProject: projectSlug } : undefined,
   );
   const latestDeployment = latestDeploymentResult?.deployment;
+
+  const existingSpecifiers = useMemo(
+    () =>
+      new Set(
+        (latestDeployment?.externalMcps ?? []).map(
+          (mcp) => mcp.registryServerSpecifier,
+        ),
+      ),
+    [latestDeployment?.externalMcps],
+  );
 
   const [phase, setPhase] = useState<ReleasePhase>("configure");
   const [serverConfigs, setServerConfigs] = useState<ServerConfig[]>([]);
@@ -103,18 +117,19 @@ export function useExternalMcpReleaseState({
     },
   );
 
-  // Poll deployment logs
+  // Poll deployment logs — keep polling in deploying phase OR briefly in error phase to capture final logs
   const { data: logsData } = useDeploymentLogs(
     { deploymentId: deploymentId!, gramProject: projectSlug },
     undefined,
     {
-      enabled: !!deploymentId && phase === "deploying",
-      refetchInterval: 2000,
+      enabled: !!deploymentId && (phase === "deploying" || phase === "error"),
+      refetchInterval: phase === "deploying" ? 2000 : false,
     },
   );
 
   const deploymentLogs = logsData?.events ?? [];
-  const deploymentStatus = deploymentData?.status;
+  // Use status from both deployment and logs endpoints for faster detection
+  const deploymentStatus = deploymentData?.status ?? logsData?.status;
 
   // Transition from deploying → complete (then toolset creation starts)
   // or deploying → error
@@ -330,5 +345,7 @@ export function useExternalMcpReleaseState({
     startDeployment,
     reset,
     error,
+    existingSpecifiers,
+    projectSlug,
   };
 }
