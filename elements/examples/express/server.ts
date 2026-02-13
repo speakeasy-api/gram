@@ -24,7 +24,7 @@ app.post('/api/login', (req, res) => {
 
 // Chat session endpoint — uses the Express server adapter
 app.post(
-  '/api/chat/session',
+  '/chat/session',
   createExpressHandler({
     embedOrigin: process.env.EMBED_ORIGIN ?? 'http://localhost:3000',
     userIdentifier: 'user-123',

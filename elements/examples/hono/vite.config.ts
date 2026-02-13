@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:3001',
+      '/chat/session': 'http://localhost:3001',
     },
   },
 })

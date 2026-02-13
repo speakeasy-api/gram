@@ -30,20 +30,6 @@ export function ChatPage() {
 
   const config: ElementsConfig = {
     projectSlug: import.meta.env.VITE_GRAM_PROJECT_SLUG,
-    api: {
-      sessionFn: async () => {
-        const res = await fetch('/api/chat/session', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Gram-Project': import.meta.env.VITE_GRAM_PROJECT_SLUG,
-          },
-        })
-        if (!res.ok) throw new Error('Failed to create chat session')
-        const json: { client_token: string } = await res.json()
-        return json.client_token
-      },
-    },
     mcp: import.meta.env.VITE_GRAM_MCP_URL,
     variant: 'standalone',
     environment: { MY_MCP_BEARER_TOKEN: token },

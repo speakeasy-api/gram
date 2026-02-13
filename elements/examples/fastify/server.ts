@@ -22,7 +22,7 @@ fastify.post('/api/login', async (request, reply) => {
 
 // Chat session endpoint — uses the Fastify server adapter
 fastify.post(
-  '/api/chat/session',
+  '/chat/session',
   createFastifyHandler({
     embedOrigin: process.env.EMBED_ORIGIN ?? 'http://localhost:3000',
     userIdentifier: 'user-123',

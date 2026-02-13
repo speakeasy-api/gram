@@ -23,7 +23,7 @@ app.post('/api/login', async (c) => {
 
 // Chat session endpoint — uses the Hono server adapter
 app.post(
-  '/api/chat/session',
+  '/chat/session',
   createHonoHandler({
     embedOrigin: process.env.EMBED_ORIGIN ?? 'http://localhost:3000',
     userIdentifier: 'user-123',
