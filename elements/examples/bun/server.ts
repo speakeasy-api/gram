@@ -8,12 +8,6 @@ const sessionHandler = createBunHandler({
   expiresAfter: 3600,
 })
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': 'http://localhost:3000',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Gram-Project',
-}
-
 Bun.serve({
   port,
   routes: {
@@ -26,32 +20,18 @@ Bun.serve({
         if (!username || !password) {
           return Response.json(
             { error: 'Username and password are required' },
-            { status: 401, headers: corsHeaders }
+            { status: 401 }
           )
         }
         const token = btoa(JSON.stringify({ username, timestamp: Date.now() }))
-        return Response.json({ token }, { headers: corsHeaders })
+        return Response.json({ token })
       },
     },
     '/chat/session': {
-      POST: async (req) => {
-        const res = await sessionHandler(req)
-        // Append CORS headers to the adapter response
-        const headers = new Headers(res.headers)
-        for (const [key, value] of Object.entries(corsHeaders)) {
-          headers.set(key, value)
-        }
-        return new Response(res.body, {
-          status: res.status,
-          headers,
-        })
-      },
+      POST: sessionHandler,
     },
   },
-  fetch(req) {
-    if (req.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders })
-    }
+  fetch() {
     return new Response('Not Found', { status: 404 })
   },
 })
