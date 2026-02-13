@@ -20,7 +20,7 @@ type AgentDefinition struct {
 	Title          pgtype.Text
 	Description    string
 	Instruction    string
-	Tools          []string
+	Tools          []urn.Tool
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz

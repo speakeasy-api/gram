@@ -47,7 +47,7 @@ type CreateAgentDefinitionParams struct {
 	Title          interface{}
 	Description    string
 	Instruction    string
-	Tools          []string
+	Tools          []urn.Tool
 }
 
 func (q *Queries) CreateAgentDefinition(ctx context.Context, arg CreateAgentDefinitionParams) (AgentDefinition, error) {
@@ -233,7 +233,7 @@ type UpdateAgentDefinitionParams struct {
 	Title       interface{}
 	Description interface{}
 	Instruction interface{}
-	Tools       []string
+	Tools       []urn.Tool
 	ID          uuid.UUID
 	ProjectID   uuid.UUID
 }
