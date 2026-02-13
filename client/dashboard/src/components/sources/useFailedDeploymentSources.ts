@@ -36,22 +36,24 @@ const SOURCE_TYPE_TO_URN_KIND: Record<FailedSource["type"], string> = {
 export function useFailedDeploymentSources(
   deploymentId?: string,
 ): UseFailedDeploymentSourcesResult {
-  const {
-    data: latestResult,
-    isLoading: latestLoading,
-  } = useLatestDeployment(undefined, undefined, {
-    enabled: !deploymentId,
-  });
+  const { data: latestResult, isLoading: latestLoading } = useLatestDeployment(
+    undefined,
+    undefined,
+    {
+      enabled: !deploymentId,
+    },
+  );
 
-  const {
-    data: specificResult,
-    isLoading: specificLoading,
-  } = useDeployment({ id: deploymentId ?? "" }, undefined, {
-    enabled: !!deploymentId,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
+  const { data: specificResult, isLoading: specificLoading } = useDeployment(
+    { id: deploymentId ?? "" },
+    undefined,
+    {
+      enabled: !!deploymentId,
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  );
 
   const deploymentLoading = deploymentId ? specificLoading : latestLoading;
   // GetDeploymentResult IS the deployment; GetLatestDeploymentResult wraps it in .deployment

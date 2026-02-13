@@ -352,9 +352,7 @@ function DeployingPhase({
           {releaseState.deploymentLogs.map((log) => (
             <div
               key={log.id}
-              className={
-                log.event.includes("error") ? "text-destructive" : ""
-              }
+              className={log.event.includes("error") ? "text-destructive" : ""}
             >
               {log.message}
             </div>
@@ -397,27 +395,28 @@ function CompletePhase({
       </div>
 
       {/* Next steps — only shown when all toolsets are done */}
-      {allDone && (() => {
-        const firstCompleted = releaseState.toolsetStatuses.find(
-          (s) => s.status === "completed" && s.toolsetSlug && s.mcpSlug,
-        );
-        if (firstCompleted) {
-          return (
-            <SingleServerNextSteps
-              toolsetSlug={firstCompleted.toolsetSlug!}
-              mcpSlug={firstCompleted.mcpSlug!}
-              releaseState={releaseState}
-            />
+      {allDone &&
+        (() => {
+          const firstCompleted = releaseState.toolsetStatuses.find(
+            (s) => s.status === "completed" && s.toolsetSlug && s.mcpSlug,
           );
-        }
-        return (
-          <Dialog.Footer>
-            <Button variant="tertiary" onClick={onClose}>
-              <Button.Text>Close</Button.Text>
-            </Button>
-          </Dialog.Footer>
-        );
-      })()}
+          if (firstCompleted) {
+            return (
+              <SingleServerNextSteps
+                toolsetSlug={firstCompleted.toolsetSlug!}
+                mcpSlug={firstCompleted.mcpSlug!}
+                releaseState={releaseState}
+              />
+            );
+          }
+          return (
+            <Dialog.Footer>
+              <Button variant="tertiary" onClick={onClose}>
+                <Button.Text>Close</Button.Text>
+              </Button>
+            </Dialog.Footer>
+          );
+        })()}
     </div>
   );
 }
@@ -593,9 +592,7 @@ function ErrorPhase({
           {releaseState.deploymentLogs.map((log) => (
             <div
               key={log.id}
-              className={
-                log.event.includes("error") ? "text-destructive" : ""
-              }
+              className={log.event.includes("error") ? "text-destructive" : ""}
             >
               {log.message}
             </div>
