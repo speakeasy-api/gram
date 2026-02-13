@@ -175,6 +175,10 @@ type DeploymentSummary struct {
 	FunctionsAssetCount int64
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64
+	// The number of external MCP server assets.
+	ExternalMcpAssetCount int64
+	// The number of tools in the deployment generated from external MCP servers.
+	ExternalMcpToolCount int64
 }
 
 // EvolvePayload is the payload type of the deployments service evolve method.
@@ -301,8 +305,10 @@ type GetDeploymentResult struct {
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*types.OpenAPIv3DeploymentAsset
-	// The number of tools in the deployment generated from OpenAPI documents.
+	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64
+	// The number of tools in the deployment generated from external MCP servers.
+	ExternalMcpToolCount int64
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	FunctionsAssets []*types.DeploymentFunctions

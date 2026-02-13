@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 82468aeccdce46798403492f3b85114a
+  docChecksum: 48254c07958746567b0813267bfcbe48
   docVersion: 0.0.1
-  speakeasyVersion: 1.708.0
-  generationVersion: 2.811.2
-  releaseVersion: 0.27.1
-  configChecksum: 623c89c395b387449279fc95ffa885ef
+  speakeasyVersion: 1.700.2
+  generationVersion: 2.801.2
+  releaseVersion: 0.27.2
+  configChecksum: 15f297cf892efb960bdcae98efdad676
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -14,8 +14,8 @@ persistentEdits:
 features:
   typescript:
     additionalDependencies: 0.1.0
-    constsAndDefaults: 0.1.13
-    core: 3.26.27
+    constsAndDefaults: 0.1.12
+    core: 3.26.23
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -24,10 +24,10 @@ features:
     globalSecurityCallbacks: 0.1.0
     globalServerURLs: 2.83.0
     methodArguments: 0.1.2
-    methodSecurity: 2.82.7
+    methodSecurity: 2.82.6
     nameOverrides: 2.81.2
     reactQueryHooks: 0.2.4
-    responseFormat: 0.3.0
+    responseFormat: 0.2.3
     retries: 2.83.0
     sdkHooks: 0.4.0
     uploadStreams: 0.1.0
@@ -127,7 +127,7 @@ trackedFiles:
   docs/models/components/createdeploymentrequestbody.md:
     last_write_checksum: sha1:8fc85ee0f324152af0a75f269497dbf73732075f
   docs/models/components/createdeploymentresult.md:
-    last_write_checksum: sha1:6ec93c629c22ec945fde9e9199fc164424ed6d21
+    last_write_checksum: sha1:41e18a5dedda65b901d6b193aa810ab3a74661cc
   docs/models/components/createdomainrequestbody.md:
     last_write_checksum: sha1:60c3cda352b20924981c062fd173092243c6292c
   docs/models/components/createenvironmentform.md:
@@ -167,7 +167,7 @@ trackedFiles:
   docs/models/components/deleteglobaltoolvariationresult.md:
     last_write_checksum: sha1:04dce9a78844146d01af0010e5af8cd64c155a00
   docs/models/components/deployment.md:
-    last_write_checksum: sha1:aa6c84de11d9e3234f7c6960c4abed0977a12b16
+    last_write_checksum: sha1:c05444112c4ac42b41636bf63e232a8773a21d31
   docs/models/components/deploymentexternalmcp.md:
     last_write_checksum: sha1:2fa321164c3d13db558e08acfb4652d4c547ebd8
   docs/models/components/deploymentfunctions.md:
@@ -177,7 +177,7 @@ trackedFiles:
   docs/models/components/deploymentpackage.md:
     last_write_checksum: sha1:9b6481e8af0916f6e44a3dc2be0aafc40a9a381f
   docs/models/components/deploymentsummary.md:
-    last_write_checksum: sha1:82fbb732f324f40e1278633262215830c2d86443
+    last_write_checksum: sha1:5d4ab2325f17cf618cafef456b8e52dd33d4da9a
   docs/models/components/engine.md:
     last_write_checksum: sha1:011590e0a0948b257fe56e89b478e1576fdb488b
   docs/models/components/environment.md:
@@ -189,7 +189,7 @@ trackedFiles:
   docs/models/components/evolveform.md:
     last_write_checksum: sha1:cd9c280ab931b01b543723464486a1a350f1252d
   docs/models/components/evolveresult.md:
-    last_write_checksum: sha1:86dc8cfc34fd1a3843865ccdf8afe94461c08058
+    last_write_checksum: sha1:db06ce126556570bbfa4033c393953026f88280a
   docs/models/components/exportmcpmetadatarequestbody.md:
     last_write_checksum: sha1:40e4d7ae27440bfd5a593b31a6e25cc5a7a4f7ad
   docs/models/components/externalmcpheaderdefinition.md:
@@ -223,17 +223,17 @@ trackedFiles:
   docs/models/components/generatetitleresponsebody.md:
     last_write_checksum: sha1:38ee2cf743b12e9ffa968731732b84116e7d4da8
   docs/models/components/getactivedeploymentresult.md:
-    last_write_checksum: sha1:77a991f5cbabbec6daf2468aaf70997e309cc2b5
+    last_write_checksum: sha1:b3b64581cc0a3c0439cc61e407f2b8dd21a41b49
   docs/models/components/getdeploymentlogsresult.md:
     last_write_checksum: sha1:dfd6ce6a7623292f2aa2837f9a1bc6e3723ec2da
   docs/models/components/getdeploymentresult.md:
-    last_write_checksum: sha1:fbc2e7feb141b6f92ed1316748c046aed75d3192
+    last_write_checksum: sha1:d071a02508f3cfd7908fdd374fa5fc6d6ee8376f
   docs/models/components/getinstanceresult.md:
     last_write_checksum: sha1:bb61b209573a535441fd5265f48ee2ebeb156a0f
   docs/models/components/getintegrationresult.md:
     last_write_checksum: sha1:335b69f11d9ce89bf863806d5ab746f0a34c6c03
   docs/models/components/getlatestdeploymentresult.md:
-    last_write_checksum: sha1:352dbc7f775a03f74db8144a7b634a77c81a12a7
+    last_write_checksum: sha1:edfc03b954ccf67da252ed64e90f9b22e2689cb0
   docs/models/components/getmcpmetadataresponsebody.md:
     last_write_checksum: sha1:9b86c4be9501099f26c719416628dff6b1b969dc
   docs/models/components/getmetricssummaryresult.md:
@@ -285,7 +285,7 @@ trackedFiles:
   docs/models/components/listchatswithresolutionsresult.md:
     last_write_checksum: sha1:39a311585ebeaa9c8ce51dc3b3ea47749de595ea
   docs/models/components/listdeploymentresult.md:
-    last_write_checksum: sha1:12f43e3bf8a04f8aea833fc962369ab4ed4da623
+    last_write_checksum: sha1:e81f46e1358dfcee125fcfb93dfb636b707be998
   docs/models/components/listenvironmentsresult.md:
     last_write_checksum: sha1:407469156fe816e6d51ea58346d03afc56129391
   docs/models/components/listfilteroptionspayload.md:
@@ -373,7 +373,7 @@ trackedFiles:
   docs/models/components/redeployrequestbody.md:
     last_write_checksum: sha1:ce5975e0572331dee1ef25b019656fce4aaebf3a
   docs/models/components/redeployresult.md:
-    last_write_checksum: sha1:f00c8fb6f056ac857862552ccc103d34ff295ade
+    last_write_checksum: sha1:340a77d96566b71b36c058dec6ce1eee93b97ceb
   docs/models/components/registerrequestbody.md:
     last_write_checksum: sha1:7faa85fe815401c7992c699bbc4698f7e92c9f8e
   docs/models/components/rendertemplatebyidrequestbody.md:
@@ -1360,11 +1360,11 @@ trackedFiles:
     pristine_git_object: 8a33dbb4b9cb9cefaa43e10ddf535cbcd13c9e72
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:217915ac7e306e2b3d05030234c3c5e4bce0a83f
+    last_write_checksum: sha1:9ead37064181d10f1e2584ba3be1df463d889248
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:ef3915800402764802fc0d6dd1b50aa5dc27cb85
+    last_write_checksum: sha1:ae2daf8a35e7f4f4f86e6b0b1716be4cf828e13b
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1830,7 +1830,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:fe6d8b6eb290c03c232bf8044d434929e1351deb
+    last_write_checksum: sha1:c3ccf12ce7b61748fea6556b95c5c361a5685e01
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2056,7 +2056,7 @@ trackedFiles:
     pristine_git_object: 0c185e97b50dac05d7dc8374bf7fc18862e41827
   src/models/components/deployment.ts:
     id: 73b9af3ba286
-    last_write_checksum: sha1:7dcfcda75475cde245f0cf38876191cd37ca5a47
+    last_write_checksum: sha1:585a375c4abe825eb8e77f8f2798508783a039b0
     pristine_git_object: 77b8b7ac1e85c3e073fc455b9fa83e932e5f68ac
   src/models/components/deploymentexternalmcp.ts:
     id: 72ae2b28a944
@@ -2076,7 +2076,7 @@ trackedFiles:
     pristine_git_object: c531b3cd77d7aa4c8f68c22e945be1307045ffe1
   src/models/components/deploymentsummary.ts:
     id: 435890ac8384
-    last_write_checksum: sha1:323e3661b5e09afbf2c733e30b45b1d03013c2ce
+    last_write_checksum: sha1:d6a53bdb20526d6cd0398d33a266871dadbfdd8c
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
   src/models/components/environment.ts:
     id: c68cb95d8182
@@ -2152,7 +2152,7 @@ trackedFiles:
     pristine_git_object: bdc8ab84d50d6bec0d9584e1e8743dd6f8dd8a89
   src/models/components/getdeploymentresult.ts:
     id: c0fcda89f8a6
-    last_write_checksum: sha1:bf7db79389ca28a4141bdd48afdb95700f5ce2ad
+    last_write_checksum: sha1:29160c1022913273d5bf6206b8766cecbd357b8a
     pristine_git_object: d1c8cfa0335d49d507da3c1b229a42e0012091c0
   src/models/components/getinstanceresult.ts:
     id: 1d161207cec2
@@ -4037,7 +4037,7 @@ examples:
         application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcps": [{"name": "ai.exa/exa", "registry_id": "0a3c30db-c529-4810-ad7a-28eff64064bb", "registry_server_specifier": "slack", "slug": "<value>"}], "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "non_blocking": false}
       responses:
         "200":
-          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2023-01-07T04:35:31.471Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 5649, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 5649, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2023-01-07T04:35:31.471Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcp_tool_count": 5649, "functions_tool_count": 5649, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 5649, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -4048,7 +4048,7 @@ examples:
         application/json: {"non_blocking": false, "upsert_external_mcps": [{"name": "ai.exa/exa", "registry_id": "fb7378d0-8d03-460e-bcd1-36af78f7025c", "registry_server_specifier": "slack", "slug": "<value>"}]}
       responses:
         "200":
-          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-12-06T08:41:21.182Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 976608, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 976608, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-12-06T08:41:21.182Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcp_tool_count": 976608, "functions_tool_count": 976608, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 976608, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4060,7 +4060,7 @@ examples:
           id: "<id>"
       responses:
         "200":
-          application/json: {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-09-04T09:09:38.559Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 891772, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 891772, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
+          application/json: {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-09-04T09:09:38.559Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcp_tool_count": 891772, "functions_tool_count": 891772, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 891772, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -4069,7 +4069,7 @@ examples:
     speakeasy-default-get-latest-deployment:
       responses:
         "200":
-          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-09-22T00:37:56.766Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 907871, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 907871, "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-09-22T00:37:56.766Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcp_tool_count": 907871, "functions_tool_count": 907871, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 907871, "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -4078,7 +4078,7 @@ examples:
     speakeasy-default-list-deployments:
       responses:
         "200":
-          application/json: {"items": [{"created_at": "2023-05-14T18:10:51.662Z", "functions_asset_count": 522593, "functions_tool_count": 585740, "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "openapiv3_asset_count": 522593, "openapiv3_tool_count": 585740, "status": "<value>", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
+          application/json: {"items": [{"created_at": "2023-05-14T18:10:51.662Z", "external_mcp_asset_count": 522593, "external_mcp_tool_count": 585740, "functions_asset_count": 522593, "functions_tool_count": 585740, "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "openapiv3_asset_count": 522593, "openapiv3_tool_count": 585740, "status": "<value>", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -4504,7 +4504,7 @@ examples:
         application/json: {"deployment_id": "<id>"}
       responses:
         "200":
-          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2024-06-03T17:13:21.766Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 474195, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 474195, "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2024-06-03T17:13:21.766Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcp_tool_count": 474195, "functions_tool_count": 474195, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 474195, "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -4667,7 +4667,7 @@ examples:
     speakeasy-default-get-active-deployment:
       responses:
         "200":
-          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2023-03-14T06:52:58.051Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 254017, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 85948, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2023-03-14T06:52:58.051Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcp_tool_count": 65955, "functions_tool_count": 254017, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 85948, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

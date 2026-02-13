@@ -13038,6 +13038,10 @@ components:
           type: string
           description: The external ID to refer to the deployment. This can be a git commit hash for example.
           example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+        external_mcp_tool_count:
+          type: integer
+          description: The number of tools in the deployment generated from external MCP servers.
+          format: int64
         external_mcps:
           type: array
           items:
@@ -13053,7 +13057,7 @@ components:
           description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
         functions_tool_count:
           type: integer
-          description: The number of tools in the deployment generated from OpenAPI documents.
+          description: The number of tools in the deployment generated from Functions.
           format: int64
         github_pr:
           type: string
@@ -13112,6 +13116,7 @@ components:
         - packages
         - openapiv3_tool_count
         - functions_tool_count
+        - external_mcp_tool_count
     DeploymentExternalMCP:
       type: object
       properties:
@@ -13213,6 +13218,14 @@ components:
           type: string
           description: The creation date of the deployment.
           format: date-time
+        external_mcp_asset_count:
+          type: integer
+          description: The number of external MCP server assets.
+          format: int64
+        external_mcp_tool_count:
+          type: integer
+          description: The number of tools in the deployment generated from external MCP servers.
+          format: int64
         functions_asset_count:
           type: integer
           description: The number of Functions assets.
@@ -13248,6 +13261,8 @@ components:
         - openapiv3_tool_count
         - functions_asset_count
         - functions_tool_count
+        - external_mcp_asset_count
+        - external_mcp_tool_count
     Environment:
       type: object
       properties:
@@ -13938,6 +13953,10 @@ components:
           type: string
           description: The external ID to refer to the deployment. This can be a git commit hash for example.
           example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+        external_mcp_tool_count:
+          type: integer
+          description: The number of tools in the deployment generated from external MCP servers.
+          format: int64
         external_mcps:
           type: array
           items:
@@ -13953,7 +13972,7 @@ components:
           description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
         functions_tool_count:
           type: integer
-          description: The number of tools in the deployment generated from OpenAPI documents.
+          description: The number of tools in the deployment generated from Functions.
           format: int64
         github_pr:
           type: string
@@ -14012,6 +14031,7 @@ components:
         - packages
         - openapiv3_tool_count
         - functions_tool_count
+        - external_mcp_tool_count
     GetInstanceForm:
       type: object
       properties:

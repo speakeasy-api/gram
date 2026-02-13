@@ -38,6 +38,10 @@ export type GetDeploymentResult = {
    */
   externalId?: string | undefined;
   /**
+   * The number of tools in the deployment generated from external MCP servers.
+   */
+  externalMcpToolCount: number;
+  /**
    * The external MCP servers that were deployed.
    */
   externalMcps?: Array<DeploymentExternalMCP> | undefined;
@@ -50,7 +54,7 @@ export type GetDeploymentResult = {
    */
   functionsAssets?: Array<DeploymentFunctions> | undefined;
   /**
-   * The number of tools in the deployment generated from OpenAPI documents.
+   * The number of tools in the deployment generated from Functions.
    */
   functionsToolCount: number;
   /**
@@ -112,6 +116,7 @@ export const GetDeploymentResult$inboundSchema: z.ZodType<
   cloned_from: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   external_id: z.string().optional(),
+  external_mcp_tool_count: z.number().int(),
   external_mcps: z.array(DeploymentExternalMCP$inboundSchema).optional(),
   external_url: z.string().optional(),
   functions_assets: z.array(DeploymentFunctions$inboundSchema).optional(),
@@ -133,6 +138,7 @@ export const GetDeploymentResult$inboundSchema: z.ZodType<
     "cloned_from": "clonedFrom",
     "created_at": "createdAt",
     "external_id": "externalId",
+    "external_mcp_tool_count": "externalMcpToolCount",
     "external_mcps": "externalMcps",
     "external_url": "externalUrl",
     "functions_assets": "functionsAssets",

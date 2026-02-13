@@ -120,10 +120,11 @@ func (c *DeploymentsClient) GetDeployment(
 		ClonedFrom:         result.ClonedFrom,
 		Openapiv3ToolCount: result.Openapiv3ToolCount,
 		Openapiv3Assets:    result.Openapiv3Assets,
-		FunctionsToolCount: result.FunctionsToolCount,
-		FunctionsAssets:    result.FunctionsAssets,
-		Packages:           result.Packages,
-		ExternalMcps:       result.ExternalMcps,
+		FunctionsToolCount:   result.FunctionsToolCount,
+		FunctionsAssets:      result.FunctionsAssets,
+		ExternalMcpToolCount: result.ExternalMcpToolCount,
+		Packages:             result.Packages,
+		ExternalMcps:         result.ExternalMcps,
 	}, nil
 }
 
