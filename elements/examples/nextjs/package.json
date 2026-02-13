@@ -4,7 +4,6 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --port 3000",
-    "build": "next build",
     "check": "tsc --noEmit"
   },
   "dependencies": {

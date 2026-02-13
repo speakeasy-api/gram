@@ -6,7 +6,6 @@
     "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:client\"",
     "dev:server": "tsx watch server.ts",
     "dev:client": "vite --port 3000",
-    "build": "vite build",
     "check": "tsc --noEmit"
   },
   "dependencies": {
