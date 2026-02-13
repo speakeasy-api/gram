@@ -49,9 +49,7 @@ function ChatServerFnPage() {
     <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-500">
-            Logged in as {username}
-          </span>
+          <span className="text-sm text-gray-500">Logged in as {username}</span>
           <span className="text-xs text-gray-400">(Server Function)</span>
         </div>
         <div className="flex items-center gap-2">
