@@ -208,7 +208,7 @@ const UsageTiers = () => {
                 className="inline-flex"
                 onClick={handleFallbackClick}
               >
-                UPGRADE
+                ADD CARD
               </a>
             </Button>
           </div>
@@ -227,7 +227,7 @@ const UsageTiers = () => {
               data-polar-checkout-theme={"light"}
               className="inline-flex"
             >
-              UPGRADE
+              ADD CARD
             </a>
           </Button>
         </div>
