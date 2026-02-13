@@ -1,30 +1,31 @@
 import { Checkbox } from "@/components/ui/checkbox";
+import type { FailedSource } from "@/components/sources/useFailedDeploymentSources";
 import { cn } from "@/lib/utils";
 import { useSdkClient } from "@/contexts/Sdk";
 import type {
   Deployment,
   DeploymentLogEvent,
 } from "@gram/client/models/components";
-import { Button, Dialog } from "@speakeasy-api/moonshine";
+import { Alert, Badge, Button, Dialog } from "@speakeasy-api/moonshine";
 import {
   ChevronDown,
   ChevronRight,
+  CircleAlert,
   Code,
   FileCode,
   Loader2,
   Server,
+  Wrench,
 } from "lucide-react";
+import { useRoutes } from "@/routes";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { FailedSource } from "./useFailedDeploymentSources";
 
-interface FailedDeploymentModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+interface FailedSourcesSectionProps {
   failedSources: FailedSource[];
   generalErrors: DeploymentLogEvent[];
   deployment: Deployment;
-  onRedeploySuccess: () => void;
+  onRemoveSuccess: () => void;
 }
 
 const SOURCE_ICONS = {
@@ -33,27 +34,28 @@ const SOURCE_ICONS = {
   externalmcp: Server,
 } as const;
 
-export function FailedDeploymentModal({
-  open,
-  onOpenChange,
+export function FailedSourcesSection({
   failedSources,
   generalErrors,
   deployment,
-  onRedeploySuccess,
-}: FailedDeploymentModalProps) {
+  onRemoveSuccess,
+}: FailedSourcesSectionProps) {
   const client = useSdkClient();
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const routes = useRoutes();
+  // Auto-select only sources with no toolset references
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(failedSources.filter((s) => s.toolCount === 0).map((s) => s.id)),
+  );
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [pending, setPending] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Reset selection when modal opens with new data
+  // Reset selection when sources change
   useEffect(() => {
-    if (open) {
-      setSelected(new Set(failedSources.map((s) => s.id)));
-      setExpanded(new Set());
-      setPending(false);
-    }
-  }, [open, failedSources]);
+    setSelected(new Set(failedSources.filter((s) => s.toolCount === 0).map((s) => s.id)));
+    setExpanded(new Set());
+    setPending(false);
+  }, [failedSources]);
 
   const toggleSelected = useCallback((id: string) => {
     setSelected((prev) => {
@@ -84,15 +86,29 @@ export function FailedDeploymentModal({
     [failedSources, selected],
   );
 
-  const handleRemoveAndRedeploy = async () => {
+  const selectedWithTools = useMemo(
+    () => selectedSources.filter((s) => s.toolCount > 0),
+    [selectedSources],
+  );
+
+  const handleRemoveClick = () => {
+    if (selectedSources.length === 0) return;
+    if (selectedWithTools.length > 0) {
+      setConfirmOpen(true);
+    } else {
+      doRemove();
+    }
+  };
+
+  const doRemove = async () => {
+    setConfirmOpen(false);
     if (selectedSources.length === 0) return;
 
     setPending(true);
-    const toastId = "redeploy-without-failed";
-    toast.loading("Redeploying without failed sources...", { id: toastId });
+    const toastId = "remove-failed-sources";
+    toast.loading("Removing failed sources...", { id: toastId });
 
     try {
-      // Group selected sources by type to build exclude lists
       const excludeOpenapiv3Assets: string[] = [];
       const excludeFunctions: string[] = [];
       const excludeExternalMcps: string[] = [];
@@ -123,29 +139,43 @@ export function FailedDeploymentModal({
       });
 
       toast.success(
-        `Redeployed without ${selectedSources.length} failed source${selectedSources.length !== 1 ? "s" : ""}`,
+        `Removed ${selectedSources.length} failed source${selectedSources.length !== 1 ? "s" : ""}`,
         { id: toastId },
       );
-      onRedeploySuccess();
+      onRemoveSuccess();
+      routes.deployments.goTo();
     } catch (error) {
-      console.error("Failed to redeploy:", error);
-      toast.error("Failed to redeploy. Please try again.", { id: toastId });
+      console.error("Failed to remove sources:", error);
+      toast.error("Failed to remove sources. Please try again.", {
+        id: toastId,
+      });
     } finally {
       setPending(false);
     }
   };
 
+  const totalAffectedTools = selectedWithTools.reduce(
+    (sum, s) => sum + s.toolCount,
+    0,
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="max-w-2xl!">
-        <Dialog.Header>
-          <Dialog.Title>Deployment Failed</Dialog.Title>
-          <Dialog.Description>
+    <>
+      <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <CircleAlert className="size-5 text-destructive shrink-0" />
+          <h3 className="text-sm font-semibold">
             {failedSources.length > 0
-              ? `${failedSources.length} source${failedSources.length !== 1 ? "s" : ""} caused errors in the latest deployment. Select the ones to remove and redeploy without them.`
-              : "The latest deployment failed. Check the error details below."}
-          </Dialog.Description>
-        </Dialog.Header>
+              ? `${failedSources.length} source${failedSources.length !== 1 ? "s" : ""} failed`
+              : "Deployment failed"}
+          </h3>
+        </div>
+
+        {failedSources.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            Select the sources to remove and redeploy without them.
+          </p>
+        )}
 
         <div className="max-h-80 overflow-y-auto space-y-2">
           {failedSources.map((source) => {
@@ -160,7 +190,7 @@ export function FailedDeploymentModal({
                   "rounded-lg border p-3 transition-colors",
                   isSelected
                     ? "border-destructive/40 bg-destructive/5"
-                    : "border-border",
+                    : "border-border bg-card",
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -182,10 +212,19 @@ export function FailedDeploymentModal({
                         : source.type === "function"
                           ? "Function"
                           : "External MCP"}{" "}
-                      &middot; {source.errors.length} error
-                      {source.errors.length !== 1 ? "s" : ""}
+                      &middot;{" "}
+                      {`${source.errors.length} error${source.errors.length !== 1 ? "s" : ""}`}
                     </span>
                   </div>
+                  {source.toolCount > 0 && (
+                    <Badge
+                      variant="neutral"
+                      className="shrink-0 flex items-center gap-1"
+                    >
+                      <Wrench className="size-3" />
+                      {`${source.toolCount} ${source.toolCount === 1 ? "tool" : "tools"}`}
+                    </Badge>
+                  )}
                   {source.errors.length > 0 && (
                     <button
                       type="button"
@@ -217,7 +256,7 @@ export function FailedDeploymentModal({
           })}
 
           {generalErrors.length > 0 && (
-            <div className="rounded-lg border border-border p-3">
+            <div className="rounded-lg border border-border bg-card p-3">
               <span className="text-sm font-medium">General errors</span>
               <div className="mt-2 space-y-1">
                 {generalErrors.map((err) => (
@@ -233,18 +272,11 @@ export function FailedDeploymentModal({
           )}
         </div>
 
-        <Dialog.Footer>
-          <Button
-            variant="tertiary"
-            onClick={() => onOpenChange(false)}
-            disabled={pending}
-          >
-            Cancel
-          </Button>
-          {failedSources.length > 0 && (
+        {failedSources.length > 0 && (
+          <div className="flex justify-end">
             <Button
               variant="destructive-primary"
-              onClick={handleRemoveAndRedeploy}
+              onClick={handleRemoveClick}
               disabled={pending || selected.size === 0}
             >
               {pending ? (
@@ -252,18 +284,51 @@ export function FailedDeploymentModal({
                   <Button.LeftIcon>
                     <Loader2 className="size-4 animate-spin" />
                   </Button.LeftIcon>
-                  <Button.Text>Redeploying...</Button.Text>
+                  <Button.Text>Removing...</Button.Text>
                 </>
               ) : (
                 <Button.Text>
-                  Remove {selected.size > 0 ? selected.size : ""} &amp;
-                  Redeploy
+                  {`Remove ${selected.size > 0 ? selected.size : ""} source${selected.size !== 1 ? "s" : ""}`}
                 </Button.Text>
               )}
             </Button>
-          )}
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
+          </div>
+        )}
+      </section>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <Dialog.Content className="max-w-lg!">
+          <Dialog.Header>
+            <Dialog.Title>Active toolsets affected</Dialog.Title>
+            <Dialog.Description>
+              {`${selectedWithTools.length} of the selected source${selectedWithTools.length !== 1 ? "s have" : " has"} ${totalAffectedTools} tool${totalAffectedTools !== 1 ? "s" : ""} referenced by active toolsets.`}
+            </Dialog.Description>
+          </Dialog.Header>
+          <Alert variant="warning" dismissible={false}>
+            Removing these sources will break toolsets that depend on their
+            tools. You may need to update affected toolsets afterward.
+          </Alert>
+          <ul className="text-sm space-y-1">
+            {selectedWithTools.map((s) => (
+              <li key={s.id} className="flex items-center gap-2">
+                <Wrench className="size-3 text-muted-foreground shrink-0" />
+                <span className="font-medium">{s.name}</span>
+                <span className="text-muted-foreground">
+                  {`${s.toolCount} ${s.toolCount === 1 ? "tool" : "tools"}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Dialog.Footer>
+            <Button variant="tertiary" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive-primary" onClick={doRemove}>
+              <Button.Text>Remove anyway</Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }

@@ -3,8 +3,10 @@ import type {
   DeploymentLogEvent,
 } from "@gram/client/models/components";
 import {
+  useDeployment,
   useDeploymentLogs,
   useLatestDeployment,
+  useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { useMemo } from "react";
 
@@ -14,6 +16,7 @@ export interface FailedSource {
   slug: string;
   type: "openapi" | "function" | "externalmcp";
   errors: DeploymentLogEvent[];
+  toolCount: number;
 }
 
 export interface UseFailedDeploymentSourcesResult {
@@ -24,10 +27,37 @@ export interface UseFailedDeploymentSourcesResult {
   isLoading: boolean;
 }
 
-export function useFailedDeploymentSources(): UseFailedDeploymentSourcesResult {
-  const { data: deploymentResult, isLoading: deploymentLoading } =
-    useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
+const SOURCE_TYPE_TO_URN_KIND: Record<FailedSource["type"], string> = {
+  openapi: "http",
+  function: "function",
+  externalmcp: "externalmcp",
+};
+
+export function useFailedDeploymentSources(
+  deploymentId?: string,
+): UseFailedDeploymentSourcesResult {
+  const {
+    data: latestResult,
+    isLoading: latestLoading,
+  } = useLatestDeployment(undefined, undefined, {
+    enabled: !deploymentId,
+  });
+
+  const {
+    data: specificResult,
+    isLoading: specificLoading,
+  } = useDeployment({ id: deploymentId ?? "" }, undefined, {
+    enabled: !!deploymentId,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  const deploymentLoading = deploymentId ? specificLoading : latestLoading;
+  // GetDeploymentResult IS the deployment; GetLatestDeploymentResult wraps it in .deployment
+  const deployment: Deployment | undefined = deploymentId
+    ? specificResult
+    : latestResult?.deployment;
 
   const { data: logs, isLoading: logsLoading } = useDeploymentLogs(
     { deploymentId: deployment?.id ?? "" },
@@ -39,6 +69,8 @@ export function useFailedDeploymentSources(): UseFailedDeploymentSourcesResult {
       enabled: !!deployment?.id,
     },
   );
+
+  const { data: toolsetsData } = useListToolsets();
 
   const result = useMemo(() => {
     if (!deployment || !logs) {
@@ -102,15 +134,30 @@ export function useFailedDeploymentSources(): UseFailedDeploymentSourcesResult {
       });
     }
 
+    // Count toolset tool URN references for each source
+    const allToolsets = toolsetsData?.toolsets ?? [];
+
     // Match errors to sources
     const failedSources: FailedSource[] = [];
     for (const [attachmentId, errors] of errorsByAttachment) {
       const source = sourceMap.get(attachmentId);
       if (source) {
+        const urnKind = SOURCE_TYPE_TO_URN_KIND[source.type];
+        const prefix = `tools:${urnKind}:${source.slug}:`;
+        let toolCount = 0;
+        for (const toolset of allToolsets) {
+          for (const urn of toolset.toolUrns ?? []) {
+            if (urn.startsWith(prefix)) {
+              toolCount++;
+            }
+          }
+        }
+
         failedSources.push({
           id: attachmentId,
           ...source,
           errors,
+          toolCount,
         });
       } else {
         // Attachment doesn't match a known source — treat as general errors
@@ -123,7 +170,7 @@ export function useFailedDeploymentSources(): UseFailedDeploymentSourcesResult {
       failedSources,
       generalErrors,
     };
-  }, [deployment, logs]);
+  }, [deployment, logs, toolsetsData]);
 
   return {
     ...result,
