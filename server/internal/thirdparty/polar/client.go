@@ -860,7 +860,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
 				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
-				"$11 per 10 additional LLM credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
+				fmt.Sprintf("%s / 10 additional LLM credits", formatPrice(10*creditsPrice)), // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
 		},
 		Pro: &gen.TierLimits{
