@@ -1,6 +1,6 @@
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
-import { useSession } from "@/contexts/Auth";
+import { useProductTier } from "@/hooks/useProductTier";
 import { useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { Button } from "@speakeasy-api/moonshine";
@@ -21,7 +21,7 @@ export function ServerEnableDialog({
   isLoading = false,
   currentlyEnabled = false,
 }: ServerEnableDialogProps) {
-  const session = useSession();
+  const productTier = useProductTier();
   const routes = useRoutes();
   const { data: periodUsage } = useGetPeriodUsage();
 
@@ -35,17 +35,14 @@ export function ServerEnableDialog({
     onClose();
   };
 
-  // Specifying that the account is not just in "free" tier, but also that it has no subscription on file to pay for overages
-  const isUnpaidAccount =
-    session.gramAccountType === "free" &&
-    periodUsage &&
-    periodUsage.hasActiveSubscription === false;
   const hasAdditionalIncludedServers =
     periodUsage &&
     periodUsage.includedServers > periodUsage.actualEnabledServerCount;
 
   const canEnable =
-    isUnpaidAccount && !currentlyEnabled ? hasAdditionalIncludedServers : true;
+    productTier === "base" && !currentlyEnabled
+      ? hasAdditionalIncludedServers
+      : true;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

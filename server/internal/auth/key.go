@@ -126,17 +126,18 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID: apiKey.OrganizationID,
-		UserID:               apiKey.CreatedByUserID,
-		ExternalUserID:       "",
-		APIKeyID:             apiKey.ID.String(),
-		SessionID:            nil,
-		ProjectID:            nil,
-		OrganizationSlug:     org.Slug,
-		Email:                nil,
-		AccountType:          org.GramAccountType,
-		ProjectSlug:          nil,
-		APIKeyScopes:         scopes,
+		ActiveOrganizationID:  apiKey.OrganizationID,
+		HasActiveSubscription: org.HasActiveSubscription,
+		UserID:                apiKey.CreatedByUserID,
+		ExternalUserID:        "",
+		APIKeyID:              apiKey.ID.String(),
+		SessionID:             nil,
+		ProjectID:             nil,
+		OrganizationSlug:      org.Slug,
+		Email:                 nil,
+		AccountType:           org.GramAccountType,
+		ProjectSlug:           nil,
+		APIKeyScopes:          scopes,
 	})
 
 	return ctx, nil

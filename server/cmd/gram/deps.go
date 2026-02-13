@@ -377,7 +377,7 @@ func newBillingProvider(
 	switch {
 	case c.String("polar-api-key") != "":
 		catalog := &polar.Catalog{
-			ProductIDFree:    c.String("polar-product-id-free"),
+			ProductIDBase:    c.String("polar-product-id-free"),
 			ProductIDPro:     c.String("polar-product-id-pro"),
 			MeterIDToolCalls: c.String("polar-meter-id-tool-calls"),
 			MeterIDServers:   c.String("polar-meter-id-servers"),
