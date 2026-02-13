@@ -790,11 +790,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 	proTierLimits := extractTierLimits(p.catalog, proTierProduct)
 
 	var toolCallPrice, mcpServerPrice float64
-
-	// Credits are hard-coded for now; keep bullets in sync dynamically
-	freeIncludedCredits := 5
-	proIncludedCredits := 25
-	additionalToolCallsBlock := 5000
+	var creditsPrice float64
 
 	for _, price := range proTierProduct.Prices {
 		if price.Type != polarComponents.PricesTypeProductPrice {
@@ -821,6 +817,15 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			}
 			mcpServerPrice /= 100 // Result from Polar is in cents
 		}
+
+		if price.ProductPrice.ProductPriceMeteredUnit.MeterID == p.catalog.MeterIDCredits {
+			meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
+			creditsPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse credits price: %w", err)
+			}
+			creditsPrice /= 100 // Result from Polar is in cents
+		}
 	}
 
 	// Helper to format prices cleanly (no trailing .00 for whole dollars)
@@ -836,7 +841,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			BasePrice:                  0,
 			IncludedToolCalls:          freeTierLimits.ToolCalls,
 			IncludedServers:            freeTierLimits.Servers,
-			IncludedCredits:            freeIncludedCredits, // Hard coded for now. TODO: Move to Polar
+			IncludedCredits:            freeTierLimits.Credits,
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
 			FeatureBullets: []string{
@@ -849,16 +854,20 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
-				fmt.Sprintf("%d LLM credits / month", freeIncludedCredits),
+				fmt.Sprintf("%d LLM credits / month", freeTierLimits.Credits),
 				"Slack community support",
 			},
-			AddOnBullets: []string{},
+			AddOnBullets: []string{
+				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
+				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
+				"$11 per 10 additional LLM credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
+			},
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  29, // Hard coded for now. TODO: Move to Polar
 			IncludedToolCalls:          proTierLimits.ToolCalls,
 			IncludedServers:            proTierLimits.Servers,
-			IncludedCredits:            proIncludedCredits, // Hard coded for now. TODO: Move to Polar
+			IncludedCredits:            proTierLimits.Credits,
 			PricePerAdditionalToolCall: toolCallPrice,
 			PricePerAdditionalServer:   mcpServerPrice,
 			FeatureBullets: []string{
@@ -869,12 +878,12 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
-				fmt.Sprintf("%d LLM credits / month", proIncludedCredits),
+				fmt.Sprintf("%d LLM credits / month", proTierLimits.Credits),
 				"Email support",
 			},
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
-				fmt.Sprintf("%s / month / additional %d tool calls", formatPrice(toolCallPrice*float64(additionalToolCallsBlock)), additionalToolCallsBlock),
+				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
 				"$11 per 10 additional LLM credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
 		},
@@ -887,6 +896,9 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			PricePerAdditionalServer:   0,
 			FeatureBullets: []string{
 				"Oauth 2.1 proxy support",
+				"Register your own OAuth server",
+				"Custom domain",
+				"30 day log retention",
 				"SSO",
 				"Audit logs",
 				"Self-hosting Gram dataplane",
