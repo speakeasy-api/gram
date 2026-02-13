@@ -435,6 +435,11 @@ func (s *Service) CreateAgentDefinition(ctx context.Context, payload *agents.Cre
 
 	toolURN := urn.NewTool(urn.ToolKindAgent, "gram", string(payload.Name))
 
+	tools, err := parseToolURNs(payload.Tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URN")
+	}
+
 	row, err := s.agentDefRepo.CreateAgentDefinition(ctx, agentdefrepo.CreateAgentDefinitionParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      projectID,
@@ -444,7 +449,7 @@ func (s *Service) CreateAgentDefinition(ctx context.Context, payload *agents.Cre
 		Title:          ptrToAny(payload.Title),
 		Description:    payload.Description,
 		Instruction:    payload.Instruction,
-		Tools:          payload.Tools,
+		Tools:          tools,
 	})
 
 	var pgErr *pgconn.PgError
@@ -522,6 +527,11 @@ func (s *Service) UpdateAgentDefinition(ctx context.Context, payload *agents.Upd
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid agent definition id")
 	}
 
+	tools, err := parseToolURNs(payload.Tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URN")
+	}
+
 	row, err := s.agentDefRepo.UpdateAgentDefinition(ctx, agentdefrepo.UpdateAgentDefinitionParams{
 		ID:          id,
 		ProjectID:   projectID,
@@ -529,7 +539,7 @@ func (s *Service) UpdateAgentDefinition(ctx context.Context, payload *agents.Upd
 		Title:       ptrToAny(payload.Title),
 		Description: ptrToAny(payload.Description),
 		Instruction: ptrToAny(payload.Instruction),
-		Tools:       payload.Tools,
+		Tools:       tools,
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -571,9 +581,9 @@ func toAgentDefinitionView(row *agentdefrepo.AgentDefinition) *agents.AgentDefin
 		title = &row.Title.String
 	}
 
-	tools := row.Tools
-	if tools == nil {
-		tools = []string{}
+	tools := make([]string, 0, len(row.Tools))
+	for _, t := range row.Tools {
+		tools = append(tools, t.String())
 	}
 
 	return &agents.AgentDefinitionView{
@@ -588,6 +598,21 @@ func toAgentDefinitionView(row *agentdefrepo.AgentDefinition) *agents.AgentDefin
 		CreatedAt:   row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:   row.UpdatedAt.Time.Format(time.RFC3339),
 	}
+}
+
+func parseToolURNs(ss []string) ([]urn.Tool, error) {
+	if ss == nil {
+		return nil, nil
+	}
+	tools := make([]urn.Tool, 0, len(ss))
+	for _, s := range ss {
+		t, err := urn.ParseTool(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid tool URN %q: %w", s, err)
+		}
+		tools = append(tools, t)
+	}
+	return tools, nil
 }
 
 func ptrToAny(s *string) any {
