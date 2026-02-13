@@ -1357,6 +1357,38 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
 ON user_oauth_tokens (user_id, organization_id, toolset_id)
 WHERE deleted IS FALSE;
 
+-- Agent definitions: user-defined agents that act as tools in MCP servers.
+-- Each agent wraps a chat completion with a system prompt and access to other tools.
+CREATE TABLE IF NOT EXISTS agent_definitions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  tool_urn TEXT NOT NULL CHECK (tool_urn <> ''),
+  model TEXT NOT NULL CHECK (model <> '' AND CHAR_LENGTH(model) <= 100),
+  title TEXT CHECK (title <> '' AND CHAR_LENGTH(title) <= 200),
+  description TEXT NOT NULL CHECK (description <> '' AND CHAR_LENGTH(description) <= 1000),
+  instruction TEXT NOT NULL CHECK (instruction <> ''),
+  tools TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT agent_definitions_pkey PRIMARY KEY (id),
+  CONSTRAINT agent_definitions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS agent_definitions_project_id_name_key
+ON agent_definitions (project_id, name)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS agent_definitions_project_id_deleted_idx
+ON agent_definitions (project_id, deleted, id DESC)
+WHERE deleted IS FALSE;
+
 -- Team invites for organization member management
 CREATE TABLE IF NOT EXISTS team_invites (
   expires_at timestamptz NOT NULL,
