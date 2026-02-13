@@ -1,9 +1,5 @@
 import './globals.css'
 
-export const metadata = {
-  title: 'Gram Elements — Next.js Example',
-}
-
 export default function RootLayout({
   children,
 }: {
@@ -11,6 +7,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <title>Gram Elements — Next.js Example</title>
+      </head>
       <body>{children}</body>
     </html>
   )
