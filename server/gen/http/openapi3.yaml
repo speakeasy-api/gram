@@ -103,6 +103,520 @@ paths:
             x-speakeasy-name-override: slackLogin
             x-speakeasy-react-hook:
                 disabled: true
+    /rpc/agents.definitions.create:
+        post:
+            description: Create a new agent definition.
+            operationId: createAgentDefinition
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateAgentDefinitionForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentDefinitionResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createAgentDefinition agent_definitions
+            tags:
+                - agent_definitions
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateAgentDefinition
+    /rpc/agents.definitions.delete:
+        delete:
+            description: Delete an agent definition.
+            operationId: deleteAgentDefinition
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the agent definition to delete
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the agent definition to delete
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteAgentDefinition agent_definitions
+            tags:
+                - agent_definitions
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: DeleteAgentDefinition
+    /rpc/agents.definitions.get:
+        get:
+            description: Get an agent definition by ID.
+            operationId: getAgentDefinition
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the agent definition
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the agent definition
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentDefinitionResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getAgentDefinition agent_definitions
+            tags:
+                - agent_definitions
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: AgentDefinition
+    /rpc/agents.definitions.list:
+        get:
+            description: List all agent definitions for a project.
+            operationId: listAgentDefinitions
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAgentDefinitionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listAgentDefinitions agent_definitions
+            tags:
+                - agent_definitions
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: AgentDefinitions
+    /rpc/agents.definitions.update:
+        post:
+            description: Update an existing agent definition.
+            operationId: updateAgentDefinition
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateAgentDefinitionForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentDefinitionResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateAgentDefinition agent_definitions
+            tags:
+                - agent_definitions
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateAgentDefinition
     /rpc/agents.response:
         delete:
             description: Deletes any response associated with a given agent run.
@@ -11752,6 +12266,60 @@ components:
                     description: The version of the package to add. If omitted, the latest version will be used.
             required:
                 - name
+        AgentDefinitionResult:
+            type: object
+            properties:
+                agent_definition:
+                    $ref: '#/components/schemas/AgentDefinitionView'
+            required:
+                - agent_definition
+        AgentDefinitionView:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the agent was created
+                    format: date-time
+                description:
+                    type: string
+                    description: The tool description
+                id:
+                    type: string
+                    description: The ID of the agent definition
+                instruction:
+                    type: string
+                    description: The system prompt
+                model:
+                    type: string
+                    description: The default model
+                name:
+                    type: string
+                    description: The name of the agent
+                title:
+                    type: string
+                    description: The display title
+                tool_urn:
+                    type: string
+                    description: The tool URN for this agent
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs this agent can invoke
+                updated_at:
+                    type: string
+                    description: When the agent was last updated
+                    format: date-time
+            required:
+                - id
+                - name
+                - tool_urn
+                - model
+                - description
+                - instruction
+                - tools
+                - created_at
+                - updated_at
         AgentResponseOutput:
             type: object
             properties:
@@ -12402,6 +12970,39 @@ components:
                 - total_input_tokens
                 - total_output_tokens
                 - total_tokens
+        CreateAgentDefinitionForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: The tool description for this agent when presented as a tool
+                    maxLength: 1000
+                instruction:
+                    type: string
+                    description: The system prompt for the agent
+                model:
+                    type: string
+                    description: The default model to use for this agent
+                    maxLength: 100
+                name:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                title:
+                    type: string
+                    description: The display title when presented in UIs
+                    maxLength: 200
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs this agent can invoke
+            required:
+                - name
+                - model
+                - description
+                - instruction
         CreateDeploymentForm:
             type: object
             properties:
@@ -14450,6 +15051,16 @@ components:
                 - scopes
                 - created_at
                 - updated_at
+        ListAgentDefinitionsResult:
+            type: object
+            properties:
+                agent_definitions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentDefinitionView'
+                    description: The list of agent definitions
+            required:
+                - agent_definitions
         ListAllowedOriginsResult:
             type: object
             properties:
@@ -17015,6 +17626,34 @@ components:
                 - id
                 - toolset_id
                 - environment_id
+        UpdateAgentDefinitionForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: The tool description for this agent when presented as a tool
+                    maxLength: 1000
+                id:
+                    type: string
+                    description: The ID of the agent definition to update
+                instruction:
+                    type: string
+                    description: The system prompt for the agent
+                model:
+                    type: string
+                    description: The default model to use for this agent
+                    maxLength: 100
+                title:
+                    type: string
+                    description: The display title when presented in UIs
+                    maxLength: 200
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs this agent can invoke
+            required:
+                - id
         UpdateEnvironmentForm:
             type: object
             properties:
@@ -17644,6 +18283,8 @@ components:
             name: Gram-Session
             in: header
 tags:
+    - name: agent_definitions
+      description: Manages agent definitions that act as tools in MCP servers.
     - name: agents
       description: OpenAI Responses API compatible endpoint for running agent workflows.
     - name: assets
