@@ -1,10 +1,9 @@
-import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
-import { getServerURL } from "@/lib/utils";
+import { cn, getServerURL } from "@/lib/utils";
 import type { Server } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { Button, Dialog, Input, Stack } from "@speakeasy-api/moonshine";
 import {
   AlertCircle,
   ArrowRight,
@@ -161,6 +160,15 @@ function PhaseContent({
   }
 }
 
+/** Routes scoped to the target project (which may differ from the current project). */
+function useTargetRoutes(releaseState: ExternalMcpReleaseState) {
+  return useRoutes(
+    releaseState.projectSlug
+      ? { projectSlug: releaseState.projectSlug }
+      : undefined,
+  );
+}
+
 // --- Configure Phase ---
 
 function ConfigurePhase({
@@ -174,8 +182,19 @@ function ConfigurePhase({
   projectSelector?: React.ReactNode;
   onClose: () => void;
 }) {
+  const routes = useTargetRoutes(releaseState);
+  const { existingSpecifiers } = releaseState;
+  const allAlreadyAdded =
+    existingSpecifiers.size > 0 &&
+    releaseState.serverConfigs.every((c) =>
+      existingSpecifiers.has(c.server.registrySpecifier),
+    );
+  const hasNewServers = releaseState.serverConfigs.some(
+    (c) => !existingSpecifiers.has(c.server.registrySpecifier),
+  );
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && releaseState.canDeploy) {
+    if (e.key === "Enter" && releaseState.canDeploy && hasNewServers) {
       e.preventDefault();
       releaseState.startDeployment();
     }
@@ -185,7 +204,20 @@ function ConfigurePhase({
     <div onKeyDown={handleKeyDown}>
       <Stack gap={4} className="py-2">
         {projectSelector}
-        {isSingle ? (
+        {allAlreadyAdded ? (
+          <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
+            <AlertCircle className="size-4 text-muted-foreground shrink-0 mt-0.5" />
+            <Type small muted>
+              {releaseState.serverConfigs.length === 1
+                ? "This source is"
+                : "All selected sources are"}{" "}
+              already in your project.{" "}
+              <routes.sources.Link className="text-primary">
+                View sources
+              </routes.sources.Link>
+            </Type>
+          </div>
+        ) : isSingle ? (
           <SingleServerConfig releaseState={releaseState} />
         ) : (
           <BatchServerConfig releaseState={releaseState} />
@@ -193,14 +225,16 @@ function ConfigurePhase({
       </Stack>
       <Dialog.Footer>
         <Button variant="tertiary" onClick={onClose}>
-          Cancel
+          {allAlreadyAdded ? "Close" : "Cancel"}
         </Button>
-        <Button
-          disabled={!releaseState.canDeploy}
-          onClick={() => releaseState.startDeployment()}
-        >
-          <Button.Text>Deploy</Button.Text>
-        </Button>
+        {!allAlreadyAdded && (
+          <Button
+            disabled={!releaseState.canDeploy || !hasNewServers}
+            onClick={() => releaseState.startDeployment()}
+          >
+            <Button.Text>Deploy</Button.Text>
+          </Button>
+        )}
       </Dialog.Footer>
     </div>
   );
@@ -233,40 +267,54 @@ function BatchServerConfig({
 }: {
   releaseState: ExternalMcpReleaseState;
 }) {
+  const { existingSpecifiers } = releaseState;
   return (
     <div className="space-y-3 max-h-80 overflow-y-auto">
-      {releaseState.serverConfigs.map((config, index) => (
-        <div
-          key={config.server.registrySpecifier}
-          className="flex items-center gap-3 p-3 rounded-lg border"
-        >
-          <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center shrink-0">
-            {config.server.iconUrl ? (
-              <img
-                src={config.server.iconUrl}
-                alt=""
-                className="w-4 h-4 rounded"
+      {releaseState.serverConfigs.map((config, index) => {
+        const isAlreadyAdded = existingSpecifiers.has(
+          config.server.registrySpecifier,
+        );
+        return (
+          <div
+            key={config.server.registrySpecifier}
+            className={cn(
+              "flex items-center gap-3 p-3 rounded-lg border",
+              isAlreadyAdded && "opacity-50",
+            )}
+          >
+            <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center shrink-0">
+              {config.server.iconUrl ? (
+                <img
+                  src={config.server.iconUrl}
+                  alt=""
+                  className="w-4 h-4 rounded"
+                />
+              ) : (
+                <ServerIcon className="w-3 h-3 text-muted-foreground" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <Input
+                placeholder={
+                  config.server.title || config.server.registrySpecifier
+                }
+                value={config.name}
+                onChange={(e) =>
+                  releaseState.updateServerConfig(index, {
+                    name: e.target.value,
+                  })
+                }
+                className="text-sm"
               />
-            ) : (
-              <ServerIcon className="w-3 h-3 text-muted-foreground" />
+            </div>
+            {isAlreadyAdded && (
+              <span className="text-xs text-muted-foreground shrink-0">
+                Already added
+              </span>
             )}
           </div>
-          <div className="flex-1 min-w-0">
-            <Input
-              placeholder={
-                config.server.title || config.server.registrySpecifier
-              }
-              value={config.name}
-              onChange={(e) =>
-                releaseState.updateServerConfig(index, {
-                  name: e.target.value,
-                })
-              }
-              className="text-sm"
-            />
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -339,7 +387,11 @@ function CompletePhase({
         <Type className="font-medium mb-2">Creating MCP servers</Type>
         <div className="space-y-2">
           {releaseState.toolsetStatuses.map((ts) => (
-            <ToolsetStatusRow key={ts.slug} status={ts} />
+            <ToolsetStatusRow
+              key={ts.slug}
+              status={ts}
+              releaseState={releaseState}
+            />
           ))}
         </div>
       </div>
@@ -354,6 +406,7 @@ function CompletePhase({
             <SingleServerNextSteps
               toolsetSlug={firstCompleted.toolsetSlug!}
               mcpSlug={firstCompleted.mcpSlug!}
+              releaseState={releaseState}
             />
           );
         }
@@ -369,8 +422,14 @@ function CompletePhase({
   );
 }
 
-function ToolsetStatusRow({ status }: { status: ServerToolsetStatus }) {
-  const routes = useRoutes();
+function ToolsetStatusRow({
+  status,
+  releaseState,
+}: {
+  status: ServerToolsetStatus;
+  releaseState: ExternalMcpReleaseState;
+}) {
+  const routes = useTargetRoutes(releaseState);
   const isCompleted = status.status === "completed" && status.toolsetSlug;
 
   const content = (
@@ -425,11 +484,13 @@ function ToolsetStatusIcon({
 function SingleServerNextSteps({
   toolsetSlug,
   mcpSlug,
+  releaseState,
 }: {
   toolsetSlug: string;
   mcpSlug: string;
+  releaseState: ExternalMcpReleaseState;
 }) {
-  const routes = useRoutes();
+  const routes = useTargetRoutes(releaseState);
 
   return (
     <div>
@@ -512,7 +573,7 @@ function ErrorPhase({
   releaseState: ExternalMcpReleaseState;
   onClose: () => void;
 }) {
-  const routes = useRoutes();
+  const routes = useTargetRoutes(releaseState);
 
   return (
     <div className="py-2 space-y-4">

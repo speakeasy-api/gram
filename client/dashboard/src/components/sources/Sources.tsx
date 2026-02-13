@@ -35,7 +35,6 @@ import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard, SourceCardSkeleton } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
-import { FailedDeploymentModal } from "./FailedDeploymentModal";
 import { useFailedDeploymentSources } from "./useFailedDeploymentSources";
 import { ViewAssetDialogContent } from "./ViewAssetDialogContent";
 
@@ -43,15 +42,13 @@ type DialogState =
   | { type: "closed" }
   | { type: "remove-source"; asset: NamedAsset }
   | { type: "upload-openapi"; documentSlug: string }
-  | { type: "view-asset"; asset: NamedAsset }
-  | { type: "failed-deployment" };
+  | { type: "view-asset"; asset: NamedAsset };
 
 interface DialogStore {
   dialogState: DialogState;
   openRemoveSource: (asset: NamedAsset) => void;
   openUploadOpenApi: (documentSlug: string) => void;
   openViewAsset: (asset: NamedAsset) => void;
-  openFailedDeployment: () => void;
   closeDialog: () => void;
 }
 
@@ -62,8 +59,6 @@ const useDialogStore = create<DialogStore>((set) => ({
   openUploadOpenApi: (documentSlug) =>
     set({ dialogState: { type: "upload-openapi", documentSlug } }),
   openViewAsset: (asset) => set({ dialogState: { type: "view-asset", asset } }),
-  openFailedDeployment: () =>
-    set({ dialogState: { type: "failed-deployment" } }),
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
 
@@ -117,7 +112,6 @@ export default function Sources() {
     openRemoveSource,
     openUploadOpenApi,
     openViewAsset,
-    openFailedDeployment,
     closeDialog,
   } = useDialogStore();
   const deploymentIsEmpty = useDeploymentIsEmpty();
@@ -258,15 +252,14 @@ export default function Sources() {
         <Page.Section.Title>
           <span className="inline-flex items-center gap-2">
             Sources
-            {failedDeployment.hasFailures && (
-              <button
-                type="button"
-                onClick={openFailedDeployment}
+            {failedDeployment.hasFailures && failedDeployment.deployment && (
+              <routes.deployments.deployment.Link
+                params={[failedDeployment.deployment.id]}
                 className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-sm font-medium text-destructive bg-destructive/10 hover:bg-destructive/20 transition-colors"
               >
                 <CircleAlert className="size-4" />
                 <span>Deployment errors</span>
-              </button>
+              </routes.deployments.deployment.Link>
             )}
           </span>
         </Page.Section.Title>
@@ -362,10 +355,7 @@ export default function Sources() {
             )}
           </div>
           <Dialog
-            open={
-              dialogState.type !== "closed" &&
-              dialogState.type !== "failed-deployment"
-            }
+            open={dialogState.type !== "closed"}
             onOpenChange={(open) => !open && closeDialog()}
           >
             <Dialog.Content
@@ -394,19 +384,6 @@ export default function Sources() {
               )}
             </Dialog.Content>
           </Dialog>
-          {failedDeployment.deployment && (
-            <FailedDeploymentModal
-              open={dialogState.type === "failed-deployment"}
-              onOpenChange={(open) => !open && closeDialog()}
-              failedSources={failedDeployment.failedSources}
-              generalErrors={failedDeployment.generalErrors}
-              deployment={failedDeployment.deployment}
-              onRedeploySuccess={() => {
-                closeDialog();
-                refetch();
-              }}
-            />
-          )}
         </Page.Section.Body>
       </Page.Section>
     </>
