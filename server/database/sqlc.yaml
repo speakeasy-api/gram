@@ -66,6 +66,10 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
+      - column: agent_definitions.tool_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Tool
 
 sql:
   - schema: schema.sql
@@ -383,5 +387,15 @@ sql:
       go:
         package: "repo"
         out: "../internal/externalmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/agentdefinitions/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/agentdefinitions/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
