@@ -109,7 +109,7 @@ var _ = Service("agents", func() {
 		})
 
 		Meta("openapi:operationId", "createAgentDefinition")
-		Meta("openapi:extension:x-speakeasy-name-override", "createDefinition")
+		Meta("openapi:extension:x-speakeasy-name-override", "CreateAgent")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAgentDefinition"}`)
 	})
 
@@ -141,7 +141,7 @@ var _ = Service("agents", func() {
 		})
 
 		Meta("openapi:operationId", "getAgentDefinition")
-		Meta("openapi:extension:x-speakeasy-name-override", "getDefinition")
+		Meta("openapi:extension:x-speakeasy-name-override", "Agent")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentDefinition"}`)
 	})
 
@@ -169,7 +169,7 @@ var _ = Service("agents", func() {
 		})
 
 		Meta("openapi:operationId", "listAgentDefinitions")
-		Meta("openapi:extension:x-speakeasy-name-override", "listDefinitions")
+		Meta("openapi:extension:x-speakeasy-name-override", "Agents")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentDefinitions"}`)
 	})
 
@@ -199,7 +199,7 @@ var _ = Service("agents", func() {
 		})
 
 		Meta("openapi:operationId", "updateAgentDefinition")
-		Meta("openapi:extension:x-speakeasy-name-override", "updateDefinition")
+		Meta("openapi:extension:x-speakeasy-name-override", "UpdateAgent")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateAgentDefinition"}`)
 	})
 
@@ -231,7 +231,7 @@ var _ = Service("agents", func() {
 		})
 
 		Meta("openapi:operationId", "deleteAgentDefinition")
-		Meta("openapi:extension:x-speakeasy-name-override", "deleteDefinition")
+		Meta("openapi:extension:x-speakeasy-name-override", "DeleteAgent")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteAgentDefinition"}`)
 	})
 })

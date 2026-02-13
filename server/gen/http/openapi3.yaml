@@ -204,7 +204,7 @@ paths:
             summary: createAgentDefinition agents
             tags:
                 - agents
-            x-speakeasy-name-override: createDefinition
+            x-speakeasy-name-override: CreateAgent
             x-speakeasy-react-hook:
                 name: CreateAgentDefinition
     /rpc/agents.delete:
@@ -306,7 +306,7 @@ paths:
             summary: deleteAgentDefinition agents
             tags:
                 - agents
-            x-speakeasy-name-override: deleteDefinition
+            x-speakeasy-name-override: DeleteAgent
             x-speakeasy-react-hook:
                 name: DeleteAgentDefinition
     /rpc/agents.getByID:
@@ -412,7 +412,7 @@ paths:
             summary: getAgentDefinition agents
             tags:
                 - agents
-            x-speakeasy-name-override: getDefinition
+            x-speakeasy-name-override: Agent
             x-speakeasy-react-hook:
                 name: AgentDefinition
     /rpc/agents.list:
@@ -510,7 +510,7 @@ paths:
             summary: listAgentDefinitions agents
             tags:
                 - agents
-            x-speakeasy-name-override: listDefinitions
+            x-speakeasy-name-override: Agents
             x-speakeasy-react-hook:
                 name: AgentDefinitions
     /rpc/agents.response:
@@ -891,7 +891,7 @@ paths:
             summary: updateAgentDefinition agents
             tags:
                 - agents
-            x-speakeasy-name-override: updateDefinition
+            x-speakeasy-name-override: UpdateAgent
             x-speakeasy-react-hook:
                 name: UpdateAgentDefinition
     /rpc/assets.createSignedChatAttachmentURL:
