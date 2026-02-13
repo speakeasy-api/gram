@@ -96,3 +96,9 @@ Activate a skill when your task falls within its scope.
 | `vercel-react-best-practices` | Optimizing React performance, reviewing components for best practices      |
 | `gram-functions`              | Understanding or modifying the Gram Functions serverless execution feature |
 | `mise-tasks`                  | Creating or editing mise task scripts in `.mise-tasks/`                    |
+
+# Plan Mode
+
+- Make the plan extremely concise. Sacrifice grammar for the sake of concision.
+- Identify any of the skills above that are relevant to the task so you can activate when implementing.
+- At the end of each plan, give me a list of unresolved questions to answer, if any.
