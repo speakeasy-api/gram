@@ -32,6 +32,15 @@ export default defineConfig({
       entry: {
         elements: resolve(__dirname, 'src/index.ts'),
         server: resolve(__dirname, 'src/server.ts'),
+        'server/express': resolve(__dirname, 'src/server/express.ts'),
+        'server/nextjs': resolve(__dirname, 'src/server/nextjs.ts'),
+        'server/fastify': resolve(__dirname, 'src/server/fastify.ts'),
+        'server/hono': resolve(__dirname, 'src/server/hono.ts'),
+        'server/bun': resolve(__dirname, 'src/server/bun.ts'),
+        'server/tanstack-start': resolve(
+          __dirname,
+          'src/server/tanstack-start.ts'
+        ),
         plugins: resolve(__dirname, 'src/plugins/index.ts'),
         'compat-plugin': resolve(__dirname, 'src/compat-plugin.ts'),
         'react-shim': resolve(__dirname, 'src/react-shim.ts'),
