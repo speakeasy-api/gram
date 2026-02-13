@@ -60,8 +60,8 @@ export function createTanStackStartSessionFn(options: SessionHandlerOptions) {
         throw new Error(`Failed to create chat session: ${result.body}`)
       }
 
-      const parsed = JSON.parse(result.body) as { token: string }
-      return parsed.token
+      const parsed = JSON.parse(result.body) as { client_token: string }
+      return parsed.client_token
     })
 }
 
