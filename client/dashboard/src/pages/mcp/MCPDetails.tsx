@@ -20,18 +20,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useProductTier } from "@/hooks/useProductTier";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
-import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
 import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
+import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
 import { Confirm, ToolsetEntry } from "@gram/client/models/components";
 import {
@@ -787,7 +787,7 @@ function MCPPromptsTab({ toolset }: { toolset: Toolset }) {
 function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
-  const session = useSession();
+  const productTier = useProductTier();
   const { orgSlug } = useParams();
   const { domain } = useCustomDomain();
   const routes = useRoutes();
@@ -974,15 +974,18 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     </Tooltip>
   );
 
+  // Account for legacy Pro tier which can still access custom domains
+  const canAccessCustomDomain = !productTier.includes("base");
+
   const customDomain =
-    domain && session.gramAccountType !== "free" && !toolset.customDomainId ? (
+    domain && canAccessCustomDomain && !toolset.customDomainId ? (
       linkDomainButton
     ) : (
       <Button
         variant="secondary"
         size="sm"
         onClick={() => {
-          if (session.gramAccountType == "free") {
+          if (!canAccessCustomDomain) {
             setIsCustomDomainModalOpen(true);
           } else {
             routes.settings.goTo();
@@ -1294,8 +1297,8 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       <FeatureRequestModal
         isOpen={isMaxServersModalOpen}
         onClose={() => setIsMaxServersModalOpen(false)}
-        title="Public MCP Server Limit Reached"
-        description={`You have reached the maximum number of public MCP servers for the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
+        title="MCP Server Limit Reached"
+        description={`You have reached the maximum number of MCP servers for the Base plan. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
         actionType="max_public_mcp_servers"
         icon={Globe}
         telemetryData={{ slug: toolset.slug }}
@@ -1901,9 +1904,9 @@ function ConnectOAuthModal({
   toolsetSlug: string;
   toolset: Toolset;
 }) {
-  const session = useSession();
+  const productTier = useProductTier();
   const queryClient = useQueryClient();
-  const isAccountUpgrade = session.gramAccountType === "free";
+  const isAccountUpgrade = productTier.includes("base");
 
   // For free accounts, show the FeatureRequestModal
   if (isAccountUpgrade) {

@@ -30,7 +30,7 @@ import (
 )
 
 type Catalog struct {
-	ProductIDFree string
+	ProductIDBase string
 	ProductIDPro  string
 
 	MeterIDToolCalls string
@@ -39,8 +39,8 @@ type Catalog struct {
 }
 
 func (c *Catalog) Validate() error {
-	if c.ProductIDFree == "" {
-		return errors.New("missing free tier product id in catalog")
+	if c.ProductIDBase == "" {
+		return errors.New("missing base tier product id in catalog")
 	}
 	if c.ProductIDPro == "" {
 		return errors.New("missing pro tier product id in catalog")
@@ -500,7 +500,7 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 }
 
 // This is used during auth, so keep it as lightweight as possible.
-func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.Tier, err error) {
+func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.Tier, hasActiveSubscription bool, err error) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer_tier", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
@@ -511,21 +511,29 @@ func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.
 
 	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return p.extractCustomerTier(customerState)
+	return p.extractCustomerTier(ctx, customerState)
 }
 
-func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (*billing.Tier, error) {
+func (p *Client) extractCustomerTier(ctx context.Context, customerState *polarComponents.CustomerState) (*billing.Tier, bool, error) {
 	if customerState != nil {
 		// Active enterprise subscriptions return earlier with the enterprise flag in the DB
 		if len(customerState.ActiveSubscriptions) >= 1 {
-			return conv.Ptr(billing.TierPro), nil
+			if len(customerState.ActiveSubscriptions) > 1 {
+				p.logger.ErrorContext(ctx, "multiple active subscriptions found", attr.SlogOrganizationID(customerState.OrganizationID))
+			}
+			activeSubscription := customerState.ActiveSubscriptions[0]
+			if activeSubscription.ProductID == p.catalog.ProductIDBase {
+				return conv.Ptr(billing.TierBase), true, nil
+			}
+			// Fallback case for old accounts
+			return conv.Ptr(billing.TierPro), true, nil
 		}
 	}
 
-	return nil, nil
+	return nil, false, nil
 }
 
 func (p *Client) GetCustomer(ctx context.Context, orgID string) (c *billing.Customer, err error) {
@@ -653,7 +661,7 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 	}
 
 	if usage.IncludedToolCalls == -1 || usage.IncludedServers == -1 || usage.IncludedCredits == -1 {
-		freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
+		freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDBase)
 		if err != nil {
 			return nil, fmt.Errorf("get free tier product: %w", err)
 		}
@@ -725,7 +733,7 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 		EmbedOrigin:        &serverURL,
 		SuccessURL:         &successURL,
 		Products: []string{
-			p.catalog.ProductIDPro,
+			p.catalog.ProductIDBase,
 		},
 	})
 
@@ -768,7 +776,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 		span.End()
 	}()
 
-	freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
+	freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDBase)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Free tier product: %w", err)
 	}

@@ -20,9 +20,9 @@ import (
 )
 
 type localEnvFile map[string]struct {
-	UserEmail   string  `json:"user_email"`
-	DisplayName *string `json:"display_name"`
-	Admin       bool    `json:"admin"`
+	UserEmail     string  `json:"user_email"`
+	DisplayName   *string `json:"display_name"`
+	Admin         bool    `json:"admin"`
 	Organizations []struct {
 		OrganizationID   string `json:"organization_id"`
 		OrganizationName string `json:"organization_name"`
@@ -97,17 +97,18 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	}
 
 	authCtx := &contextvalues.AuthContext{
-		SessionID:            &session.SessionID,
-		ActiveOrganizationID: session.ActiveOrganizationID,
-		UserID:               session.UserID,
-		ExternalUserID:       "",
-		ProjectID:            nil,
-		OrganizationSlug:     "",
-		Email:                nil,
-		AccountType:          "",
-		ProjectSlug:          nil,
-		APIKeyScopes:         nil,
-		APIKeyID:             "",
+		SessionID:             &session.SessionID,
+		ActiveOrganizationID:  session.ActiveOrganizationID,
+		UserID:                session.UserID,
+		ExternalUserID:        "",
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "",
+		HasActiveSubscription: false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+		APIKeyID:              "",
 	}
 
 	if session.ActiveOrganizationID == "" {
@@ -129,6 +130,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	}
 
 	authCtx.AccountType = orgMetadata.GramAccountType
+	authCtx.HasActiveSubscription = orgMetadata.HasActiveSubscription
 	authCtx.OrganizationSlug = orgMetadata.Slug
 	authCtx.Email = &email
 

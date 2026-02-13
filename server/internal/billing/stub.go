@@ -40,11 +40,11 @@ func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider) *St
 var _ Tracker = (*StubClient)(nil)
 var _ Repository = (*StubClient)(nil)
 
-func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, error) {
+func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, bool, error) {
 	_, span := s.tracer.Start(ctx, "stub_client.get_customer")
 	defer span.End()
 
-	return nil, nil
+	return nil, false, nil
 }
 
 func (s *StubClient) ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*PolarWebhookPayload, error) {
