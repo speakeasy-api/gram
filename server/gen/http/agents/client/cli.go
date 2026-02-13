@@ -10,8 +10,10 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	agents "github.com/speakeasy-api/gram/server/gen/agents"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -128,6 +130,237 @@ func BuildDeleteResponsePayload(agentsDeleteResponseResponseID string, agentsDel
 	v := &agents.DeleteResponsePayload{}
 	v.ResponseID = responseID
 	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateAgentDefinitionPayload builds the payload for the agents
+// createAgentDefinition endpoint from CLI flags.
+func BuildCreateAgentDefinitionPayload(agentsCreateAgentDefinitionBody string, agentsCreateAgentDefinitionApikeyToken string, agentsCreateAgentDefinitionSessionToken string, agentsCreateAgentDefinitionProjectSlugInput string) (*agents.CreateAgentDefinitionPayload, error) {
+	var err error
+	var body CreateAgentDefinitionRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsCreateAgentDefinitionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"aaa\",\n      \"instruction\": \"abc123\",\n      \"model\": \"aaa\",\n      \"name\": \"aaa\",\n      \"title\": \"aaa\",\n      \"tools\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(body.Name) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
+		}
+		if utf8.RuneCountInString(body.Model) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.model", body.Model, utf8.RuneCountInString(body.Model), 100, false))
+		}
+		if body.Title != nil {
+			if utf8.RuneCountInString(*body.Title) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.title", *body.Title, utf8.RuneCountInString(*body.Title), 200, false))
+			}
+		}
+		if utf8.RuneCountInString(body.Description) > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.description", body.Description, utf8.RuneCountInString(body.Description), 1000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentsCreateAgentDefinitionApikeyToken != "" {
+			apikeyToken = &agentsCreateAgentDefinitionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsCreateAgentDefinitionSessionToken != "" {
+			sessionToken = &agentsCreateAgentDefinitionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if agentsCreateAgentDefinitionProjectSlugInput != "" {
+			projectSlugInput = &agentsCreateAgentDefinitionProjectSlugInput
+		}
+	}
+	v := &agents.CreateAgentDefinitionPayload{
+		Name:        types.Slug(body.Name),
+		Model:       body.Model,
+		Title:       body.Title,
+		Description: body.Description,
+		Instruction: body.Instruction,
+	}
+	if body.Tools != nil {
+		v.Tools = make([]string, len(body.Tools))
+		for i, val := range body.Tools {
+			v.Tools[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetAgentDefinitionPayload builds the payload for the agents
+// getAgentDefinition endpoint from CLI flags.
+func BuildGetAgentDefinitionPayload(agentsGetAgentDefinitionID string, agentsGetAgentDefinitionApikeyToken string, agentsGetAgentDefinitionSessionToken string, agentsGetAgentDefinitionProjectSlugInput string) (*agents.GetAgentDefinitionPayload, error) {
+	var id string
+	{
+		id = agentsGetAgentDefinitionID
+	}
+	var apikeyToken *string
+	{
+		if agentsGetAgentDefinitionApikeyToken != "" {
+			apikeyToken = &agentsGetAgentDefinitionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsGetAgentDefinitionSessionToken != "" {
+			sessionToken = &agentsGetAgentDefinitionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if agentsGetAgentDefinitionProjectSlugInput != "" {
+			projectSlugInput = &agentsGetAgentDefinitionProjectSlugInput
+		}
+	}
+	v := &agents.GetAgentDefinitionPayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListAgentDefinitionsPayload builds the payload for the agents
+// listAgentDefinitions endpoint from CLI flags.
+func BuildListAgentDefinitionsPayload(agentsListAgentDefinitionsApikeyToken string, agentsListAgentDefinitionsSessionToken string, agentsListAgentDefinitionsProjectSlugInput string) (*agents.ListAgentDefinitionsPayload, error) {
+	var apikeyToken *string
+	{
+		if agentsListAgentDefinitionsApikeyToken != "" {
+			apikeyToken = &agentsListAgentDefinitionsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsListAgentDefinitionsSessionToken != "" {
+			sessionToken = &agentsListAgentDefinitionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if agentsListAgentDefinitionsProjectSlugInput != "" {
+			projectSlugInput = &agentsListAgentDefinitionsProjectSlugInput
+		}
+	}
+	v := &agents.ListAgentDefinitionsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateAgentDefinitionPayload builds the payload for the agents
+// updateAgentDefinition endpoint from CLI flags.
+func BuildUpdateAgentDefinitionPayload(agentsUpdateAgentDefinitionBody string, agentsUpdateAgentDefinitionApikeyToken string, agentsUpdateAgentDefinitionSessionToken string, agentsUpdateAgentDefinitionProjectSlugInput string) (*agents.UpdateAgentDefinitionPayload, error) {
+	var err error
+	var body UpdateAgentDefinitionRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsUpdateAgentDefinitionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"aaa\",\n      \"id\": \"abc123\",\n      \"instruction\": \"abc123\",\n      \"model\": \"aaa\",\n      \"title\": \"aaa\",\n      \"tools\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.Model != nil {
+			if utf8.RuneCountInString(*body.Model) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.model", *body.Model, utf8.RuneCountInString(*body.Model), 100, false))
+			}
+		}
+		if body.Title != nil {
+			if utf8.RuneCountInString(*body.Title) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.title", *body.Title, utf8.RuneCountInString(*body.Title), 200, false))
+			}
+		}
+		if body.Description != nil {
+			if utf8.RuneCountInString(*body.Description) > 1000 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.description", *body.Description, utf8.RuneCountInString(*body.Description), 1000, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentsUpdateAgentDefinitionApikeyToken != "" {
+			apikeyToken = &agentsUpdateAgentDefinitionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsUpdateAgentDefinitionSessionToken != "" {
+			sessionToken = &agentsUpdateAgentDefinitionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if agentsUpdateAgentDefinitionProjectSlugInput != "" {
+			projectSlugInput = &agentsUpdateAgentDefinitionProjectSlugInput
+		}
+	}
+	v := &agents.UpdateAgentDefinitionPayload{
+		ID:          body.ID,
+		Model:       body.Model,
+		Title:       body.Title,
+		Description: body.Description,
+		Instruction: body.Instruction,
+	}
+	if body.Tools != nil {
+		v.Tools = make([]string, len(body.Tools))
+		for i, val := range body.Tools {
+			v.Tools[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteAgentDefinitionPayload builds the payload for the agents
+// deleteAgentDefinition endpoint from CLI flags.
+func BuildDeleteAgentDefinitionPayload(agentsDeleteAgentDefinitionID string, agentsDeleteAgentDefinitionApikeyToken string, agentsDeleteAgentDefinitionSessionToken string, agentsDeleteAgentDefinitionProjectSlugInput string) (*agents.DeleteAgentDefinitionPayload, error) {
+	var id string
+	{
+		id = agentsDeleteAgentDefinitionID
+	}
+	var apikeyToken *string
+	{
+		if agentsDeleteAgentDefinitionApikeyToken != "" {
+			apikeyToken = &agentsDeleteAgentDefinitionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsDeleteAgentDefinitionSessionToken != "" {
+			sessionToken = &agentsDeleteAgentDefinitionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if agentsDeleteAgentDefinitionProjectSlugInput != "" {
+			projectSlugInput = &agentsDeleteAgentDefinitionProjectSlugInput
+		}
+	}
+	v := &agents.DeleteAgentDefinitionPayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil

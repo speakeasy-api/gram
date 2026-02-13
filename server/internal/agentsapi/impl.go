@@ -6,7 +6,12 @@ import (
 	"log/slog"
 	"time"
 
+	"database/sql"
+	"errors"
+
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -20,6 +25,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/agents"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agents/server"
+	agentdefrepo "github.com/speakeasy-api/gram/server/internal/agentdefinitions/repo"
 	agentspkg "github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -45,6 +51,7 @@ type Service struct {
 	agentsService     *agentspkg.Service
 	db                *pgxpool.Pool
 	agentExecRepo     *repo.Queries
+	agentDefRepo      *agentdefrepo.Queries
 	auth              *auth.Auth
 	temporalClient    client.Client
 	temporalNamespace string // TODO: build a wrapper around temporal client to better encapsulate metadata like this
@@ -88,6 +95,7 @@ func NewService(
 		agentsService:     agentsService,
 		db:                db,
 		agentExecRepo:     repo.New(db),
+		agentDefRepo:      agentdefrepo.New(db),
 		auth:              authService,
 		temporalClient:    temporalClient,
 		temporalNamespace: temporalNamespace,
@@ -414,6 +422,204 @@ func toServiceRequest(req *agents.CreateResponsePayload) (agentspkg.ResponseRequ
 		Async:              req.Async,
 		Store:              req.Store,
 	}, nil
+}
+
+func (s *Service) CreateAgentDefinition(ctx context.Context, payload *agents.CreateAgentDefinitionPayload) (*agents.AgentDefinitionResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := *authCtx.ProjectID
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
+
+	toolURN := urn.NewTool(urn.ToolKindAgent, "gram", string(payload.Name))
+
+	tools, err := parseToolURNs(payload.Tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URN")
+	}
+
+	row, err := s.agentDefRepo.CreateAgentDefinition(ctx, agentdefrepo.CreateAgentDefinitionParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           string(payload.Name),
+		ToolUrn:        toolURN,
+		Model:          payload.Model,
+		Title:          ptrToAny(payload.Title),
+		Description:    payload.Description,
+		Instruction:    payload.Instruction,
+		Tools:          tools,
+	})
+
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation:
+		return nil, oops.E(oops.CodeConflict, err, "agent definition name already exists")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "create agent definition").Log(ctx, logger)
+	}
+
+	return &agents.AgentDefinitionResult{AgentDefinition: toAgentDefinitionView(&row)}, nil
+}
+
+func (s *Service) GetAgentDefinition(ctx context.Context, payload *agents.GetAgentDefinitionPayload) (*agents.AgentDefinitionResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := *authCtx.ProjectID
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid agent definition id")
+	}
+
+	row, err := s.agentDefRepo.GetAgentDefinition(ctx, agentdefrepo.GetAgentDefinitionParams{
+		ID:        id,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "agent definition not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get agent definition").Log(ctx, logger)
+	}
+
+	return &agents.AgentDefinitionResult{AgentDefinition: toAgentDefinitionView(&row)}, nil
+}
+
+func (s *Service) ListAgentDefinitions(ctx context.Context, payload *agents.ListAgentDefinitionsPayload) (*agents.ListAgentDefinitionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := *authCtx.ProjectID
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
+
+	rows, err := s.agentDefRepo.ListAgentDefinitions(ctx, projectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list agent definitions").Log(ctx, logger)
+	}
+
+	views := make([]*agents.AgentDefinitionView, 0, len(rows))
+	for _, row := range rows {
+		views = append(views, toAgentDefinitionView(&row))
+	}
+
+	return &agents.ListAgentDefinitionsResult{AgentDefinitions: views}, nil
+}
+
+func (s *Service) UpdateAgentDefinition(ctx context.Context, payload *agents.UpdateAgentDefinitionPayload) (*agents.AgentDefinitionResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := *authCtx.ProjectID
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid agent definition id")
+	}
+
+	tools, err := parseToolURNs(payload.Tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URN")
+	}
+
+	row, err := s.agentDefRepo.UpdateAgentDefinition(ctx, agentdefrepo.UpdateAgentDefinitionParams{
+		ID:          id,
+		ProjectID:   projectID,
+		Model:       ptrToAny(payload.Model),
+		Title:       ptrToAny(payload.Title),
+		Description: ptrToAny(payload.Description),
+		Instruction: ptrToAny(payload.Instruction),
+		Tools:       tools,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "agent definition not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "update agent definition").Log(ctx, logger)
+	}
+
+	return &agents.AgentDefinitionResult{AgentDefinition: toAgentDefinitionView(&row)}, nil
+}
+
+func (s *Service) DeleteAgentDefinition(ctx context.Context, payload *agents.DeleteAgentDefinitionPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := *authCtx.ProjectID
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid agent definition id")
+	}
+
+	if err := s.agentDefRepo.DeleteAgentDefinition(ctx, agentdefrepo.DeleteAgentDefinitionParams{
+		ID:        id,
+		ProjectID: projectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete agent definition").Log(ctx, logger)
+	}
+
+	return nil
+}
+
+func toAgentDefinitionView(row *agentdefrepo.AgentDefinition) *agents.AgentDefinitionView {
+	var title *string
+	if row.Title.Valid {
+		title = &row.Title.String
+	}
+
+	tools := make([]string, 0, len(row.Tools))
+	for _, t := range row.Tools {
+		tools = append(tools, t.String())
+	}
+
+	return &agents.AgentDefinitionView{
+		ID:          row.ID.String(),
+		Name:        row.Name,
+		ToolUrn:     row.ToolUrn.String(),
+		Model:       row.Model,
+		Title:       title,
+		Description: row.Description,
+		Instruction: row.Instruction,
+		Tools:       tools,
+		CreatedAt:   row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:   row.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
+func parseToolURNs(ss []string) ([]urn.Tool, error) {
+	if ss == nil {
+		return nil, nil
+	}
+	tools := make([]urn.Tool, 0, len(ss))
+	for _, s := range ss {
+		t, err := urn.ParseTool(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid tool URN %q: %w", s, err)
+		}
+		tools = append(tools, t)
+	}
+	return tools, nil
+}
+
+func ptrToAny(s *string) any {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // toGoaResponse converts an internal response to the Goa response type.

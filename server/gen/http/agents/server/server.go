@@ -19,10 +19,15 @@ import (
 
 // Server lists the agents service endpoint HTTP handlers.
 type Server struct {
-	Mounts         []*MountPoint
-	CreateResponse http.Handler
-	GetResponse    http.Handler
-	DeleteResponse http.Handler
+	Mounts                []*MountPoint
+	CreateResponse        http.Handler
+	GetResponse           http.Handler
+	DeleteResponse        http.Handler
+	CreateAgentDefinition http.Handler
+	GetAgentDefinition    http.Handler
+	ListAgentDefinitions  http.Handler
+	UpdateAgentDefinition http.Handler
+	DeleteAgentDefinition http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -55,10 +60,20 @@ func New(
 			{"CreateResponse", "POST", "/rpc/agents.response"},
 			{"GetResponse", "GET", "/rpc/agents.response"},
 			{"DeleteResponse", "DELETE", "/rpc/agents.response"},
+			{"CreateAgentDefinition", "POST", "/rpc/agents.create"},
+			{"GetAgentDefinition", "GET", "/rpc/agents.getByID"},
+			{"ListAgentDefinitions", "GET", "/rpc/agents.list"},
+			{"UpdateAgentDefinition", "POST", "/rpc/agents.update"},
+			{"DeleteAgentDefinition", "DELETE", "/rpc/agents.delete"},
 		},
-		CreateResponse: NewCreateResponseHandler(e.CreateResponse, mux, decoder, encoder, errhandler, formatter),
-		GetResponse:    NewGetResponseHandler(e.GetResponse, mux, decoder, encoder, errhandler, formatter),
-		DeleteResponse: NewDeleteResponseHandler(e.DeleteResponse, mux, decoder, encoder, errhandler, formatter),
+		CreateResponse:        NewCreateResponseHandler(e.CreateResponse, mux, decoder, encoder, errhandler, formatter),
+		GetResponse:           NewGetResponseHandler(e.GetResponse, mux, decoder, encoder, errhandler, formatter),
+		DeleteResponse:        NewDeleteResponseHandler(e.DeleteResponse, mux, decoder, encoder, errhandler, formatter),
+		CreateAgentDefinition: NewCreateAgentDefinitionHandler(e.CreateAgentDefinition, mux, decoder, encoder, errhandler, formatter),
+		GetAgentDefinition:    NewGetAgentDefinitionHandler(e.GetAgentDefinition, mux, decoder, encoder, errhandler, formatter),
+		ListAgentDefinitions:  NewListAgentDefinitionsHandler(e.ListAgentDefinitions, mux, decoder, encoder, errhandler, formatter),
+		UpdateAgentDefinition: NewUpdateAgentDefinitionHandler(e.UpdateAgentDefinition, mux, decoder, encoder, errhandler, formatter),
+		DeleteAgentDefinition: NewDeleteAgentDefinitionHandler(e.DeleteAgentDefinition, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -70,6 +85,11 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateResponse = m(s.CreateResponse)
 	s.GetResponse = m(s.GetResponse)
 	s.DeleteResponse = m(s.DeleteResponse)
+	s.CreateAgentDefinition = m(s.CreateAgentDefinition)
+	s.GetAgentDefinition = m(s.GetAgentDefinition)
+	s.ListAgentDefinitions = m(s.ListAgentDefinitions)
+	s.UpdateAgentDefinition = m(s.UpdateAgentDefinition)
+	s.DeleteAgentDefinition = m(s.DeleteAgentDefinition)
 }
 
 // MethodNames returns the methods served.
@@ -80,6 +100,11 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateResponseHandler(mux, h.CreateResponse)
 	MountGetResponseHandler(mux, h.GetResponse)
 	MountDeleteResponseHandler(mux, h.DeleteResponse)
+	MountCreateAgentDefinitionHandler(mux, h.CreateAgentDefinition)
+	MountGetAgentDefinitionHandler(mux, h.GetAgentDefinition)
+	MountListAgentDefinitionsHandler(mux, h.ListAgentDefinitions)
+	MountUpdateAgentDefinitionHandler(mux, h.UpdateAgentDefinition)
+	MountDeleteAgentDefinitionHandler(mux, h.DeleteAgentDefinition)
 }
 
 // Mount configures the mux to serve the agents endpoints.
@@ -223,6 +248,271 @@ func NewDeleteResponseHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteResponse")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateAgentDefinitionHandler configures the mux to serve the "agents"
+// service "createAgentDefinition" endpoint.
+func MountCreateAgentDefinitionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agents.create", otelhttp.WithRouteTag("/rpc/agents.create", f).ServeHTTP)
+}
+
+// NewCreateAgentDefinitionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "createAgentDefinition" endpoint.
+func NewCreateAgentDefinitionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateAgentDefinitionRequest(mux, decoder)
+		encodeResponse = EncodeCreateAgentDefinitionResponse(encoder)
+		encodeError    = EncodeCreateAgentDefinitionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createAgentDefinition")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetAgentDefinitionHandler configures the mux to serve the "agents"
+// service "getAgentDefinition" endpoint.
+func MountGetAgentDefinitionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agents.getByID", otelhttp.WithRouteTag("/rpc/agents.getByID", f).ServeHTTP)
+}
+
+// NewGetAgentDefinitionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "getAgentDefinition" endpoint.
+func NewGetAgentDefinitionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetAgentDefinitionRequest(mux, decoder)
+		encodeResponse = EncodeGetAgentDefinitionResponse(encoder)
+		encodeError    = EncodeGetAgentDefinitionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getAgentDefinition")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAgentDefinitionsHandler configures the mux to serve the "agents"
+// service "listAgentDefinitions" endpoint.
+func MountListAgentDefinitionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agents.list", otelhttp.WithRouteTag("/rpc/agents.list", f).ServeHTTP)
+}
+
+// NewListAgentDefinitionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "listAgentDefinitions" endpoint.
+func NewListAgentDefinitionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAgentDefinitionsRequest(mux, decoder)
+		encodeResponse = EncodeListAgentDefinitionsResponse(encoder)
+		encodeError    = EncodeListAgentDefinitionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAgentDefinitions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateAgentDefinitionHandler configures the mux to serve the "agents"
+// service "updateAgentDefinition" endpoint.
+func MountUpdateAgentDefinitionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agents.update", otelhttp.WithRouteTag("/rpc/agents.update", f).ServeHTTP)
+}
+
+// NewUpdateAgentDefinitionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "updateAgentDefinition" endpoint.
+func NewUpdateAgentDefinitionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateAgentDefinitionRequest(mux, decoder)
+		encodeResponse = EncodeUpdateAgentDefinitionResponse(encoder)
+		encodeError    = EncodeUpdateAgentDefinitionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateAgentDefinition")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteAgentDefinitionHandler configures the mux to serve the "agents"
+// service "deleteAgentDefinition" endpoint.
+func MountDeleteAgentDefinitionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/agents.delete", otelhttp.WithRouteTag("/rpc/agents.delete", f).ServeHTTP)
+}
+
+// NewDeleteAgentDefinitionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "deleteAgentDefinition" endpoint.
+func NewDeleteAgentDefinitionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteAgentDefinitionRequest(mux, decoder)
+		encodeResponse = EncodeDeleteAgentDefinitionResponse(encoder)
+		encodeError    = EncodeDeleteAgentDefinitionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteAgentDefinition")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
 		payload, err := decodeRequest(r)
 		if err != nil {

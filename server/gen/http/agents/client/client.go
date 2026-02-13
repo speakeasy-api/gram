@@ -29,6 +29,26 @@ type Client struct {
 	// deleteResponse endpoint.
 	DeleteResponseDoer goahttp.Doer
 
+	// CreateAgentDefinition Doer is the HTTP client used to make requests to the
+	// createAgentDefinition endpoint.
+	CreateAgentDefinitionDoer goahttp.Doer
+
+	// GetAgentDefinition Doer is the HTTP client used to make requests to the
+	// getAgentDefinition endpoint.
+	GetAgentDefinitionDoer goahttp.Doer
+
+	// ListAgentDefinitions Doer is the HTTP client used to make requests to the
+	// listAgentDefinitions endpoint.
+	ListAgentDefinitionsDoer goahttp.Doer
+
+	// UpdateAgentDefinition Doer is the HTTP client used to make requests to the
+	// updateAgentDefinition endpoint.
+	UpdateAgentDefinitionDoer goahttp.Doer
+
+	// DeleteAgentDefinition Doer is the HTTP client used to make requests to the
+	// deleteAgentDefinition endpoint.
+	DeleteAgentDefinitionDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -49,14 +69,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateResponseDoer:  doer,
-		GetResponseDoer:     doer,
-		DeleteResponseDoer:  doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateResponseDoer:        doer,
+		GetResponseDoer:           doer,
+		DeleteResponseDoer:        doer,
+		CreateAgentDefinitionDoer: doer,
+		GetAgentDefinitionDoer:    doer,
+		ListAgentDefinitionsDoer:  doer,
+		UpdateAgentDefinitionDoer: doer,
+		DeleteAgentDefinitionDoer: doer,
+		RestoreResponseBody:       restoreBody,
+		scheme:                    scheme,
+		host:                      host,
+		decoder:                   dec,
+		encoder:                   enc,
 	}
 }
 
@@ -127,6 +152,126 @@ func (c *Client) DeleteResponse() goa.Endpoint {
 		resp, err := c.DeleteResponseDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agents", "deleteResponse", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateAgentDefinition returns an endpoint that makes HTTP requests to the
+// agents service createAgentDefinition server.
+func (c *Client) CreateAgentDefinition() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateAgentDefinitionRequest(c.encoder)
+		decodeResponse = DecodeCreateAgentDefinitionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateAgentDefinitionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateAgentDefinitionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "createAgentDefinition", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetAgentDefinition returns an endpoint that makes HTTP requests to the
+// agents service getAgentDefinition server.
+func (c *Client) GetAgentDefinition() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetAgentDefinitionRequest(c.encoder)
+		decodeResponse = DecodeGetAgentDefinitionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetAgentDefinitionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetAgentDefinitionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "getAgentDefinition", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAgentDefinitions returns an endpoint that makes HTTP requests to the
+// agents service listAgentDefinitions server.
+func (c *Client) ListAgentDefinitions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAgentDefinitionsRequest(c.encoder)
+		decodeResponse = DecodeListAgentDefinitionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAgentDefinitionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAgentDefinitionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "listAgentDefinitions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateAgentDefinition returns an endpoint that makes HTTP requests to the
+// agents service updateAgentDefinition server.
+func (c *Client) UpdateAgentDefinition() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateAgentDefinitionRequest(c.encoder)
+		decodeResponse = DecodeUpdateAgentDefinitionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateAgentDefinitionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateAgentDefinitionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "updateAgentDefinition", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteAgentDefinition returns an endpoint that makes HTTP requests to the
+// agents service deleteAgentDefinition server.
+func (c *Client) DeleteAgentDefinition() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteAgentDefinitionRequest(c.encoder)
+		decodeResponse = DecodeDeleteAgentDefinitionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteAgentDefinitionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteAgentDefinitionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "deleteAgentDefinition", err)
 		}
 		return decodeResponse(resp)
 	}

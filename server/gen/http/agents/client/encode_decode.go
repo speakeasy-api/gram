@@ -717,6 +717,1202 @@ func DecodeDeleteResponseResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildCreateAgentDefinitionRequest instantiates a HTTP request object with
+// method and path set to call the "agents" service "createAgentDefinition"
+// endpoint
+func (c *Client) BuildCreateAgentDefinitionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateAgentDefinitionAgentsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "createAgentDefinition", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateAgentDefinitionRequest returns an encoder for requests sent to
+// the agents createAgentDefinition server.
+func EncodeCreateAgentDefinitionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.CreateAgentDefinitionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "createAgentDefinition", "*agents.CreateAgentDefinitionPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateAgentDefinitionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agents", "createAgentDefinition", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateAgentDefinitionResponse returns a decoder for responses returned
+// by the agents createAgentDefinition endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeCreateAgentDefinitionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateAgentDefinitionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateAgentDefinitionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+			}
+			err = ValidateCreateAgentDefinitionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+			}
+			res := NewCreateAgentDefinitionAgentDefinitionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateAgentDefinitionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+			}
+			err = ValidateCreateAgentDefinitionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+			}
+			return nil, NewCreateAgentDefinitionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateAgentDefinitionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+			}
+			err = ValidateCreateAgentDefinitionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+			}
+			return nil, NewCreateAgentDefinitionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateAgentDefinitionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+			}
+			err = ValidateCreateAgentDefinitionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+			}
+			return nil, NewCreateAgentDefinitionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateAgentDefinitionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+			}
+			err = ValidateCreateAgentDefinitionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+			}
+			return nil, NewCreateAgentDefinitionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateAgentDefinitionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+			}
+			err = ValidateCreateAgentDefinitionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+			}
+			return nil, NewCreateAgentDefinitionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateAgentDefinitionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+			}
+			err = ValidateCreateAgentDefinitionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+			}
+			return nil, NewCreateAgentDefinitionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateAgentDefinitionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+			}
+			err = ValidateCreateAgentDefinitionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+			}
+			return nil, NewCreateAgentDefinitionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateAgentDefinitionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+				}
+				err = ValidateCreateAgentDefinitionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+				}
+				return nil, NewCreateAgentDefinitionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateAgentDefinitionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+				}
+				err = ValidateCreateAgentDefinitionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+				}
+				return nil, NewCreateAgentDefinitionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "createAgentDefinition", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateAgentDefinitionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createAgentDefinition", err)
+			}
+			err = ValidateCreateAgentDefinitionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createAgentDefinition", err)
+			}
+			return nil, NewCreateAgentDefinitionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "createAgentDefinition", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetAgentDefinitionRequest instantiates a HTTP request object with
+// method and path set to call the "agents" service "getAgentDefinition"
+// endpoint
+func (c *Client) BuildGetAgentDefinitionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetAgentDefinitionAgentsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "getAgentDefinition", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetAgentDefinitionRequest returns an encoder for requests sent to the
+// agents getAgentDefinition server.
+func EncodeGetAgentDefinitionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.GetAgentDefinitionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "getAgentDefinition", "*agents.GetAgentDefinitionPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetAgentDefinitionResponse returns a decoder for responses returned by
+// the agents getAgentDefinition endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetAgentDefinitionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetAgentDefinitionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetAgentDefinitionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+			}
+			err = ValidateGetAgentDefinitionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+			}
+			res := NewGetAgentDefinitionAgentDefinitionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetAgentDefinitionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+			}
+			err = ValidateGetAgentDefinitionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+			}
+			return nil, NewGetAgentDefinitionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetAgentDefinitionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+			}
+			err = ValidateGetAgentDefinitionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+			}
+			return nil, NewGetAgentDefinitionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetAgentDefinitionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+			}
+			err = ValidateGetAgentDefinitionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+			}
+			return nil, NewGetAgentDefinitionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetAgentDefinitionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+			}
+			err = ValidateGetAgentDefinitionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+			}
+			return nil, NewGetAgentDefinitionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetAgentDefinitionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+			}
+			err = ValidateGetAgentDefinitionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+			}
+			return nil, NewGetAgentDefinitionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetAgentDefinitionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+			}
+			err = ValidateGetAgentDefinitionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+			}
+			return nil, NewGetAgentDefinitionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetAgentDefinitionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+			}
+			err = ValidateGetAgentDefinitionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+			}
+			return nil, NewGetAgentDefinitionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetAgentDefinitionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+				}
+				err = ValidateGetAgentDefinitionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+				}
+				return nil, NewGetAgentDefinitionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetAgentDefinitionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+				}
+				err = ValidateGetAgentDefinitionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+				}
+				return nil, NewGetAgentDefinitionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "getAgentDefinition", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetAgentDefinitionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getAgentDefinition", err)
+			}
+			err = ValidateGetAgentDefinitionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getAgentDefinition", err)
+			}
+			return nil, NewGetAgentDefinitionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "getAgentDefinition", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListAgentDefinitionsRequest instantiates a HTTP request object with
+// method and path set to call the "agents" service "listAgentDefinitions"
+// endpoint
+func (c *Client) BuildListAgentDefinitionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAgentDefinitionsAgentsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "listAgentDefinitions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAgentDefinitionsRequest returns an encoder for requests sent to
+// the agents listAgentDefinitions server.
+func EncodeListAgentDefinitionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.ListAgentDefinitionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "listAgentDefinitions", "*agents.ListAgentDefinitionsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListAgentDefinitionsResponse returns a decoder for responses returned
+// by the agents listAgentDefinitions endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListAgentDefinitionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAgentDefinitionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAgentDefinitionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+			}
+			err = ValidateListAgentDefinitionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+			}
+			res := NewListAgentDefinitionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAgentDefinitionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+			}
+			err = ValidateListAgentDefinitionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+			}
+			return nil, NewListAgentDefinitionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAgentDefinitionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+			}
+			err = ValidateListAgentDefinitionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+			}
+			return nil, NewListAgentDefinitionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAgentDefinitionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+			}
+			err = ValidateListAgentDefinitionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+			}
+			return nil, NewListAgentDefinitionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAgentDefinitionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+			}
+			err = ValidateListAgentDefinitionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+			}
+			return nil, NewListAgentDefinitionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAgentDefinitionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+			}
+			err = ValidateListAgentDefinitionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+			}
+			return nil, NewListAgentDefinitionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAgentDefinitionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+			}
+			err = ValidateListAgentDefinitionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+			}
+			return nil, NewListAgentDefinitionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAgentDefinitionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+			}
+			err = ValidateListAgentDefinitionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+			}
+			return nil, NewListAgentDefinitionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAgentDefinitionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+				}
+				err = ValidateListAgentDefinitionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+				}
+				return nil, NewListAgentDefinitionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAgentDefinitionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+				}
+				err = ValidateListAgentDefinitionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+				}
+				return nil, NewListAgentDefinitionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "listAgentDefinitions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAgentDefinitionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listAgentDefinitions", err)
+			}
+			err = ValidateListAgentDefinitionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listAgentDefinitions", err)
+			}
+			return nil, NewListAgentDefinitionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "listAgentDefinitions", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateAgentDefinitionRequest instantiates a HTTP request object with
+// method and path set to call the "agents" service "updateAgentDefinition"
+// endpoint
+func (c *Client) BuildUpdateAgentDefinitionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateAgentDefinitionAgentsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "updateAgentDefinition", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateAgentDefinitionRequest returns an encoder for requests sent to
+// the agents updateAgentDefinition server.
+func EncodeUpdateAgentDefinitionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.UpdateAgentDefinitionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "updateAgentDefinition", "*agents.UpdateAgentDefinitionPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateAgentDefinitionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agents", "updateAgentDefinition", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateAgentDefinitionResponse returns a decoder for responses returned
+// by the agents updateAgentDefinition endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeUpdateAgentDefinitionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateAgentDefinitionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateAgentDefinitionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+			}
+			err = ValidateUpdateAgentDefinitionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+			}
+			res := NewUpdateAgentDefinitionAgentDefinitionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateAgentDefinitionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+			}
+			err = ValidateUpdateAgentDefinitionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+			}
+			return nil, NewUpdateAgentDefinitionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateAgentDefinitionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+			}
+			err = ValidateUpdateAgentDefinitionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+			}
+			return nil, NewUpdateAgentDefinitionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateAgentDefinitionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+			}
+			err = ValidateUpdateAgentDefinitionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+			}
+			return nil, NewUpdateAgentDefinitionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateAgentDefinitionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+			}
+			err = ValidateUpdateAgentDefinitionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+			}
+			return nil, NewUpdateAgentDefinitionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateAgentDefinitionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+			}
+			err = ValidateUpdateAgentDefinitionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+			}
+			return nil, NewUpdateAgentDefinitionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateAgentDefinitionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+			}
+			err = ValidateUpdateAgentDefinitionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+			}
+			return nil, NewUpdateAgentDefinitionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateAgentDefinitionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+			}
+			err = ValidateUpdateAgentDefinitionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+			}
+			return nil, NewUpdateAgentDefinitionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateAgentDefinitionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+				}
+				err = ValidateUpdateAgentDefinitionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+				}
+				return nil, NewUpdateAgentDefinitionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateAgentDefinitionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+				}
+				err = ValidateUpdateAgentDefinitionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+				}
+				return nil, NewUpdateAgentDefinitionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "updateAgentDefinition", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateAgentDefinitionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updateAgentDefinition", err)
+			}
+			err = ValidateUpdateAgentDefinitionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updateAgentDefinition", err)
+			}
+			return nil, NewUpdateAgentDefinitionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "updateAgentDefinition", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteAgentDefinitionRequest instantiates a HTTP request object with
+// method and path set to call the "agents" service "deleteAgentDefinition"
+// endpoint
+func (c *Client) BuildDeleteAgentDefinitionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteAgentDefinitionAgentsPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "deleteAgentDefinition", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteAgentDefinitionRequest returns an encoder for requests sent to
+// the agents deleteAgentDefinition server.
+func EncodeDeleteAgentDefinitionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.DeleteAgentDefinitionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "deleteAgentDefinition", "*agents.DeleteAgentDefinitionPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteAgentDefinitionResponse returns a decoder for responses returned
+// by the agents deleteAgentDefinition endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeDeleteAgentDefinitionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteAgentDefinitionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteAgentDefinitionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteAgentDefinition", err)
+			}
+			err = ValidateDeleteAgentDefinitionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteAgentDefinition", err)
+			}
+			return nil, NewDeleteAgentDefinitionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteAgentDefinitionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteAgentDefinition", err)
+			}
+			err = ValidateDeleteAgentDefinitionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteAgentDefinition", err)
+			}
+			return nil, NewDeleteAgentDefinitionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteAgentDefinitionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteAgentDefinition", err)
+			}
+			err = ValidateDeleteAgentDefinitionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteAgentDefinition", err)
+			}
+			return nil, NewDeleteAgentDefinitionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteAgentDefinitionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteAgentDefinition", err)
+			}
+			err = ValidateDeleteAgentDefinitionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteAgentDefinition", err)
+			}
+			return nil, NewDeleteAgentDefinitionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteAgentDefinitionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteAgentDefinition", err)
+			}
+			err = ValidateDeleteAgentDefinitionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteAgentDefinition", err)
+			}
+			return nil, NewDeleteAgentDefinitionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteAgentDefinitionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteAgentDefinition", err)
+			}
+			err = ValidateDeleteAgentDefinitionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteAgentDefinition", err)
+			}
+			return nil, NewDeleteAgentDefinitionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteAgentDefinitionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteAgentDefinition", err)
+			}
+			err = ValidateDeleteAgentDefinitionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteAgentDefinition", err)
+			}
+			return nil, NewDeleteAgentDefinitionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteAgentDefinitionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "deleteAgentDefinition", err)
+				}
+				err = ValidateDeleteAgentDefinitionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "deleteAgentDefinition", err)
+				}
+				return nil, NewDeleteAgentDefinitionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteAgentDefinitionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "deleteAgentDefinition", err)
+				}
+				err = ValidateDeleteAgentDefinitionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "deleteAgentDefinition", err)
+				}
+				return nil, NewDeleteAgentDefinitionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "deleteAgentDefinition", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteAgentDefinitionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deleteAgentDefinition", err)
+			}
+			err = ValidateDeleteAgentDefinitionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deleteAgentDefinition", err)
+			}
+			return nil, NewDeleteAgentDefinitionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "deleteAgentDefinition", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalAgentsAgentToolsetToAgentToolsetRequestBody builds a value of type
 // *AgentToolsetRequestBody from a value of type *agents.AgentToolset.
 func marshalAgentsAgentToolsetToAgentToolsetRequestBody(v *agents.AgentToolset) *AgentToolsetRequestBody {
@@ -825,6 +2021,29 @@ func unmarshalAgentResponseTextResponseBodyToAgentsAgentResponseText(v *AgentRes
 func unmarshalAgentTextFormatResponseBodyToAgentsAgentTextFormat(v *AgentTextFormatResponseBody) *agents.AgentTextFormat {
 	res := &agents.AgentTextFormat{
 		Type: *v.Type,
+	}
+
+	return res
+}
+
+// unmarshalAgentDefinitionViewResponseBodyToAgentsAgentDefinitionView builds a
+// value of type *agents.AgentDefinitionView from a value of type
+// *AgentDefinitionViewResponseBody.
+func unmarshalAgentDefinitionViewResponseBodyToAgentsAgentDefinitionView(v *AgentDefinitionViewResponseBody) *agents.AgentDefinitionView {
+	res := &agents.AgentDefinitionView{
+		ID:          *v.ID,
+		Name:        *v.Name,
+		ToolUrn:     *v.ToolUrn,
+		Model:       *v.Model,
+		Title:       v.Title,
+		Description: *v.Description,
+		Instruction: *v.Instruction,
+		CreatedAt:   *v.CreatedAt,
+		UpdatedAt:   *v.UpdatedAt,
+	}
+	res.Tools = make([]string, len(v.Tools))
+	for i, val := range v.Tools {
+		res.Tools[i] = val
 	}
 
 	return res
