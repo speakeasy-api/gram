@@ -76,7 +76,7 @@ app.post('/chat/session', createExpressHandler((req) => ({
 ### Next.js App Router
 
 ```typescript
-// app/api/chat/session/route.ts
+// app/chat/session/route.ts
 import { createNextHandler } from '@gram-ai/elements/server/nextjs'
 
 export const POST = createNextHandler({
@@ -84,13 +84,6 @@ export const POST = createNextHandler({
   userIdentifier: 'user-123',
   expiresAfter: 3600,
 })
-```
-
-For dynamic options:
-
-```typescript
-// app/api/chat/session/route.ts
-import { createNextHandler } from '@gram-ai/elements/server/nextjs'
 import { cookies } from 'next/headers'
 
 export const POST = createNextHandler(async (request) => {
