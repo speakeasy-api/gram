@@ -217,6 +217,81 @@ This is great because:
 
 </good-example>
 
+## Conversion utilities (`server/internal/conv`)
+
+Use the `conv` package for common type conversions instead of writing inline helpers. Key functions:
+
+- `conv.Ptr(v)` — create a pointer to a literal value or return value. Use this instead of declaring a variable just to take its address.
+- `conv.PtrEmpty(v)` — like `Ptr` but returns `nil` when `v` is the zero value.
+- `conv.PtrValOr(ptr, default)` — dereference a pointer with a fallback default.
+- `conv.Default(val, default)` — return `val` unless it is the zero value, then return `default`.
+- `conv.ToPGText`, `conv.ToPGTextEmpty`, `conv.PtrToPGText`, `conv.PtrToPGTextEmpty` — convert strings to `pgtype.Text`.
+- `conv.FromPGText`, `conv.FromPGBool` — convert `pgtype` values to Go pointer types.
+- `conv.PtrToPGBool` — convert a `*bool` to `pgtype.Bool`.
+- `conv.Ternary(cond, trueVal, falseVal)` — inline conditional expression.
+
+<important>
+
+Do NOT reimplement pointer helpers, ternary expressions, or pgtype conversions inline. Always reach for `conv` first.
+
+</important>
+
+## Observability (`server/internal/o11y`)
+
+Use the `o11y` package for deferred cleanup and error logging. Two key functions:
+
+### `o11y.LogDefer`
+
+```go
+func LogDefer(ctx context.Context, logger *slog.Logger, cb func() error) error
+```
+
+Use `LogDefer` when a cleanup operation's error should be **logged**. Wrap cleanup calls with `defer o11y.LogDefer(...)` so failures are always visible in logs.
+
+<good-example>
+
+```go
+defer o11y.LogDefer(ctx, logger, func() error { return file.Close() })
+```
+
+</good-example>
+
+### `o11y.NoLogDefer`
+
+```go
+func NoLogDefer(cb func() error)
+```
+
+Use `NoLogDefer` when a cleanup operation's error can be **silently discarded** — for example, rolling back a database transaction (which is a no-op if the transaction already committed) or closing an HTTP response body.
+
+<good-example>
+
+```go
+dbtx, err := s.repo.DB().Begin(ctx)
+if err != nil {
+    return nil, oops.E(oops.CodeUnexpected, err, "error accessing resource").Log(ctx, logger)
+}
+defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+```
+
+</good-example>
+
+<good-example>
+
+```go
+defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+```
+
+</good-example>
+
+<important>
+
+- ALWAYS use `o11y.LogDefer` or `o11y.NoLogDefer` for deferred cleanup instead of bare `defer resource.Close()` calls. Bare defers silently discard errors with no traceability.
+- Choose `LogDefer` when the error matters for debugging (file I/O, critical resource cleanup).
+- Choose `NoLogDefer` when the error is expected or inconsequential (transaction rollbacks, response body closes).
+
+</important>
+
 ## Testing
 
 - When writing assertions, use `github.com/stretchr/testify/require` exclusively.
