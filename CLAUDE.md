@@ -100,5 +100,5 @@ Activate a skill when your task falls within its scope.
 # Plan Mode
 
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
-- Identify any of the skills above that are relevant to the task so you can be activate when implementing.
+- Identify any of the skills above that are relevant to the task so you can activate when implementing.
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
