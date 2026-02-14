@@ -6,7 +6,8 @@
     "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:client\"",
     "dev:server": "tsx watch server.ts",
     "dev:client": "vite --port 3000",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "build:example": "vite build && esbuild server.ts --bundle --platform=node --packages=external --format=esm --outfile=dist/server.mjs"
   },
   "dependencies": {
     "@gram-ai/elements": "workspace:*",
@@ -32,6 +33,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.4",
     "concurrently": "^9.1.0",
+    "esbuild": "^0.25.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.2",
     "vite": "^7.1.7"

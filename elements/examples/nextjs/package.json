@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --port 3000",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "build:example": "next build"
   },
   "dependencies": {
     "@gram-ai/elements": "workspace:*",

@@ -719,6 +719,9 @@ importers:
       concurrently:
         specifier: ^9.1.0
         version: 9.2.1
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       typescript:
         specifier: ^5.7.2
         version: 5.8.3
@@ -798,6 +801,9 @@ importers:
       concurrently:
         specifier: ^9.1.0
         version: 9.2.1
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       tsx:
         specifier: ^4.19.0
         version: 4.20.6
@@ -874,6 +880,9 @@ importers:
       concurrently:
         specifier: ^9.1.0
         version: 9.2.1
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       tsx:
         specifier: ^4.19.0
         version: 4.20.6
@@ -950,6 +959,9 @@ importers:
       concurrently:
         specifier: ^9.1.0
         version: 9.2.1
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       tsx:
         specifier: ^4.19.0
         version: 4.20.6
