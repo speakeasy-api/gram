@@ -55,9 +55,8 @@ export function ServerCard({
     return tools.map((t) => t.name || "Unknown tool");
   }, [server.tools]);
 
-  // Card is clickable for selection only if not already added
   const handleCardClick = () => {
-    if (!isAdded && onToggleSelect) {
+    if (onToggleSelect) {
       onToggleSelect();
     }
   };
