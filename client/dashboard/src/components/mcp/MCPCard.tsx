@@ -3,13 +3,14 @@ import { UpdatedAt } from "@/components/updated-at";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { ToolsetEntry } from "@gram/client/models/components";
+import type { ToolsetEntry } from "@gram/client/models/components";
 import { useMemo } from "react";
 import { useCatalogIconMap } from "../sources/Sources";
 import {
   ExternalMCPIllustration,
   MCPPatternIllustration,
 } from "../sources/SourceCardIllustrations";
+import { OAuthStatusBadge } from "./OAuthStatusBadge";
 import { ToolCollectionBadge } from "../tool-collection-badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
@@ -117,7 +118,10 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
           >
             {toolset.name}
           </Type>
-          <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <OAuthStatusBadge toolset={toolset} />
+            <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
+          </div>
         </div>
 
         {/* Footer row with status indicator and updated time */}
