@@ -14,7 +14,9 @@ var mcpOpenAccessControlRoutes = []string{
 	"/.well-known/oauth-protected-resource/mcp",
 }
 
-func CORSMiddleware(env string, serverURL string, chatSessionsManager *chatsessions.Manager) func(next http.Handler) http.Handler {
+func CORSMiddleware(env string, serverURL string, chatSessionsManager *chatsessions.Manager, extraOrigins ...string) func(next http.Handler) http.Handler {
+	allowedOrigins := append([]string{serverURL}, extraOrigins...)
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch env {
@@ -23,10 +25,13 @@ func CORSMiddleware(env string, serverURL string, chatSessionsManager *chatsessi
 				if _, err := url.Parse(origin); err == nil {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 				}
-			case "dev":
-				w.Header().Set("Access-Control-Allow-Origin", serverURL)
-			case "prod":
-				w.Header().Set("Access-Control-Allow-Origin", serverURL)
+			case "dev", "prod":
+				origin := r.Header.Get("Origin")
+				if slices.Contains(allowedOrigins, origin) {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+				} else {
+					w.Header().Set("Access-Control-Allow-Origin", serverURL)
+				}
 			default:
 				// No CORS headers set for unspecified environments
 			}

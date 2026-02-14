@@ -1,0 +1,32 @@
+{
+  "name": "chat",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port ${GRAM_CHAT_PORT:-5174}",
+    "build": "vite build",
+    "lint": "prettier --check . && eslint . && tsc -b --noEmit",
+    "preview": "vite preview",
+    "format": "prettier --write .",
+    "type-check": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@gram-ai/elements": "workspace:*",
+    "@gram/client": "workspace:*",
+    "@tailwindcss/vite": "^4.1.17",
+    "@tanstack/react-query": "catalog:",
+    "lucide-react": "^0.530.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router": "^7.12.0",
+    "tailwindcss": "^4.1.17"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "^4.6.0",
+    "typescript": "catalog:",
+    "vite": "^7.2.0"
+  }
+}

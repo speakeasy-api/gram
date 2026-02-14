@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedchats"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -124,6 +125,11 @@ func newStartCommand() *cli.Command {
 			Usage:    "The URL of the site",
 			EnvVars:  []string{"GRAM_SITE_URL"},
 			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "chat-url",
+			Usage:   "The URL of the hosted chat site (chat.getgram.ai)",
+			EnvVars: []string{"GRAM_CHAT_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -616,7 +622,11 @@ func newStartCommand() *cli.Command {
 			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, posthogClient)
 
 			mux := goahttp.NewMuxer()
-			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
+			var corsExtraOrigins []string
+			if chatURL := c.String("chat-url"); chatURL != "" {
+				corsExtraOrigins = append(corsExtraOrigins, chatURL)
+			}
+			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager, corsExtraOrigins...))
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
@@ -669,6 +679,7 @@ func newStartCommand() *cli.Command {
 			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
+			hostedchats.Attach(mux, hostedchats.NewService(logger, db, sessionManager))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

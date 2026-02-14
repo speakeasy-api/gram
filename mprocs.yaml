@@ -9,6 +9,10 @@ procs:
     cmd: ["mise", "run", "start:dashboard"]
     stop:
       send-keys: ["<C-c>"]
+  chat:
+    cmd: ["mise", "run", "start:chat"]
+    stop:
+      send-keys: ["<C-c>"]
   elements:
     cmd: ["mise", "run", "start:elements"]
     stop:
