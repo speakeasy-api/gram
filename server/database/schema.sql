@@ -1245,6 +1245,13 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   oauth_scopes_supported TEXT[],
   header_definitions JSONB,
 
+  -- MCP tool annotations (behavioral hints from the server)
+  title TEXT,
+  read_only_hint BOOLEAN,
+  destructive_hint BOOLEAN,
+  idempotent_hint BOOLEAN,
+  open_world_hint BOOLEAN,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
