@@ -76,12 +76,7 @@ INSERT INTO external_mcp_tool_definitions (
   oauth_token_endpoint,
   oauth_registration_endpoint,
   oauth_scopes_supported,
-  header_definitions,
-  title,
-  read_only_hint,
-  destructive_hint,
-  idempotent_hint,
-  open_world_hint
+  header_definitions
 )
 VALUES (
   $1,
@@ -98,18 +93,11 @@ VALUES (
   $12,
   $13,
   $14,
-  $15,
-  $16,
-  $17,
-  $18,
-  $19,
-  $20
+  $15
 )
 RETURNING id, external_mcp_attachment_id, tool_urn, type, name, description, schema, remote_url, requires_oauth,
   oauth_version, oauth_authorization_endpoint, oauth_token_endpoint,
-  oauth_registration_endpoint, oauth_scopes_supported, header_definitions,
-  title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint,
-  created_at, updated_at
+  oauth_registration_endpoint, oauth_scopes_supported, header_definitions, created_at, updated_at
 `
 
 type CreateExternalMCPToolDefinitionParams struct {
@@ -128,11 +116,6 @@ type CreateExternalMCPToolDefinitionParams struct {
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
 	HeaderDefinitions          []byte
-	Title                      pgtype.Text
-	ReadOnlyHint               pgtype.Bool
-	DestructiveHint            pgtype.Bool
-	IdempotentHint             pgtype.Bool
-	OpenWorldHint              pgtype.Bool
 }
 
 type CreateExternalMCPToolDefinitionRow struct {
@@ -151,11 +134,6 @@ type CreateExternalMCPToolDefinitionRow struct {
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
 	HeaderDefinitions          []byte
-	Title                      pgtype.Text
-	ReadOnlyHint               pgtype.Bool
-	DestructiveHint            pgtype.Bool
-	IdempotentHint             pgtype.Bool
-	OpenWorldHint              pgtype.Bool
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 }
@@ -177,11 +155,6 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 		arg.OauthRegistrationEndpoint,
 		arg.OauthScopesSupported,
 		arg.HeaderDefinitions,
-		arg.Title,
-		arg.ReadOnlyHint,
-		arg.DestructiveHint,
-		arg.IdempotentHint,
-		arg.OpenWorldHint,
 	)
 	var i CreateExternalMCPToolDefinitionRow
 	err := row.Scan(
@@ -200,11 +173,6 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 		&i.OauthRegistrationEndpoint,
 		&i.OauthScopesSupported,
 		&i.HeaderDefinitions,
-		&i.Title,
-		&i.ReadOnlyHint,
-		&i.DestructiveHint,
-		&i.IdempotentHint,
-		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -238,11 +206,6 @@ SELECT
   t.oauth_registration_endpoint,
   t.oauth_scopes_supported,
   t.header_definitions,
-  t.title,
-  t.read_only_hint,
-  t.destructive_hint,
-  t.idempotent_hint,
-  t.open_world_hint,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -280,11 +243,6 @@ type GetExternalMCPToolDefinitionByURNRow struct {
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
 	HeaderDefinitions          []byte
-	Title                      pgtype.Text
-	ReadOnlyHint               pgtype.Bool
-	DestructiveHint            pgtype.Bool
-	IdempotentHint             pgtype.Bool
-	OpenWorldHint              pgtype.Bool
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeploymentID               uuid.UUID
@@ -314,11 +272,6 @@ func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, arg Get
 		&i.OauthRegistrationEndpoint,
 		&i.OauthScopesSupported,
 		&i.HeaderDefinitions,
-		&i.Title,
-		&i.ReadOnlyHint,
-		&i.DestructiveHint,
-		&i.IdempotentHint,
-		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeploymentID,
@@ -347,11 +300,6 @@ SELECT
   t.oauth_registration_endpoint,
   t.oauth_scopes_supported,
   t.header_definitions,
-  t.title,
-  t.read_only_hint,
-  t.destructive_hint,
-  t.idempotent_hint,
-  t.open_world_hint,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -383,11 +331,6 @@ type GetExternalMCPToolsRequiringOAuthRow struct {
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
 	HeaderDefinitions          []byte
-	Title                      pgtype.Text
-	ReadOnlyHint               pgtype.Bool
-	DestructiveHint            pgtype.Bool
-	IdempotentHint             pgtype.Bool
-	OpenWorldHint              pgtype.Bool
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeploymentID               uuid.UUID
@@ -422,11 +365,6 @@ func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploym
 			&i.OauthRegistrationEndpoint,
 			&i.OauthScopesSupported,
 			&i.HeaderDefinitions,
-			&i.Title,
-			&i.ReadOnlyHint,
-			&i.DestructiveHint,
-			&i.IdempotentHint,
-			&i.OpenWorldHint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeploymentID,
@@ -537,11 +475,6 @@ SELECT
   t.oauth_registration_endpoint,
   t.oauth_scopes_supported,
   t.header_definitions,
-  t.title,
-  t.read_only_hint,
-  t.destructive_hint,
-  t.idempotent_hint,
-  t.open_world_hint,
   t.created_at,
   t.updated_at,
   e.deployment_id,
@@ -574,11 +507,6 @@ type ListExternalMCPToolDefinitionsRow struct {
 	OauthRegistrationEndpoint  pgtype.Text
 	OauthScopesSupported       []string
 	HeaderDefinitions          []byte
-	Title                      pgtype.Text
-	ReadOnlyHint               pgtype.Bool
-	DestructiveHint            pgtype.Bool
-	IdempotentHint             pgtype.Bool
-	OpenWorldHint              pgtype.Bool
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeploymentID               uuid.UUID
@@ -614,11 +542,6 @@ func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deployment
 			&i.OauthRegistrationEndpoint,
 			&i.OauthScopesSupported,
 			&i.HeaderDefinitions,
-			&i.Title,
-			&i.ReadOnlyHint,
-			&i.DestructiveHint,
-			&i.IdempotentHint,
-			&i.OpenWorldHint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeploymentID,
