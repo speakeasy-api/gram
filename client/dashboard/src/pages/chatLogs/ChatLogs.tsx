@@ -23,9 +23,9 @@ import { ChatLogsFilters } from "./ChatLogsFilters";
 import { ChatLogsTable } from "./ChatLogsTable";
 import {
   TimeRangePicker,
-  DateRangePreset,
+  type DateRangePreset,
   getPresetRange,
-} from "../observability/time-range-picker";
+} from "@gram-ai/elements";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
   Select,

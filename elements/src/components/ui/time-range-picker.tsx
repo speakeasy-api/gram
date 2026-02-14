@@ -1,325 +1,671 @@
+/* eslint-disable react-refresh/only-export-components */
 import * as React from 'react'
-import { cva, type VariantProps } from 'class-variance-authority'
-import { Search, Zap, ChevronDown, X } from 'lucide-react'
+import { CalendarIcon, ChevronDown, Zap } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import { useTimeRange, type UseTimeRangeOptions } from '@/hooks/useTimeRange'
-import type { TimeRange, TimeRangePreset } from '@/lib/time-parser'
-import { DEFAULT_PRESETS, formatTimeRange } from '@/lib/time-parser'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
 import { Calendar } from './calendar'
 
-const timeRangePickerVariants = cva('flex flex-col gap-2 w-full', {
-  variants: {
-    size: {
-      sm: 'text-xs',
-      default: 'text-sm',
-      lg: 'text-base',
-    },
-  },
-  defaultVariants: {
-    size: 'default',
-  },
-})
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-export type { TimeRange, TimeRangePreset }
-
-export interface TimeRangePickerProps
-  extends
-    Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange'>,
-    VariantProps<typeof timeRangePickerVariants> {
-  /** Current time range value */
-  value?: TimeRange
-  /** Called when time range changes */
-  onChange?: (range: TimeRange) => void
-  /** Timezone to display (e.g., "UTC-08:00") */
-  timezone?: string
-  /** Show LIVE mode toggle */
-  showLive?: boolean
-  /** Enable LLM parsing for complex inputs */
-  enableLLMParsing?: boolean
-  /** API URL for LLM parsing */
-  apiUrl?: string
-  /** Auth headers for LLM parsing */
-  authHeaders?: Record<string, string>
-  /** Custom presets (defaults provided) */
-  presets?: TimeRangePreset[]
-  /** Placeholder text */
-  placeholder?: string
-  /** Show interpreted range description */
-  showInterpretation?: boolean
-  /** Disable the component */
-  disabled?: boolean
+export interface TimeRange {
+  from: Date
+  to: Date
 }
 
-const TimeRangePicker = React.forwardRef<HTMLDivElement, TimeRangePickerProps>(
-  (
-    {
-      className,
-      size,
-      value,
-      onChange,
-      timezone,
-      showLive = true,
-      enableLLMParsing = false,
-      apiUrl,
-      authHeaders,
-      presets = DEFAULT_PRESETS,
-      placeholder = 'Enter time range...',
-      showInterpretation = true,
-      disabled = false,
-      ...props
-    },
-    ref
-  ) => {
-    const [isPopoverOpen, setIsPopoverOpen] = React.useState(false)
+export type DateRangePreset =
+  | '15m'
+  | '1h'
+  | '4h'
+  | '1d'
+  | '2d'
+  | '3d'
+  | '7d'
+  | '15d'
+  | '30d'
+  | '90d'
 
-    const hookOptions: UseTimeRangeOptions = {
-      initialValue: value,
-      enableLLMParsing,
-      apiUrl,
-      authHeaders,
-      timezone,
-      onChange,
+export interface TimeRangePreset {
+  label: string
+  shortLabel: string
+  value: DateRangePreset
+  getRange: () => TimeRange
+}
+
+// ---------------------------------------------------------------------------
+// Date Utilities (no external dependencies)
+// ---------------------------------------------------------------------------
+
+function formatDate(date: Date, pattern: 'short' | 'medium' = 'short'): string {
+  if (pattern === 'short') {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Presets Configuration
+// ---------------------------------------------------------------------------
+
+export const PRESETS: TimeRangePreset[] = [
+  {
+    label: 'Past 15 Minutes',
+    shortLabel: '15m',
+    value: '15m',
+    getRange: () => ({
+      from: new Date(Date.now() - 15 * 60 * 1000),
+      to: new Date(),
+    }),
+  },
+  {
+    label: 'Past 1 Hour',
+    shortLabel: '1h',
+    value: '1h',
+    getRange: () => ({
+      from: new Date(Date.now() - 60 * 60 * 1000),
+      to: new Date(),
+    }),
+  },
+  {
+    label: 'Past 4 Hours',
+    shortLabel: '4h',
+    value: '4h',
+    getRange: () => ({
+      from: new Date(Date.now() - 4 * 60 * 60 * 1000),
+      to: new Date(),
+    }),
+  },
+  {
+    label: 'Past 1 Day',
+    shortLabel: '1d',
+    value: '1d',
+    getRange: () => ({
+      from: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      to: new Date(),
+    }),
+  },
+  {
+    label: 'Past 2 Days',
+    shortLabel: '2d',
+    value: '2d',
+    getRange: () => ({
+      from: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+      to: new Date(),
+    }),
+  },
+  {
+    label: 'Past 3 Days',
+    shortLabel: '3d',
+    value: '3d',
+    getRange: () => ({
+      from: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      to: new Date(),
+    }),
+  },
+  {
+    label: 'Past 7 Days',
+    shortLabel: '1w',
+    value: '7d',
+    getRange: () => ({
+      from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      to: new Date(),
+    }),
+  },
+  {
+    label: 'Past 15 Days',
+    shortLabel: '15d',
+    value: '15d',
+    getRange: () => ({
+      from: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+      to: new Date(),
+    }),
+  },
+  {
+    label: 'Past 1 Month',
+    shortLabel: '1mo',
+    value: '30d',
+    getRange: () => ({
+      from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      to: new Date(),
+    }),
+  },
+]
+
+// Badge width class - shared between trigger and dropdown for alignment
+const BADGE_WIDTH = 'min-w-10'
+
+export function getPresetRange(preset: DateRangePreset): TimeRange {
+  const p = PRESETS.find((p) => p.value === preset)
+  return p ? p.getRange() : PRESETS[5].getRange() // Default to 3d
+}
+
+function getPresetByValue(value: DateRangePreset): TimeRangePreset | undefined {
+  return PRESETS.find((p) => p.value === value)
+}
+
+// ---------------------------------------------------------------------------
+// AI Time Range Parser
+// ---------------------------------------------------------------------------
+
+type ParseResult =
+  | { type: 'preset'; preset: DateRangePreset }
+  | { type: 'custom'; range: TimeRange; label?: string }
+  | null
+
+async function parseWithAI(
+  input: string,
+  apiUrl: string,
+  projectSlug?: string
+): Promise<ParseResult> {
+  try {
+    const now = new Date()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (projectSlug) {
+      headers['gram-project'] = projectSlug
+    }
+    const response = await fetch(`${apiUrl}/chat/completions`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify({
+        model: 'openai/gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a time range parser for an analytics dashboard. Parse natural language into a PAST time range.
+Current time: ${now.toISOString()}
+
+Output ONLY valid JSON (no markdown): {"from": "ISO8601", "to": "ISO8601", "label": "LABEL"}
+
+KEY RULES:
+- "X days ago" = THE WHOLE DAY (from: start 00:00, to: end 23:59:59)
+- "X months ago" = THE WHOLE MONTH (from: 1st 00:00, to: last day 23:59:59)
+- "X years ago" = THE WHOLE YEAR (from: Jan 1, to: Dec 31)
+- "past X days" = RANGE from X days ago to now
+- "last wednesday" etc = that specific day (whole day)
+
+LABEL RULES - use semantic labels:
+- Duration presets: "15m", "1h", "4h", "1d", "2d", "3d", "7d", "15d", "30d"
+- Single day: use 3-letter day name "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
+- Whole month: use 3-letter month name "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+- Whole year: use the year "2024", "2025"
+- Date range: use "M/D-M/D" format like "1/5-1/10" or "12/1-12/15"
+
+Examples:
+- "4 days ago" -> label: "Mon" (or whatever day it was)
+- "2 months ago" -> label: "Dec" (or whatever month)
+- "1 year ago" -> label: "2025" (or whatever year)
+- "past 3 days" -> label: "3d"
+- "last wednesday" -> label: "Wed"
+- "jan 5 to jan 10" -> label: "1/5-1/10"`,
+          },
+          {
+            role: 'user',
+            content: input,
+          },
+        ],
+        max_tokens: 150,
+        temperature: 0,
+      }),
+    })
+
+    if (!response.ok) {
+      return null
     }
 
-    const {
-      inputValue,
-      parsedRange,
-      interpretation,
-      isLive,
-      isParsing,
-      parseError,
-      setInputValue,
-      setLive,
-      selectPreset,
-      selectDateRange,
-      clear,
-    } = useTimeRange(hookOptions)
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content
+    if (!content) return null
 
-    // Sync external value changes
-    React.useEffect(() => {
-      if (value && parsedRange) {
-        const sameStart = value.start.getTime() === parsedRange.start.getTime()
-        const sameEnd = value.end.getTime() === parsedRange.end.getTime()
-        if (!sameStart || !sameEnd) {
-          // External value changed, but we don't reset internal state
-          // This allows controlled usage while maintaining internal state
+    // Parse the JSON response
+    const parsed = JSON.parse(content)
+    if (parsed.from && parsed.to) {
+      const from = new Date(parsed.from)
+      const to = new Date(parsed.to)
+      if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+        // Check if the AI returned a label that matches a preset
+        if (parsed.label) {
+          // Normalize labels like "1w" -> "7d", "2w" -> "14d"
+          let normalizedLabel = parsed.label
+          if (normalizedLabel === '1w') normalizedLabel = '7d'
+          if (normalizedLabel === '2w') normalizedLabel = '14d'
+          if (normalizedLabel === '1mo') normalizedLabel = '30d'
+          if (normalizedLabel === '3mo') normalizedLabel = '90d'
+
+          const matchedPreset = PRESETS.find((p) => p.value === normalizedLabel)
+          if (matchedPreset) {
+            return { type: 'preset', preset: matchedPreset.value }
+          }
+
+          // Use the semantic label from AI (e.g., "Mon", "Jan", "2024", "1/5-1/10")
+          return { type: 'custom', range: { from, to }, label: parsed.label }
         }
-      }
-    }, [value, parsedRange])
 
-    const handlePresetClick = (preset: TimeRangePreset) => {
-      selectPreset(preset)
-      setIsPopoverOpen(false)
-    }
-
-    const handleCalendarSelect = (range: { start: Date; end: Date | null }) => {
-      if (range.start && range.end) {
-        selectDateRange(range)
-        setIsPopoverOpen(false)
+        // Fallback to custom range without label
+        return { type: 'custom', range: { from, to } }
       }
     }
+    return null
+  } catch {
+    return null
+  }
+}
 
-    const handleLiveToggle = () => {
-      setLive(!isLive)
+// ---------------------------------------------------------------------------
+// TimeRangePicker Component (Datadog Style)
+// ---------------------------------------------------------------------------
+
+export interface TimeRangePickerProps {
+  /** Current preset value */
+  preset?: DateRangePreset | null
+  /** Current custom range */
+  customRange?: TimeRange | null
+  /** Called when a preset is selected */
+  onPresetChange?: (preset: DateRangePreset) => void
+  /** Called when a custom range is selected */
+  onCustomRangeChange?: (from: Date, to: Date, label?: string) => void
+  /** Called to clear custom range */
+  onClearCustomRange?: () => void
+  /** Initial label for custom range (from URL params) */
+  customRangeLabel?: string | null
+  /** Show LIVE mode option */
+  showLive?: boolean
+  /** Is LIVE mode active */
+  isLive?: boolean
+  /** Called when LIVE mode changes */
+  onLiveChange?: (isLive: boolean) => void
+  /** Disabled state */
+  disabled?: boolean
+  /** Timezone display (e.g., "UTC-08:00") */
+  timezone?: string
+  /** API URL for AI parsing (defaults to window.location.origin) */
+  apiUrl?: string
+  /** Project slug for API authentication */
+  projectSlug?: string
+}
+
+function TimeRangePicker({
+  preset,
+  customRange,
+  onPresetChange,
+  onCustomRangeChange,
+  onClearCustomRange,
+  customRangeLabel: initialCustomLabel,
+  showLive = false,
+  isLive = false,
+  onLiveChange,
+  disabled = false,
+  timezone,
+  apiUrl,
+  projectSlug,
+}: TimeRangePickerProps) {
+  const [isOpen, setIsOpen] = React.useState(false)
+  const [showCalendar, setShowCalendar] = React.useState(false)
+  const [inputValue, setInputValue] = React.useState('')
+  const [isEditing, setIsEditing] = React.useState(false)
+  const [isParsing, setIsParsing] = React.useState(false)
+  const [customLabel, setCustomLabel] = React.useState<string | null>(
+    initialCustomLabel || null
+  )
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  // Sync custom label from props (e.g., when URL changes)
+  React.useEffect(() => {
+    if (initialCustomLabel !== undefined) {
+      setCustomLabel(initialCustomLabel || null)
     }
+  }, [initialCustomLabel])
 
-    const handleClear = () => {
-      clear()
+  const effectiveApiUrl =
+    apiUrl || (typeof window !== 'undefined' ? window.location.origin : '')
+
+  const handlePresetClick = (p: TimeRangePreset) => {
+    onPresetChange?.(p.value)
+    setCustomLabel(null)
+    setIsOpen(false)
+    setInputValue('')
+  }
+
+  const handleLiveClick = () => {
+    onLiveChange?.(!isLive)
+    if (!isLive) {
+      // When enabling LIVE, also select a default short preset
+      onPresetChange?.('15m')
     }
+    setIsOpen(false)
+  }
 
-    return (
-      <div
-        ref={ref}
-        data-slot="time-range-picker"
-        className={cn(timeRangePickerVariants({ size, className }))}
-        {...props}
-      >
-        {/* Top row: timezone, presets, live toggle */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Timezone indicator */}
+  const handleCalendarSelect = (range: { start: Date; end: Date | null }) => {
+    if (range.start && range.end) {
+      onCustomRangeChange?.(range.start, range.end)
+      setCustomLabel(null) // Calendar selections don't have AI labels
+      setIsOpen(false)
+      setShowCalendar(false)
+      setInputValue('')
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value)
+  }
+
+  const applyParseResult = (parsed: ParseResult) => {
+    if (parsed) {
+      if (parsed.type === 'preset') {
+        onPresetChange?.(parsed.preset)
+        setCustomLabel(null)
+      } else {
+        const label = parsed.label || undefined
+        onCustomRangeChange?.(parsed.range.from, parsed.range.to, label)
+        setCustomLabel(label || null)
+      }
+      setInputValue('')
+      setIsOpen(false)
+      setIsEditing(false)
+      return true
+    }
+    return false
+  }
+
+  const handleInputKeyDown = async (
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (e.key === 'Enter' && inputValue.trim() && !isParsing) {
+      // Use AI to parse natural language input
+      setIsParsing(true)
+      try {
+        const aiParsed = await parseWithAI(
+          inputValue,
+          effectiveApiUrl,
+          projectSlug
+        )
+        applyParseResult(aiParsed)
+      } finally {
+        setIsParsing(false)
+      }
+    } else if (e.key === 'Escape') {
+      setInputValue('')
+      setIsEditing(false)
+      setIsOpen(false)
+    } else if (e.key === 'Backspace' && inputValue === '' && customRange) {
+      // Clear custom range when backspacing on empty input
+      e.preventDefault()
+      onClearCustomRange?.()
+    }
+  }
+
+  const handleInputClick = (e: React.MouseEvent) => {
+    // Prevent the popover trigger from toggling closed
+    e.stopPropagation()
+    setIsEditing(true)
+    setIsOpen(true)
+  }
+
+  const handleInputFocus = () => {
+    setIsEditing(true)
+    // Don't set isOpen here - let the click handler or popover manage it
+  }
+
+  const handleInputBlur = () => {
+    // Delay to allow click events on dropdown items
+    setTimeout(() => {
+      if (!inputValue) {
+        setIsEditing(false)
+      }
+    }, 150)
+  }
+
+  // Determine current range for display
+  const currentRange = customRange ?? (preset ? getPresetRange(preset) : null)
+
+  // Get short label for trigger badge
+  const getShortLabel = () => {
+    if (customRange) return customLabel || 'Custom'
+    if (preset) {
+      const presetObj = getPresetByValue(preset)
+      return presetObj?.shortLabel ?? preset
+    }
+    return '7d'
+  }
+
+  // Get label text (preset label or custom range description)
+  const getLabelText = () => {
+    if (customRange) {
+      return `${formatDate(customRange.from)} – ${formatDate(customRange.to)}`
+    }
+    if (preset) {
+      const presetObj = getPresetByValue(preset)
+      return presetObj?.label ?? 'Select time range'
+    }
+    return 'Select time range'
+  }
+
+  const handleOpenChange = (open: boolean) => {
+    // If closing while editing, keep it open unless explicitly closed via selection
+    if (!open && isEditing) {
+      return
+    }
+    setIsOpen(open)
+    if (open && inputRef.current) {
+      // Focus input when opening
+      setTimeout(() => inputRef.current?.focus(), 0)
+    }
+  }
+
+  return (
+    <Popover open={isOpen} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild disabled={disabled}>
+        <div
+          className={cn(
+            'bg-background relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm outline-none transition-all',
+            'border-border hover:border-border/80',
+            disabled && 'cursor-not-allowed opacity-50',
+            timezone && 'pt-4'
+          )}
+        >
+          {/* Floating timezone legend */}
           {timezone && (
-            <button
-              type="button"
-              disabled={disabled}
-              className={cn(
-                'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs',
-                'bg-secondary text-secondary-foreground',
-                'hover:bg-secondary/80 transition-colors',
-                disabled && 'cursor-not-allowed opacity-50'
-              )}
-            >
+            <span className="bg-background text-muted-foreground absolute -top-2 left-3 px-1 text-xs">
               {timezone}
-              <ChevronDown className="h-3 w-3" />
-            </button>
+            </span>
           )}
 
-          {/* Preset badges */}
-          <div className="flex gap-1">
-            {presets.map((preset) => (
-              <button
-                key={preset.value}
-                type="button"
-                disabled={disabled}
-                onClick={() => handlePresetClick(preset)}
-                className={cn(
-                  'inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium',
-                  'bg-secondary text-secondary-foreground',
-                  'hover:bg-secondary/80 transition-colors',
-                  'focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none',
-                  disabled && 'cursor-not-allowed opacity-50'
-                )}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
+          {/* Short badge */}
+          <span
+            className={cn(
+              'inline-flex h-6 items-center justify-center rounded px-2 py-1 text-xs font-semibold',
+              BADGE_WIDTH,
+              isLive
+                ? 'bg-green-500 text-white'
+                : 'bg-muted text-muted-foreground'
+            )}
+          >
+            {isParsing ? (
+              <div className="h-3 w-3 animate-spin rounded-full border-2 border-current/30 border-t-current" />
+            ) : (
+              getShortLabel()
+            )}
+          </span>
 
-          {/* Spacer */}
-          <div className="flex-1" />
+          {/* Input field for natural language or display label */}
+          <input
+            ref={inputRef}
+            type="text"
+            value={isEditing ? inputValue : getLabelText()}
+            onChange={handleInputChange}
+            onClick={handleInputClick}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
+            onKeyDown={handleInputKeyDown}
+            placeholder="e.g., 3 days ago, last week..."
+            disabled={disabled}
+            className={cn(
+              'min-w-[140px] flex-1 bg-transparent outline-none',
+              'placeholder:text-muted-foreground/60',
+              !isEditing && 'cursor-pointer',
+              disabled && 'cursor-not-allowed'
+            )}
+          />
 
-          {/* Live toggle */}
-          {showLive && (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={handleLiveToggle}
-              className={cn(
-                'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                'focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none',
-                isLive
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100'
-                  : 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-                disabled && 'cursor-not-allowed opacity-50'
-              )}
-            >
-              <Zap className={cn('h-3 w-3', isLive && 'fill-current')} />
-              LIVE
-            </button>
-          )}
+          {/* Dropdown chevron */}
+          <ChevronDown className="text-muted-foreground h-4 w-4 shrink-0" />
         </div>
+      </PopoverTrigger>
 
-        {/* Input row */}
-        <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-          <PopoverTrigger asChild disabled={disabled}>
-            <div
-              className={cn(
-                'relative flex items-center',
-                'bg-background border-input rounded-md border',
-                'focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]',
-                'transition-[border-color,box-shadow]',
-                disabled && 'cursor-not-allowed opacity-50'
-              )}
-            >
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder={placeholder}
-                disabled={disabled}
-                className={cn(
-                  'flex-1 bg-transparent px-3 py-2 outline-none',
-                  'placeholder:text-muted-foreground',
-                  'disabled:cursor-not-allowed',
-                  size === 'sm' && 'h-8 text-xs',
-                  size === 'lg' && 'h-11 text-base',
-                  (!size || size === 'default') && 'h-9 text-sm'
-                )}
-                onFocus={() => setIsPopoverOpen(true)}
-              />
-
-              {/* Clear button */}
-              {(inputValue || parsedRange) && !disabled && (
+      <PopoverContent
+        className="w-64 p-0"
+        align="start"
+        onOpenAutoFocus={(e) => {
+          // Prevent popover from stealing focus from the input
+          e.preventDefault()
+          inputRef.current?.focus()
+        }}
+      >
+        <div className="flex flex-col">
+          {/* Calendar view */}
+          {showCalendar ? (
+            <>
+              <div className="border-border/50 flex items-center justify-between border-b px-3 py-2">
+                <span className="text-muted-foreground text-xs font-medium">
+                  Select date range
+                </span>
                 <button
                   type="button"
-                  onClick={handleClear}
-                  className="hover:bg-accent mr-1 rounded p-1 transition-colors"
-                  aria-label="Clear"
+                  onClick={() => setShowCalendar(false)}
+                  className="text-primary text-xs hover:underline"
                 >
-                  <X className="text-muted-foreground h-4 w-4" />
+                  Back
+                </button>
+              </div>
+              <Calendar
+                selected={{
+                  start: currentRange?.from ?? null,
+                  end: currentRange?.to ?? null,
+                }}
+                onSelect={handleCalendarSelect}
+                maxDate={new Date()}
+              />
+              {customRange && onClearCustomRange && (
+                <div className="border-border/50 border-t p-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClearCustomRange()
+                      setShowCalendar(false)
+                    }}
+                    className="text-muted-foreground hover:text-foreground w-full text-xs transition-colors"
+                  >
+                    Clear custom range
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Presets list */
+            <div className="py-1">
+              {/* LIVE option */}
+              {showLive && (
+                <button
+                  type="button"
+                  onClick={handleLiveClick}
+                  className={cn(
+                    'flex w-full items-center gap-3 px-3 py-2 text-sm transition-colors',
+                    'hover:bg-muted',
+                    isLive && 'bg-blue-500/10'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'inline-flex items-center justify-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold',
+                      BADGE_WIDTH,
+                      isLive
+                        ? 'bg-green-500 text-white'
+                        : 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400'
+                    )}
+                  >
+                    <Zap className="h-3 w-3" />
+                    LIVE
+                  </span>
+                  <span className="text-foreground/80">15 Minutes</span>
                 </button>
               )}
 
-              {/* Search icon */}
-              <div className="pr-3">
-                {isParsing ? (
-                  <div className="border-primary h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
-                ) : (
-                  <Search className="text-muted-foreground h-4 w-4" />
+              {/* Preset options */}
+              {PRESETS.map((p) => {
+                const isSelected = preset === p.value && !customRange && !isLive
+                return (
+                  <button
+                    key={p.value}
+                    type="button"
+                    onClick={() => handlePresetClick(p)}
+                    className={cn(
+                      'flex w-full items-center gap-3 px-3 py-2 text-sm transition-colors',
+                      isSelected ? 'bg-blue-500 text-white' : 'hover:bg-muted'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-semibold',
+                        BADGE_WIDTH,
+                        isSelected
+                          ? 'bg-white/20 text-white'
+                          : 'bg-muted text-muted-foreground'
+                      )}
+                    >
+                      {p.shortLabel}
+                    </span>
+                    <span
+                      className={
+                        isSelected ? 'text-white' : 'text-foreground/80'
+                      }
+                    >
+                      {p.label}
+                    </span>
+                  </button>
+                )
+              })}
+
+              {/* Select from calendar */}
+              <button
+                type="button"
+                onClick={() => setShowCalendar(true)}
+                className={cn(
+                  'flex w-full items-center gap-3 px-3 py-2 text-sm transition-colors',
+                  customRange ? 'bg-blue-500 text-white' : 'hover:bg-muted'
                 )}
-              </div>
-            </div>
-          </PopoverTrigger>
-
-          <PopoverContent className="w-auto p-0" align="start">
-            <div className="flex flex-col">
-              {/* Quick suggestions */}
-              <div className="border-b p-3">
-                <p className="text-muted-foreground mb-2 text-xs">
-                  Try typing:
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {['yesterday', '3 days ago', 'last week', 'this month'].map(
-                    (suggestion) => (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        onClick={() => {
-                          setInputValue(suggestion)
-                          setIsPopoverOpen(false)
-                        }}
-                        className={cn(
-                          'rounded-md px-2 py-1 text-xs',
-                          'bg-secondary text-secondary-foreground',
-                          'hover:bg-secondary/80 transition-colors'
-                        )}
-                      >
-                        {suggestion}
-                      </button>
-                    )
+              >
+                <span
+                  className={cn(
+                    'inline-flex items-center justify-center rounded px-1.5 py-0.5',
+                    BADGE_WIDTH,
+                    customRange
+                      ? 'bg-white/20 text-white'
+                      : 'bg-muted text-muted-foreground'
                   )}
-                </div>
-              </div>
-
-              {/* Calendar */}
-              <div className="border-b">
-                <Calendar
-                  mode="range"
-                  selected={{
-                    start: parsedRange?.start ?? null,
-                    end: parsedRange?.end ?? null,
-                  }}
-                  onSelect={handleCalendarSelect}
-                  maxDate={new Date()}
-                />
-              </div>
-
-              {/* Selected range display */}
-              {parsedRange && (
-                <div className="text-muted-foreground p-3 text-xs">
-                  Selected: {formatTimeRange(parsedRange, { timezone })}
-                </div>
-              )}
+                >
+                  <CalendarIcon className="h-4 w-4" />
+                </span>
+                <span
+                  className={customRange ? 'text-white' : 'text-foreground/80'}
+                >
+                  Select from calendar...
+                </span>
+              </button>
             </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* Interpretation row */}
-        {showInterpretation && (
-          <div className="text-muted-foreground min-h-[1.25rem] text-xs">
-            {parseError ? (
-              <span className="text-destructive">{parseError}</span>
-            ) : parsedRange ? (
-              <span>{interpretation}</span>
-            ) : null}
-          </div>
-        )}
-      </div>
-    )
-  }
-)
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
 TimeRangePicker.displayName = 'TimeRangePicker'
 
-// eslint-disable-next-line react-refresh/only-export-components
-export { TimeRangePicker, timeRangePickerVariants }
+export { TimeRangePicker }

@@ -72,23 +72,16 @@ export { MODELS } from './lib/models'
 export type { Plugin } from './types/plugins'
 
 // Time Range Picker
-export { TimeRangePicker } from '@/components/ui/time-range-picker'
+export {
+  TimeRangePicker,
+  getPresetRange,
+  PRESETS,
+} from '@/components/ui/time-range-picker'
 export type {
   TimeRange,
   TimeRangePreset,
   TimeRangePickerProps,
+  DateRangePreset,
 } from '@/components/ui/time-range-picker'
-export { useTimeRange } from '@/hooks/useTimeRange'
-export type {
-  UseTimeRangeOptions,
-  UseTimeRangeReturn,
-} from '@/hooks/useTimeRange'
 export { Calendar } from '@/components/ui/calendar'
 export type { CalendarProps } from '@/components/ui/calendar'
-export {
-  parseTimeRange,
-  formatTimeRange,
-  describeTimeRange,
-  applyPreset,
-  DEFAULT_PRESETS,
-} from '@/lib/time-parser'

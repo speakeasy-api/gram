@@ -8,9 +8,9 @@ import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import {
   TimeRangePicker,
-  DateRangePreset,
+  type DateRangePreset,
   getPresetRange,
-} from "./time-range-picker";
+} from "@gram-ai/elements";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryListFilterOptions } from "@gram/client/funcs/telemetryListFilterOptions";
