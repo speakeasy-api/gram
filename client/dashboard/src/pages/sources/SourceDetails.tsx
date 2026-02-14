@@ -6,29 +6,46 @@ import {
   useFetchSourceContent,
   ViewSourceDialogContent,
 } from "@/components/sources/ViewSourceDialogContent";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Heading } from "@/components/ui/heading";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { getServerURL } from "@/lib/utils";
+import { dateTimeFormatters } from "@/lib/dates";
+import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
   useListAssets,
+  useListDeployments,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
+import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
+import { useGramContext } from "@gram/client/react-query/_context";
+import { useQuery } from "@tanstack/react-query";
+import { unwrapAsync } from "@gram/client/types/fp";
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useListTools } from "@/hooks/toolTypes";
 import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
-import { format, formatDistanceToNow } from "date-fns";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip as ChartJSTooltip,
+} from "chart.js";
+import { Line } from "react-chartjs-2";
+import { formatDistanceToNow } from "date-fns";
 import {
   ChevronRight,
   Download,
   Eye,
   Globe,
-  History,
   Lock,
   Power,
   Search,
@@ -39,8 +56,17 @@ import {
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { DeploymentsTable } from "../deployments/Deployments";
+import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  ChartJSTooltip,
+);
 
 export default function SourceDetails() {
   const { sourceKind, sourceSlug } = useParams<{
@@ -57,6 +83,24 @@ export default function SourceDetails() {
     refetch,
   } = useLatestDeployment();
   const { data: assetsData, refetch: refetchAssets } = useListAssets();
+  const { data: deploymentsData } = useListDeployments({}, {});
+  const allDeployments = useMemo(
+    () => deploymentsData?.items ?? [],
+    [deploymentsData],
+  );
+  const activeDeploymentItem = useMemo(
+    () => allDeployments.find((d) => d.status === "completed"),
+    [allDeployments],
+  );
+
+  // Telemetry: last 7 days overview for this source's tools
+  const gramClient = useGramContext();
+  const telemetryFrom = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d;
+  }, []);
+  const telemetryTo = useMemo(() => new Date(), []);
 
   const { projectSlug } = useSlugs();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -103,16 +147,21 @@ export default function SourceDetails() {
 
   const relatedTools = useMemo(() => {
     if (!toolsData?.tools || !source) return [];
-    return toolsData.tools.filter((tool) => {
+    const matched = toolsData.tools.filter((tool) => {
       if (tool.type === "http") {
-        // HTTP tools link to OpenAPI sources via openapiv3DocumentId
         return tool.openapiv3DocumentId === source.id;
       }
       if (tool.type === "function") {
-        // Function tools link to function sources via assetId
         return tool.assetId === source.assetId;
       }
       return false;
+    });
+    // Deduplicate by toolUrn (variations can produce multiple entries)
+    const seen = new Set<string>();
+    return matched.filter((t) => {
+      if (seen.has(t.toolUrn)) return false;
+      seen.add(t.toolUrn);
+      return true;
     });
   }, [toolsData, source]);
 
@@ -132,15 +181,67 @@ export default function SourceDetails() {
     );
   }, [toolsetsData, relatedTools]);
 
+  // Telemetry data for this source's tools
+  const sourceToolUrnsArray = useMemo(
+    () => relatedTools.map((t) => t.toolUrn),
+    [relatedTools],
+  );
+  const { data: telemetryData, isLoading: isLoadingTelemetry } =
+    useQuery<GetObservabilityOverviewResult>({
+      queryKey: [
+        "source-telemetry",
+        sourceSlug,
+        telemetryFrom.toISOString(),
+      ],
+      queryFn: () =>
+        unwrapAsync(
+          telemetryGetObservabilityOverview(gramClient, {
+            getObservabilityOverviewPayload: {
+              from: telemetryFrom,
+              to: telemetryTo,
+              includeTimeSeries: true,
+            },
+          }),
+        ),
+      enabled: relatedTools.length > 0,
+    });
+
+  // Filter telemetry tool metrics to only tools from this source
+  const sourceToolMetrics = useMemo(() => {
+    if (!telemetryData?.topToolsByCount || sourceToolUrnsArray.length === 0)
+      return [];
+    const urnSet = new Set(sourceToolUrnsArray);
+    return telemetryData.topToolsByCount.filter((m) => urnSet.has(m.gramUrn));
+  }, [telemetryData, sourceToolUrnsArray]);
+
+  const sourceTelemetrySummary = useMemo(() => {
+    if (sourceToolMetrics.length === 0) return null;
+    const totalCalls = sourceToolMetrics.reduce(
+      (sum, m) => sum + m.callCount,
+      0,
+    );
+    const totalFailures = sourceToolMetrics.reduce(
+      (sum, m) => sum + m.failureCount,
+      0,
+    );
+    const avgLatency =
+      totalCalls > 0
+        ? sourceToolMetrics.reduce(
+            (sum, m) => sum + m.avgLatencyMs * m.callCount,
+            0,
+          ) / totalCalls
+        : 0;
+    const errorRate = totalCalls > 0 ? (totalFailures / totalCalls) * 100 : 0;
+    return { totalCalls, totalFailures, avgLatency, errorRate };
+  }, [sourceToolMetrics]);
+
   const isOpenAPI = sourceKind === "http" || sourceKind === "openapi";
   const sourceType = isOpenAPI ? "OpenAPI" : "Function";
 
   // Build valid tabs dynamically based on source type and associated toolsets
   const validTabs = useMemo(() => {
     const tabs = ["overview", "tools"];
-    if (associatedToolsets.length > 0) {
-      tabs.push("mcp-servers");
-    }
+    tabs.push("mcp-servers");
     if (isOpenAPI) {
       tabs.push("spec");
     }
@@ -282,28 +383,13 @@ export default function SourceDetails() {
           <div className="absolute inset-0 bg-linear-to-t from-foreground/50 via-foreground/20 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
             <Stack gap={2}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 ml-1">
-                  <Heading variant="h1" className="text-background">
-                    {source?.name || sourceSlug}
-                  </Heading>
-                  <Badge variant="neutral">
-                    <Badge.Text>{sourceType}</Badge.Text>
-                  </Badge>
-                </div>
-                {deployment?.deployment?.id && (
-                  <routes.deployments.deployment.Link
-                    params={[deployment.deployment.id]}
-                    className="hover:no-underline"
-                  >
-                    <Button variant="secondary" size="sm">
-                      <Button.LeftIcon>
-                        <History className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>View Deployment</Button.Text>
-                    </Button>
-                  </routes.deployments.deployment.Link>
-                )}
+              <div className="flex items-center gap-3 ml-1">
+                <Heading variant="h1" className="text-background">
+                  {source?.name || sourceSlug}
+                </Heading>
+                <Badge variant="neutral">
+                  <Badge.Text>{sourceType}</Badge.Text>
+                </Badge>
               </div>
               <div className="flex items-center gap-2 ml-1">
                 <Type className="max-w-2xl truncate text-background/70!">
@@ -335,14 +421,14 @@ export default function SourceDetails() {
                 >
                   Tools {relatedTools.length > 0 && `(${relatedTools.length})`}
                 </TabsTrigger>
-                {associatedToolsets.length > 0 && (
-                  <TabsTrigger
-                    value="mcp-servers"
-                    className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
-                  >
-                    MCP Servers ({associatedToolsets.length})
-                  </TabsTrigger>
-                )}
+                <TabsTrigger
+                  value="mcp-servers"
+                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                >
+                  MCP Servers
+                  {associatedToolsets.length > 0 &&
+                    ` (${associatedToolsets.length})`}
+                </TabsTrigger>
                 {isOpenAPI && (
                   <TabsTrigger
                     value="spec"
@@ -369,90 +455,230 @@ export default function SourceDetails() {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="mt-0 flex-1">
-            <div className="max-w-[1270px] mx-auto px-8 py-8 w-full space-y-6">
-              {/* Row 1: Name, Format, File Size (or Runtime for functions) */}
-              <div className="flex gap-16">
-                <div>
-                  <Type muted small className="mb-1">
-                    Name
-                  </Type>
-                  <Type className="font-medium">{source?.name || "—"}</Type>
+            <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+              <div className="grid grid-cols-[280px_1fr] gap-8 items-stretch">
+                {/* ── Left: Source Information ── */}
+                <div className="flex flex-col">
+                  <Heading variant="h4" className="mb-3">
+                    Source Information
+                  </Heading>
+                  <div className="border rounded-lg divide-y flex-1">
+                      <OverviewRow label={isOpenAPI ? "API name" : "Function name"}>
+                        <Type className="font-medium">{source?.name || "—"}</Type>
+                      </OverviewRow>
+                      <OverviewRow label="Source ID">
+                        <span className="flex items-center gap-1">
+                          <Type className="font-mono text-sm">
+                            {source?.id ? `${source.id.slice(0, 8)}…` : "—"}
+                          </Type>
+                          {source?.id && (
+                            <CopyButton text={source.id} size="inline" />
+                          )}
+                        </span>
+                      </OverviewRow>
+                      {isOpenAPI ? (
+                        <OverviewRow label="Format">
+                          <Type className="font-mono text-sm">
+                            {underlyingAsset?.contentType?.includes("yaml")
+                              ? "YAML"
+                              : underlyingAsset?.contentType?.includes("json")
+                                ? "JSON"
+                                : underlyingAsset?.contentType || "—"}
+                          </Type>
+                        </OverviewRow>
+                      ) : (
+                        <OverviewRow label="Runtime">
+                          <Type className="text-sm">
+                            {source && "runtime" in source
+                              ? String(source.runtime)
+                              : "—"}
+                          </Type>
+                        </OverviewRow>
+                      )}
+                      <OverviewRow label="File size">
+                        <Type className="text-sm">
+                          {underlyingAsset?.contentLength
+                            ? formatFileSize(underlyingAsset.contentLength)
+                            : "—"}
+                        </Type>
+                      </OverviewRow>
+                      <OverviewRow label="Created">
+                        <Type className="text-sm">
+                          {underlyingAsset?.createdAt
+                            ? dateTimeFormatters.humanize(
+                                new Date(underlyingAsset.createdAt),
+                              )
+                            : "—"}
+                        </Type>
+                      </OverviewRow>
+                      <OverviewRow label="Updated">
+                        <Type className="text-sm">{lastUpdated}</Type>
+                      </OverviewRow>
+                      <OverviewRow label="Active deployment">
+                        {activeDeploymentItem ? (
+                          <routes.deployments.deployment.Link
+                            params={[activeDeploymentItem.id]}
+                            className="flex items-center gap-1 hover:no-underline"
+                          >
+                            <Type className="font-mono text-sm text-primary">
+                              {activeDeploymentItem.id.slice(0, 8)}
+                            </Type>
+                          </routes.deployments.deployment.Link>
+                        ) : (
+                          <Type className="text-sm text-muted-foreground">—</Type>
+                        )}
+                      </OverviewRow>
+                  </div>
                 </div>
-                {isOpenAPI ? (
-                  <div>
-                    <Type muted small className="mb-1">
-                      Format
-                    </Type>
-                    <Type className="font-mono">
-                      {underlyingAsset?.contentType?.includes("yaml")
-                        ? "YAML"
-                        : underlyingAsset?.contentType?.includes("json")
-                          ? "JSON"
-                          : underlyingAsset?.contentType || "—"}
+
+                {/* ── Right: Invocation Activity ── */}
+                <div className="flex flex-col">
+                  <div className="flex items-center justify-between mb-3">
+                    <Heading variant="h4">Invocation Activity</Heading>
+                    <Type muted small>
+                      Last 7 days
                     </Type>
                   </div>
-                ) : (
-                  <div>
-                    <Type muted small className="mb-1">
-                      Runtime
-                    </Type>
-                    <Type>
-                      {source && "runtime" in source
-                        ? String(source.runtime)
-                        : "—"}
-                    </Type>
-                  </div>
-                )}
-                <div>
-                  <Type muted small className="mb-1">
-                    File Size
-                  </Type>
-                  <Type>
-                    {underlyingAsset?.contentLength
-                      ? formatFileSize(underlyingAsset.contentLength)
-                      : "—"}
-                  </Type>
-                </div>
-              </div>
 
-              {/* Row 2: Last Updated, Created At */}
-              <div className="flex gap-16">
-                <div>
-                  <Type muted small className="mb-1">
-                    Last Updated
-                  </Type>
-                  <Type>{lastUpdated}</Type>
+                  {isLoadingTelemetry ? (
+                    <div className="rounded-lg border border-border p-6 flex-1 animate-pulse bg-muted/20" />
+                  ) : telemetryData?.timeSeries &&
+                    telemetryData.timeSeries.length > 0 ? (
+                    <>
+                      <div className="rounded-lg border border-border p-4 flex-1 flex flex-col">
+                        <div className="flex-1 min-h-36">
+                          <Line
+                            data={{
+                              labels: telemetryData.timeSeries.map((b) => {
+                                const ts =
+                                  Number(b.bucketTimeUnixNano) / 1_000_000;
+                                return new Date(ts).toLocaleDateString(
+                                  undefined,
+                                  { month: "short", day: "numeric" },
+                                );
+                              }),
+                              datasets: [
+                                {
+                                  label: "Tool Calls",
+                                  data: telemetryData.timeSeries.map(
+                                    (b) => b.totalToolCalls,
+                                  ),
+                                  borderColor: "#3b82f6",
+                                  backgroundColor: "rgba(59, 130, 246, 0.1)",
+                                  fill: true,
+                                  tension: 0.4,
+                                  borderWidth: 1.5,
+                                  pointRadius: 0,
+                                  pointHoverRadius: 3,
+                                },
+                                {
+                                  label: "Errors",
+                                  data: telemetryData.timeSeries.map(
+                                    (b) => b.failedToolCalls,
+                                  ),
+                                  borderColor: "#ef4444",
+                                  backgroundColor: "rgba(239, 68, 68, 0.08)",
+                                  fill: true,
+                                  tension: 0.4,
+                                  borderWidth: 1.5,
+                                  pointRadius: 0,
+                                  pointHoverRadius: 3,
+                                },
+                              ],
+                            }}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              interaction: {
+                                mode: "index",
+                                intersect: false,
+                              },
+                              plugins: {
+                                legend: {
+                                  display: true,
+                                  position: "top",
+                                  align: "end",
+                                  labels: {
+                                    boxWidth: 8,
+                                    boxHeight: 8,
+                                    usePointStyle: true,
+                                    pointStyle: "circle",
+                                    font: { size: 11 },
+                                  },
+                                },
+                                tooltip: {
+                                  backgroundColor: "rgba(0,0,0,0.85)",
+                                  titleColor: "#fff",
+                                  bodyColor: "#e5e7eb",
+                                  padding: 8,
+                                  cornerRadius: 6,
+                                },
+                              },
+                              scales: {
+                                x: {
+                                  grid: { display: false },
+                                  ticks: {
+                                    font: { size: 10 },
+                                    maxRotation: 0,
+                                    maxTicksLimit: 7,
+                                  },
+                                },
+                                y: {
+                                  beginAtZero: true,
+                                  grid: {
+                                    color: "rgba(128,128,128,0.1)",
+                                  },
+                                  ticks: { font: { size: 10 } },
+                                },
+                              },
+                            }}
+                          />
+                        </div>
+                      </div>
+                      {sourceTelemetrySummary && (
+                        <div className="flex items-center gap-4 text-sm px-1">
+                          <Type muted small>
+                            {sourceTelemetrySummary.totalCalls.toLocaleString()}{" "}
+                            calls from this source
+                          </Type>
+                          {sourceTelemetrySummary.totalFailures > 0 && (
+                            <Type small className="text-destructive">
+                              {sourceTelemetrySummary.totalFailures} failed
+                            </Type>
+                          )}
+                          <Type muted small>
+                            {sourceTelemetrySummary.avgLatency < 1000
+                              ? `${sourceTelemetrySummary.avgLatency.toFixed(0)}ms avg`
+                              : `${(sourceTelemetrySummary.avgLatency / 1000).toFixed(1)}s avg`}
+                          </Type>
+                          {sourceTelemetrySummary.errorRate > 0 && (
+                            <Type
+                              small
+                              className={
+                                sourceTelemetrySummary.errorRate > 5
+                                  ? "text-destructive"
+                                  : "text-warning"
+                              }
+                            >
+                              {sourceTelemetrySummary.errorRate.toFixed(1)}%
+                              error rate
+                            </Type>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="border rounded-lg p-12 text-center flex-1 flex flex-col items-center justify-center">
+                      <Type muted className="block mb-1">
+                        No invocation data yet
+                      </Type>
+                      <Type muted small>
+                        Telemetry will appear here once tools from this source
+                        are called via an MCP server.
+                      </Type>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <Type muted small className="mb-1">
-                    Created
-                  </Type>
-                  <Type>
-                    {underlyingAsset?.createdAt
-                      ? format(
-                          new Date(underlyingAsset.createdAt),
-                          "MMM d, yyyy",
-                        )
-                      : "—"}
-                  </Type>
-                </div>
-              </div>
-
-              {/* Row 3: Deployment */}
-              <div>
-                <Type muted small className="mb-1">
-                  Deployment
-                </Type>
-                {deployment?.deployment?.id ? (
-                  <routes.deployments.deployment.Link
-                    params={[deployment.deployment.id]}
-                    className="hover:underline text-primary font-mono"
-                  >
-                    {deployment.deployment.id.slice(0, 8)}
-                  </routes.deployments.deployment.Link>
-                ) : (
-                  <Type className="text-muted-foreground">None</Type>
-                )}
               </div>
             </div>
           </TabsContent>
@@ -739,17 +965,39 @@ export default function SourceDetails() {
           </TabsContent>
 
           {/* MCP Servers Tab */}
-          {associatedToolsets.length > 0 && (
-            <TabsContent value="mcp-servers" className="mt-0 flex-1">
-              <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+          <TabsContent value="mcp-servers" className="mt-0 flex-1">
+            <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+              {associatedToolsets.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {associatedToolsets.map((toolset) => (
-                    <MCPServerPortalCard key={toolset.slug} toolset={toolset} />
+                    <MCPServerPortalCard
+                      key={toolset.slug}
+                      toolset={toolset}
+                    />
                   ))}
                 </div>
-              </div>
-            </TabsContent>
-          )}
+              ) : (
+                <div className="border rounded-lg p-12 text-center">
+                  <Server className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
+                  <Type className="block mb-1 font-medium">
+                    No MCP servers yet
+                  </Type>
+                  <Type muted small className="block max-w-sm mx-auto mb-4">
+                    Create an MCP server that includes tools from this source to
+                    expose them to AI agents and clients.
+                  </Type>
+                  <routes.mcp.Link className="hover:no-underline">
+                    <Button variant="secondary" size="sm">
+                      <Button.LeftIcon>
+                        <Server className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Go to MCP Servers</Button.Text>
+                    </Button>
+                  </routes.mcp.Link>
+                </div>
+              )}
+            </div>
+          </TabsContent>
 
           {/* Spec Tab (OpenAPI only) */}
           {isOpenAPI && (
@@ -790,12 +1038,10 @@ export default function SourceDetails() {
           )}
 
           {/* Deployments Tab */}
-          <TabsContent value="deployments" className="mt-0 flex-1">
-            <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
-              <Suspense fallback={<div>Loading deployments...</div>}>
-                <DeploymentsTable />
-              </Suspense>
-            </div>
+          <TabsContent value="deployments" className="mt-0 flex-1 min-h-0">
+            <Suspense fallback={<div className="p-8">Loading deployments...</div>}>
+              <SourceDeploymentsPanel sourceKind={sourceKind} />
+            </Suspense>
           </TabsContent>
 
           {/* Settings Tab */}
@@ -886,6 +1132,23 @@ export default function SourceDetails() {
 }
 
 // Portal-style card for MCP servers
+function OverviewRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5">
+      <Type muted small>
+        {label}
+      </Type>
+      <div className="text-right">{children}</div>
+    </div>
+  );
+}
+
 function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
 

@@ -107,10 +107,14 @@ function parseLogMessage(message: string, event: string): ParsedLogEntry {
   };
 }
 
-export const LogsTabContent = () => {
-  const { deploymentId } = useParams();
+export const LogsTabContent = ({
+  deploymentId: propDeploymentId,
+  embeddedMode = false,
+}: { deploymentId?: string; embeddedMode?: boolean } = {}) => {
+  const { deploymentId: paramDeploymentId } = useParams();
+  const deploymentId = propDeploymentId ?? paramDeploymentId!;
   const { data: deploymentLogs } = useDeploymentLogsSuspense(
-    { deploymentId: deploymentId! },
+    { deploymentId },
     undefined,
     {
       staleTime: Infinity,
@@ -128,21 +132,25 @@ export const LogsTabContent = () => {
   const [searchInputFocused, setSearchInputFocused] = useState(false);
 
   const { searchParams, setSearchParams } = useDeploymentSearchParams();
+  const [localGrouping, setLocalGrouping] = useState(false);
 
-  const setGroupBySource = (value: boolean) => {
-    setSearchParams((prev) => {
-      if (prev.tab !== "logs") return prev;
-      const next = { ...prev };
-      if (value) next.grouping = "by_source";
-      else next.grouping = undefined;
-      return next;
-    });
-  };
+  const setGroupBySource = embeddedMode
+    ? (value: boolean) => setLocalGrouping(value)
+    : (value: boolean) => {
+        setSearchParams((prev) => {
+          if (prev.tab !== "logs") return prev;
+          const next = { ...prev };
+          if (value) next.grouping = "by_source";
+          else next.grouping = undefined;
+          return next;
+        });
+      };
 
   const groupBySource = React.useMemo(() => {
+    if (embeddedMode) return localGrouping;
     if (searchParams.tab !== "logs") return false;
     return searchParams.grouping === "by_source";
-  }, [searchParams]);
+  }, [embeddedMode, localGrouping, searchParams]);
 
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
