@@ -1,6 +1,7 @@
 import MonacoEditorLazy from "@/components/monaco-editor.lazy";
 import { Page } from "@/components/page-layout";
 import { RemoveSourceDialogContent } from "@/components/sources/RemoveSourceDialogContent";
+import { UploadOpenApiDialogContent } from "@/components/sources/UploadOpenApiDialogContent";
 import { MCPPatternIllustration } from "@/components/sources/SourceCardIllustrations";
 import {
   useFetchSourceContent,
@@ -34,6 +35,7 @@ import {
   Search,
   Server,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -60,6 +62,7 @@ export default function SourceDetails() {
   const { projectSlug } = useSlugs();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [methodFilter, setMethodFilter] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -289,19 +292,33 @@ export default function SourceDetails() {
                     <Badge.Text>{sourceType}</Badge.Text>
                   </Badge>
                 </div>
-                {deployment?.deployment?.id && (
-                  <routes.deployments.deployment.Link
-                    params={[deployment.deployment.id]}
-                    className="hover:no-underline"
-                  >
-                    <Button variant="secondary" size="sm">
+                <div className="flex items-center gap-2">
+                  {isOpenAPI && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setUploadDialogOpen(true)}
+                    >
                       <Button.LeftIcon>
-                        <History className="h-4 w-4" />
+                        <Upload className="h-4 w-4" />
                       </Button.LeftIcon>
-                      <Button.Text>View Deployment</Button.Text>
+                      <Button.Text>Update Source</Button.Text>
                     </Button>
-                  </routes.deployments.deployment.Link>
-                )}
+                  )}
+                  {deployment?.deployment?.id && (
+                    <routes.deployments.deployment.Link
+                      params={[deployment.deployment.id]}
+                      className="hover:no-underline"
+                    >
+                      <Button variant="secondary" size="sm">
+                        <Button.LeftIcon>
+                          <History className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>View Deployment</Button.Text>
+                      </Button>
+                    </routes.deployments.deployment.Link>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2 ml-1">
                 <Type className="max-w-2xl truncate text-background/70!">
@@ -790,6 +807,18 @@ export default function SourceDetails() {
                   Source Actions
                 </Type>
                 <Stack direction="horizontal" gap={3}>
+                  {isOpenAPI && (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() => setUploadDialogOpen(true)}
+                    >
+                      <Button.LeftIcon>
+                        <Upload className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Update Source</Button.Text>
+                    </Button>
+                  )}
                   {!isOpenAPI && (
                     <Button
                       variant="secondary"
@@ -863,6 +892,23 @@ export default function SourceDetails() {
             )}
           </Dialog.Content>
         </Dialog>
+
+        {/* Upload OpenAPI Dialog */}
+        {isOpenAPI && source && (
+          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+            <Dialog.Content className="max-w-2xl!">
+              <UploadOpenApiDialogContent
+                documentSlug={source.slug}
+                onClose={() => setUploadDialogOpen(false)}
+                onSuccess={() => {
+                  setUploadDialogOpen(false);
+                  refetch();
+                  refetchAssets();
+                }}
+              />
+            </Dialog.Content>
+          </Dialog>
+        )}
       </Page.Body>
     </Page>
   );
