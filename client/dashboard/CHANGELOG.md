@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.28.1
+
+### Patch Changes
+
+- 78f81f6: Bring back resources and prompts tabs to MCP details page
+- d9506c5: Show tool annotation badges in tool list sidebar
+- e87ada8:
+
 ## 0.28.0
 
 ### Minor Changes
