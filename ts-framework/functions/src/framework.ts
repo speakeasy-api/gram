@@ -31,6 +31,10 @@ export type ToolDefinition<
    */
   inputSchema: TInputSchema;
   /**
+   * Optional annotations describing tool behavior hints (aligned with MCP spec).
+   */
+  annotations?: ToolAnnotations;
+  /**
    * The function that implements the tool call.
    */
   execute: (
@@ -64,12 +68,20 @@ type InferInput<T> = ToolSignature<T>[1];
 
 type InferResult<T> = ToolSignature<T>[3];
 
+export type ToolAnnotations = {
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+};
+
 export type ManifestVariables = Record<string, { description?: string }>;
 
 export type ManifestTool = {
   name: string;
   description?: string;
   inputSchema: unknown;
+  annotations?: ToolAnnotations;
   variables?: ManifestVariables;
   authInput?: {
     type: "oauth2";
@@ -394,6 +406,7 @@ export class Gram<
         name: string;
         description?: string;
         inputSchema: unknown;
+        annotations?: ToolAnnotations;
         variables?: ManifestVariables;
         authInput?: {
           type: "oauth2";
@@ -405,6 +418,10 @@ export class Gram<
       };
       if (tool.description != null) {
         result.description = tool.description;
+      }
+
+      if (tool.annotations != null) {
+        result.annotations = tool.annotations;
       }
 
       if (tool.envSchema != null) {
