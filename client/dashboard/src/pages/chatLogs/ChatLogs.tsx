@@ -22,10 +22,10 @@ import { ChatDetailPanel } from "./ChatDetailPanel";
 import { ChatLogsFilters } from "./ChatLogsFilters";
 import { ChatLogsTable } from "./ChatLogsTable";
 import {
-  DateRangeSelect,
+  TimeRangePicker,
   DateRangePreset,
-  getDateRange,
-} from "../observability/date-range-select";
+  getPresetRange,
+} from "../observability/time-range-picker";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
   Select,
@@ -103,7 +103,18 @@ function ScoreLegend() {
 }
 
 // Valid date range presets
-const validPresets: DateRangePreset[] = ["24h", "7d", "30d", "90d"];
+const validPresets: DateRangePreset[] = [
+  "15m",
+  "1h",
+  "4h",
+  "1d",
+  "2d",
+  "3d",
+  "7d",
+  "15d",
+  "30d",
+  "90d",
+];
 
 function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
@@ -165,7 +176,7 @@ export default function ChatLogs() {
     if (customRange) {
       return { from: customRange.from, to: customRange.to };
     }
-    return getDateRange(dateRange);
+    return getPresetRange(dateRange);
   }, [customRange, dateRange]);
 
   // Update URL helpers
@@ -193,6 +204,17 @@ export default function ChatLogs() {
         range: preset,
         from: null,
         to: null,
+      });
+    },
+    [updateSearchParams],
+  );
+
+  const setCustomRangeParam = useCallback(
+    (from: Date, to: Date) => {
+      updateSearchParams({
+        range: null,
+        from: from.toISOString(),
+        to: to.toISOString(),
       });
     },
     [updateSearchParams],
@@ -312,6 +334,7 @@ export default function ChatLogs() {
       <ChatLogsContent
         dateRange={dateRange}
         setDateRangeParam={setDateRangeParam}
+        setCustomRangeParam={setCustomRangeParam}
         customRange={customRange}
         clearCustomRange={clearCustomRange}
         searchQuery={searchQuery}
@@ -343,6 +366,7 @@ export default function ChatLogs() {
 function ChatLogsContent({
   dateRange,
   setDateRangeParam,
+  setCustomRangeParam,
   customRange,
   clearCustomRange,
   searchQuery,
@@ -368,6 +392,7 @@ function ChatLogsContent({
 }: {
   dateRange: DateRangePreset;
   setDateRangeParam: (preset: DateRangePreset) => void;
+  setCustomRangeParam: (from: Date, to: Date) => void;
   customRange: { from: Date; to: Date } | null;
   clearCustomRange: () => void;
   searchQuery: string;
@@ -448,10 +473,11 @@ function ChatLogsContent({
                     </p>
                   </div>
                   <div className="flex-shrink-0">
-                    <DateRangeSelect
-                      value={dateRange}
-                      onValueChange={setDateRangeParam}
+                    <TimeRangePicker
+                      preset={customRange ? null : dateRange}
                       customRange={customRange}
+                      onPresetChange={setDateRangeParam}
+                      onCustomRangeChange={setCustomRangeParam}
                       onClearCustomRange={clearCustomRange}
                     />
                   </div>
