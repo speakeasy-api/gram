@@ -33,6 +33,7 @@ import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import {
   Chart as ChartJS,
   CategoryScale,
+  Legend,
   LinearScale,
   PointElement,
   LineElement,
@@ -61,6 +62,7 @@ import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
 
 ChartJS.register(
   CategoryScale,
+  Legend,
   LinearScale,
   PointElement,
   LineElement,
@@ -534,7 +536,12 @@ export default function SourceDetails() {
                 {/* ── Right: Invocation Activity ── */}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-between mb-3">
-                    <Heading variant="h4">Invocation Activity</Heading>
+                    <div>
+                      <Heading variant="h4">Project Activity</Heading>
+                      <Type muted small>
+                        All tool calls across this project
+                      </Type>
+                    </div>
                     <Type muted small>
                       Last 7 days
                     </Type>
