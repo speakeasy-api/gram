@@ -241,6 +241,11 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 			Name:                       conv.PtrToPGTextEmpty(nil),
 			Description:                conv.PtrToPGTextEmpty(nil),
 			Schema:                     nil,
+			Title:                      pgtype.Text{String: "", Valid: false},
+			ReadOnlyHint:               pgtype.Bool{Bool: false, Valid: false},
+			DestructiveHint:            pgtype.Bool{Bool: false, Valid: false},
+			IdempotentHint:             pgtype.Bool{Bool: false, Valid: false},
+			OpenWorldHint:              pgtype.Bool{Bool: false, Valid: false},
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition", task.MCP.Name).Log(ctx, logger)
@@ -260,15 +265,15 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 // Returns an invalid pgtype.Bool when the key is missing or not a bool.
 func extractAnnotationBool(annotations map[string]any, key string) pgtype.Bool {
 	if annotations == nil {
-		return pgtype.Bool{}
+		return pgtype.Bool{Bool: false, Valid: false}
 	}
 	v, ok := annotations[key]
 	if !ok {
-		return pgtype.Bool{}
+		return pgtype.Bool{Bool: false, Valid: false}
 	}
 	b, ok := v.(bool)
 	if !ok {
-		return pgtype.Bool{}
+		return pgtype.Bool{Bool: false, Valid: false}
 	}
 	return pgtype.Bool{Bool: b, Valid: true}
 }
@@ -277,15 +282,15 @@ func extractAnnotationBool(annotations map[string]any, key string) pgtype.Bool {
 // Returns an invalid pgtype.Text when the key is missing, not a string, or empty.
 func extractAnnotationString(annotations map[string]any, key string) pgtype.Text {
 	if annotations == nil {
-		return pgtype.Text{}
+		return pgtype.Text{String: "", Valid: false}
 	}
 	v, ok := annotations[key]
 	if !ok {
-		return pgtype.Text{}
+		return pgtype.Text{String: "", Valid: false}
 	}
 	s, ok := v.(string)
 	if !ok || s == "" {
-		return pgtype.Text{}
+		return pgtype.Text{String: "", Valid: false}
 	}
 	return pgtype.Text{String: s, Valid: true}
 }
