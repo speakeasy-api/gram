@@ -123,6 +123,7 @@ async function collectTools(
         inputSchema: tool.inputSchema,
         annotations: tool.annotations
           ? {
+              title: tool.annotations.title,
               readOnlyHint: tool.annotations.readOnlyHint,
               destructiveHint: tool.annotations.destructiveHint,
               idempotentHint: tool.annotations.idempotentHint,

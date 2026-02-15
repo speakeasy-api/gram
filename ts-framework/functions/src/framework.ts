@@ -69,6 +69,10 @@ type InferInput<T> = ToolSignature<T>[1];
 type InferResult<T> = ToolSignature<T>[3];
 
 export type ToolAnnotations = {
+  /**
+   * A human-readable title for the tool.
+   */
+  title?: string;
   readOnlyHint?: boolean;
   destructiveHint?: boolean;
   idempotentHint?: boolean;
