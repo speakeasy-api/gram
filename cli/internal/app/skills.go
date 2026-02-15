@@ -35,9 +35,6 @@ func newSkillsCommand() *cli.Command {
 		Description: "foo",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
-				Name:  "interactive",
-				Usage: "ffs"},
-			&cli.BoolFlag{
 				Name:  "server-name",
 				Usage: "lipsum",
 			},
@@ -54,7 +51,10 @@ func newSkillsCommand() *cli.Command {
 				Usage: "foo",
 			},
 			&cli.StringFlag{
-				Name: "url",
+				Name:    "url",
+				Usage:   "Gram server URL",
+				EnvVars: []string{"GRAM_SITE_URL"},
+				Value:   "https://localhost:8080",
 			},
 		},
 		Action: doSkills,
@@ -193,10 +193,8 @@ func materializePluginFS(pluginDir string, metadata PluginMetadata) error {
 		}
 	}
 
-	// Create MCP configuration file with defaults
-	mcpConfig := map[string]interface{}{
-		"mcpServers": map[string]interface{}{},
-	}
+	// Create MCP configuration file with toolset information
+	mcpConfig := generateMCPConfig(metadata)
 	mcpData, err := json.MarshalIndent(mcpConfig, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal MCP config: %w", err)
@@ -207,9 +205,7 @@ func materializePluginFS(pluginDir string, metadata PluginMetadata) error {
 	}
 
 	// Create LSP configuration file with defaults
-	lspConfig := map[string]interface{}{
-		"languageServers": map[string]interface{}{},
-	}
+	lspConfig := generateLSPConfig()
 	lspData, err := json.MarshalIndent(lspConfig, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal LSP config: %w", err)
@@ -232,4 +228,33 @@ func materializePluginFS(pluginDir string, metadata PluginMetadata) error {
 	}
 
 	return nil
+}
+
+// generateMCPConfig creates an MCP configuration with the toolset information
+func generateMCPConfig(metadata PluginMetadata) map[string]interface{} {
+	// Create a server entry for this toolset
+	serverName := metadata.Name
+
+	return map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			serverName: map[string]interface{}{
+				"command": "npx",
+				"args": []string{
+					"-y",
+					"@speakeasy-api/mcp-server-gram",
+					"--project",
+					metadata.Name,
+				},
+				"description": metadata.Description,
+			},
+		},
+	}
+}
+
+// generateLSPConfig creates an LSP configuration
+// Currently returns an empty configuration as LSP servers are language-specific
+func generateLSPConfig() map[string]interface{} {
+	return map[string]interface{}{
+		"languageServers": map[string]interface{}{},
+	}
 }
