@@ -202,6 +202,11 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 				OauthRegistrationEndpoint:  oauthRegEndpoint,
 				OauthScopesSupported:       oauthScopes,
 				HeaderDefinitions:          headerDefinitions,
+				Title:                      extractAnnotationString(tool.Annotations, "title"),
+				ReadOnlyHint:               extractAnnotationBool(tool.Annotations, "readOnlyHint"),
+				DestructiveHint:            extractAnnotationBool(tool.Annotations, "destructiveHint"),
+				IdempotentHint:             extractAnnotationBool(tool.Annotations, "idempotentHint"),
+				OpenWorldHint:              extractAnnotationBool(tool.Annotations, "openWorldHint"),
 			})
 			if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition for %s", task.MCP.Name, tool.Name).Log(ctx, logger)
@@ -236,6 +241,11 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 			Name:                       conv.PtrToPGTextEmpty(nil),
 			Description:                conv.PtrToPGTextEmpty(nil),
 			Schema:                     nil,
+			Title:                      pgtype.Text{String: "", Valid: false},
+			ReadOnlyHint:               pgtype.Bool{Bool: false, Valid: false},
+			DestructiveHint:            pgtype.Bool{Bool: false, Valid: false},
+			IdempotentHint:             pgtype.Bool{Bool: false, Valid: false},
+			OpenWorldHint:              pgtype.Bool{Bool: false, Valid: false},
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition", task.MCP.Name).Log(ctx, logger)
@@ -249,4 +259,38 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	}
 
 	return nil
+}
+
+// extractAnnotationBool extracts a boolean annotation value from the MCP tool annotations map.
+// Returns an invalid pgtype.Bool when the key is missing or not a bool.
+func extractAnnotationBool(annotations map[string]any, key string) pgtype.Bool {
+	if annotations == nil {
+		return pgtype.Bool{Bool: false, Valid: false}
+	}
+	v, ok := annotations[key]
+	if !ok {
+		return pgtype.Bool{Bool: false, Valid: false}
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return pgtype.Bool{Bool: false, Valid: false}
+	}
+	return pgtype.Bool{Bool: b, Valid: true}
+}
+
+// extractAnnotationString extracts a string annotation value from the MCP tool annotations map.
+// Returns an invalid pgtype.Text when the key is missing, not a string, or empty.
+func extractAnnotationString(annotations map[string]any, key string) pgtype.Text {
+	if annotations == nil {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	v, ok := annotations[key]
+	if !ok {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	s, ok := v.(string)
+	if !ok || s == "" {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	return pgtype.Text{String: s, Valid: true}
 }
