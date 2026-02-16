@@ -42,12 +42,13 @@ function createDangerousApiKeySessionFn(
   apiKey: string,
   apiUrl: string
 ): GetSessionFn {
-  return async () => {
+  return async ({ projectSlug }) => {
     const response = await fetch(`${apiUrl}/rpc/chatSessions.create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Gram-Key': apiKey,
+        'Gram-Project': projectSlug,
       },
       body: JSON.stringify({
         embed_origin: window.location.origin,
