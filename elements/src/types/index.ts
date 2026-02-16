@@ -420,7 +420,8 @@ export type UnifiedSessionAuthConfig = {
 }
 
 /**
- * API configuration - can be just the URL, or URL with session auth, or URL with API key auth.
+ * API configuration - base URL, session auth (static token or fetcher function),
+ * or dangerousApiKey for quick dev/testing without a backend session endpoint.
  */
 export type ApiConfig =
   | BaseApiConfig
