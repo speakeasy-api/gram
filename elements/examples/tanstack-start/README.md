@@ -3,7 +3,7 @@
 Embeds [Gram Elements](https://docs.getgram.ai) in a TanStack Start application with two session creation approaches:
 
 - **API Route** (`/chat`) — traditional endpoint at `/api/chat/session` using `createTanStackStartHandler`
-- **Server Function** (`/chat/server-fn`) — RPC-style `createServerFn` passed directly to `sessionFn`
+- **Server Function** (`/chat/server-fn`) — RPC-style `createServerFn` passed directly to `session`
 
 ## Setup
 
