@@ -108,6 +108,7 @@ export default function SourceDetails() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [methodFilter, setMethodFilter] = useState<string | null>(null);
+  const [runtimeFilter, setRuntimeFilter] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -239,6 +240,18 @@ export default function SourceDetails() {
 
   const isOpenAPI = sourceKind === "http" || sourceKind === "openapi";
   const sourceType = isOpenAPI ? "OpenAPI" : "Function";
+
+  // Unique runtimes for function tools filter pills
+  const uniqueRuntimes = useMemo(() => {
+    if (isOpenAPI) return [];
+    const runtimes = new Set<string>();
+    for (const tool of relatedTools) {
+      if (tool.type === "function" && tool.runtime) {
+        runtimes.add(tool.runtime);
+      }
+    }
+    return Array.from(runtimes).sort();
+  }, [relatedTools, isOpenAPI]);
 
   // Build valid tabs dynamically based on source type and associated toolsets
   const validTabs = useMemo(() => {
@@ -757,6 +770,54 @@ export default function SourceDetails() {
                     </div>
                   )}
 
+                  {/* Runtime filter pills - only for function tools with multiple runtimes */}
+                  {!isOpenAPI && uniqueRuntimes.length > 1 && (
+                    <div className="flex gap-2 flex-wrap shrink-0">
+                      <button onClick={() => setRuntimeFilter(null)}>
+                        <Badge
+                          variant={
+                            runtimeFilter === null ? "information" : "neutral"
+                          }
+                          className="py-2"
+                        >
+                          <Badge.Text>
+                            All (
+                            {
+                              relatedTools.filter((t) => t.type === "function")
+                                .length
+                            }
+                            )
+                          </Badge.Text>
+                        </Badge>
+                      </button>
+                      {uniqueRuntimes.map((runtime) => {
+                        const count = relatedTools.filter(
+                          (t) =>
+                            t.type === "function" && t.runtime === runtime,
+                        ).length;
+                        const isActive = runtimeFilter === runtime;
+                        const variant = runtimeBadgeVariant(runtime);
+                        return (
+                          <button
+                            key={runtime}
+                            onClick={() =>
+                              setRuntimeFilter(isActive ? null : runtime)
+                            }
+                          >
+                            <Badge
+                              variant={variant}
+                              className={`py-2 ${isActive ? "" : "opacity-50 hover:opacity-100"}`}
+                            >
+                              <Badge.Text>
+                                {runtime} ({count})
+                              </Badge.Text>
+                            </Badge>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {/* Tools table - different layout for HTTP vs Function */}
                   <div className="border rounded-lg flex flex-col overflow-hidden flex-1 min-h-0 mb-4">
                     {/* Fixed header */}
@@ -813,12 +874,12 @@ export default function SourceDetails() {
                           </div>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-[200px_100px_1fr] items-center px-4 py-1">
-                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider truncate">
-                            Function Name
-                          </div>
-                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider truncate">
+                        <div className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-1">
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                             Runtime
+                          </div>
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider pr-3">
+                            Function Name
                           </div>
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center justify-between">
                             <span>Description</span>
@@ -885,6 +946,11 @@ export default function SourceDetails() {
                             }
                           } else {
                             if (tool.type !== "function") return false;
+                            if (
+                              runtimeFilter &&
+                              tool.runtime !== runtimeFilter
+                            )
+                              return false;
                             if (searchQuery) {
                               const query = searchQuery.toLowerCase();
                               return (
@@ -941,15 +1007,15 @@ export default function SourceDetails() {
                             return (
                               <div
                                 key={tool.toolUrn}
-                                className="grid grid-cols-[200px_100px_1fr] items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
+                                className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
                               >
-                                <div className="font-mono text-sm truncate pr-3">
-                                  {tool.name}
-                                </div>
                                 <div>
-                                  <Badge variant="neutral">
+                                  <Badge variant={runtimeBadgeVariant(tool.runtime)}>
                                     <Badge.Text>{tool.runtime}</Badge.Text>
                                   </Badge>
+                                </div>
+                                <div className="font-mono text-sm truncate pr-3">
+                                  {tool.name}
                                 </div>
                                 <div className="text-sm text-muted-foreground truncate">
                                   {tool.description}
@@ -1136,6 +1202,18 @@ export default function SourceDetails() {
       </Page.Body>
     </Page>
   );
+}
+
+/** Map a runtime string (e.g. "nodejs:22", "python:3.12") to a Badge variant */
+function runtimeBadgeVariant(
+  runtime: string,
+): "success" | "information" | "warning" | "neutral" | "destructive" {
+  const rt = runtime.toLowerCase();
+  if (rt.startsWith("nodejs") || rt.startsWith("node")) return "information";
+  if (rt.startsWith("python")) return "success";
+  if (rt.startsWith("go") || rt.startsWith("golang")) return "warning";
+  if (rt.startsWith("rust")) return "destructive";
+  return "neutral";
 }
 
 // Portal-style card for MCP servers
