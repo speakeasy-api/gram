@@ -682,7 +682,7 @@ export const LogsTabContent = ({
                           if (el) logRefs.current.set(globalIndex, el);
                         }}
                         key={
-                          deploymentLogs.events[globalIndex]?.id ||
+                          visibleEvents[globalIndex]?.id ||
                           `fallback-${globalIndex}`
                         }
                         className={cn(
@@ -703,7 +703,7 @@ export const LogsTabContent = ({
                             )}
                           >
                             {formatLogTimestamp(
-                              deploymentLogs.events[globalIndex]!.createdAt,
+                              visibleEvents[globalIndex]!.createdAt,
                             )}
                           </span>
                           <span
@@ -743,7 +743,7 @@ export const LogsTabContent = ({
                   ref={(el) => {
                     if (el) logRefs.current.set(index, el);
                   }}
-                  key={deploymentLogs.events[index]?.id || `fallback-${index}`}
+                  key={visibleEvents[index]?.id || `fallback-${index}`}
                   className={cn(
                     "px-3 py-2 transition-colors relative",
                     "hover:bg-muted/20",
@@ -761,7 +761,7 @@ export const LogsTabContent = ({
                       )}
                     >
                       {formatLogTimestamp(
-                        deploymentLogs.events[index]!.createdAt,
+                        visibleEvents[index]!.createdAt,
                       )}
                     </span>
                     <span
