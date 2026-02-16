@@ -7,14 +7,15 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import {
-  DateRangeSelect,
-  DateRangePreset,
-  getDateRange,
-} from "./date-range-select";
+  TimeRangePicker,
+  type DateRangePreset,
+  getPresetRange,
+} from "@gram-ai/elements";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryListFilterOptions } from "@gram/client/funcs/telemetryListFilterOptions";
 import { useGramContext } from "@gram/client/react-query/_context";
+import { useSlugs } from "@/contexts/Sdk";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
@@ -356,7 +357,18 @@ function smoothData(data: number[], windowSize?: number): number[] {
 }
 
 // Valid date range presets
-const validPresets: DateRangePreset[] = ["24h", "7d", "30d", "90d"];
+const validPresets: DateRangePreset[] = [
+  "15m",
+  "1h",
+  "4h",
+  "1d",
+  "2d",
+  "3d",
+  "7d",
+  "15d",
+  "30d",
+  "90d",
+];
 
 function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
@@ -365,6 +377,24 @@ function isValidPreset(value: string | null): value is DateRangePreset {
 export default function ObservabilityOverview() {
   const [searchParams, setSearchParams] = useSearchParams();
   const client = useGramContext();
+
+  // Track if user has seen setup modal (persists to localStorage)
+  const [hasSeenSetupModal, setHasSeenSetupModal] = useState(() => {
+    try {
+      return localStorage.getItem("insights-setup-modal-seen") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const markSetupModalSeen = useCallback(() => {
+    setHasSeenSetupModal(true);
+    try {
+      localStorage.setItem("insights-setup-modal-seen", "true");
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
 
   // Copilot config - filters to metrics-related tools
   const metricsToolFilter = useCallback(
@@ -379,6 +409,15 @@ export default function ObservabilityOverview() {
   const urlRange = searchParams.get("range");
   const urlFrom = searchParams.get("from");
   const urlTo = searchParams.get("to");
+  const urlLabelEncoded = searchParams.get("label");
+  const urlLabel = useMemo(() => {
+    if (!urlLabelEncoded) return null;
+    try {
+      return atob(urlLabelEncoded);
+    } catch {
+      return null;
+    }
+  }, [urlLabelEncoded]);
   const urlFilter = searchParams.get("filter");
   const urlFilterId = searchParams.get("filterId");
 
@@ -426,17 +465,19 @@ export default function ObservabilityOverview() {
         from: null,
         to: null,
         interval: null, // Clear interval when switching to preset
+        label: null, // Clear label when switching to preset
       });
     },
     [updateSearchParams],
   );
 
   const setCustomRangeParam = useCallback(
-    (from: Date, to: Date) => {
+    (from: Date, to: Date, label?: string) => {
       updateSearchParams({
         range: null,
         from: from.toISOString(),
         to: to.toISOString(),
+        label: label ? btoa(label) : null,
       });
     },
     [updateSearchParams],
@@ -446,6 +487,7 @@ export default function ObservabilityOverview() {
     updateSearchParams({
       from: null,
       to: null,
+      label: null,
     });
   }, [updateSearchParams]);
 
@@ -471,7 +513,7 @@ export default function ObservabilityOverview() {
   // Use custom range if set, otherwise use preset
   // Memoize to prevent new Date objects on every render
   const { from, to } = useMemo(
-    () => customRange ?? getDateRange(dateRange),
+    () => customRange ?? getPresetRange(dateRange),
     [customRange, dateRange],
   );
 
@@ -590,6 +632,8 @@ export default function ObservabilityOverview() {
             dateRange={dateRange}
             onDateRangeChange={setDateRangeParam}
             customRange={customRange}
+            customRangeLabel={urlLabel}
+            onCustomRangeChange={setCustomRangeParam}
             onClearCustomRange={clearCustomRange}
             disabled={isLogsDisabled}
           />
@@ -606,6 +650,8 @@ export default function ObservabilityOverview() {
               setCustomRangeParam(from, to);
             }}
             refetch={refetch}
+            hasSeenSetupModal={hasSeenSetupModal}
+            onSetupModalSeen={markSetupModalSeen}
           />
         </Page.Body>
       </Page>
@@ -622,6 +668,8 @@ function InsightsPageHeader({
   dateRange,
   onDateRangeChange,
   customRange,
+  customRangeLabel,
+  onCustomRangeChange,
   onClearCustomRange,
   disabled,
 }: {
@@ -633,10 +681,13 @@ function InsightsPageHeader({
   dateRange: DateRangePreset;
   onDateRangeChange: (preset: DateRangePreset) => void;
   customRange: { from: Date; to: Date } | null;
+  customRangeLabel?: string | null;
+  onCustomRangeChange: (from: Date, to: Date, label?: string) => void;
   onClearCustomRange: () => void;
   disabled?: boolean;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
+  const { projectSlug } = useSlugs();
 
   return (
     <div
@@ -672,12 +723,15 @@ function InsightsPageHeader({
           options={filterOptions}
           disabled={disabled}
         />
-        <DateRangeSelect
-          value={dateRange}
-          onValueChange={onDateRangeChange}
+        <TimeRangePicker
+          preset={customRange ? null : dateRange}
           customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          onPresetChange={onDateRangeChange}
+          onCustomRangeChange={onCustomRangeChange}
           onClearCustomRange={onClearCustomRange}
           disabled={disabled}
+          projectSlug={projectSlug}
         />
       </div>
     </div>
@@ -692,10 +746,22 @@ function getComparisonLabel(
     return "vs previous period";
   }
   switch (dateRange) {
-    case "24h":
-      return "vs last 24 hours";
+    case "15m":
+      return "vs last 15 minutes";
+    case "1h":
+      return "vs last hour";
+    case "4h":
+      return "vs last 4 hours";
+    case "1d":
+      return "vs last day";
+    case "2d":
+      return "vs last 2 days";
+    case "3d":
+      return "vs last 3 days";
     case "7d":
       return "vs last 7 days";
+    case "15d":
+      return "vs last 15 days";
     case "30d":
       return "vs last month";
     case "90d":
@@ -715,6 +781,8 @@ function ObservabilityContent({
   customRange,
   onTimeRangeSelect,
   refetch,
+  hasSeenSetupModal,
+  onSetupModalSeen,
 }: {
   isPending: boolean;
   isFetching: boolean;
@@ -725,6 +793,8 @@ function ObservabilityContent({
   customRange: { from: Date; to: Date } | null;
   onTimeRangeSelect: (from: Date, to: Date) => void;
   refetch: () => void;
+  hasSeenSetupModal: boolean;
+  onSetupModalSeen: () => void;
 }) {
   const routes = useRoutes();
   const { isExpanded: isInsightsOpen, setIsExpanded } = useInsightsState();
@@ -743,12 +813,12 @@ function ObservabilityContent({
     };
   }, [data]);
 
-  // Show setup modal when data loads and there's no data at all
+  // Show setup modal when data loads and there's no data at all (only if not already seen)
   React.useEffect(() => {
-    if (!isPending && data && !hasAnyData) {
+    if (!isPending && data && !hasAnyData && !hasSeenSetupModal) {
       setShowSetupModal(true);
     }
-  }, [isPending, data, hasAnyData]);
+  }, [isPending, data, hasAnyData, hasSeenSetupModal]);
 
   if (isLogsDisabled) {
     return (
@@ -797,7 +867,7 @@ function ObservabilityContent({
   const isRefetching = isFetching && !isPending;
 
   // Calculate the actual time range for chart label formatting
-  const { from, to } = customRange ?? getDateRange(dateRange);
+  const { from, to } = customRange ?? getPresetRange(dateRange);
   const timeRangeMs = to.getTime() - from.getTime();
 
   // Show no data overlay on charts when current time window has no data
@@ -992,10 +1062,12 @@ function ObservabilityContent({
         open={showSetupModal}
         onClose={() => {
           setShowSetupModal(false);
+          onSetupModalSeen();
           setIsExpanded(false);
         }}
         onNavigateToElements={() => {
           setShowSetupModal(false);
+          onSetupModalSeen();
           setIsExpanded(false);
           routes.elements.goTo();
         }}
