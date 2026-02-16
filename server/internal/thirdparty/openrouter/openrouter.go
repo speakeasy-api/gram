@@ -35,6 +35,7 @@ var ErrGenerationNotFound = errors.New("generation not found")
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
+	"anthropic/claude-opus-4.6":     true,
 	"anthropic/claude-sonnet-4.5":   true,
 	"anthropic/claude-haiku-4.5":    true,
 	"anthropic/claude-sonnet-4":     true,
