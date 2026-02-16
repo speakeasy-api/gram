@@ -59,7 +59,46 @@ Each tool requires:
 - **name**: A unique identifier for the tool
 - **description** (optional): Human-readable description of what the tool does
 - **inputSchema**: A Zod schema object defining the expected input parameters
+- **annotations** (optional): Behavior hints for AI models (see below)
 - **execute**: An async function that implements the tool logic
+
+### Tool Annotations
+
+Annotations are optional hints that describe tool behavior to AI models and
+clients. They align with the
+[MCP tool annotations spec](https://modelcontextprotocol.io/docs/concepts/tools#tool-annotations).
+
+```typescript
+.tool({
+  name: "delete_user",
+  description: "Permanently delete a user account",
+  inputSchema: { userId: z.string() },
+  annotations: {
+    title: "Delete User",
+    destructiveHint: true,
+    readOnlyHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  async execute(ctx, input) {
+    await deleteUser(input.userId);
+    return ctx.json({ deleted: true });
+  },
+})
+```
+
+Available annotation fields:
+
+| Field              | Type      | Default | Description                                     |
+| ------------------ | --------- | ------- | ----------------------------------------------- |
+| `title`            | `string`  | —       | Human-readable display name for the tool         |
+| `readOnlyHint`     | `boolean` | `false` | Tool does not modify its environment             |
+| `destructiveHint`  | `boolean` | `true`  | Tool may perform destructive updates             |
+| `idempotentHint`   | `boolean` | `false` | Repeated calls with same args have no extra effect |
+| `openWorldHint`    | `boolean` | `true`  | Tool interacts with external entities            |
+
+All annotation properties are **hints** — they are not guaranteed to be
+accurate and clients should not rely on them for security decisions.
 
 ### Tool Context
 
@@ -343,6 +382,7 @@ const manifest = g.manifest();
 //       name: "tool1",
 //       description: "...",
 //       inputSchema: "...", // JSON Schema string
+//       annotations: { title: "...", readOnlyHint: true, ... },
 //       variables: { ... }
 //     },
 //     ...

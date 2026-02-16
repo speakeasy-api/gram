@@ -212,6 +212,15 @@ export function fromGram(
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema,
+          annotations: t.annotations
+            ? {
+                title: t.annotations.title,
+                readOnlyHint: t.annotations.readOnlyHint,
+                destructiveHint: t.annotations.destructiveHint,
+                idempotentHint: t.annotations.idempotentHint,
+                openWorldHint: t.annotations.openWorldHint,
+              }
+            : undefined,
         };
       }) as ListToolsResult["tools"];
 
