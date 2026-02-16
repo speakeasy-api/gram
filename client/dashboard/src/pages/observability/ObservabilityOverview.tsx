@@ -465,6 +465,7 @@ export default function ObservabilityOverview() {
         from: null,
         to: null,
         interval: null, // Clear interval when switching to preset
+        label: null, // Clear label when switching to preset
       });
     },
     [updateSearchParams],

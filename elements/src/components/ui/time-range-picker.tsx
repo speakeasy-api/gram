@@ -1,6 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from 'react'
 import { CalendarIcon, ChevronDown, Zap } from 'lucide-react'
+import { generateObject } from 'ai'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { z } from 'zod'
 
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
@@ -135,6 +138,15 @@ export const PRESETS: TimeRangePreset[] = [
       to: new Date(),
     }),
   },
+  {
+    label: 'Past 3 Months',
+    shortLabel: '3mo',
+    value: '90d',
+    getRange: () => ({
+      from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+      to: new Date(),
+    }),
+  },
 ]
 
 // Badge width class - shared between trigger and dropdown for alignment
@@ -158,6 +170,14 @@ type ParseResult =
   | { type: 'custom'; range: TimeRange; label?: string }
   | null
 
+const timeRangeSchema = z.object({
+  from: z.string().describe('ISO8601 start date/time'),
+  to: z.string().describe('ISO8601 end date/time'),
+  label: z.string().describe('Short semantic label for the range'),
+})
+
+const TIME_RANGE_MODEL = 'openai/gpt-4o-mini'
+
 async function parseWithAI(
   input: string,
   apiUrl: string,
@@ -165,25 +185,31 @@ async function parseWithAI(
 ): Promise<ParseResult> {
   try {
     const now = new Date()
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    }
-    if (projectSlug) {
-      headers['gram-project'] = projectSlug
-    }
-    const response = await fetch(`${apiUrl}/chat/completions`, {
-      method: 'POST',
-      headers,
-      credentials: 'include',
-      body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a time range parser for an analytics dashboard. Parse natural language into a PAST time range.
-Current time: ${now.toISOString()}
 
-Output ONLY valid JSON (no markdown): {"from": "ISO8601", "to": "ISO8601", "label": "LABEL"}
+    // Create OpenRouter provider without X-Gram-Source header (so usage is billed)
+    const headers: Record<string, string> = {}
+    if (projectSlug) {
+      headers['Gram-Project'] = projectSlug
+    }
+
+    const openRouter = createOpenRouter({
+      baseURL: apiUrl,
+      apiKey: 'unused',
+      headers,
+      fetch: (url, init) =>
+        fetch(url, {
+          ...init,
+          credentials: 'include',
+        }),
+    })
+
+    const model = openRouter.chat(TIME_RANGE_MODEL)
+
+    const result = await generateObject({
+      model,
+      schema: timeRangeSchema,
+      prompt: `You are a time range parser for an analytics dashboard. Parse natural language into a PAST time range.
+Current time: ${now.toISOString()}
 
 KEY RULES:
 - "X days ago" = THE WHOLE DAY (from: start 00:00, to: end 23:59:59)
@@ -205,55 +231,33 @@ Examples:
 - "1 year ago" -> label: "2025" (or whatever year)
 - "past 3 days" -> label: "3d"
 - "last wednesday" -> label: "Wed"
-- "jan 5 to jan 10" -> label: "1/5-1/10"`,
-          },
-          {
-            role: 'user',
-            content: input,
-          },
-        ],
-        max_tokens: 150,
-        temperature: 0,
-      }),
+- "jan 5 to jan 10" -> label: "1/5-1/10"
+
+User input: ${input}`,
     })
 
-    if (!response.ok) {
+    const parsed = result.object
+    const from = new Date(parsed.from)
+    const to = new Date(parsed.to)
+
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) {
       return null
     }
 
-    const data = await response.json()
-    const content = data.choices?.[0]?.message?.content
-    if (!content) return null
+    // Normalize labels like "1w" -> "7d", "2w" -> "14d"
+    let normalizedLabel = parsed.label
+    if (normalizedLabel === '1w') normalizedLabel = '7d'
+    if (normalizedLabel === '2w') normalizedLabel = '14d'
+    if (normalizedLabel === '1mo') normalizedLabel = '30d'
+    if (normalizedLabel === '3mo') normalizedLabel = '90d'
 
-    // Parse the JSON response
-    const parsed = JSON.parse(content)
-    if (parsed.from && parsed.to) {
-      const from = new Date(parsed.from)
-      const to = new Date(parsed.to)
-      if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
-        // Check if the AI returned a label that matches a preset
-        if (parsed.label) {
-          // Normalize labels like "1w" -> "7d", "2w" -> "14d"
-          let normalizedLabel = parsed.label
-          if (normalizedLabel === '1w') normalizedLabel = '7d'
-          if (normalizedLabel === '2w') normalizedLabel = '14d'
-          if (normalizedLabel === '1mo') normalizedLabel = '30d'
-          if (normalizedLabel === '3mo') normalizedLabel = '90d'
-
-          const matchedPreset = PRESETS.find((p) => p.value === normalizedLabel)
-          if (matchedPreset) {
-            return { type: 'preset', preset: matchedPreset.value }
-          }
-
-          // Use the semantic label from AI (e.g., "Mon", "Jan", "2024", "1/5-1/10")
-          return { type: 'custom', range: { from, to }, label: parsed.label }
-        }
-
-        // Fallback to custom range without label
-        return { type: 'custom', range: { from, to } }
-      }
+    const matchedPreset = PRESETS.find((p) => p.value === normalizedLabel)
+    if (matchedPreset) {
+      return { type: 'preset', preset: matchedPreset.value }
     }
-    return null
+
+    // Use the semantic label from AI (e.g., "Mon", "Jan", "2024", "1/5-1/10")
+    return { type: 'custom', range: { from, to }, label: parsed.label }
   } catch {
     return null
   }
@@ -465,7 +469,7 @@ function TimeRangePicker({
       <PopoverTrigger asChild disabled={disabled}>
         <div
           className={cn(
-            'bg-background relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm outline-none transition-all',
+            'bg-background relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all outline-none',
             'border-border hover:border-border/80',
             disabled && 'cursor-not-allowed opacity-50',
             timezone && 'pt-4'
