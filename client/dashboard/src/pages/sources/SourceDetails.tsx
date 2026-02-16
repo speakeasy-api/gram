@@ -1113,7 +1113,7 @@ export default function SourceDetails() {
           {/* Deployments Tab */}
           <TabsContent value="deployments" className="mt-0 flex-1 min-h-0">
             <Suspense fallback={<div className="p-8">Loading deployments...</div>}>
-              <SourceDeploymentsPanel sourceKind={sourceKind} />
+              <SourceDeploymentsPanel sourceKind={sourceKind} attachmentId={source?.id} />
             </Suspense>
           </TabsContent>
 
