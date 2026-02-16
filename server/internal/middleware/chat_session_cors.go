@@ -34,6 +34,11 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 
 			chatSession := r.Header.Get(constants.ChatSessionsTokenHeader)
 			if chatSession == "" {
+				// If the request uses API key auth (e.g. dangerousApiKey from Elements),
+				// allow the requesting origin so the browser doesn't block the response.
+				if r.Header.Get(constants.APIKeyHeader) != "" {
+					w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
