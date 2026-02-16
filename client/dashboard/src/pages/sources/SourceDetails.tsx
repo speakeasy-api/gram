@@ -874,11 +874,11 @@ export default function SourceDetails() {
                           </div>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-1">
+                        <div className="grid grid-cols-[auto_1fr_1.5fr] gap-4 items-center px-4 py-1">
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                             Runtime
                           </div>
-                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider pr-3">
+                          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                             Function Name
                           </div>
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center justify-between">
@@ -1007,14 +1007,14 @@ export default function SourceDetails() {
                             return (
                               <div
                                 key={tool.toolUrn}
-                                className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
+                                className="grid grid-cols-[auto_1fr_1.5fr] gap-4 items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
                               >
                                 <div>
                                   <Badge variant={runtimeBadgeVariant(tool.runtime)}>
                                     <Badge.Text>{tool.runtime}</Badge.Text>
                                   </Badge>
                                 </div>
-                                <div className="font-mono text-sm truncate pr-3">
+                                <div className="font-mono text-sm truncate">
                                   {tool.name}
                                 </div>
                                 <div className="text-sm text-muted-foreground truncate">
