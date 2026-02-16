@@ -159,7 +159,8 @@ export const LogsTabContent = ({
   const visibleEvents = useMemo(() => {
     if (!attachmentId) return deploymentLogs.events;
     return deploymentLogs.events.filter(
-      (event) => event.attachmentId === attachmentId,
+      (event) =>
+        !event.attachmentId || event.attachmentId === attachmentId,
     );
   }, [deploymentLogs.events, attachmentId]);
 
