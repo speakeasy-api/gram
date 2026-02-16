@@ -996,7 +996,7 @@ jobs:
 
       - name: "[DEV] Create fly app"
         id: flyCreateDev
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.actor != 'dependabot[bot]' }}
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
@@ -1009,7 +1009,7 @@ jobs:
 
       - name: "[PROD] Create fly app"
         id: flyCreateProd
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.actor != 'dependabot[bot]' }}
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
@@ -1021,11 +1021,11 @@ jobs:
             --force
 
       - name: Set up Docker Buildx
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.actor != 'dependabot[bot]' }}
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Extract Docker metadata
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.actor != 'dependabot[bot]' }}
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
@@ -1040,7 +1040,7 @@ jobs:
             type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
 
       - name: Tag images
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.actor != 'dependabot[bot]' }}
         working-directory: functions
         run: |
           set -x
@@ -1054,7 +1054,7 @@ jobs:
           done
 
       - name: "[DEV] Push images"
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.actor != 'dependabot[bot]' }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
         run: |
@@ -1063,7 +1063,7 @@ jobs:
           docker push --all-tags "${{ steps.flyCreateDev.outputs.flyAppRegistry }}"
 
       - name: "[PROD] Push images"
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.actor != 'dependabot[bot]' }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
         run: |
