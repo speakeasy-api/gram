@@ -166,7 +166,7 @@ export function PlaygroundElements({
         projectSlug: project.slug,
         api: {
           url: getServerURL(),
-          sessionFn: getSession,
+          session: getSession,
           headers: {
             "X-Gram-Source": "playground",
             ...userProvidedHeaders,

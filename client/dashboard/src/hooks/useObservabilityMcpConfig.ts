@@ -75,7 +75,7 @@ export function useObservabilityMcpConfig({
       },
       api: {
         url: getServerURL(),
-        sessionFn: getSession,
+        session: getSession,
       },
       environment: {
         GRAM_SERVER_URL: getServerURL(),

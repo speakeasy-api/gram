@@ -16,7 +16,7 @@ describe('getApiUrl', () => {
     const getApiUrl = await loadGetApiUrl('https://env.example.com')
     const config: ElementsConfig = {
       projectSlug: 'test',
-      api: { url: 'https://config.example.com', sessionToken: 'test-key' },
+      api: { url: 'https://config.example.com', session: 'test-key' },
     }
 
     expect(getApiUrl(config)).toBe('https://config.example.com')
@@ -26,7 +26,7 @@ describe('getApiUrl', () => {
     const getApiUrl = await loadGetApiUrl('https://env.example.com')
     const config: ElementsConfig = {
       projectSlug: 'test',
-      api: { sessionToken: 'test-key' },
+      api: { session: 'test-key' },
     }
 
     expect(getApiUrl(config)).toBe('https://env.example.com')
@@ -63,7 +63,7 @@ describe('getApiUrl', () => {
     const getApiUrl = await loadGetApiUrl('https://env.example.com')
     const config: ElementsConfig = {
       projectSlug: 'test',
-      api: { url: '', sessionToken: 'test-key' },
+      api: { url: '', session: 'test-key' },
     }
 
     expect(getApiUrl(config)).toBe('https://env.example.com')
@@ -73,7 +73,7 @@ describe('getApiUrl', () => {
     const getApiUrl = await loadGetApiUrl('')
     const config: ElementsConfig = {
       projectSlug: 'test',
-      api: { url: 'https://config.example.com///', sessionToken: 'test-key' },
+      api: { url: 'https://config.example.com///', session: 'test-key' },
     }
 
     expect(getApiUrl(config)).toBe('https://config.example.com')

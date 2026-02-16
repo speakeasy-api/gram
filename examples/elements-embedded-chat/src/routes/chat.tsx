@@ -45,11 +45,11 @@ function ChatPage() {
   const config: ElementsConfig = {
     projectSlug: import.meta.env.VITE_GRAM_PROJECT_SLUG,
 
-    // sessionFn obtains a short-lived client token from our server-side proxy
+    // session obtains a short-lived client token from our server-side proxy
     // (/api/chat/session), which in turn calls Gram's session API using our
     // secret GRAM_API_KEY. This keeps the API key off the client.
     api: {
-      sessionFn: async () => {
+      session: async () => {
         const request = new Request('/api/chat/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
