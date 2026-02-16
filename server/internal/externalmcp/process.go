@@ -139,10 +139,56 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 			})
 		}
 	} else if authErr := (*AuthRejectedError)(nil); errors.As(err, &authErr) {
-		logger.InfoContext(ctx, "[%s] external MCP server rejected auth probe, continuing without OAuth",
+		logger.InfoContext(ctx, fmt.Sprintf("[%s] external MCP server rejected auth probe, attempting OAuth discovery via well-known URLs", task.MCP.Name),
 			attr.SlogURL(serverDetails.RemoteURL),
 			attr.SlogHTTPResponseStatusCode(authErr.StatusCode),
 		)
+
+		// Attempt OAuth discovery via well-known URL probing (Strategy 3 in DiscoverOAuthMetadata).
+		// Even without a WWW-Authenticate header, the server may expose OAuth metadata at
+		// /.well-known/oauth-protected-resource or /.well-known/oauth-authorization-server.
+		oauthDiscovery, err = DiscoverOAuthMetadata(ctx, internalLogger, "", serverDetails.RemoteURL)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "[%s] error discovering OAuth metadata after auth rejection", task.MCP.Name).Log(ctx, logger)
+		}
+
+		switch oauthDiscovery.Version {
+		case OAuthVersion21:
+			requiresOAuth = true
+			logger.InfoContext(ctx, fmt.Sprintf("[%s] discovered OAuth 2.1 via well-known probing", task.MCP.Name),
+				attr.SlogOAuthVersion(oauthDiscovery.Version),
+				attr.SlogOAuthAuthorizationEndpoint(oauthDiscovery.AuthorizationEndpoint),
+				attr.SlogOAuthTokenEndpoint(oauthDiscovery.TokenEndpoint),
+				attr.SlogOAuthRegistrationEndpoint(oauthDiscovery.RegistrationEndpoint),
+			)
+		case OAuthVersion20:
+			logger.WarnContext(ctx, fmt.Sprintf("[%s] discovered legacy OAuth 2.0 via well-known probing; "+
+				"falling back to manual Authorization header", task.MCP.Name))
+			oauthDiscovery = nil
+
+			authDescription := "Bearer token for authentication (OAuth 2.0 requires static client registration)"
+			serverDetails.Headers = append(serverDetails.Headers, RemoteHeader{
+				Name:        "Authorization",
+				IsSecret:    true,
+				IsRequired:  true,
+				Description: &authDescription,
+				Placeholder: nil,
+			})
+		default:
+			// No OAuth metadata found — server needs auth but doesn't advertise OAuth.
+			// Add a manual Authorization header so the user can provide credentials.
+			logger.WarnContext(ctx, fmt.Sprintf("[%s] no OAuth metadata discovered; adding manual Authorization header", task.MCP.Name))
+			oauthDiscovery = nil
+
+			authDescription := "Authorization header value (e.g. Bearer <token>)"
+			serverDetails.Headers = append(serverDetails.Headers, RemoteHeader{
+				Name:        "Authorization",
+				IsSecret:    true,
+				IsRequired:  true,
+				Description: &authDescription,
+				Placeholder: nil,
+			})
+		}
 	} else if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "[%s] external mcp server unavailable", task.MCP.Name).Log(ctx, logger)
 	} else {
