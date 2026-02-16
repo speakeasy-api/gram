@@ -688,7 +688,7 @@ func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) squirrel.Se
 		From("metrics_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
-		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
+		Where("time_bucket < toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
 }
 
 // getOverviewSummaryRaw builds a query against the raw telemetry_logs table (used when filters are applied).
