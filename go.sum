@@ -606,8 +606,8 @@ github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/superfly/fly-go v0.2.1 h1:MNctspOX1bka3YHcdfG2NB2cYFPCf/D+YlBevoheS3E=
-github.com/superfly/fly-go v0.2.1/go.mod h1:2gCFoNR3iUELADGTJtbBoviMa2jlh2vlPK3cKUajOp8=
+github.com/superfly/fly-go v0.3.1 h1:XWrxqQOpZhWFP0gpNgKFec1iXxOAwuW7dYWJW+hh8M8=
+github.com/superfly/fly-go v0.3.1/go.mod h1:2gCFoNR3iUELADGTJtbBoviMa2jlh2vlPK3cKUajOp8=
 github.com/superfly/graphql v0.2.6 h1:zppbodNerWecoXEdjkhrqaNaSjGqobhXNlViHFuZzb4=
 github.com/superfly/graphql v0.2.6/go.mod h1:CVfDl31srm8HnJ9udwLu6hFNUW/P6GUM2dKcG1YQ8jc=
 github.com/superfly/macaroon v0.3.0 h1:tdRq5VqBCNJIlvYByZZ3bGDOKX/v0llQM/Ljd27DbU8=
