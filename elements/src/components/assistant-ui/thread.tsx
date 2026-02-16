@@ -108,21 +108,6 @@ const DangerousApiKeyWarning = () => (
   </div>
 )
 
-const StaticSessionWarning = () => (
-  <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
-    <strong>Warning:</strong> You are using a static session token in the
-    client. It will expire shortly. Please{' '}
-    <a
-      href="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-amber-700 underline hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
-    >
-      set up a session endpoint to avoid this warning.
-    </a>
-  </div>
-)
-
 interface ThreadProps {
   className?: string
 }
@@ -134,11 +119,6 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const components = config.components ?? {}
   const showDangerousApiKeyWarning =
     config.api && 'dangerousApiKey' in config.api
-  const showStaticSessionWarning =
-    !showDangerousApiKeyWarning &&
-    config.api &&
-    ('sessionToken' in config.api ||
-      ('session' in config.api && typeof config.api.session === 'string'))
   const showFeedback = config.thread?.showFeedback ?? false
   const [isResolved, setIsResolved] = useState(false)
   const [feedbackHidden, setFeedbackHidden] = useState(false)
@@ -225,7 +205,6 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
               </ThreadPrimitive.If>
 
               {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
-              {showStaticSessionWarning && <StaticSessionWarning />}
 
               <ThreadPrimitive.Messages
                 components={{
