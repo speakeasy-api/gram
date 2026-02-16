@@ -39,7 +39,7 @@ function ChatServerFnPage() {
     variant: 'standalone',
     environment: { MY_MCP_BEARER_TOKEN: token },
     api: {
-      sessionFn: async ({ projectSlug }) => {
+      session: async ({ projectSlug }) => {
         return await getSession({ data: { projectSlug } })
       },
     },

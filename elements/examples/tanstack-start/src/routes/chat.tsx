@@ -38,7 +38,7 @@ function ChatPage() {
     variant: 'standalone',
     environment: { MY_MCP_BEARER_TOKEN: token },
     api: {
-      sessionFn: async ({ projectSlug }) => {
+      session: async ({ projectSlug }) => {
         const response = await fetch('/api/chat/session', {
           method: 'POST',
           headers: {
