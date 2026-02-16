@@ -7,6 +7,10 @@
 ## Interfaces
 
 - [ShareButtonProps](interfaces/ShareButtonProps.md)
+- [CalendarProps](interfaces/CalendarProps.md)
+- [TimeRange](interfaces/TimeRange.md)
+- [TimeRangePreset](interfaces/TimeRangePreset.md)
+- [TimeRangePickerProps](interfaces/TimeRangePickerProps.md)
 - [CassetteMessage](interfaces/CassetteMessage.md)
 - [Cassette](interfaces/Cassette.md)
 - [ReplayOptions](interfaces/ReplayOptions.md)
@@ -31,6 +35,7 @@
 
 ## Type Aliases
 
+- [DateRangePreset](type-aliases/DateRangePreset.md)
 - [CassettePart](type-aliases/CassettePart.md)
 - [FrontendTool](type-aliases/FrontendTool.md)
 - [GetSessionFn](type-aliases/GetSessionFn.md)
@@ -47,6 +52,7 @@
 
 ## Variables
 
+- [PRESETS](variables/PRESETS.md)
 - [MODELS](variables/MODELS.md)
 
 ## Functions
@@ -55,6 +61,9 @@
 - [ChatHistory](functions/ChatHistory.md)
 - [Replay](functions/Replay.md)
 - [ShareButton](functions/ShareButton.md)
+- [Calendar](functions/Calendar.md)
+- [getPresetRange](functions/getPresetRange.md)
+- [TimeRangePicker](functions/TimeRangePicker.md)
 - [useChatId](functions/useChatId.md)
 - [GramElementsProvider](functions/GramElementsProvider.md)
 - [useRecordCassette](functions/useRecordCassette.md)
