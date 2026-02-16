@@ -10,24 +10,20 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import {
-  useIsAdmin,
-  useOrganization,
-  useProject,
-  useSession,
-} from "@/contexts/Auth";
+import { useIsAdmin, useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert, cn, getCustomDomainCNAME } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
+import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import {
   invalidateListAPIKeys,
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
-import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
-import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
@@ -47,7 +43,7 @@ import { SettingsDangerZone } from "./SettingsDangerZone";
 
 export default function Settings() {
   const organization = useOrganization();
-  const session = useSession();
+  const productTier = useProductTier();
   const isAdmin = useIsAdmin();
   const client = useSdkClient();
   const project = useProject();
@@ -60,7 +56,8 @@ export default function Settings() {
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
   const [isCnameCopied, setIsCnameCopied] = useState(false);
   const [isTxtCopied, setIsTxtCopied] = useState(false);
-  const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
+  const [isCustomDomainModalOpen, setIsCustomDomainUpgradeModalOpen] =
+    useState(false);
   const [isDeleteDomainDialogOpen, setIsDeleteDomainDialogOpen] =
     useState(false);
   const [domainInput, setDomainInput] = useState("");
@@ -556,8 +553,8 @@ export default function Settings() {
                   variant="secondary"
                   className="mt-2"
                   onClick={() => {
-                    if (session.gramAccountType === "free") {
-                      setIsCustomDomainModalOpen(true);
+                    if (productTier.includes("base")) {
+                      setIsCustomDomainUpgradeModalOpen(true);
                     } else {
                       setIsAddDomainDialogOpen(true);
                     }
@@ -725,9 +722,9 @@ export default function Settings() {
         </Dialog>
         <FeatureRequestModal
           isOpen={isCustomDomainModalOpen}
-          onClose={() => setIsCustomDomainModalOpen(false)}
+          onClose={() => setIsCustomDomainUpgradeModalOpen(false)}
           title="Custom Domains"
-          description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
+          description="Custom domains require upgrading to an enterprise plan. Someone should be in touch shortly, or feel free to book a meeting directly."
           actionType="custom_domain"
           icon={Globe}
           accountUpgrade

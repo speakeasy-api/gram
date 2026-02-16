@@ -20,6 +20,7 @@ import {
   SquareFunction,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { AnnotationBadges } from "./AnnotationBadges";
 import { ToolVariationBadge } from "../tool-variation-badge";
 import { McpIcon } from "../ui/mcp-icon";
 import { SimpleTooltip } from "../ui/tooltip";
@@ -430,6 +431,7 @@ function ToolRow({
                 {toolNameNoPrefix}
               </p>
               <ToolVariationBadge tool={tool} />
+              <AnnotationBadges tool={tool} />
             </Stack>
             <p className="text-sm leading-6 text-muted-foreground truncate">
               {tool.description || "No description"}

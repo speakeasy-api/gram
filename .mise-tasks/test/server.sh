@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE dir="{{ config_root }}/server"
-#MISE description="Test the server with optional coverage generation"
+#MISE description="Test the server with optional coverage generation. It takes the same arguments as 'go test'."
 
 # Check if flags are provided
 cover=false

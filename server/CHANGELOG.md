@@ -1,5 +1,11 @@
 # server
 
+## 0.23.1
+
+### Patch Changes
+
+- 02503b5: fix an issue wherein we fail to account external MCP tools in deployment stats
+
 ## 0.23.0
 
 ### Minor Changes

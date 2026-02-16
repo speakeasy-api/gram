@@ -1,9 +1,9 @@
-import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
-import { useSession } from "@/contexts/Auth";
+import { useProductTier } from "@/hooks/useProductTier";
 import { useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
+import { Button } from "@speakeasy-api/moonshine";
 import { CreditCard, Server } from "lucide-react";
 
 interface ServerEnableDialogProps {
@@ -21,9 +21,8 @@ export function ServerEnableDialog({
   isLoading = false,
   currentlyEnabled = false,
 }: ServerEnableDialogProps) {
-  const session = useSession();
+  const productTier = useProductTier();
   const routes = useRoutes();
-  const isFreeAccount = session.gramAccountType === "free";
   const { data: periodUsage } = useGetPeriodUsage();
 
   const handleConfirm = () => {
@@ -36,9 +35,13 @@ export function ServerEnableDialog({
     onClose();
   };
 
+  const hasAdditionalIncludedServers =
+    periodUsage &&
+    periodUsage.includedServers > periodUsage.actualEnabledServerCount;
+
   const canEnable =
-    isFreeAccount && !currentlyEnabled
-      ? periodUsage && periodUsage.actualEnabledServerCount === 0
+    productTier === "base" && !currentlyEnabled
+      ? hasAdditionalIncludedServers
       : true;
 
   return (

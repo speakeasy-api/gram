@@ -194,6 +194,7 @@ const StatsSection = ({
   if (deployment.functionsAssets) {
     assetCount += deployment.functionsAssets.length;
   }
+  assetCount += deployment.externalMcps?.length ?? 0;
 
   return (
     <div className="text-sm flex items-center gap-3 h-4">
@@ -218,7 +219,10 @@ const StatsSection = ({
         onClick={() => onClickTools?.()}
       >
         <WrenchIcon size={16} />
-        {deployment.openapiv3ToolCount + deployment.functionsToolCount} Tools
+        {deployment.openapiv3ToolCount +
+          deployment.functionsToolCount +
+          deployment.externalMcpToolCount}{" "}
+        Tools
       </button>
     </div>
   );

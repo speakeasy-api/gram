@@ -405,7 +405,7 @@ func resolveUserConfiguration(
 }
 
 func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {
-	if accountType != string(billing.TierFree) {
+	if accountType != string(billing.TierBase) {
 		return nil
 	}
 
@@ -417,7 +417,12 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 		return nil
 	}
 
-	hardToolCallsLimit := 2 * periodUsage.MaxToolCalls
+	// If the org has an active subscription, we don't need to check the tool usage limits
+	if periodUsage.HasActiveSubscription {
+		return nil
+	}
+
+	hardToolCallsLimit := 2 * periodUsage.IncludedToolCalls
 	if hardToolCallsLimit == 0 {
 		hardToolCallsLimit = 2000 // Just in case
 	}

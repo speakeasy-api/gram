@@ -32,6 +32,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	stat := rows[0].Status
 	openapiv3ToolCount := rows[0].Openapiv3ToolCount
 	functionsToolCount := rows[0].FunctionsToolCount
+	externalMcpToolCount := rows[0].ExternalMcpToolCount
 	attachedOpenAPIv3 := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
 	attachedFunctionsAssets := make([]*types.DeploymentFunctions, 0, len(rows))
 	attachedPackages := make([]*types.DeploymentPackage, 0, len(rows))
@@ -141,9 +142,10 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 		ClonedFrom:         conv.FromNullableUUID(deployment.ClonedFrom),
 		Packages:           attachedPackages,
 		Openapiv3Assets:    attachedOpenAPIv3,
-		Openapiv3ToolCount: openapiv3ToolCount,
-		FunctionsToolCount: functionsToolCount,
-		FunctionsAssets:    attachedFunctionsAssets,
-		ExternalMcps:       attachedExternalMCPs,
+		Openapiv3ToolCount:   openapiv3ToolCount,
+		FunctionsToolCount:   functionsToolCount,
+		ExternalMcpToolCount: externalMcpToolCount,
+		FunctionsAssets:       attachedFunctionsAssets,
+		ExternalMcps:          attachedExternalMCPs,
 	}, nil
 }
