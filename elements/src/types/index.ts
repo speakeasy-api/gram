@@ -364,12 +364,14 @@ export type BaseApiConfig = {
 }
 
 /**
- * @deprecated Use `session` field instead.
+ * @deprecated Use `{ session: mySessionFn }` instead. Will be removed in a future major version.
  */
 export type SessionAuthConfig = {
   /**
    * The function to use to retrieve the session token from the backend endpoint.
    * By default, this will attempt to fetch the session token from `/chat/session`.
+   *
+   * @deprecated Use `session` instead: `{ session: mySessionFn }`.
    *
    * @example
    * const config: ElementsConfig = {
@@ -384,20 +386,13 @@ export type SessionAuthConfig = {
 }
 
 /**
- * The static session auth config is used to authenticate the Elements library using a static session token only.
- *
- * @deprecated Use `session` field instead.
- *
- * @example
- * const config: ElementsConfig = {
- *   api: {
- *     sessionToken: 'your-session-token',
- *   },
- * }
+ * @deprecated Use `{ session: 'your-token' }` instead. Will be removed in a future major version.
  */
 export type StaticSessionAuthConfig = {
   /**
    * A static session token to use if you haven't yet configured a session endpoint.
+   *
+   * @deprecated Use `session` instead: `{ session: 'your-token' }`.
    *
    * @example
    * const config: ElementsConfig = {
@@ -422,13 +417,16 @@ export type UnifiedSessionAuthConfig = {
 /**
  * API configuration - base URL, session auth (static token or fetcher function),
  * or dangerousApiKey for quick dev/testing without a backend session endpoint.
+ *
+ * The legacy `sessionFn` / `sessionToken` fields still work but are deprecated
+ * in favour of the unified `session` field.
  */
 export type ApiConfig =
   | BaseApiConfig
-  | (BaseApiConfig & SessionAuthConfig)
-  | (BaseApiConfig & StaticSessionAuthConfig)
   | (BaseApiConfig & UnifiedSessionAuthConfig)
   | (BaseApiConfig & DangerousApiKeyAuthConfig)
+  | (BaseApiConfig & SessionAuthConfig)
+  | (BaseApiConfig & StaticSessionAuthConfig)
 
 /**
  * The LLM model to use for the Elements library.

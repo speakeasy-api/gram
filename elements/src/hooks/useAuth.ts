@@ -98,11 +98,11 @@ export const useAuth = ({
     if (isUnifiedFunctionSession(auth)) {
       return auth.session
     }
-    // Legacy: static sessionToken
+    // Legacy: static sessionToken (deprecated)
     if (isStaticSessionAuth(auth)) {
       return () => Promise.resolve(auth.sessionToken)
     }
-    // Legacy: sessionFn
+    // Legacy: explicit sessionFn (deprecated)
     if (hasExplicitSessionAuth(auth)) {
       return auth.sessionFn
     }
