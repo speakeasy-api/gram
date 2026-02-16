@@ -41,6 +41,8 @@
 - [GetSessionFn](type-aliases/GetSessionFn.md)
 - [VARIANTS](type-aliases/VARIANTS.md)
 - [Variant](type-aliases/Variant.md)
+- [DangerousApiKeyAuthConfig](type-aliases/DangerousApiKeyAuthConfig.md)
+- [UnifiedSessionAuthConfig](type-aliases/UnifiedSessionAuthConfig.md)
 - [Model](type-aliases/Model.md)
 - [DENSITIES](type-aliases/DENSITIES.md)
 - [Density](type-aliases/Density.md)
