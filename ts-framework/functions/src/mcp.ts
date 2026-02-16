@@ -121,6 +121,15 @@ async function collectTools(
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema,
+        annotations: tool.annotations
+          ? {
+              title: tool.annotations.title,
+              readOnlyHint: tool.annotations.readOnlyHint,
+              destructiveHint: tool.annotations.destructiveHint,
+              idempotentHint: tool.annotations.idempotentHint,
+              openWorldHint: tool.annotations.openWorldHint,
+            }
+          : undefined,
         variables: variables,
         meta: {
           ...tool._meta,
@@ -203,6 +212,15 @@ export function fromGram(
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema,
+          annotations: t.annotations
+            ? {
+                title: t.annotations.title,
+                readOnlyHint: t.annotations.readOnlyHint,
+                destructiveHint: t.annotations.destructiveHint,
+                idempotentHint: t.annotations.idempotentHint,
+                openWorldHint: t.annotations.openWorldHint,
+              }
+            : undefined,
         };
       }) as ListToolsResult["tools"];
 
