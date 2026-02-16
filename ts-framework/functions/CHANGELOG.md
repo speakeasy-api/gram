@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.12.4
+
+### Patch Changes
+
+- 84736c7: Support tool annotations in functions framework. Adds `ToolAnnotations` type allowing function authors to specify annotations via `Gram.tool({ annotations: { ... } })`
+
 ## 0.12.3
 
 ### Patch Changes
