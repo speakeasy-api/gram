@@ -177,6 +177,8 @@ var ToolEntry = Type("ToolEntry", func() {
 	Attribute("name", String, "The name of the tool")
 
 	Required("type", "id", "name", "tool_urn")
+
+	Meta("struct:pkg:path", "types")
 })
 
 var CanonicalToolAttributes = Type("CanonicalToolAttributes", func() {
