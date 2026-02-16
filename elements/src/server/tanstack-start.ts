@@ -5,7 +5,7 @@
  *
  * 1. **Server Function (RPC)** — use `createTanStackStartSessionFn` to create
  *    a `createServerFn` that can be called directly from client code and passed
- *    to `sessionFn` in the Elements config.
+ *    to `session` in the Elements config.
  *
  * 2. **API Route** — use `createTanStackStartHandler` to create a handler for
  *    TanStack Start server routes (similar to the Next.js adapter).
@@ -42,7 +42,7 @@ import { createChatSession, type SessionHandlerOptions } from './core'
  * Create a TanStack Start server function for session creation.
  *
  * The returned function can be called from client code (RPC-style) and passed
- * to `sessionFn` in the Gram Elements config.
+ * to `session` in the Gram Elements config.
  *
  * @param options - Session configuration options
  * @returns A `createServerFn` instance callable from the client

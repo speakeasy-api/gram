@@ -37,7 +37,7 @@ WithImplicitSessionAuth.parameters = {
   },
 }
 
-const sessionFn: GetSessionFn = async () => {
+const session: GetSessionFn = async () => {
   const response = await fetch('/chat/session', {
     method: 'POST',
     headers: {
@@ -54,19 +54,17 @@ WithExplicitSessionAuth.storyName = 'With Explicit Session Auth'
 WithExplicitSessionAuth.parameters = {
   elements: {
     config: {
-      api: { sessionFn },
+      api: { session },
     },
   },
 }
 
-// NOTE: api key auth is currently non functional due to concerns with security
-// Update this story when api key auth is secure
-export const WithStaticSessionAuth: Story = () => <Chat />
-WithStaticSessionAuth.storyName = 'With Static Session Auth'
-WithStaticSessionAuth.parameters = {
+export const WithDangerousApiKey: Story = () => <Chat />
+WithDangerousApiKey.storyName = 'With Dangerous API Key Warning'
+WithDangerousApiKey.parameters = {
   elements: {
     config: {
-      api: { sessionToken: 'test' },
+      api: { dangerousApiKey: 'test' },
     },
   },
 }

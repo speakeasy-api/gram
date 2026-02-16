@@ -4,7 +4,7 @@ import { createFileRoute } from '@tanstack/react-router'
  * Server-side session proxy. This route keeps the GRAM_API_KEY secret by
  * making the upstream call to Gram's session API from the server, never
  * exposing the key to the browser. The client calls this endpoint via
- * the `sessionFn` in the ElementsConfig (see chat.tsx).
+ * the `session` field in the ElementsConfig (see chat.tsx).
  */
 export const Route = createFileRoute('/api/chat/session')({
   server: {

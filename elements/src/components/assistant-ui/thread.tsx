@@ -100,18 +100,11 @@ const ChatResolutionContext = createContext<{
 
 const useChatResolution = () => useContext(ChatResolutionContext)
 
-const StaticSessionWarning = () => (
-  <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
-    <strong>Warning:</strong> You are using a static session token in the
-    client. It will expire shortly. Please{' '}
-    <a
-      href="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-amber-700 underline hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
-    >
-      set up a session endpoint to avoid this warning.
-    </a>
+const DangerousApiKeyWarning = () => (
+  <div className="m-2 rounded-md border border-red-500 bg-red-100 px-4 py-3 text-sm text-red-800 dark:border-red-600 dark:bg-red-900/30 dark:text-red-200">
+    <strong>Danger:</strong> You are using a Gram API key directly in the
+    browser. This exposes your key to anyone who inspects this page. Do NOT use
+    this in production.
   </div>
 )
 
@@ -124,7 +117,8 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const d = useDensity()
   const { config } = useElements()
   const components = config.components ?? {}
-  const showStaticSessionWarning = config.api && 'sessionToken' in config.api
+  const showDangerousApiKeyWarning =
+    config.api && 'dangerousApiKey' in config.api
   const showFeedback = config.thread?.showFeedback ?? false
   const [isResolved, setIsResolved] = useState(false)
   const [feedbackHidden, setFeedbackHidden] = useState(false)
@@ -210,7 +204,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
                 )}
               </ThreadPrimitive.If>
 
-              {showStaticSessionWarning && <StaticSessionWarning />}
+              {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
 
               <ThreadPrimitive.Messages
                 components={{
