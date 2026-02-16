@@ -21,13 +21,14 @@ type logBuffer struct {
 }
 
 type LogHandler struct {
-	mut                *sync.Mutex
-	attrDeploymentID   uuid.UUID
-	attrProjectID      uuid.UUID
-	attrOpenAPIAssetID uuid.UUID
-	attrEvent          string
-	buffer             *logBuffer
-	level              slog.Leveler
+	mut                  *sync.Mutex
+	attrDeploymentID     uuid.UUID
+	attrProjectID        uuid.UUID
+	attrOpenAPIAssetID   uuid.UUID
+	attrFunctionsAssetID uuid.UUID
+	attrEvent            string
+	buffer               *logBuffer
+	level                slog.Leveler
 }
 
 func NewLogHandler() *LogHandler {
@@ -35,13 +36,14 @@ func NewLogHandler() *LogHandler {
 	ptr.Store(&[]repo.BatchLogEventsParams{})
 
 	return &LogHandler{
-		mut:                &sync.Mutex{},
-		level:              slog.LevelInfo,
-		attrDeploymentID:   uuid.Nil,
-		attrProjectID:      uuid.Nil,
-		attrOpenAPIAssetID: uuid.Nil,
-		attrEvent:          "",
-		buffer:             &logBuffer{msgs: []repo.BatchLogEventsParams{}},
+		mut:                  &sync.Mutex{},
+		level:                slog.LevelInfo,
+		attrDeploymentID:     uuid.Nil,
+		attrProjectID:        uuid.Nil,
+		attrOpenAPIAssetID:   uuid.Nil,
+		attrFunctionsAssetID: uuid.Nil,
+		attrEvent:            "",
+		buffer:               &logBuffer{msgs: []repo.BatchLogEventsParams{}},
 	}
 
 }
@@ -58,6 +60,7 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 	projectID := l.attrProjectID
 	deploymentID := l.attrDeploymentID
 	openAPIAssetID := l.attrOpenAPIAssetID
+	functionsAssetID := l.attrFunctionsAssetID
 
 	record.Attrs(func(a slog.Attr) bool {
 		switch {
@@ -76,6 +79,10 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 		case a.Key == string(attr.DeploymentOpenAPIIDKey) && a.Value.Kind() == slog.KindString:
 			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				openAPIAssetID = id
+			}
+		case a.Key == string(attr.DeploymentFunctionsIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
+				functionsAssetID = id
 			}
 		}
 
@@ -106,6 +113,9 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 	if openAPIAssetID != uuid.Nil {
 		msg.AttachmentID = uuid.NullUUID{UUID: openAPIAssetID, Valid: true}
 		msg.AttachmentType = conv.ToPGText("openapi")
+	} else if functionsAssetID != uuid.Nil {
+		msg.AttachmentID = uuid.NullUUID{UUID: functionsAssetID, Valid: true}
+		msg.AttachmentType = conv.ToPGText("function")
 	}
 	l.buffer.msgs = append(l.buffer.msgs, msg)
 	l.mut.Unlock()
@@ -151,6 +161,10 @@ func (l *LogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 		case a.Key == string(attr.DeploymentOpenAPIIDKey) && a.Value.Kind() == slog.KindString:
 			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				clone.attrOpenAPIAssetID = id
+			}
+		case a.Key == string(attr.DeploymentFunctionsIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
+				clone.attrFunctionsAssetID = id
 			}
 		}
 	}
