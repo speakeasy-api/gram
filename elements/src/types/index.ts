@@ -363,6 +363,9 @@ export type BaseApiConfig = {
   headers?: Record<string, string>
 }
 
+/**
+ * @deprecated Use `session` field instead.
+ */
 export type SessionAuthConfig = {
   /**
    * The function to use to retrieve the session token from the backend endpoint.
@@ -382,6 +385,8 @@ export type SessionAuthConfig = {
 
 /**
  * The static session auth config is used to authenticate the Elements library using a static session token only.
+ *
+ * @deprecated Use `session` field instead.
  *
  * @example
  * const config: ElementsConfig = {
@@ -404,6 +409,16 @@ export type StaticSessionAuthConfig = {
   sessionToken: string
 }
 
+export type DangerousApiKeyAuthConfig = {
+  /** WARNING: Exposes API key in browser. Dev/testing only. */
+  dangerousApiKey: string
+}
+
+export type UnifiedSessionAuthConfig = {
+  /** String = static token (shows expiry warning). Function = dynamic fetcher. */
+  session: string | GetSessionFn
+}
+
 /**
  * API configuration - can be just the URL, or URL with session auth, or URL with API key auth.
  */
@@ -411,6 +426,8 @@ export type ApiConfig =
   | BaseApiConfig
   | (BaseApiConfig & SessionAuthConfig)
   | (BaseApiConfig & StaticSessionAuthConfig)
+  | (BaseApiConfig & UnifiedSessionAuthConfig)
+  | (BaseApiConfig & DangerousApiKeyAuthConfig)
 
 /**
  * The LLM model to use for the Elements library.

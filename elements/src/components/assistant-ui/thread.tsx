@@ -100,6 +100,14 @@ const ChatResolutionContext = createContext<{
 
 const useChatResolution = () => useContext(ChatResolutionContext)
 
+const DangerousApiKeyWarning = () => (
+  <div className="m-2 rounded-md border border-red-500 bg-red-100 px-4 py-3 text-sm text-red-800 dark:border-red-600 dark:bg-red-900/30 dark:text-red-200">
+    <strong>Danger:</strong> You are using a Gram API key directly in the
+    browser. This exposes your key to anyone who inspects this page. Do NOT use
+    this in production.
+  </div>
+)
+
 const StaticSessionWarning = () => (
   <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
     <strong>Warning:</strong> You are using a static session token in the
@@ -124,7 +132,13 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const d = useDensity()
   const { config } = useElements()
   const components = config.components ?? {}
-  const showStaticSessionWarning = config.api && 'sessionToken' in config.api
+  const showDangerousApiKeyWarning =
+    config.api && 'dangerousApiKey' in config.api
+  const showStaticSessionWarning =
+    !showDangerousApiKeyWarning &&
+    config.api &&
+    ('sessionToken' in config.api ||
+      ('session' in config.api && typeof config.api.session === 'string'))
   const showFeedback = config.thread?.showFeedback ?? false
   const [isResolved, setIsResolved] = useState(false)
   const [feedbackHidden, setFeedbackHidden] = useState(false)
@@ -210,6 +224,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
                 )}
               </ThreadPrimitive.If>
 
+              {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
               {showStaticSessionWarning && <StaticSessionWarning />}
 
               <ThreadPrimitive.Messages
