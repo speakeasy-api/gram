@@ -138,11 +138,11 @@ export const useAuth = ({
       }
     }
 
-    // Compute staleTime from JWT exp (30s buffer). Non-JWT → Infinity (no refresh).
+    // Check if the cached token is expired (or within 30s of expiry).
+    // staleTime=0 forces a refetch; Infinity keeps the cached value.
     const exp = cachedToken ? getTokenExpiry(cachedToken) : null
-    const staleTime = exp
-      ? Math.max(0, exp * 1000 - 30_000 - Date.now())
-      : Infinity
+    const isExpired = exp !== null && Date.now() >= exp * 1000 - 30_000
+    const staleTime = isExpired ? 0 : Infinity
 
     try {
       const token = await queryClient.fetchQuery({
