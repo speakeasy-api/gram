@@ -20,10 +20,14 @@ import {
 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import {
-  type ExternalMcpReleaseState,
+  type ConfigurePhase,
+  type CompletePhase,
+  type DeployingPhase,
+  type ErrorPhase,
+  type ExternalMcpReleaseWorkflow,
   type ServerToolsetStatus,
-  useExternalMcpReleaseState,
-} from "./useExternalMcpReleaseState";
+  useExternalMcpReleaseWorkflow,
+} from "./useExternalMcpReleaseWorkflow";
 
 export interface AddServerDialogProps {
   servers: Server[];
@@ -42,7 +46,7 @@ export function AddServerDialog({
   projectSlug,
   projectSelector,
 }: AddServerDialogProps) {
-  const releaseState = useExternalMcpReleaseState({
+  const releaseState = useExternalMcpReleaseWorkflow({
     servers,
     projectSlug,
   });
@@ -56,6 +60,7 @@ export function AddServerDialog({
 
   // Notify parent when all toolsets are done
   const allToolsetsDone =
+    releaseState.phase === "complete" &&
     releaseState.toolsetStatuses.length > 0 &&
     releaseState.toolsetStatuses.every(
       (s) => s.status === "completed" || s.status === "failed",
@@ -107,7 +112,7 @@ function PhaseDescription({
   phase,
   isSingle,
 }: {
-  phase: ExternalMcpReleaseState["phase"];
+  phase: ExternalMcpReleaseWorkflow["phase"];
   isSingle: boolean;
 }) {
   switch (phase) {
@@ -130,7 +135,7 @@ function PhaseContent({
   projectSelector,
   onClose,
 }: {
-  releaseState: ExternalMcpReleaseState;
+  releaseState: ExternalMcpReleaseWorkflow;
   isSingle: boolean;
   projectSelector?: React.ReactNode;
   onClose: () => void;
@@ -138,7 +143,7 @@ function PhaseContent({
   switch (releaseState.phase) {
     case "configure":
       return (
-        <ConfigurePhase
+        <ConfigurePhaseContent
           releaseState={releaseState}
           isSingle={isSingle}
           projectSelector={projectSelector}
@@ -146,22 +151,22 @@ function PhaseContent({
         />
       );
     case "deploying":
-      return <DeployingPhase releaseState={releaseState} />;
+      return <DeployingPhaseContent releaseState={releaseState} />;
     case "complete":
       return (
-        <CompletePhase
+        <CompletePhaseContent
           releaseState={releaseState}
           isSingle={isSingle}
           onClose={onClose}
         />
       );
     case "error":
-      return <ErrorPhase releaseState={releaseState} onClose={onClose} />;
+      return <ErrorPhaseContent releaseState={releaseState} onClose={onClose} />;
   }
 }
 
 /** Routes scoped to the target project (which may differ from the current project). */
-function useTargetRoutes(releaseState: ExternalMcpReleaseState) {
+function useTargetRoutes(releaseState: ExternalMcpReleaseWorkflow) {
   return useRoutes(
     releaseState.projectSlug
       ? { projectSlug: releaseState.projectSlug }
@@ -171,13 +176,13 @@ function useTargetRoutes(releaseState: ExternalMcpReleaseState) {
 
 // --- Configure Phase ---
 
-function ConfigurePhase({
+function ConfigurePhaseContent({
   releaseState,
   isSingle,
   projectSelector,
   onClose,
 }: {
-  releaseState: ExternalMcpReleaseState;
+  releaseState: ConfigurePhase;
   isSingle: boolean;
   projectSelector?: React.ReactNode;
   onClose: () => void;
@@ -243,7 +248,7 @@ function ConfigurePhase({
 function SingleServerConfig({
   releaseState,
 }: {
-  releaseState: ExternalMcpReleaseState;
+  releaseState: ConfigurePhase;
 }) {
   const config = releaseState.serverConfigs[0];
   if (!config) return null;
@@ -265,7 +270,7 @@ function SingleServerConfig({
 function BatchServerConfig({
   releaseState,
 }: {
-  releaseState: ExternalMcpReleaseState;
+  releaseState: ConfigurePhase;
 }) {
   const { existingSpecifiers } = releaseState;
   return (
@@ -321,10 +326,10 @@ function BatchServerConfig({
 
 // --- Deploying Phase ---
 
-function DeployingPhase({
+function DeployingPhaseContent({
   releaseState,
 }: {
-  releaseState: ExternalMcpReleaseState;
+  releaseState: DeployingPhase;
 }) {
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -366,11 +371,11 @@ function DeployingPhase({
 
 // --- Complete Phase ---
 
-function CompletePhase({
+function CompletePhaseContent({
   releaseState,
   onClose,
 }: {
-  releaseState: ExternalMcpReleaseState;
+  releaseState: CompletePhase;
   isSingle: boolean;
   onClose: () => void;
 }) {
@@ -426,7 +431,7 @@ function ToolsetStatusRow({
   releaseState,
 }: {
   status: ServerToolsetStatus;
-  releaseState: ExternalMcpReleaseState;
+  releaseState: CompletePhase;
 }) {
   const routes = useTargetRoutes(releaseState);
   const isCompleted = status.status === "completed" && status.toolsetSlug;
@@ -487,7 +492,7 @@ function SingleServerNextSteps({
 }: {
   toolsetSlug: string;
   mcpSlug: string;
-  releaseState: ExternalMcpReleaseState;
+  releaseState: CompletePhase;
 }) {
   const routes = useTargetRoutes(releaseState);
 
@@ -565,11 +570,11 @@ function SingleServerNextSteps({
 
 // --- Error Phase ---
 
-function ErrorPhase({
+function ErrorPhaseContent({
   releaseState,
   onClose,
 }: {
-  releaseState: ExternalMcpReleaseState;
+  releaseState: ErrorPhase;
   onClose: () => void;
 }) {
   const routes = useTargetRoutes(releaseState);
@@ -583,7 +588,7 @@ function ErrorPhase({
             Deployment failed
           </Type>
           <Type small className="text-destructive/80 mt-1">
-            {releaseState.error ?? "An unexpected error occurred."}
+            {releaseState.error}
           </Type>
         </div>
       </div>

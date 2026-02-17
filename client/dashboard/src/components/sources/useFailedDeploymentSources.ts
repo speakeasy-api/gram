@@ -9,12 +9,13 @@ import {
   useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { useMemo } from "react";
+import { type SourceType, attachmentToURNPrefix } from "@/lib/sources";
 
 export interface FailedSource {
   id: string;
   name: string;
   slug: string;
-  type: "openapi" | "function" | "externalmcp";
+  type: SourceType;
   errors: DeploymentLogEvent[];
   toolCount: number;
 }
@@ -27,11 +28,11 @@ export interface UseFailedDeploymentSourcesResult {
   isLoading: boolean;
 }
 
-const SOURCE_TYPE_TO_URN_KIND: Record<FailedSource["type"], string> = {
-  openapi: "http",
-  function: "function",
-  externalmcp: "externalmcp",
-};
+export interface ComputeFailedSourcesResult {
+  hasFailures: boolean;
+  failedSources: FailedSource[];
+  generalErrors: DeploymentLogEvent[];
+}
 
 export function useFailedDeploymentSources(
   deploymentId?: string,
@@ -56,7 +57,6 @@ export function useFailedDeploymentSources(
   );
 
   const deploymentLoading = deploymentId ? specificLoading : latestLoading;
-  // GetDeploymentResult IS the deployment; GetLatestDeploymentResult wraps it in .deployment
   const deployment: Deployment | undefined = deploymentId
     ? specificResult
     : latestResult?.deployment;
@@ -83,100 +83,117 @@ export function useFailedDeploymentSources(
       };
     }
 
-    // Filter to error events (matching pattern from useDeploymentLogsSummary)
-    const errorEvents = logs.events.filter((e) => e.event.includes("error"));
+    const toolUrns = flattenToolUrns(toolsetsData?.toolsets ?? []);
 
-    if (errorEvents.length === 0 && deployment.status !== "failed") {
-      return {
-        hasFailures: false,
-        failedSources: [],
-        generalErrors: [],
-      };
-    }
-
-    // Group errors by attachmentId
-    const errorsByAttachment = new Map<string, DeploymentLogEvent[]>();
-    const generalErrors: DeploymentLogEvent[] = [];
-
-    for (const event of errorEvents) {
-      if (event.attachmentId) {
-        const existing = errorsByAttachment.get(event.attachmentId) ?? [];
-        existing.push(event);
-        errorsByAttachment.set(event.attachmentId, existing);
-      } else {
-        generalErrors.push(event);
-      }
-    }
-
-    // Build a lookup from source ID to source info
-    const sourceMap = new Map<
-      string,
-      { name: string; slug: string; type: FailedSource["type"] }
-    >();
-
-    for (const asset of deployment.openapiv3Assets) {
-      sourceMap.set(asset.id, {
-        name: asset.name,
-        slug: asset.slug,
-        type: "openapi",
-      });
-    }
-    for (const fn of deployment.functionsAssets ?? []) {
-      sourceMap.set(fn.id, {
-        name: fn.name,
-        slug: fn.slug,
-        type: "function",
-      });
-    }
-    for (const mcp of deployment.externalMcps ?? []) {
-      sourceMap.set(mcp.id, {
-        name: mcp.name,
-        slug: mcp.slug,
-        type: "externalmcp",
-      });
-    }
-
-    // Count toolset tool URN references for each source
-    const allToolsets = toolsetsData?.toolsets ?? [];
-
-    // Match errors to sources
-    const failedSources: FailedSource[] = [];
-    for (const [attachmentId, errors] of errorsByAttachment) {
-      const source = sourceMap.get(attachmentId);
-      if (source) {
-        const urnKind = SOURCE_TYPE_TO_URN_KIND[source.type];
-        const prefix = `tools:${urnKind}:${source.slug}:`;
-        let toolCount = 0;
-        for (const toolset of allToolsets) {
-          for (const urn of toolset.toolUrns ?? []) {
-            if (urn.startsWith(prefix)) {
-              toolCount++;
-            }
-          }
-        }
-
-        failedSources.push({
-          id: attachmentId,
-          ...source,
-          errors,
-          toolCount,
-        });
-      } else {
-        // Attachment doesn't match a known source — treat as general errors
-        generalErrors.push(...errors);
-      }
-    }
-
-    return {
-      hasFailures: deployment.status === "failed" || failedSources.length > 0,
-      failedSources,
-      generalErrors,
-    };
+    return computeFailedSources({
+      failedDeployment: deployment,
+      compareDeployment: deployment,
+      toolUrns,
+      events: logs.events,
+    });
   }, [deployment, logs, toolsetsData]);
 
   return {
     ...result,
     deployment,
     isLoading: deploymentLoading || logsLoading,
+  };
+}
+
+const partition = <T>(arr: T[], pred: (x: T) => boolean): [T[], T[]] => [
+  arr.filter(pred),
+  arr.filter((x) => !pred(x)),
+];
+
+export function flattenToolUrns(toolsets: { toolUrns?: string[] }[]): string[] {
+  return toolsets.flatMap((t) => t.toolUrns ?? []);
+}
+
+function buildSourceMap(
+  deployment: Deployment,
+): Map<string, { name: string; slug: string; type: SourceType }> {
+  const map = new Map<
+    string,
+    { name: string; slug: string; type: SourceType }
+  >();
+
+  for (const asset of deployment.openapiv3Assets) {
+    map.set(asset.id, { name: asset.name, slug: asset.slug, type: "openapi" });
+  }
+  for (const fn of deployment.functionsAssets ?? []) {
+    map.set(fn.id, { name: fn.name, slug: fn.slug, type: "function" });
+  }
+  for (const mcp of deployment.externalMcps ?? []) {
+    map.set(mcp.id, { name: mcp.name, slug: mcp.slug, type: "externalmcp" });
+  }
+
+  return map;
+}
+
+function deploymentURNPrefixes(deployment: Deployment): string[] {
+  const sources = buildSourceMap(deployment);
+  return [...sources.values()].map((s) =>
+    attachmentToURNPrefix(s.type, s.slug),
+  );
+}
+
+export function computeFailedSources(args: {
+  failedDeployment: Deployment;
+  compareDeployment: Deployment;
+  toolUrns: string[];
+  events: DeploymentLogEvent[];
+}): ComputeFailedSourcesResult {
+  const { failedDeployment, compareDeployment, toolUrns, events } = args;
+
+  const errorEvents = events.filter((e) => e.event.includes("error"));
+
+  if (errorEvents.length === 0 && failedDeployment.status !== "failed") {
+    return { hasFailures: false, failedSources: [], generalErrors: [] };
+  }
+
+  const [attachmentErrors, generalErrors] = partition(
+    errorEvents,
+    (e) => !!e.attachmentId,
+  );
+
+  const errorsByAttachment = new Map<string, DeploymentLogEvent[]>();
+  for (const event of attachmentErrors) {
+    const existing = errorsByAttachment.get(event.attachmentId!) ?? [];
+    existing.push(event);
+    errorsByAttachment.set(event.attachmentId!, existing);
+  }
+
+  const sourceMap = buildSourceMap(failedDeployment);
+
+  const comparePrefixes = deploymentURNPrefixes(compareDeployment);
+  const relevantUrns = toolUrns.filter((urn) =>
+    comparePrefixes.some((prefix) => urn.startsWith(prefix)),
+  );
+
+  const failedSources: FailedSource[] = [];
+  for (const [attachmentId, errors] of errorsByAttachment) {
+    const source = sourceMap.get(attachmentId);
+    if (source) {
+      const prefix = attachmentToURNPrefix(source.type, source.slug);
+      const toolCount = relevantUrns.filter((urn) =>
+        urn.startsWith(prefix),
+      ).length;
+
+      failedSources.push({
+        id: attachmentId,
+        ...source,
+        errors,
+        toolCount,
+      });
+    } else {
+      generalErrors.push(...errors);
+    }
+  }
+
+  return {
+    hasFailures:
+      failedDeployment.status === "failed" || failedSources.length > 0,
+    failedSources,
+    generalErrors,
   };
 }
