@@ -57,6 +57,7 @@ export function UploadOpenApiDialogContent({
         <OpenApiSourceInput
           onUpload={handleSpecUpload}
           onUrlUpload={handleUrlUpload}
+          documentSlug={documentSlug}
         />
       ) : (
         <UploadedDocument

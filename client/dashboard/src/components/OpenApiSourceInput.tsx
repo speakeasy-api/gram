@@ -1,23 +1,27 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button, Stack } from "@speakeasy-api/moonshine";
-import { LinkIcon, UploadIcon } from "lucide-react";
+import { LinkIcon, TerminalIcon, UploadIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FullWidthUpload } from "@/components/upload";
 import { Spinner } from "@/components/ui/spinner";
 import { useMutation } from "@tanstack/react-query";
 import { useSdkClient } from "@/contexts/Sdk";
 import { UploadOpenAPIv3Result } from "@gram/client/models/components";
+import { CodeBlock } from "@/components/code";
 
 interface OpenApiSourceInputProps {
   onUpload: (file: File) => void;
   onUrlUpload?: (result: UploadOpenAPIv3Result) => void | Promise<void>;
+  /** When provided, shows a CLI tab with pre-filled commands for this document slug. */
+  documentSlug?: string;
   className?: string;
 }
 
 export function OpenApiSourceInput({
   onUpload,
   onUrlUpload,
+  documentSlug,
   className,
 }: OpenApiSourceInputProps) {
   const [url, setUrl] = useState("");
@@ -70,7 +74,7 @@ export function OpenApiSourceInput({
 
   return (
     <Tabs defaultValue="upload" className={className}>
-      <TabsList className="grid w-full grid-cols-2">
+      <TabsList className={`grid w-full ${documentSlug ? "grid-cols-3" : "grid-cols-2"}`}>
         <TabsTrigger value="upload">
           <UploadIcon className="size-4 mr-1.5" />
           Upload
@@ -79,6 +83,12 @@ export function OpenApiSourceInput({
           <LinkIcon className="size-4 mr-1.5" />
           From URL
         </TabsTrigger>
+        {documentSlug && (
+          <TabsTrigger value="cli">
+            <TerminalIcon className="size-4 mr-1.5" />
+            CLI
+          </TabsTrigger>
+        )}
       </TabsList>
       <TabsContent value="upload" className="my-3">
         <FullWidthUpload
@@ -116,6 +126,32 @@ export function OpenApiSourceInput({
           </Stack>
         </form>
       </TabsContent>
+      {documentSlug && (
+        <TabsContent value="cli" className="my-3 space-y-3">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Direct upload
+            </p>
+            <CodeBlock
+              language="bash"
+              className="!border-0 !bg-muted/50 !rounded-lg"
+            >
+              {`gram upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --location ./path/to/spec.yaml`}
+            </CodeBlock>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Or stage and push (useful for CI/CD)
+            </p>
+            <CodeBlock
+              language="bash"
+              className="!border-0 !bg-muted/50 !rounded-lg"
+            >
+              {`gram stage openapi \\\n  --slug ${documentSlug} \\\n  --location ./path/to/spec.yaml\n\ngram push`}
+            </CodeBlock>
+          </div>
+        </TabsContent>
+      )}
     </Tabs>
   );
 }
