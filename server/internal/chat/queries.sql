@@ -24,6 +24,37 @@ VALUES (
 ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
 RETURNING id;
 
+-- name: UpsertMCPSession :one
+-- Upsert an MCP session chat record. Creates if not exists, updates title if provided.
+INSERT INTO chats (
+    id
+  , project_id
+  , organization_id
+  , user_id
+  , external_user_id
+  , title
+  , source
+  , connection_fingerprint
+  , created_at
+  , updated_at
+)
+VALUES (
+    @id,
+    @project_id,
+    @organization_id,
+    @user_id,
+    @external_user_id,
+    @title,
+    'MCP',
+    @connection_fingerprint,
+    NOW(),
+    NOW()
+)
+ON CONFLICT (id) DO UPDATE SET
+    title = COALESCE(NULLIF(@title, ''), chats.title),
+    updated_at = NOW()
+RETURNING id;
+
 -- name: CreateChatMessage :copyfrom
 INSERT INTO chat_messages (
     chat_id

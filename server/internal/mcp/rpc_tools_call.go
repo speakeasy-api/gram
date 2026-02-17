@@ -80,6 +80,23 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").Log(ctx, logger)
 	}
 
+	// Extract MCP session context from tool arguments
+	sessionCtx, cleanedArgs, err := extractSessionContext(params.Arguments)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to extract session context", attr.SlogError(err))
+	}
+
+	// Fallback to Mcp-Session-Id header if no session in arguments
+	if sessionCtx.IsNewSession && payload.sessionID != "" {
+		if parsedID, parseErr := uuid.Parse(payload.sessionID); parseErr == nil {
+			sessionCtx.SessionID = parsedID
+			sessionCtx.IsNewSession = false
+		}
+	}
+
+	// Use cleaned arguments (without Gram session fields) for tool execution
+	params.Arguments = cleanedArgs
+
 	projectID := mv.ProjectID(payload.projectID)
 
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
@@ -259,8 +276,11 @@ func handleToolsCall(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		// Use MCP session ID for conversation tracking (prefer explicit chatID if set)
 		if payload.chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
+		} else if sessionCtx.SessionID != uuid.Nil {
+			logAttrs[attr.GenAIConversationIDKey] = sessionCtx.SessionID.String()
 		}
 		if payload.userID != "" {
 			logAttrs[attr.UserIDKey] = payload.userID
@@ -311,16 +331,93 @@ func handleToolsCall(
 		}
 	}
 
+	// Store MCP session and messages (non-blocking, errors logged but don't fail the request)
+	go func() {
+		bgCtx := context.WithoutCancel(ctx)
+		sessionStorage := NewMCPSessionStorage(db)
+
+		// Derive title from first user message
+		title := deriveSessionTitle(sessionCtx.Messages)
+
+		// Get request context for fingerprinting and metadata
+		reqCtx, _ := contextvalues.GetRequestContext(bgCtx)
+
+		// Get connection fingerprint from request context
+		var fingerprint string
+		var origin, userAgent, ipAddress string
+		if reqCtx != nil {
+			// Use available request context fields for fingerprinting
+			fp := ConnectionFingerprint{
+				IPAddress: "", // IP not available in RequestContext, leave empty
+				UserAgent: reqCtx.UserAgent,
+				Origin:    reqCtx.Host,
+			}
+			fingerprint = fp.Hash()
+			origin = reqCtx.Host
+			userAgent = reqCtx.UserAgent
+		}
+
+		// Upsert the session
+		if err := sessionStorage.UpsertSession(bgCtx, UpsertSessionParams{
+			SessionID:             sessionCtx.SessionID,
+			ProjectID:             uuid.UUID(projectID),
+			OrganizationID:        toolset.OrganizationID,
+			UserID:                payload.userID,
+			ExternalUserID:        payload.externalUserID,
+			Title:                 title,
+			ConnectionFingerprint: fingerprint,
+		}); err != nil {
+			logger.ErrorContext(bgCtx, "failed to upsert MCP session", attr.SlogError(err))
+			return
+		}
+
+		// Store conversation messages
+		if err := sessionStorage.StoreMessages(bgCtx, StoreMessagesParams{
+			SessionID:      sessionCtx.SessionID,
+			ProjectID:      uuid.UUID(projectID),
+			Messages:       sessionCtx.Messages,
+			UserID:         payload.userID,
+			ExternalUserID: payload.externalUserID,
+			Origin:         origin,
+			UserAgent:      userAgent,
+			IPAddress:      ipAddress,
+		}); err != nil {
+			logger.ErrorContext(bgCtx, "failed to store MCP session messages", attr.SlogError(err))
+		}
+
+		// Store tool call response
+		if err := sessionStorage.StoreToolCall(bgCtx, StoreToolCallParams{
+			SessionID:      sessionCtx.SessionID,
+			ProjectID:      uuid.UUID(projectID),
+			ToolName:       params.Name,
+			ToolURN:        toolURN.String(),
+			ToolCallID:     "", // Not available in MCP protocol
+			Request:        params.Arguments,
+			Response:       rw.body.String(),
+			UserID:         payload.userID,
+			ExternalUserID: payload.externalUserID,
+			Origin:         origin,
+			UserAgent:      userAgent,
+			IPAddress:      ipAddress,
+		}); err != nil {
+			logger.ErrorContext(bgCtx, "failed to store MCP tool call", attr.SlogError(err))
+		}
+	}()
+
 	var meta map[string]any
 	if tool != nil && tool.FunctionToolDefinition != nil {
 		meta = tool.FunctionToolDefinition.Meta
 	}
 
 	// External MCP tools and MCP passthrough tools already return properly formatted responses
+	// We still need to inject our session ID into the response metadata
 	if plan.Kind == gateway.ToolKindExternalMCP || isMCPPassthrough(meta) {
+		mcpResult := json.RawMessage(rw.body.Bytes())
+		mcpResult = injectSessionIDIntoMCPResult(mcpResult, sessionCtx.SessionID.String())
+
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:     req.ID,
-			Result: json.RawMessage(rw.body.Bytes()),
+			Result: mcpResult,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").Log(ctx, logger)
@@ -329,7 +426,7 @@ func handleToolsCall(
 		return bs, nil
 	}
 
-	chunk, err := formatResult(*rw, plan.Kind)
+	chunk, err := formatResult(*rw, plan.Kind, sessionCtx.SessionID.String())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").Log(ctx, logger)
 	}
@@ -509,7 +606,7 @@ func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.RawMessage, error) {
+func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind, sessionID string) (json.RawMessage, error) {
 	body := rw.body.Bytes()
 	if len(body) == 0 {
 		return nil, nil
@@ -521,6 +618,14 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 		return nil, fmt.Errorf("failed to parse content type %q: %w", ct, err)
 	}
 
+	// Build metadata with session ID if available
+	meta := map[string]any{
+		MetaGramMimeType: mt,
+	}
+	if sessionID != "" {
+		meta[GramSessionFieldName] = sessionID
+	}
+
 	switch {
 	case strings.HasPrefix(mt, "text/"), contenttypes.IsJSON(mt), contenttypes.IsYAML(mt):
 		bs, err := json.Marshal(contentChunk[string, json.RawMessage]{
@@ -528,9 +633,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Text:     string(body),
 			MimeType: nil,
 			Data:     nil,
-			Meta: map[string]any{
-				MetaGramMimeType: mt,
-			},
+			Meta:     meta,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize text content: %w", err)
@@ -539,12 +642,17 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 		return bs, nil
 	case strings.HasPrefix(mt, "image/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
+		// Build image meta with session ID if available
+		imageMeta := make(map[string]any)
+		if sessionID != "" {
+			imageMeta[GramSessionFieldName] = sessionID
+		}
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
 			Type:     "image",
 			Data:     encoded,
 			MimeType: &mt,
 			Text:     nil,
-			Meta:     nil,
+			Meta:     imageMeta,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize image content: %w", err)
@@ -553,12 +661,17 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 		return bs, nil
 	case strings.HasPrefix(mt, "audio/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
+		// Build audio meta with session ID if available
+		audioMeta := make(map[string]any)
+		if sessionID != "" {
+			audioMeta[GramSessionFieldName] = sessionID
+		}
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
 			Type:     "audio",
 			Data:     encoded,
 			MimeType: &mt,
 			Text:     nil,
-			Meta:     nil,
+			Meta:     audioMeta,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("serialize audio content: %w", err)
