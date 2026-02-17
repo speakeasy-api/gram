@@ -36,7 +36,7 @@ function ChatServerFnPage() {
   if (!username || !token) return null
 
   const config: ElementsConfig = {
-    projectSlug: 'default',
+    projectSlug: import.meta.env.VITE_GRAM_PROJECT_SLUG,
     mcp: import.meta.env.VITE_GRAM_MCP_URL,
     variant: 'standalone',
     environment: { MY_MCP_BEARER_TOKEN: token },
