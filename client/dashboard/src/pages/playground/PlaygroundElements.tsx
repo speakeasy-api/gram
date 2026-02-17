@@ -7,7 +7,7 @@ import {
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -68,8 +68,8 @@ export function PlaygroundElements({
     { enabled: !!toolsetSlug },
   );
 
-  // Get MCP URL from toolset (always uses Gram domain, not custom domains)
-  const mcpUrl = useInternalMcpUrl(toolset);
+  // Get MCP URL from toolset (uses custom domain if configured)
+  const { url: mcpUrl } = useMcpUrl(toolset);
 
   // Get environments and MCP metadata for auth status check
   const { data: environmentsData } = useListEnvironments();
