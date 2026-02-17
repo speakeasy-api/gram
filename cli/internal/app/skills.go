@@ -31,24 +31,26 @@ type PluginMetadata struct {
 func newSkillsCommand() *cli.Command {
 	return &cli.Command{
 		Name:        "skills",
-		Usage:       "lol",
-		Description: "foo",
+		Usage:       "Generate Claude Code skills from a Gram toolset",
+		Description: "Creates a Claude Code plugin with auto-generated skills based on tools in a Gram project. The plugin is created in a temporary directory and includes MCP server configuration.",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  "server-name",
-				Usage: "lipsum",
+				Usage: "Display the MCP server name in output",
 			},
 			&cli.StringSliceFlag{
 				Name:  "tool-name",
-				Usage: "stuff",
+				Usage: "Filter to specific tool names (can be specified multiple times)",
 			},
 			&cli.StringFlag{
-				Name:  "api-key",
-				Usage: "foo",
+				Name:     "api-key",
+				Usage:    "Gram API key for authentication",
+				Required: true,
 			},
 			&cli.StringFlag{
-				Name:  "project-slug",
-				Usage: "foo",
+				Name:     "project-slug",
+				Usage:    "Slug of the Gram project to generate skills from",
+				Required: true,
 			},
 			&cli.StringFlag{
 				Name:    "url",
