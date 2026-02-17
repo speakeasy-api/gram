@@ -5,7 +5,7 @@ import (
 	"goa.design/goa/v3/expr"
 
 	_ "github.com/speakeasy-api/gram/server/design/about"
-	_ "github.com/speakeasy-api/gram/server/design/agents"
+	_ "github.com/speakeasy-api/gram/server/design/agentworkflows"
 	_ "github.com/speakeasy-api/gram/server/design/assets"
 	_ "github.com/speakeasy-api/gram/server/design/auth"
 	_ "github.com/speakeasy-api/gram/server/design/chat"

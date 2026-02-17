@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 
-	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"

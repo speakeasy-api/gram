@@ -1,4 +1,4 @@
-package agentsapi_test
+package agentworkflows_test
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 
-	"github.com/speakeasy-api/gram/server/internal/agents"
-	"github.com/speakeasy-api/gram/server/internal/agentsapi"
+	"github.com/speakeasy-api/gram/server/internal/agentworkflows"
+	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *agentsapi.Service
+	service        *agentworkflows.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	temporalClient client.Client
@@ -120,7 +120,7 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
-	svc := agentsapi.NewService(
+	svc := agentworkflows.NewService(
 		logger,
 		tracerProvider,
 		meterProvider,

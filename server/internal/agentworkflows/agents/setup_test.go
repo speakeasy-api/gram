@@ -15,7 +15,7 @@ import (
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
-	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
