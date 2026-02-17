@@ -27,7 +27,6 @@ import { create } from "zustand";
 import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard, SourceCardSkeleton } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
-import { UpdateFunctionDialogContent } from "./UpdateFunctionDialogContent";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
 import { ViewAssetDialogContent } from "./ViewAssetDialogContent";
 
@@ -35,14 +34,12 @@ type DialogState =
   | { type: "closed" }
   | { type: "remove-source"; asset: NamedAsset }
   | { type: "upload-openapi"; documentSlug: string }
-  | { type: "update-function"; functionSlug: string }
   | { type: "view-asset"; asset: NamedAsset };
 
 interface DialogStore {
   dialogState: DialogState;
   openRemoveSource: (asset: NamedAsset) => void;
   openUploadOpenApi: (documentSlug: string) => void;
-  openUpdateFunction: (functionSlug: string) => void;
   openViewAsset: (asset: NamedAsset) => void;
   closeDialog: () => void;
 }
@@ -53,8 +50,6 @@ const useDialogStore = create<DialogStore>((set) => ({
     set({ dialogState: { type: "remove-source", asset } }),
   openUploadOpenApi: (documentSlug) =>
     set({ dialogState: { type: "upload-openapi", documentSlug } }),
-  openUpdateFunction: (functionSlug) =>
-    set({ dialogState: { type: "update-function", functionSlug } }),
   openViewAsset: (asset) => set({ dialogState: { type: "view-asset", asset } }),
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
@@ -107,7 +102,6 @@ export default function Sources() {
     dialogState,
     openRemoveSource,
     openUploadOpenApi,
-    openUpdateFunction,
     openViewAsset,
     closeDialog,
   } = useDialogStore();
@@ -334,7 +328,6 @@ export default function Sources() {
                   handleRemove={() => openRemoveSource(asset)}
                   handleViewAsset={() => openViewAsset(asset)}
                   setChangeDocumentTargetSlug={openUploadOpenApi}
-                  setUpdateFunctionTargetSlug={openUpdateFunction}
                 />
               ))
             )}
@@ -362,12 +355,6 @@ export default function Sources() {
                   documentSlug={dialogState.documentSlug}
                   onClose={closeDialog}
                   onSuccess={handleDialogSuccess}
-                />
-              )}
-              {dialogState.type === "update-function" && (
-                <UpdateFunctionDialogContent
-                  functionSlug={dialogState.functionSlug}
-                  onClose={closeDialog}
                 />
               )}
               {dialogState.type === "view-asset" && (
