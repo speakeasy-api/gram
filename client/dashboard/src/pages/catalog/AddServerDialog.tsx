@@ -161,7 +161,9 @@ function PhaseContent({
         />
       );
     case "error":
-      return <ErrorPhaseContent releaseState={releaseState} onClose={onClose} />;
+      return (
+        <ErrorPhaseContent releaseState={releaseState} onClose={onClose} />
+      );
   }
 }
 
@@ -267,11 +269,7 @@ function SingleServerConfig({
   );
 }
 
-function BatchServerConfig({
-  releaseState,
-}: {
-  releaseState: ConfigurePhase;
-}) {
+function BatchServerConfig({ releaseState }: { releaseState: ConfigurePhase }) {
   const { existingSpecifiers } = releaseState;
   return (
     <div className="space-y-3 max-h-80 overflow-y-auto">

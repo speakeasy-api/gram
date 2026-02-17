@@ -358,9 +358,22 @@ export function useExternalMcpReleaseWorkflow({
 
   switch (phase) {
     case "configure":
-      return { phase, serverConfigs, updateServerConfig, canDeploy, startDeployment, ...base };
+      return {
+        phase,
+        serverConfigs,
+        updateServerConfig,
+        canDeploy,
+        startDeployment,
+        ...base,
+      };
     case "deploying":
-      return { phase, deploymentId: deploymentId!, deploymentStatus, deploymentLogs, ...base };
+      return {
+        phase,
+        deploymentId: deploymentId!,
+        deploymentStatus,
+        deploymentLogs,
+        ...base,
+      };
     case "complete":
       return { phase, toolsetStatuses, ...base };
     case "error":
