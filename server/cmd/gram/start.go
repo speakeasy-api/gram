@@ -616,6 +616,9 @@ func newStartCommand() *cli.Command {
 			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, posthogClient)
 
 			mux := goahttp.NewMuxer()
+			mux.Use(func(h http.Handler) http.Handler {
+				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
+			})
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
@@ -672,7 +675,7 @@ func newStartCommand() *cli.Command {
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
-				Handler:           otelhttp.NewHandler(mux, "http", otelhttp.WithServerName("gram")),
+				Handler:           mux,
 				ReadHeaderTimeout: 10 * time.Second,
 				BaseContext: func(net.Listener) context.Context {
 					return ctx
