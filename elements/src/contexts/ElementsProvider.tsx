@@ -157,7 +157,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   const auth = useAuth({
     auth: config.api,
     projectSlug: config.projectSlug,
+    refreshSession: config.refreshSession,
   })
+
+  // Ref to access ensureValidHeaders in async transport without stale closures
+  const ensureValidHeadersRef = useRef(auth.ensureValidHeaders)
+  ensureValidHeadersRef.current = auth.ensureValidHeaders
   const toolApproval = useToolApproval()
 
   const [model, setModel] = useState<Model>(
@@ -266,6 +271,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           throw new Error('Session is loading')
         }
 
+        // Ensure the session token is still valid; refresh if expired
+        const validHeaders = await ensureValidHeadersRef.current()
+
         // Get chat ID - use the synced remoteId ref first (history mode),
         // fall back to generated ID (non-history mode)
         let chatId = currentRemoteIdRef.current
@@ -318,13 +326,20 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
 
         // Include Gram-Chat-ID header for chat persistence and Gram-Environment for environment selection
         const headersWithChatId = {
-          ...auth.headers,
+          ...validHeaders,
           'Gram-Chat-ID': chatId,
           'X-Gram-Source': 'elements',
           ...config.api?.headers, // We do this after X-Gram-Source so the playground can override it
           ...(config.gramEnvironment && {
             'Gram-Environment': config.gramEnvironment,
           }),
+        }
+
+        // Update MCP headers with the (possibly refreshed) session token
+        // so mid-stream MCP tool calls use the fresh token
+        const freshSession = validHeaders['Gram-Chat-Session']
+        if (freshSession) {
+          mcpHeaders['Gram-Chat-Session'] = freshSession
         }
 
         // Create OpenRouter model (only needed when not using custom model)

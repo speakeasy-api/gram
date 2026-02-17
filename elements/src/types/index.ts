@@ -297,6 +297,15 @@ export interface ElementsConfig {
   api?: ApiConfig
 
   /**
+   * Whether to automatically refresh session tokens before they expire.
+   * Only effective when using the default session fetching (`/chat/session`)
+   * or a session function. Has no effect on static tokens.
+   *
+   * @default true
+   */
+  refreshSession?: boolean
+
+  /**
    * Error tracking configuration.
    * By default, errors are reported to help improve the Elements library.
    *

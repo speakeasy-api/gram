@@ -1,14 +1,17 @@
 import { useReplayContext } from '@/contexts/ReplayContext'
 import {
   hasExplicitSessionAuth,
+  isAnyStaticSession,
   isDangerousApiKeyAuth,
   isStaticSessionAuth,
   isUnifiedFunctionSession,
   isUnifiedStaticSession,
 } from '@/lib/auth'
-import { useMemo } from 'react'
+import { isTokenExpired } from '@/lib/token'
+import { useCallback, useMemo, useRef } from 'react'
 import { ApiConfig, GetSessionFn } from '../types'
 import { useSession } from './useSession'
+import { useQueryClient } from '@tanstack/react-query'
 
 declare const __GRAM_API_URL__: string | undefined
 
@@ -16,10 +19,12 @@ export type Auth =
   | {
       headers: Record<string, string>
       isLoading: false
+      ensureValidHeaders: () => Promise<Record<string, string>>
     }
   | {
       headers?: Record<string, string>
       isLoading: true
+      ensureValidHeaders: () => Promise<Record<string, string>>
     }
 
 async function defaultGetSession(init: {
@@ -62,17 +67,20 @@ function createDangerousApiKeySessionFn(
 
 /**
  * Hook to fetch or retrieve the session token for the chat.
- * @returns The session token string or null
+ * @returns Auth object with headers and ensureValidHeaders for pre-request token refresh
  */
 export const useAuth = ({
   projectSlug,
   auth,
+  refreshSession,
 }: {
   auth?: ApiConfig
   projectSlug: string
+  refreshSession?: boolean
 }): Auth => {
   const replayCtx = useReplayContext()
   const isReplay = replayCtx?.isReplay ?? false
+  const queryClient = useQueryClient()
 
   const apiUrl = useMemo(() => {
     const envUrl =
@@ -117,17 +125,66 @@ export const useAuth = ({
     projectSlug,
   })
 
+  const shouldRefresh =
+    (refreshSession ?? true) && !isAnyStaticSession(auth) && !isReplay
+
+  // Ref to deduplicate concurrent refresh calls
+  const refreshPromiseRef = useRef<Promise<string> | null>(null)
+
+  const queryKey = useMemo(() => ['chatSession', projectSlug], [projectSlug])
+
+  const ensureValidHeaders = useCallback(async (): Promise<
+    Record<string, string>
+  > => {
+    // Read the current cached token
+    const cachedToken = queryClient.getQueryData<string>(queryKey)
+
+    // If refresh is disabled, or no token to check, return current headers
+    if (!shouldRefresh || !cachedToken || !getSession) {
+      return {
+        'Gram-Project': projectSlug,
+        ...(cachedToken && { 'Gram-Chat-Session': cachedToken }),
+      }
+    }
+
+    // Token is still valid — return current headers
+    if (!isTokenExpired(cachedToken)) {
+      return {
+        'Gram-Project': projectSlug,
+        'Gram-Chat-Session': cachedToken,
+      }
+    }
+
+    // Token is expired — refresh, deduplicating concurrent calls
+    if (!refreshPromiseRef.current) {
+      refreshPromiseRef.current = getSession({ projectSlug }).finally(() => {
+        refreshPromiseRef.current = null
+      })
+    }
+
+    const freshToken = await refreshPromiseRef.current
+    // Update the query cache so useSession consumers see the new token
+    queryClient.setQueryData(queryKey, freshToken)
+
+    return {
+      'Gram-Project': projectSlug,
+      'Gram-Chat-Session': freshToken,
+    }
+  }, [shouldRefresh, getSession, projectSlug, queryClient, queryKey])
+
   // In replay mode, return immediately without waiting for session
   if (isReplay) {
     return {
       headers: {},
       isLoading: false,
+      ensureValidHeaders: async () => ({}),
     }
   }
 
   return !session
     ? {
         isLoading: true,
+        ensureValidHeaders,
       }
     : {
         headers: {
@@ -135,5 +192,6 @@ export const useAuth = ({
           'Gram-Chat-Session': session,
         },
         isLoading: false,
+        ensureValidHeaders,
       }
 }
