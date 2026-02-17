@@ -102,12 +102,12 @@ function DeploymentDetailPanel({
   deployment,
   isActive,
   sourceKind,
-  attachmentId,
+  attachmentType,
 }: {
   deployment: DeploymentSummary;
   isActive: boolean;
   sourceKind?: string;
-  attachmentId?: string;
+  attachmentType?: string;
 }) {
   // Show source-type-specific counts when viewing a source detail page
   const isFunction = sourceKind === "function";
@@ -183,7 +183,7 @@ function DeploymentDetailPanel({
           <div className="text-sm text-muted-foreground">Loading logs...</div>
         }
       >
-        <LogsTabContent deploymentId={deployment.id} embeddedMode attachmentId={attachmentId} />
+        <LogsTabContent deploymentId={deployment.id} embeddedMode attachmentType={attachmentType} />
       </Suspense>
     </div>
   );
@@ -193,10 +193,10 @@ function DeploymentDetailPanel({
 
 export function SourceDeploymentsPanel({
   sourceKind,
-  attachmentId,
+  attachmentType,
 }: {
   sourceKind?: string;
-  attachmentId?: string;
+  attachmentType?: string;
 }) {
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
@@ -252,7 +252,7 @@ export function SourceDeploymentsPanel({
         deployment={selectedDeployment}
         isActive={activeDeployment?.id === selectedDeployment.id}
         sourceKind={sourceKind}
-        attachmentId={attachmentId}
+        attachmentType={attachmentType}
       />
     </div>
   );

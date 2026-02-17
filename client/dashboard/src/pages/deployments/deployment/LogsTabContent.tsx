@@ -110,8 +110,8 @@ function parseLogMessage(message: string, event: string): ParsedLogEntry {
 export const LogsTabContent = ({
   deploymentId: propDeploymentId,
   embeddedMode = false,
-  attachmentId,
-}: { deploymentId?: string; embeddedMode?: boolean; attachmentId?: string } = {}) => {
+  attachmentType,
+}: { deploymentId?: string; embeddedMode?: boolean; attachmentType?: string } = {}) => {
   const { deploymentId: paramDeploymentId } = useParams();
   const deploymentId = propDeploymentId ?? paramDeploymentId!;
   const { data: deploymentLogs } = useDeploymentLogsSuspense(
@@ -157,12 +157,12 @@ export const LogsTabContent = ({
   const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const visibleEvents = useMemo(() => {
-    if (!attachmentId) return deploymentLogs.events;
+    if (!attachmentType) return deploymentLogs.events;
     return deploymentLogs.events.filter(
       (event) =>
-        !event.attachmentId || event.attachmentId === attachmentId,
+        !event.attachmentType || event.attachmentType === attachmentType,
     );
-  }, [deploymentLogs.events, attachmentId]);
+  }, [deploymentLogs.events, attachmentType]);
 
   const parsedLogs = useMemo(
     () =>
