@@ -30,8 +30,6 @@ var PromptTemplate = Type("PromptTemplate", func() {
 		Description("The suggested tool URNS associated with the prompt template")
 		MaxLength(20)
 	})
-
-	Meta("struct:pkg:path", "types")
 })
 
 var PromptTemplateEntry = Type("PromptTemplateEntry", func() {
@@ -40,6 +38,4 @@ var PromptTemplateEntry = Type("PromptTemplateEntry", func() {
 	Attribute("id", String, "The ID of the prompt template")
 	Attribute("name", Slug, "The name of the prompt template")
 	Attribute("kind", String, "The kind of the prompt template")
-
-	Meta("struct:pkg:path", "types")
 })

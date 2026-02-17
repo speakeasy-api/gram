@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/functions/internal/attr"
 	"github.com/speakeasy-api/gram/functions/internal/auth"
 	"github.com/speakeasy-api/gram/functions/internal/encryption"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type Service struct {
@@ -39,11 +40,17 @@ func NewService(
 func (s *Service) Attach(mux *http.ServeMux) {
 	mux.Handle(
 		"POST /tool-call",
-		auth.AuthorizeRequest(s.logger, s.encryption, http.HandlerFunc(s.handleToolCall)),
+		otelhttp.WithRouteTag(
+			"http.toolCall",
+			auth.AuthorizeRequest(s.logger, s.encryption, http.HandlerFunc(s.handleToolCall)),
+		),
 	)
 
 	mux.Handle(
 		"POST /resource-request",
-		auth.AuthorizeRequest(s.logger, s.encryption, http.HandlerFunc(s.handleResourceRequest)),
+		otelhttp.WithRouteTag(
+			"http.resourceRequest",
+			auth.AuthorizeRequest(s.logger, s.encryption, http.HandlerFunc(s.handleResourceRequest)),
+		),
 	)
 }
