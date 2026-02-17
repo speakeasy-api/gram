@@ -353,9 +353,9 @@ If there are no tool calls, return an empty array.`, userPromptText)
 func (a *AnalyzeSegment) formatUserFeedback(userFeedback []UserFeedback) string {
 	var feedbackText strings.Builder
 	for _, fb := range userFeedback {
-		feedbackText.WriteString(fmt.Sprintf(`User feedback at message index %d: %s\n`, fb.MessageIndex, fb.Resolution))
+		fmt.Fprintf(&feedbackText, `User feedback at message index %d: %s\n`, fb.MessageIndex, fb.Resolution)
 		if fb.ResolutionNotes != "" {
-			feedbackText.WriteString(fmt.Sprintf(`-- User feedback notes: %s\n`, fb.ResolutionNotes))
+			fmt.Fprintf(&feedbackText, `-- User feedback notes: %s\n`, fb.ResolutionNotes)
 		}
 	}
 	return feedbackText.String()

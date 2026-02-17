@@ -480,7 +480,7 @@ func RenderTemplateJSON(ctx context.Context, logger *slog.Logger, promptJSON str
 	for _, step := range prompt.Steps {
 		var stepInputs strings.Builder
 		for _, input := range step.Inputs {
-			stepInputs.WriteString(fmt.Sprintf("    <Input name=\"%s\" />\n", input))
+			fmt.Fprintf(&stepInputs, "    <Input name=\"%s\" />\n", input)
 		}
 
 		stepInstructions := fmt.Sprintf("  <Instruction>%s</Instruction>\n%s", step.Instructions, stepInputs.String())
@@ -488,7 +488,7 @@ func RenderTemplateJSON(ctx context.Context, logger *slog.Logger, promptJSON str
 			// When tool is empty, just show the instruction without CallTool wrapper
 			stepsPortion.WriteString(stepInstructions)
 		} else {
-			stepsPortion.WriteString(fmt.Sprintf("  <CallTool tool_name=\"%s\">\n  %s  </CallTool>\n", step.Tool, stepInstructions))
+			fmt.Fprintf(&stepsPortion, "  <CallTool tool_name=\"%s\">\n  %s  </CallTool>\n", step.Tool, stepInstructions)
 		}
 	}
 

@@ -172,19 +172,19 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 func formatListToolsSlackMessage(input activities.SlackProjectContextResponse) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("*Project:* `%s`\n", input.ProjectSlug))
+	fmt.Fprintf(&sb, "*Project:* `%s`\n", input.ProjectSlug)
 	if input.DefaultToolsetSlug != nil {
-		sb.WriteString(fmt.Sprintf("*Default Toolset:* `%s`\n", *input.DefaultToolsetSlug))
+		fmt.Fprintf(&sb, "*Default Toolset:* `%s`\n", *input.DefaultToolsetSlug)
 	}
 	sb.WriteString("\n*Toolsets:*\n")
 
 	for _, ts := range input.Toolsets {
-		sb.WriteString(fmt.Sprintf("• *`%s`* (%d tools)\n", ts.Slug, ts.NumberOfTools))
+		fmt.Fprintf(&sb, "• *`%s`* (%d tools)\n", ts.Slug, ts.NumberOfTools)
 		if ts.Description != nil && *ts.Description != "" {
-			sb.WriteString(fmt.Sprintf("  _%s_\n", *ts.Description))
+			fmt.Fprintf(&sb, "  _%s_\n", *ts.Description)
 		}
-		sb.WriteString(fmt.Sprintf("  created at: `%s`\n", ts.CreatedAt))
-		sb.WriteString(fmt.Sprintf("  updated at: `%s`\n\n", ts.UpdatedAt))
+		fmt.Fprintf(&sb, "  created at: `%s`\n", ts.CreatedAt)
+		fmt.Fprintf(&sb, "  updated at: `%s`\n\n", ts.UpdatedAt)
 	}
 
 	return sb.String()
