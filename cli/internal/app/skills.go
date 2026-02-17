@@ -43,9 +43,9 @@ func newSkillsCommand() *cli.Command {
 				Usage: "Filter to specific tool names (can be specified multiple times)",
 			},
 			&cli.StringFlag{
-				Name:     "api-key",
-				Usage:    "Gram API key for authentication",
-				Required: true,
+				Name:    "api-key",
+				Usage:   "Gram API key for authentication",
+				EnvVars: []string{"GRAM_API_KEY"},
 			},
 			&cli.StringFlag{
 				Name:     "project-slug",
