@@ -106,27 +106,28 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	var requiresOAuth bool
 	var oauthDiscovery *OAuthDiscoveryResult
 	mcpClient, err := NewClient(ctx, internalLogger, serverDetails.RemoteURL, serverDetails.TransportType, nil)
-	if oauthErr := (*OAuthRequiredError)(nil); errors.As(err, &oauthErr) {
-		requiresOAuth = true
+	if authErr := (*AuthRejectedError)(nil); errors.As(err, &authErr) {
+		logger.InfoContext(ctx, fmt.Sprintf("[%s] external MCP server rejected auth, attempting OAuth discovery", task.MCP.Name),
+			attr.SlogURL(serverDetails.RemoteURL),
+			attr.SlogHTTPResponseStatusCode(authErr.StatusCode),
+		)
 
-		oauthDiscovery, err = DiscoverOAuthMetadata(ctx, internalLogger, oauthErr.WWWAuthenticate, serverDetails.RemoteURL)
+		oauthDiscovery, err = DiscoverOAuthMetadata(ctx, internalLogger, authErr.WWWAuthenticate, serverDetails.RemoteURL)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "[%s] error discovering OAuth metadata", task.MCP.Name).Log(ctx, logger)
 		}
 
-		logger.InfoContext(ctx, "discovered oauth metadata",
-			attr.SlogOAuthVersion(oauthDiscovery.Version),
-			attr.SlogOAuthAuthorizationEndpoint(oauthDiscovery.AuthorizationEndpoint),
-			attr.SlogOAuthTokenEndpoint(oauthDiscovery.TokenEndpoint),
-			attr.SlogOAuthRegistrationEndpoint(oauthDiscovery.RegistrationEndpoint),
-		)
-
-		if oauthDiscovery.Version == OAuthVersion20 {
-			logger.WarnContext(ctx, fmt.Sprintf("[%s] external MCP server uses legacy OAuth 2.0 which requires static client registration; "+
-				"falling back to manual Authorization header", task.MCP.Name))
-
-			// Fall back to manual Authorization header instead of OAuth
-			requiresOAuth = false
+		switch oauthDiscovery.Version {
+		case OAuthVersion21:
+			requiresOAuth = true
+			logger.InfoContext(ctx, fmt.Sprintf("[%s] discovered OAuth 2.1", task.MCP.Name),
+				attr.SlogOAuthVersion(oauthDiscovery.Version),
+				attr.SlogOAuthAuthorizationEndpoint(oauthDiscovery.AuthorizationEndpoint),
+				attr.SlogOAuthTokenEndpoint(oauthDiscovery.TokenEndpoint),
+				attr.SlogOAuthRegistrationEndpoint(oauthDiscovery.RegistrationEndpoint),
+			)
+		case OAuthVersion20:
+			logger.WarnContext(ctx, fmt.Sprintf("[%s] legacy OAuth 2.0; falling back to manual Authorization header", task.MCP.Name))
 			oauthDiscovery = nil
 
 			authDescription := "Bearer token for authentication (OAuth 2.0 requires static client registration)"
@@ -137,12 +138,19 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 				Description: &authDescription,
 				Placeholder: nil,
 			})
+		default:
+			logger.WarnContext(ctx, fmt.Sprintf("[%s] no OAuth metadata discovered; adding manual Authorization header", task.MCP.Name))
+			oauthDiscovery = nil
+
+			authDescription := "Authorization header value (e.g. Bearer <token>)"
+			serverDetails.Headers = append(serverDetails.Headers, RemoteHeader{
+				Name:        "Authorization",
+				IsSecret:    true,
+				IsRequired:  true,
+				Description: &authDescription,
+				Placeholder: nil,
+			})
 		}
-	} else if authErr := (*AuthRejectedError)(nil); errors.As(err, &authErr) {
-		logger.InfoContext(ctx, "[%s] external MCP server rejected auth probe, continuing without OAuth",
-			attr.SlogURL(serverDetails.RemoteURL),
-			attr.SlogHTTPResponseStatusCode(authErr.StatusCode),
-		)
 	} else if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "[%s] external mcp server unavailable", task.MCP.Name).Log(ctx, logger)
 	} else {
