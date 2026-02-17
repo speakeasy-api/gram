@@ -172,9 +172,10 @@ func processSecurity(
 	}
 
 	for key, value := range env.SystemEnv.All() {
-		canonicalKey := http.CanonicalHeaderKey(key)
+		headerKey := toolconfig.ToHTTPHeader(key)
+		canonicalKey := http.CanonicalHeaderKey(headerKey)
 		if _, alreadyProcessed := securityHeadersProcessed[canonicalKey]; !alreadyProcessed {
-			req.Header.Set(key, value)
+			req.Header.Set(headerKey, value)
 		}
 	}
 
