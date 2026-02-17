@@ -138,7 +138,7 @@ export function OpenApiSourceInput({
               language="bash"
               className="!border-0 !bg-muted/50 !rounded-lg"
             >
-              {`gram upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --location ./path/to/spec.yaml`}
+              {`gram upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name "${documentSlug}" \\\n  --location ./path/to/spec.yaml`}
             </CodeBlock>
           </div>
           <div>
