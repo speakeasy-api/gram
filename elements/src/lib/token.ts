@@ -9,7 +9,8 @@ export function getTokenExpiry(token: string): number | null {
     if (parts.length !== 3) return null
 
     // base64url → base64 → decode
-    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    while (payload.length % 4) payload += '='
 
     const json = atob(payload)
     const parsed = JSON.parse(json)

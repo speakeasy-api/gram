@@ -10,7 +10,7 @@ import {
 import { isTokenExpired } from '@/lib/token'
 import { useCallback, useMemo, useRef } from 'react'
 import { ApiConfig, GetSessionFn } from '../types'
-import { useSession } from './useSession'
+import { getChatSessionQueryKey, useSession } from './useSession'
 import { useQueryClient } from '@tanstack/react-query'
 
 declare const __GRAM_API_URL__: string | undefined
@@ -134,7 +134,7 @@ export const useAuth = ({
   const ensureValidHeaders = useCallback(async (): Promise<
     Record<string, string>
   > => {
-    const queryKey = ['chatSession', projectSlug]
+    const queryKey = getChatSessionQueryKey(projectSlug)
     // Read the current cached token
     const cachedToken = queryClient.getQueryData<string>(queryKey)
 
@@ -161,13 +161,21 @@ export const useAuth = ({
       })
     }
 
-    const freshToken = await refreshPromiseRef.current
-    // Update the query cache so useSession consumers see the new token
-    queryClient.setQueryData(queryKey, freshToken)
+    try {
+      const freshToken = await refreshPromiseRef.current
+      // Update the query cache so useSession consumers see the new token
+      queryClient.setQueryData(queryKey, freshToken)
 
-    return {
-      'Gram-Project': projectSlug,
-      'Gram-Chat-Session': freshToken,
+      return {
+        'Gram-Project': projectSlug,
+        'Gram-Chat-Session': freshToken,
+      }
+    } catch {
+      // Fall back to stale token — let the server decide via 401
+      return {
+        'Gram-Project': projectSlug,
+        'Gram-Chat-Session': cachedToken,
+      }
     }
   }, [shouldRefresh, getSession, projectSlug, queryClient])
 

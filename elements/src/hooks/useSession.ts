@@ -1,6 +1,10 @@
 import { GetSessionFn } from '@/types'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
+export function getChatSessionQueryKey(projectSlug: string) {
+  return ['chatSession', projectSlug] as const
+}
+
 /**
  * Hook to fetch or retrieve the session token for the chat.
  * @returns The session token string or null
@@ -13,7 +17,7 @@ export const useSession = ({
   projectSlug: string
 }): string | null => {
   const queryClient = useQueryClient()
-  const queryKey = ['chatSession', projectSlug]
+  const queryKey = getChatSessionQueryKey(projectSlug)
 
   const queryState = queryClient.getQueryState(queryKey)
   const hasData = queryState?.data !== undefined

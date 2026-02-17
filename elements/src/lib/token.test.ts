@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { getTokenExpiry, isTokenExpired } from './token'
 
 /** Helper: build a JWT with a given payload (no signature verification needed). */
@@ -45,10 +45,6 @@ describe('getTokenExpiry', () => {
 })
 
 describe('isTokenExpired', () => {
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
   it('returns true for an expired token', () => {
     // exp = 1 second ago
     const exp = Math.floor(Date.now() / 1000) - 1
