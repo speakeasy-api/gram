@@ -34,14 +34,6 @@ func newSkillsCommand() *cli.Command {
 		Usage:       "Generate Claude Code skills from a Gram toolset",
 		Description: "Creates a Claude Code plugin with auto-generated skills based on tools in a Gram project. The plugin is created in a temporary directory and includes MCP server configuration.",
 		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:  "server-name",
-				Usage: "Display the MCP server name in output",
-			},
-			&cli.StringSliceFlag{
-				Name:  "tool-name",
-				Usage: "Filter to specific tool names (can be specified multiple times)",
-			},
 			&cli.StringFlag{
 				Name:    "api-key",
 				Usage:   "Gram API key for authentication",
@@ -51,6 +43,11 @@ func newSkillsCommand() *cli.Command {
 				Name:     "project-slug",
 				Usage:    "Slug of the Gram project to generate skills from",
 				Required: true,
+			},
+			&cli.StringFlag{
+				Name:  "dir",
+				Usage: "Directory where the plugin will be created",
+				Value: ".",
 			},
 			&cli.StringFlag{
 				Name:    "url",
@@ -64,13 +61,6 @@ func newSkillsCommand() *cli.Command {
 }
 
 func doSkills(c *cli.Context) error {
-	// Print all flag values
-	fmt.Printf("interactive: %v\n", c.Bool("interactive"))
-	fmt.Printf("server-name: %v\n", c.Bool("server-name"))
-	fmt.Printf("tool-name: %v\n", c.StringSlice("tool-name"))
-	fmt.Printf("api-key: %v\n", c.String("api-key"))
-
-	// Construct secret.Secret from string
 	apiKey := secret.Secret(c.String("api-key"))
 	projectSlug := c.String("project-slug")
 
@@ -88,18 +78,23 @@ func doSkills(c *cli.Context) error {
 
 	result, err := tsc.InferSkillsFromToolset(ctx, apiKey, projectSlug)
 	if err != nil {
-		return fmt.Errorf("could not infer skills from toolset: %w", err)
+		return fmt.Errorf("w", err)
 	}
 
-	fmt.Printf("Tools count: %d\n", len(result.Tools))
-	fmt.Printf("Skills count: %d\n", len(result.Skills))
-
-	// Create temporary directory for the plugin
-	tmpDir, err := os.MkdirTemp("", "claude-plugin-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temporary directory: %w", err)
+	// DEBUG: Print what we received
+	fmt.Printf("\n=== CLI DEBUG ===\n")
+	fmt.Printf("Received %d tools and %d skills\n", len(result.Tools), len(result.Skills))
+	if len(result.Tools) > 0 {
+		fmt.Printf("First tool: %s\n", result.Tools[0].Name)
+		fmt.Printf("Last tool: %s\n", result.Tools[len(result.Tools)-1].Name)
 	}
-	fmt.Printf("Created temporary directory: %s\n", tmpDir)
+	fmt.Printf("=== END CLI DEBUG ===\n\n")
+
+	// Get the plugin directory from the flag
+	pluginDir := c.String("dir")
+	if err := os.MkdirAll(pluginDir, 0750); err != nil {
+		return fmt.Errorf("failed to create plugin directory: %w", err)
+	}
 
 	// Materialize plugin filesystem structure
 	metadata := PluginMetadata{
@@ -107,12 +102,12 @@ func doSkills(c *cli.Context) error {
 		Description: "Auto-generated skills from toolsets",
 		Version:     "1.0.0",
 	}
-	if err := materializePluginFS(tmpDir, metadata); err != nil {
+	if err := materializePluginFS(pluginDir, metadata); err != nil {
 		return fmt.Errorf("failed to create plugin filesystem: %w", err)
 	}
 
 	// Render templates into the filesystem
-	skillsDir := filepath.Join(tmpDir, "skills")
+	skillsDir := filepath.Join(pluginDir, "skills")
 	for i, skill := range result.Skills {
 		var toolName string
 		if i < len(result.Tools) {
@@ -142,10 +137,9 @@ func doSkills(c *cli.Context) error {
 		fmt.Printf("Created skill: %s\n", toolName)
 	}
 
-	// Return the path to the temporary directory
+	// Return the path to the plugin directory
 	fmt.Printf("\n✓ Plugin created successfully!\n")
-	fmt.Printf("\nTo use this plugin, copy the directory to your desired location.\n")
-	fmt.Printf("%s", tmpDir)
+	fmt.Printf("\nPlugin location: %s\n", pluginDir)
 
 	return nil
 }
