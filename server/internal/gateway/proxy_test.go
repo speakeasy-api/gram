@@ -1964,6 +1964,89 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	require.Equal(t, "system-secret-key", capturedRequest.Header.Get("X-System-Key"))
 }
 
+func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T) {
+	t.Parallel()
+
+	// Create a mock server that captures the request
+	var capturedRequest *http.Request
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedRequest = r
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success": true}`))
+	}))
+	defer mockServer.Close()
+
+	// Setup test dependencies
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	tool := newTestToolDescriptor()
+	plan := &HTTPToolCallPlan{
+		ServerEnvVar:       "",
+		DefaultServerUrl:   NullString{Value: mockServer.URL, Valid: true},
+		Security:           []*HTTPToolSecurity{},
+		SecurityScopes:     map[string][]string{},
+		Method:             "GET",
+		Path:               "/test",
+		Schema:             []byte{},
+		HeaderParams:       map[string]*HTTPParameter{},
+		QueryParams:        map[string]*HTTPParameter{},
+		PathParams:         map[string]*HTTPParameter{},
+		RequestContentType: NullString{Value: "application/json", Valid: true},
+		ResponseFilter:     nil,
+	}
+
+	requestBody := ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 nil,
+		ResponseFilter:       nil,
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "",
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		funcs,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	// Set up system env with underscore-delimited keys
+	systemEnv := toolconfig.NewCaseInsensitiveEnv()
+	systemEnv.Set("X_API_KEY", "my-api-key")
+	systemEnv.Set("X_CUSTOM_HEADER", "custom-value")
+
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  systemEnv,
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
+
+	require.NoError(t, err)
+	require.NotNil(t, capturedRequest)
+
+	// Verify underscore-delimited env keys were converted to hyphenated HTTP headers
+	require.Equal(t, "my-api-key", capturedRequest.Header.Get("X-Api-Key"))
+	require.Equal(t, "custom-value", capturedRequest.Header.Get("X-Custom-Header"))
+}
+
 func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	t.Parallel()
 
