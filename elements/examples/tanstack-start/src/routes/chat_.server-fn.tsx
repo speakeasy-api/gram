@@ -4,12 +4,14 @@ import { Chat, GramElementsProvider } from '@gram-ai/elements'
 import type { ElementsConfig } from '@gram-ai/elements'
 import '@gram-ai/elements/elements.css'
 import { getSession } from '../session.functions'
+import { useServerFn } from '@tanstack/react-start'
 
 export const Route = createFileRoute('/chat_/server-fn')({
   component: ChatServerFnPage,
 })
 
 function ChatServerFnPage() {
+  const serverGetSession = useServerFn(getSession)
   const navigate = useNavigate()
   const [username, setUsername] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
@@ -39,8 +41,9 @@ function ChatServerFnPage() {
     variant: 'standalone',
     environment: { MY_MCP_BEARER_TOKEN: token },
     api: {
+      url: 'https://app.getgram.ai',
       session: async ({ projectSlug }) => {
-        return await getSession({ data: { projectSlug } })
+        return await serverGetSession({ data: { projectSlug } })
       },
     },
   }

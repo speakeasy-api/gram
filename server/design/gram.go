@@ -3,7 +3,6 @@ package design
 import (
 	. "goa.design/goa/v3/dsl"
 	"goa.design/goa/v3/expr"
-	_ "goa.design/plugins/v3/otel"
 
 	_ "github.com/speakeasy-api/gram/server/design/about"
 	_ "github.com/speakeasy-api/gram/server/design/agents"

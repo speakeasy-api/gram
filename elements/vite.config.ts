@@ -32,6 +32,7 @@ export default defineConfig({
       entry: {
         elements: resolve(__dirname, 'src/index.ts'),
         server: resolve(__dirname, 'src/server.ts'),
+        'server/core': resolve(__dirname, 'src/server/core.ts'),
         'server/express': resolve(__dirname, 'src/server/express.ts'),
         'server/nextjs': resolve(__dirname, 'src/server/nextjs.ts'),
         'server/fastify': resolve(__dirname, 'src/server/fastify.ts'),
