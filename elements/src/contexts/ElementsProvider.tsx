@@ -157,7 +157,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   const auth = useAuth({
     auth: config.api,
     projectSlug: config.projectSlug,
-    refreshSession: config.refreshSession,
   })
 
   // Ref to access ensureValidHeaders in async transport without stale closures

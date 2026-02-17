@@ -72,11 +72,9 @@ function createDangerousApiKeySessionFn(
 export const useAuth = ({
   projectSlug,
   auth,
-  refreshSession,
 }: {
   auth?: ApiConfig
   projectSlug: string
-  refreshSession?: boolean
 }): Auth => {
   const replayCtx = useReplayContext()
   const isReplay = replayCtx?.isReplay ?? false
@@ -125,8 +123,7 @@ export const useAuth = ({
     projectSlug,
   })
 
-  const shouldRefresh =
-    (refreshSession ?? true) && !isAnyStaticSession(auth) && !isReplay
+  const shouldRefresh = !isAnyStaticSession(auth) && !isReplay
 
   const ensureValidHeaders = useCallback(async (): Promise<
     Record<string, string>
