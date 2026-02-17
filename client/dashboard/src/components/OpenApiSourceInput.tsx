@@ -74,7 +74,9 @@ export function OpenApiSourceInput({
 
   return (
     <Tabs defaultValue="upload" className={className}>
-      <TabsList className={`grid w-full ${documentSlug ? "grid-cols-3" : "grid-cols-2"}`}>
+      <TabsList
+        className={`grid w-full ${documentSlug ? "grid-cols-3" : "grid-cols-2"}`}
+      >
         <TabsTrigger value="upload">
           <UploadIcon className="size-4 mr-1.5" />
           Upload
