@@ -445,7 +445,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       mcpTools,
       getApprovalHelpers,
       apiUrl,
-      auth.headers,
       auth.isLoading,
       connectionStatus,
     ]

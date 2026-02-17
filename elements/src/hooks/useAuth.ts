@@ -131,11 +131,10 @@ export const useAuth = ({
   // Ref to deduplicate concurrent refresh calls
   const refreshPromiseRef = useRef<Promise<string> | null>(null)
 
-  const queryKey = useMemo(() => ['chatSession', projectSlug], [projectSlug])
-
   const ensureValidHeaders = useCallback(async (): Promise<
     Record<string, string>
   > => {
+    const queryKey = ['chatSession', projectSlug]
     // Read the current cached token
     const cachedToken = queryClient.getQueryData<string>(queryKey)
 
@@ -170,7 +169,7 @@ export const useAuth = ({
       'Gram-Project': projectSlug,
       'Gram-Chat-Session': freshToken,
     }
-  }, [shouldRefresh, getSession, projectSlug, queryClient, queryKey])
+  }, [shouldRefresh, getSession, projectSlug, queryClient])
 
   // In replay mode, return immediately without waiting for session
   if (isReplay) {
