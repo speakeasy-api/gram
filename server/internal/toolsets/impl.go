@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -243,120 +242,79 @@ func (s *Service) InferSkillsFromToolset(ctx context.Context, payload *gen.Infer
 		}, nil
 	}
 
-	// Format tools as JSON for the prompt
-	toolsJSON, err := json.Marshal(allTools) //nolint:musttag // ToolEntry is generated code without json tags
-	if err != nil {
-		return nil, fmt.Errorf("marshalling tools: %w", err)
+	// Make parallel API calls for each tool
+	type skillResult struct {
+		index int
+		skill string
+		err   error
 	}
 
-	// Construct the prompt for skill inference
-	systemPrompt := "You are an AI assistant that analyzes API tools and suggests skill descriptions. A skill is a high-level capability that can be built by combining one or more tools."
-	userPrompt := fmt.Sprintf(`Given the following API tools, suggest skills that could be created by combining these tools. For each tool, provide a skill description that explains what the tool enables users to do. Return a JSON array of strings, where each string is a skill description corresponding to each tool in order.
+	results := make(chan skillResult, len(allTools))
+	systemPrompt := "You are an AI assistant that analyzes API tools and generates concise skill descriptions."
 
-Tools:
+	// Launch a goroutine for each tool
+	for i, tool := range allTools {
+		go func(index int, t *types.ToolEntry) {
+			// Marshal this single tool
+			toolJSON, err := json.Marshal(t) //nolint:musttag // ToolEntry is generated code without json tags
+			if err != nil {
+				results <- skillResult{index: index, skill: "", err: fmt.Errorf("marshalling tool: %w", err)}
+				return
+			}
+
+			userPrompt := fmt.Sprintf(`Generate a concise skill description for this API tool. The description should explain what the tool enables users to do in one clear sentence.
+
+Tool:
 %s
 
-Return only a JSON array of skill descriptions, one for each tool.`, string(toolsJSON))
+Return only the skill description as plain text (no JSON, no formatting).`, string(toolJSON))
 
-	// Call OpenRouter to get skill inferences
-	// Use a smaller max_tokens value to avoid credit issues
-	smallerMaxTokens := 2000
-	msg, err := s.chatClient.GetCompletion(
-		ctx,
-		authCtx.ActiveOrganizationID,
-		systemPrompt,
-		userPrompt,
-		&smallerMaxTokens,
-		nil, // no tools
-		billing.ModelUsageSourceGram,
-	)
-	if err != nil {
-		// Try to extract a more detailed error message from OpenRouter errors
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "OpenRouter API error:") {
-			// Extract the JSON error body
-			if start := strings.Index(errMsg, "{"); start != -1 {
-				jsonStr := errMsg[start:]
-				var apiErr struct {
-					Error struct {
-						Message string `json:"message"`
-						Code    int    `json:"code"`
-					} `json:"error"`
-				}
-				if json.Unmarshal([]byte(jsonStr), &apiErr) == nil && apiErr.Error.Message != "" {
-					return nil, fmt.Errorf("OpenRouter API error: %s", apiErr.Error.Message)
-				}
+			// Use a small max_tokens value since we only need one sentence
+			maxTokens := 100
+			msg, err := s.chatClient.GetCompletion(
+				ctx,
+				authCtx.ActiveOrganizationID,
+				systemPrompt,
+				userPrompt,
+				&maxTokens,
+				nil, // no tools
+				billing.ModelUsageSourceGram,
+			)
+			if err != nil {
+				results <- skillResult{index: index, skill: "", err: fmt.Errorf("getting completion: %w", err)}
+				return
 			}
-		}
-		return nil, fmt.Errorf("getting completion from chat client: %w", err)
+
+			responseText := strings.TrimSpace(openrouter.GetText(*msg))
+			results <- skillResult{index: index, skill: responseText, err: nil}
+		}(i, tool)
 	}
 
-	// Parse the response
-	var skills []string
-	responseText := openrouter.GetText(*msg)
-
-	if responseText != "" {
-		// Strip markdown code fences if present
-		responseText = strings.TrimSpace(responseText)
-
-		// Remove opening code fence
-		if after, found := strings.CutPrefix(responseText, "```json"); found {
-			responseText = after
-		} else if after, found := strings.CutPrefix(responseText, "```"); found {
-			responseText = after
-		}
-
-		// Remove closing code fence
-		if idx := strings.LastIndex(responseText, "```"); idx != -1 {
-			responseText = responseText[:idx]
-		}
-
-		responseText = strings.TrimSpace(responseText)
-
-		// Extract strings directly from the response using regex
-		// This handles cases where JSON is truncated due to token limits
-		// Pattern matches: "any text here" (with escaped quotes handled)
-		re := regexp.MustCompile(`"([^"\\]*(?:\\.[^"\\]*)*)"\s*,?\s*`)
-		matches := re.FindAllStringSubmatch(responseText, -1)
-
-		if len(matches) > 0 {
-			for _, match := range matches {
-				if len(match) > 1 {
-					// Unescape the string content
-					skill := match[1]
-					skill = strings.ReplaceAll(skill, `\"`, `"`)
-					skill = strings.ReplaceAll(skill, `\\`, `\`)
-					skill = strings.ReplaceAll(skill, `\n`, "\n")
-					skill = strings.ReplaceAll(skill, `\t`, "\t")
-					skills = append(skills, skill)
-				}
-			}
-			s.logger.InfoContext(ctx, "extracted skills from response using pattern matching",
-				slog.Int(skillCountKey, len(skills)))
+	// Collect results in order
+	skills := make([]string, len(allTools))
+	var errs []error
+	for i := 0; i < len(allTools); i++ {
+		result := <-results
+		if result.err != nil {
+			errs = append(errs, result.err)
 		} else {
-			// Fallback: try parsing as JSON if no strings found
-			if err := json.Unmarshal([]byte(responseText), &skills); err != nil {
-				// If all parsing fails, treat the whole content as a single skill
-				s.logger.WarnContext(ctx, "failed to parse skills, using raw content", attr.SlogError(err))
-				skills = []string{responseText}
-			} else {
-				s.logger.InfoContext(ctx, "successfully parsed skills as JSON array",
-					slog.Int(skillCountKey, len(skills)))
-			}
+			skills[result.index] = result.skill
 		}
 	}
 
-	result := &gen.InferSkillsResult{
+	// If there were any errors, return the first one
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("failed to infer skills: %w", errors.Join(errs...))
+	}
+
+	s.logger.InfoContext(ctx, "successfully inferred skills using parallel API calls",
+		slog.Int(toolCountKey, len(allTools)),
+		slog.Int(skillCountKey, len(skills)))
+
+	return &gen.InferSkillsResult{
 		Tools:  allTools,
 		Skills: skills,
-	}
-
-	// Debug: log what we're returning
-	s.logger.InfoContext(ctx, "returning skills result",
-		slog.Int(toolCountKey, len(result.Tools)),
-		slog.Int(skillCountKey, len(result.Skills)))
-
-	return result, nil
+	}, nil
 }
 
 func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetPayload) (*types.Toolset, error) {
