@@ -53,6 +53,7 @@ export function SourceCard({
   handleRemove,
   handleViewAsset,
   setChangeDocumentTargetSlug,
+  setUpdateFunctionTargetSlug,
 }: {
   asset: NamedAsset;
   causingFailure?: boolean | undefined;
@@ -60,6 +61,7 @@ export function SourceCard({
   handleRemove: (assetId: string) => void;
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
+  setUpdateFunctionTargetSlug: (slug: string) => void;
 }) {
   const routes = useRoutes();
   const config = sourceTypeConfig[asset.type];
@@ -85,7 +87,15 @@ export function SourceCard({
             icon: "upload" as const,
           },
         ]
-      : []),
+      : asset.type === "function"
+        ? [
+            {
+              label: "Update",
+              onClick: () => setUpdateFunctionTargetSlug(asset.slug),
+              icon: "terminal" as const,
+            },
+          ]
+        : []),
     ...(deploymentId
       ? [
           {
