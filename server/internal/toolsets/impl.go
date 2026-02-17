@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -51,6 +52,11 @@ var allowedEnabledServers = map[string]int{
 	"free": 1,
 	"pro":  5,
 }
+
+const (
+	skillCountKey = "skill_count"
+	toolCountKey  = "tool_count"
+)
 
 type Service struct {
 	tracer          trace.Tracer
@@ -288,6 +294,7 @@ Return only a JSON array of skill descriptions, one for each tool.`, string(tool
 	// Parse the response
 	var skills []string
 	responseText := openrouter.GetText(*msg)
+
 	if responseText != "" {
 		// Strip markdown code fences if present
 		responseText = strings.TrimSpace(responseText)
@@ -306,42 +313,35 @@ Return only a JSON array of skill descriptions, one for each tool.`, string(tool
 
 		responseText = strings.TrimSpace(responseText)
 
-		// Debug: log what we're about to parse
-		s.logger.InfoContext(ctx, "attempting to parse response",
-			slog.String("response_preview", responseText[:min(300, len(responseText))]),
-			slog.Int("response_length", len(responseText)))
+		// Extract strings directly from the response using regex
+		// This handles cases where JSON is truncated due to token limits
+		// Pattern matches: "any text here" (with escaped quotes handled)
+		re := regexp.MustCompile(`"([^"\\]*(?:\\.[^"\\]*)*)"\s*,?\s*`)
+		matches := re.FindAllStringSubmatch(responseText, -1)
 
-		// Try to parse as JSON array
-		if err := json.Unmarshal([]byte(responseText), &skills); err != nil {
-			// Maybe it's a nested array? Try parsing as [][]string
-			var nestedSkills [][]string
-			if err2 := json.Unmarshal([]byte(responseText), &nestedSkills); err2 == nil && len(nestedSkills) > 0 {
-				// Flatten the nested array - take the first inner array
-				skills = nestedSkills[0]
-				s.logger.InfoContext(ctx, "unwrapped nested skills array", slog.Int("count", len(skills)))
-			} else {
-				// If all parsing fails, treat the whole content as a single skill
-				s.logger.WarnContext(ctx, "failed to parse skills JSON, using raw content", attr.SlogError(err))
-				skills = []string{responseText}
-			}
-		} else {
-			s.logger.InfoContext(ctx, "successfully parsed skills as flat array",
-				slog.Int("count", len(skills)),
-				slog.String("first_skill_preview", func() string {
-					if len(skills) > 0 {
-						return skills[0][:min(100, len(skills[0]))]
-					}
-					return "no skills"
-				}()))
-
-			// Check if we accidentally got a JSON string instead of parsed array
-			if len(skills) == 1 && strings.HasPrefix(skills[0], "[") {
-				// Try to parse the string as JSON
-				var innerSkills []string
-				if err2 := json.Unmarshal([]byte(skills[0]), &innerSkills); err2 == nil {
-					skills = innerSkills
-					s.logger.InfoContext(ctx, "unwrapped string-encoded JSON array", slog.Int("count", len(skills)))
+		if len(matches) > 0 {
+			for _, match := range matches {
+				if len(match) > 1 {
+					// Unescape the string content
+					skill := match[1]
+					skill = strings.ReplaceAll(skill, `\"`, `"`)
+					skill = strings.ReplaceAll(skill, `\\`, `\`)
+					skill = strings.ReplaceAll(skill, `\n`, "\n")
+					skill = strings.ReplaceAll(skill, `\t`, "\t")
+					skills = append(skills, skill)
 				}
+			}
+			s.logger.InfoContext(ctx, "extracted skills from response using pattern matching",
+				slog.Int(skillCountKey, len(skills)))
+		} else {
+			// Fallback: try parsing as JSON if no strings found
+			if err := json.Unmarshal([]byte(responseText), &skills); err != nil {
+				// If all parsing fails, treat the whole content as a single skill
+				s.logger.WarnContext(ctx, "failed to parse skills, using raw content", attr.SlogError(err))
+				skills = []string{responseText}
+			} else {
+				s.logger.InfoContext(ctx, "successfully parsed skills as JSON array",
+					slog.Int(skillCountKey, len(skills)))
 			}
 		}
 	}
@@ -353,14 +353,8 @@ Return only a JSON array of skill descriptions, one for each tool.`, string(tool
 
 	// Debug: log what we're returning
 	s.logger.InfoContext(ctx, "returning skills result",
-		slog.Int("tools_count", len(result.Tools)),
-		slog.Int("skills_count", len(result.Skills)),
-		slog.Any("first_skill", func() string {
-			if len(result.Skills) > 0 {
-				return result.Skills[0]
-			}
-			return "no skills"
-		}()))
+		slog.Int(toolCountKey, len(result.Tools)),
+		slog.Int(skillCountKey, len(result.Skills)))
 
 	return result, nil
 }
