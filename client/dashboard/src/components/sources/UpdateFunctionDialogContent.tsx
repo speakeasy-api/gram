@@ -20,9 +20,7 @@ export function UpdateFunctionDialogContent({
       </Dialog.Header>
       <div className="space-y-3">
         <div>
-          <p className="text-xs text-muted-foreground mb-1.5">
-            Direct upload
-          </p>
+          <p className="text-xs text-muted-foreground mb-1.5">Direct upload</p>
           <CodeBlock
             language="bash"
             className="!border-0 !bg-muted/50 !rounded-lg"
