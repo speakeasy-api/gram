@@ -7,8 +7,8 @@ import {
   isUnifiedFunctionSession,
   isUnifiedStaticSession,
 } from '@/lib/auth'
-import { isTokenExpired } from '@/lib/token'
-import { useCallback, useMemo, useRef } from 'react'
+import { getTokenExpiry } from '@/lib/token'
+import { useCallback, useMemo } from 'react'
 import { ApiConfig, GetSessionFn } from '../types'
 import { getChatSessionQueryKey, useSession } from './useSession'
 import { useQueryClient } from '@tanstack/react-query'
@@ -128,53 +128,39 @@ export const useAuth = ({
   const shouldRefresh =
     (refreshSession ?? true) && !isAnyStaticSession(auth) && !isReplay
 
-  // Ref to deduplicate concurrent refresh calls
-  const refreshPromiseRef = useRef<Promise<string> | null>(null)
-
   const ensureValidHeaders = useCallback(async (): Promise<
     Record<string, string>
   > => {
     const queryKey = getChatSessionQueryKey(projectSlug)
-    // Read the current cached token
     const cachedToken = queryClient.getQueryData<string>(queryKey)
 
-    // If refresh is disabled, or no token to check, return current headers
-    if (!shouldRefresh || !cachedToken || !getSession) {
+    if (!shouldRefresh || !getSession) {
       return {
         'Gram-Project': projectSlug,
         ...(cachedToken && { 'Gram-Chat-Session': cachedToken }),
       }
     }
 
-    // Token is still valid — return current headers
-    if (!isTokenExpired(cachedToken)) {
-      return {
-        'Gram-Project': projectSlug,
-        'Gram-Chat-Session': cachedToken,
-      }
-    }
-
-    // Token is expired — refresh, deduplicating concurrent calls
-    if (!refreshPromiseRef.current) {
-      refreshPromiseRef.current = getSession({ projectSlug }).finally(() => {
-        refreshPromiseRef.current = null
-      })
-    }
+    // Compute staleTime from JWT exp (30s buffer). Non-JWT → Infinity (no refresh).
+    const exp = cachedToken ? getTokenExpiry(cachedToken) : null
+    const staleTime = exp
+      ? Math.max(0, exp * 1000 - 30_000 - Date.now())
+      : Infinity
 
     try {
-      const freshToken = await refreshPromiseRef.current
-      // Update the query cache so useSession consumers see the new token
-      queryClient.setQueryData(queryKey, freshToken)
-
+      const token = await queryClient.fetchQuery({
+        queryKey,
+        queryFn: () => getSession({ projectSlug }),
+        staleTime,
+      })
       return {
         'Gram-Project': projectSlug,
-        'Gram-Chat-Session': freshToken,
+        ...(token && { 'Gram-Chat-Session': token }),
       }
     } catch {
-      // Fall back to stale token — let the server decide via 401
       return {
         'Gram-Project': projectSlug,
-        'Gram-Chat-Session': cachedToken,
+        ...(cachedToken && { 'Gram-Chat-Session': cachedToken }),
       }
     }
   }, [shouldRefresh, getSession, projectSlug, queryClient])

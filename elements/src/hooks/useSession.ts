@@ -19,19 +19,12 @@ export const useSession = ({
   const queryClient = useQueryClient()
   const queryKey = getChatSessionQueryKey(projectSlug)
 
-  const queryState = queryClient.getQueryState(queryKey)
-  const hasData = queryState?.data !== undefined
-  // Check if data is stale - with staleTime: Infinity, data never becomes stale
-  // but we check dataUpdatedAt to determine if we should refetch
-  const dataUpdatedAt = queryState?.dataUpdatedAt ?? 0
-  const staleTime = Infinity // Matches the staleTime in useQuery options
-  const isStale = hasData && Date.now() - dataUpdatedAt > staleTime
-  const shouldFetch = !hasData || isStale
+  const hasData = queryClient.getQueryState(queryKey)?.data !== undefined
 
   const { data: fetchedSessionToken } = useQuery({
     queryKey,
     queryFn: () => getSession!({ projectSlug }),
-    enabled: shouldFetch && getSession !== null,
+    enabled: !hasData && getSession !== null,
     staleTime: Infinity, // Session tokens don't need to be refetched
     gcTime: Infinity, // Keep in cache indefinitely
   })
