@@ -130,7 +130,7 @@ func doSkills(c *cli.Context) error {
 
 	// Return the path to the plugin directory
 	fmt.Printf("\n✓ Plugin created successfully!\n")
-	fmt.Printf("\nPlugin location: %s\n", pluginDir)
+	fmt.Printf("%s", pluginDir)
 
 	return nil
 }
