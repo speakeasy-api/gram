@@ -15,6 +15,11 @@
       "import": "./dist/server.js",
       "require": "./dist/server.cjs"
     },
+    "./server/core": {
+      "types": "./dist/server/core.d.ts",
+      "import": "./dist/server/core.js",
+      "require": "./dist/server/core.cjs"
+    },
     "./server/express": {
       "types": "./dist/server/express.d.ts",
       "import": "./dist/server/express.js",
