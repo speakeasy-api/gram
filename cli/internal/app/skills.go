@@ -78,17 +78,8 @@ func doSkills(c *cli.Context) error {
 
 	result, err := tsc.InferSkillsFromToolset(ctx, apiKey, projectSlug)
 	if err != nil {
-		return fmt.Errorf("w", err)
+		return fmt.Errorf("%w", err)
 	}
-
-	// DEBUG: Print what we received
-	fmt.Printf("\n=== CLI DEBUG ===\n")
-	fmt.Printf("Received %d tools and %d skills\n", len(result.Tools), len(result.Skills))
-	if len(result.Tools) > 0 {
-		fmt.Printf("First tool: %s\n", result.Tools[0].Name)
-		fmt.Printf("Last tool: %s\n", result.Tools[len(result.Tools)-1].Name)
-	}
-	fmt.Printf("=== END CLI DEBUG ===\n\n")
 
 	// Get the plugin directory from the flag
 	pluginDir := c.String("dir")
