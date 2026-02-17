@@ -13,7 +13,6 @@ import (
 	assetsinternal "github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -119,7 +118,7 @@ func TestService_CreateSignedChatAttachmentURL_CustomTTL(t *testing.T) {
 		ProjectSlugInput: nil,
 		ProjectID:        projectID.String(),
 		ID:               asset.ID.String(),
-		TTLSeconds:       conv.Ptr(120),
+		TTLSeconds:       new(120),
 	})
 
 	require.NoError(t, err)
@@ -377,7 +376,7 @@ func TestService_SignedChatAttachment_EndToEnd(t *testing.T) {
 		ProjectSlugInput: nil,
 		ProjectID:        projectID.String(),
 		ID:               asset.ID.String(),
-		TTLSeconds:       conv.Ptr(60), // 1 minute
+		TTLSeconds:       new(60), // 1 minute
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, signedResult.URL)

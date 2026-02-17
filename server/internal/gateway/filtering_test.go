@@ -237,7 +237,7 @@ func TestHandleResponseFiltering_SuccessfulJSONFilter(t *testing.T) {
 	data, err := io.ReadAll(filterResult.resp)
 	require.NoError(t, err)
 
-	var result []interface{}
+	var result []any
 	err = json.Unmarshal(data, &result)
 	require.NoError(t, err)
 	require.Len(t, result, 1)
@@ -349,18 +349,18 @@ func TestHandleResponseFiltering_ComplexJQFilter(t *testing.T) {
 	data, err := io.ReadAll(filterResult.resp)
 	require.NoError(t, err)
 
-	var result []interface{}
+	var result []any
 	err = json.Unmarshal(data, &result)
 	require.NoError(t, err)
 	require.Len(t, result, 1) // The result is wrapped in an array by gojq
 
 	// Extract the actual filtered data
-	actualResults, ok := result[0].([]interface{})
+	actualResults, ok := result[0].([]any)
 	require.True(t, ok, "Expected result[0] to be []interface{}")
 	require.Len(t, actualResults, 2) // Only active users
 
 	// Check the structure of filtered results
-	firstUser, ok := actualResults[0].(map[string]interface{})
+	firstUser, ok := actualResults[0].(map[string]any)
 	require.True(t, ok, "Expected actualResults[0] to be map[string]interface{}")
 	require.Contains(t, firstUser, "id")
 	require.Contains(t, firstUser, "name")

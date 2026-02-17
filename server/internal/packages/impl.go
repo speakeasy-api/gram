@@ -111,7 +111,7 @@ func (s *Service) ListPackages(ctx context.Context, form *gen.ListPackagesPayloa
 			ImageAssetID:   &imageID,
 			CreatedAt:      pkg.Package.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:      pkg.Package.UpdatedAt.Time.Format(time.RFC3339),
-			DeletedAt:      conv.Ptr(pkg.Package.DeletedAt.Time.Format(time.RFC3339)),
+			DeletedAt:      new(pkg.Package.DeletedAt.Time.Format(time.RFC3339)),
 		})
 	}
 
@@ -158,7 +158,7 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 			return nil, oops.E(oops.CodeUnexpected, err, "error converting markdown to html").Log(ctx, logger)
 		}
 
-		descriptionHTML = conv.Ptr(string(html))
+		descriptionHTML = new(string(html))
 	}
 
 	packageID, err := tx.CreatePackage(ctx, repo.CreatePackageParams{
@@ -224,7 +224,7 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 			return nil, oops.E(oops.CodeUnexpected, err, "error converting markdown to html").Log(ctx, logger)
 		}
 
-		descriptionHTML = conv.Ptr(string(html))
+		descriptionHTML = new(string(html))
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -288,7 +288,7 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayloa
 
 	tx := s.repo.WithTx(dbtx)
 
-	packageName := conv.Ptr(form.Name)
+	packageName := new(form.Name)
 
 	pkg, err := describePackage(ctx, logger, tx, ProjectID(*authCtx.ProjectID), NullablePackageID(nilID), NullablePackageName(packageName))
 	if err != nil {
@@ -431,7 +431,7 @@ func describePackage(
 
 	var deletedAt *string
 	if row.Package.DeletedAt.Valid {
-		deletedAt = conv.Ptr(row.Package.DeletedAt.Time.Format(time.RFC3339))
+		deletedAt = new(row.Package.DeletedAt.Time.Format(time.RFC3339))
 	}
 
 	var versionString *string
@@ -444,7 +444,7 @@ func describePackage(
 			Prerelease: conv.PtrValOr(conv.FromPGText[string](row.VersionPrerelease), ""),
 			Build:      conv.PtrValOr(conv.FromPGText[string](row.VersionBuild), ""),
 		}
-		versionString = conv.Ptr(sv.String())
+		versionString = new(sv.String())
 	}
 
 	pkg := &gen.Package{

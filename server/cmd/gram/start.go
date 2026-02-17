@@ -535,7 +535,7 @@ func newStartCommand() *cli.Command {
 				// Default: allow server's own hostname
 				externalMcpOAuthConfig.AllowedRedirectHosts = []string{serverURL.Hostname()}
 			} else {
-				for _, host := range strings.Split(redirectDomains, ",") {
+				for host := range strings.SplitSeq(redirectDomains, ",") {
 					host = strings.TrimSpace(host)
 					if host == "" {
 						continue // skip empty entries from trailing commas

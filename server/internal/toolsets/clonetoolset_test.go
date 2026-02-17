@@ -36,7 +36,7 @@ func TestToolsetsService_CloneToolset_Success(t *testing.T) {
 	original, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Original Toolset",
-		Description:            conv.Ptr("Original toolset description"),
+		Description:            new("Original toolset description"),
 		ToolUrns:               toolUrns,
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,

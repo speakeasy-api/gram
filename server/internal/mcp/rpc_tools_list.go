@@ -29,13 +29,12 @@ type toolsListResult struct {
 }
 
 type toolListEntry struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	InputSchema json.RawMessage   `json:"inputSchema,omitempty,omitzero"`
+	Name        string                       `json:"name"`
+	Description string                       `json:"description"`
+	InputSchema json.RawMessage              `json:"inputSchema,omitempty,omitzero"`
 	Annotations *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
-	Meta        map[string]any    `json:"_meta,omitempty"`
+	Meta        map[string]any               `json:"_meta,omitempty"`
 }
-
 
 func handleToolsList(
 	ctx context.Context,
@@ -57,7 +56,7 @@ func handleToolsList(
 	}
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
-		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, map[string]interface{}{
+		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, map[string]any{
 			"project_id":           payload.projectID.String(),
 			"organization_id":      toolset.OrganizationID,
 			"authenticated":        payload.authenticated,

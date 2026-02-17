@@ -643,21 +643,21 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 			{
 				Protocol:           "tcp",
 				InternalPort:       8888,
-				Autostop:           conv.Ptr(fly.MachineAutostopStop),
-				Autostart:          conv.Ptr(true),
-				MinMachinesRunning: conv.Ptr(0),
+				Autostop:           new(fly.MachineAutostopStop),
+				Autostart:          new(true),
+				MinMachinesRunning: new(0),
 				Ports: []fly.MachinePort{
 					{
 						Handlers: []string{"tls"},
-						Port:     conv.Ptr(443),
+						Port:     new(443),
 					},
 				},
 				Checks: []fly.MachineServiceCheck{
 					{
-						Type:         conv.Ptr("http"),
-						HTTPProtocol: conv.Ptr("http"),
-						HTTPMethod:   conv.Ptr(http.MethodGet),
-						HTTPPath:     conv.Ptr("/healthz"),
+						Type:         new("http"),
+						HTTPProtocol: new("http"),
+						HTTPMethod:   new(http.MethodGet),
+						HTTPPath:     new("/healthz"),
 						Interval:     &fly.Duration{Duration: 30 * time.Second},
 						Timeout:      &fly.Duration{Duration: 5 * time.Second},
 						GracePeriod:  &fly.Duration{Duration: 5 * time.Second},
@@ -899,10 +899,10 @@ type flyLogger struct {
 	contextFunc func() context.Context
 }
 
-func (f *flyLogger) Debug(v ...interface{}) {
+func (f *flyLogger) Debug(v ...any) {
 	f.logger.DebugContext(f.contextFunc(), fmt.Sprint(v...))
 }
 
-func (f *flyLogger) Debugf(format string, v ...interface{}) {
+func (f *flyLogger) Debugf(format string, v ...any) {
 	f.logger.DebugContext(f.contextFunc(), fmt.Sprintf(format, v...))
 }

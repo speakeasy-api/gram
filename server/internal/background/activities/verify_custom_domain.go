@@ -94,13 +94,7 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		return oops.E(oops.CodeUnexpected, err, "failed to find TXT record for %s", txtName).Log(ctx, d.logger)
 	}
 	expectedTXT := fmt.Sprintf("gram-domain-verify=%s,%s", domain.Domain, args.OrgID)
-	found := false
-	for _, txt := range txts {
-		if txt == expectedTXT {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(txts, expectedTXT)
 	if !found {
 		return oops.E(oops.CodeUnexpected, errors.New("TXT record does not match expected value"), "TXT record for %s does not match expected value", txtName).Log(ctx, d.logger)
 	}

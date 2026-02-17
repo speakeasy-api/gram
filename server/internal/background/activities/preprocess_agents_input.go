@@ -12,7 +12,6 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -156,11 +155,11 @@ func convertInputToMessages(input agents.ResponseInput) ([]or.Message, error) {
 			Content: or.CreateUserMessageContentStr(requestInput),
 			Name:    nil,
 		}))
-	case []interface{}:
+	case []any:
 		// Array of output items - can be agents.OutputMessage or agents.MCPToolCall
 
 		for _, item := range requestInput {
-			itemMap, ok := item.(map[string]interface{})
+			itemMap, ok := item.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -180,9 +179,9 @@ func convertInputToMessages(input agents.ResponseInput) ([]or.Message, error) {
 				switch content := itemMap["content"].(type) {
 				case string:
 					textContent = content
-				case []interface{}:
+				case []any:
 					for _, c := range content {
-						cMap, ok := c.(map[string]interface{})
+						cMap, ok := c.(map[string]any)
 						if !ok {
 							continue
 						}
@@ -213,7 +212,7 @@ func convertInputToMessages(input agents.ResponseInput) ([]or.Message, error) {
 				case or.MessageTypeAssistant:
 					msg = or.CreateMessageAssistant(or.AssistantMessage{
 						Content: optionalnullable.From(
-							conv.Ptr(or.CreateAssistantMessageContentStr(textContent)),
+							new(or.CreateAssistantMessageContentStr(textContent)),
 						),
 						Name:             nil,
 						ToolCalls:        nil,
@@ -312,7 +311,7 @@ func convertInputToMessages(input agents.ResponseInput) ([]or.Message, error) {
 				case or.MessageTypeAssistant:
 					msg = or.CreateMessageAssistant(or.AssistantMessage{
 						Content: optionalnullable.From(
-							conv.Ptr(or.CreateAssistantMessageContentStr(content)),
+							new(or.CreateAssistantMessageContentStr(content)),
 						),
 						Name:             nil,
 						ToolCalls:        nil,
@@ -374,7 +373,7 @@ func convertOutputItemsToMessages(output []agents.OutputItem) []or.Message {
 			case or.MessageTypeAssistant:
 				msg = or.CreateMessageAssistant(or.AssistantMessage{
 					Content: optionalnullable.From(
-						conv.Ptr(or.CreateAssistantMessageContentStr(textContent)),
+						new(or.CreateAssistantMessageContentStr(textContent)),
 					),
 					Name:             nil,
 					ToolCalls:        nil,

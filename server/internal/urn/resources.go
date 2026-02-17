@@ -215,7 +215,7 @@ func (u *Resource) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (u *Resource) Scan(value interface{}) error {
+func (u *Resource) Scan(value any) error {
 	if value == nil {
 		return nil
 	}

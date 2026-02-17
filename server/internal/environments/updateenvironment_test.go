@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestEnvironmentsService_UpdateEnvironment(t *testing.T) {
@@ -23,7 +22,7 @@ func TestEnvironmentsService_UpdateEnvironment(t *testing.T) {
 			ProjectSlugInput: nil,
 			OrganizationID:   "",
 			Name:             "initial-env",
-			Description:      conv.Ptr("Initial description"),
+			Description:      new("Initial description"),
 			Entries: []*gen.EnvironmentEntryInput{
 				{Name: "KEY1", Value: "value1"},
 			},
@@ -35,8 +34,8 @@ func TestEnvironmentsService_UpdateEnvironment(t *testing.T) {
 			SessionToken:     nil,
 			ProjectSlugInput: nil,
 			Slug:             env.Slug,
-			Description:      conv.Ptr("Updated description"),
-			Name:             conv.Ptr("updated-env"),
+			Description:      new("Updated description"),
+			Name:             new("updated-env"),
 			EntriesToUpdate:  []*gen.EnvironmentEntryInput{},
 			EntriesToRemove:  []string{},
 		})

@@ -56,7 +56,7 @@ func populateDeepObjectParamsStruct(qsValues url.Values, priorScope string, stru
 		case reflect.Map:
 			populateDeepObjectParamsMap(qsValues, scope, fieldValue)
 		case reflect.Struct:
-			if fieldValue.Type() == reflect.TypeOf(time.Time{}) {
+			if fieldValue.Type() == reflect.TypeFor[time.Time]() {
 				qsValues.Add(scope, valToString(fieldValue.Interface()))
 
 				continue

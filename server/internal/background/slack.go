@@ -76,7 +76,7 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 		// If we are in a thread only go to chat completions if 'gram' is in the first two words (case-insensitive)
 		maxCheck := min(2, len(words))
 		gramIdx := -1
-		for i := 0; i < maxCheck; i++ {
+		for i := range maxCheck {
 			if strings.ToLower(words[i]) == "gram" {
 				gramIdx = i
 				break

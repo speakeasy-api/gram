@@ -10,7 +10,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -89,7 +88,7 @@ func (p *GramProvider) ExchangeToken(
 	// Use idToken as access token for gram providers
 	return &TokenExchangeResult{
 		AccessToken: idToken,
-		ExpiresAt:   conv.Ptr(time.Now().Add(session.TTL())),
+		ExpiresAt:   new(time.Now().Add(session.TTL())),
 	}, nil
 }
 

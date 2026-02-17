@@ -14,7 +14,6 @@ import (
 	pkggen "github.com/speakeasy-api/gram/server/gen/packages"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -51,11 +50,11 @@ func TestDeploymentsService_Redeploy_BasicCloning(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		GithubRepo:       conv.Ptr("test/repo"),
-		GithubPr:         conv.Ptr("123"),
-		GithubSha:        conv.Ptr("abc123"),
-		ExternalID:       conv.Ptr("ext-123"),
-		ExternalURL:      conv.Ptr("https://example.com"),
+		GithubRepo:       new("test/repo"),
+		GithubPr:         new("123"),
+		GithubSha:        new("abc123"),
+		ExternalID:       new("ext-123"),
+		ExternalURL:      new("https://example.com"),
 	})
 	require.NoError(t, err, "create initial deployment")
 	require.Equal(t, "completed", initial.Deployment.Status, "initial deployment status is not completed")
@@ -261,7 +260,7 @@ func TestDeploymentsService_Redeploy_WithPackages(t *testing.T) {
 		Packages: []*gen.AddDeploymentPackageForm{
 			{
 				Name:    "test-package",
-				Version: conv.Ptr("1.0.0"),
+				Version: new("1.0.0"),
 			},
 		},
 		ApikeyToken:      nil,
@@ -457,17 +456,17 @@ func TestDeploymentsService_Redeploy_ComplexDeployment(t *testing.T) {
 		Packages: []*gen.AddDeploymentPackageForm{
 			{
 				Name:    "external-package",
-				Version: conv.Ptr("1.0.0"),
+				Version: new("1.0.0"),
 			},
 		},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		GithubRepo:       conv.Ptr("org/complex-repo"),
-		GithubPr:         conv.Ptr("456"),
-		GithubSha:        conv.Ptr("def456"),
-		ExternalID:       conv.Ptr("complex-ext-789"),
-		ExternalURL:      conv.Ptr("https://complex.example.com"),
+		GithubRepo:       new("org/complex-repo"),
+		GithubPr:         new("456"),
+		GithubSha:        new("def456"),
+		ExternalID:       new("complex-ext-789"),
+		ExternalURL:      new("https://complex.example.com"),
 	})
 	require.NoError(t, err, "create complex deployment")
 	require.Equal(t, "completed", initial.Deployment.Status, "initial deployment status is not completed")

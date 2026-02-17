@@ -10,13 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// Ptr returns a pointer to the given value. This function is useful because it
-// allows you to create pointers to literal values like conv.Ptr(2) or return
-// values from functions/methods.
-func Ptr[T any](v T) *T {
-	return &v
-}
-
 // PtrEmpty returns a pointer to the given value or nil if the value is equal
 // to the zero value of the same type. Example:
 //

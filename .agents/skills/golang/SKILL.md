@@ -221,8 +221,7 @@ This is great because:
 
 Use the `conv` package for common type conversions instead of writing inline helpers. Key functions:
 
-- `conv.Ptr(v)` — create a pointer to a literal value or return value. Use this instead of declaring a variable just to take its address.
-- `conv.PtrEmpty(v)` — like `Ptr` but returns `nil` when `v` is the zero value.
+- `conv.PtrEmpty(v)` — If v is not the zero value, return a pointer to v; otherwise, return nil.
 - `conv.PtrValOr(ptr, default)` — dereference a pointer with a fallback default.
 - `conv.Default(val, default)` — return `val` unless it is the zero value, then return `default`.
 - `conv.ToPGText`, `conv.ToPGTextEmpty`, `conv.PtrToPGText`, `conv.PtrToPGTextEmpty` — convert strings to `pgtype.Text`.

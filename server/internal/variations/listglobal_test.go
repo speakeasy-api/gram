@@ -10,7 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/variations"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestVariationsService_ListGlobal_Success(t *testing.T) {
@@ -236,9 +235,9 @@ func TestVariationsService_ListGlobal_OrderedByID(t *testing.T) {
 		SrcToolName:      "first-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
-		Name:             conv.Ptr("first-variation"),
-		Summary:          conv.Ptr("first summary"),
-		Description:      conv.Ptr("first description"),
+		Name:             new("first-variation"),
+		Summary:          new("first summary"),
+		Description:      new("first description"),
 		Tags:             nil,
 		Summarizer:       nil,
 	})
@@ -254,9 +253,9 @@ func TestVariationsService_ListGlobal_OrderedByID(t *testing.T) {
 		SrcToolName:      "second-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
-		Name:             conv.Ptr("second-variation"),
-		Summary:          conv.Ptr("second summary"),
-		Description:      conv.Ptr("second description"),
+		Name:             new("second-variation"),
+		Summary:          new("second summary"),
+		Description:      new("second description"),
 		Tags:             nil,
 		Summarizer:       nil,
 	})

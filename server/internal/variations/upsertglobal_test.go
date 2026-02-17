@@ -7,7 +7,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/variations"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestVariationsService_UpsertGlobal_Create(t *testing.T) {
@@ -290,7 +289,7 @@ func TestVariationsService_UpsertGlobal_CreatesGroup(t *testing.T) {
 		SrcToolName:      "first-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
-		Name:             conv.Ptr("first variation"),
+		Name:             new("first variation"),
 		Summary:          nil,
 		Description:      nil,
 		Tags:             nil,
@@ -308,7 +307,7 @@ func TestVariationsService_UpsertGlobal_CreatesGroup(t *testing.T) {
 		SrcToolName:      "second-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
-		Name:             conv.Ptr("second variation"),
+		Name:             new("second variation"),
 		Summary:          nil,
 		Description:      nil,
 		Tags:             nil,

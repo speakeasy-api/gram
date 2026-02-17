@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestEnvironmentsService_CreateEnvironment(t *testing.T) {
@@ -22,7 +21,7 @@ func TestEnvironmentsService_CreateEnvironment(t *testing.T) {
 			ProjectSlugInput: nil,
 			OrganizationID:   "",
 			Name:             "test-env",
-			Description:      conv.Ptr("Test environment description"),
+			Description:      new("Test environment description"),
 			Entries: []*gen.EnvironmentEntryInput{
 				{
 					Name:  "API_KEY",

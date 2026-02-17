@@ -425,8 +425,8 @@ func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource
 // Fragments are client-side only and should not be sent to servers.
 // https://datatracker.ietf.org/doc/html/rfc3986#section-3.5 a fragment should always end the URL and there should only be one included.
 func trimFragment(path string) string {
-	if idx := strings.Index(path, "#"); idx != -1 {
-		return path[:idx]
+	if before, _, ok := strings.Cut(path, "#"); ok {
+		return before
 	}
 	return path
 }

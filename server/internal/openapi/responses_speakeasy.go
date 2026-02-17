@@ -50,7 +50,7 @@ func getResponseFilterSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 		escapedSchema = strings.ReplaceAll(escapedSchema, "\n", `\n`) // Escape newlines
 		escapedSchema = strings.ReplaceAll(escapedSchema, "\r", `\r`) // Escape carriage returns
 		escapedSchema = strings.ReplaceAll(escapedSchema, "\t", `\t`) // Escape tabs
-		schemaBytes := []byte(fmt.Sprintf(responseFilterSchema, escapedSchema))
+		schemaBytes := fmt.Appendf(nil, responseFilterSchema, escapedSchema)
 
 		// TODO when libopenapi is gone we should be able to avoid unmarshaling here from a string and just build the schema directly
 		var outSchema oas3.JSONSchema[oas3.Referenceable]

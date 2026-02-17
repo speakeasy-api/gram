@@ -332,7 +332,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 			q := logoURLValue.Query()
 			q.Set("id", metadataRecord.LogoID.UUID.String())
 			logoURLValue.RawQuery = q.Encode()
-			logoURL = conv.Ptr(logoURLValue.String())
+			logoURL = new(logoURLValue.String())
 		}
 		docsURL = conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl)
 		instructions = conv.FromPGText[string](metadataRecord.Instructions)
@@ -564,7 +564,7 @@ func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (string, error) {
 	config := IDEInstallLinkConfig{
 		Name:    &toolsetName,
-		Type:    conv.Ptr("http"),
+		Type:    new("http"),
 		URL:     mcpURL,
 		Headers: map[string]string{},
 	}

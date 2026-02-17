@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/ettle/strcase"
@@ -105,9 +106,7 @@ func (c *CaseInsensitiveEnv) Set(key, value string) {
 // All returns a copy of all stored key-value pairs.
 func (c *CaseInsensitiveEnv) All() map[string]string {
 	result := make(map[string]string, len(c.data))
-	for k, v := range c.data {
-		result[k] = v
-	}
+	maps.Copy(result, c.data)
 	return result
 }
 

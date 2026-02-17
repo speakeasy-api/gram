@@ -468,7 +468,7 @@ func TestCreateDeployment_WithFunctions_Idempotency(t *testing.T) {
 
 	// Create same deployment multiple times with same idempotency key
 	var deploymentIDs []string
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 			IdempotencyKey:  "test-functions-idempotency",
 			Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},

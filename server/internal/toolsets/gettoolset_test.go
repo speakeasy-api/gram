@@ -33,7 +33,7 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
-		Description:            conv.Ptr("A test toolset"),
+		Description:            new("A test toolset"),
 		ToolUrns:               []string{tools[0].ToolUrn.String(), tools[1].ToolUrn.String()},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -92,10 +92,10 @@ func TestToolsetsService_GetToolset_WithEnvironment(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Toolset with Env",
-		Description:            conv.Ptr("A toolset with environment"),
+		Description:            new("A toolset with environment"),
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
-		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("get-test-env")),
+		DefaultEnvironmentSlug: (*types.Slug)(new("get-test-env")),
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
@@ -172,7 +172,7 @@ func TestToolsetsService_GetToolset_VerifyAllFields(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Complete Toolset",
-		Description:            conv.Ptr("A complete toolset with all fields"),
+		Description:            new("A complete toolset with all fields"),
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -227,7 +227,7 @@ func TestToolsetsService_GetToolset_WithFunctionTools(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Function Toolset",
-		Description:            conv.Ptr("A toolset with function tools"),
+		Description:            new("A toolset with function tools"),
 		ToolUrns:               []string{functionTools[0].ToolUrn.String()},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -279,7 +279,7 @@ func TestToolsetsService_GetToolset_WithResources(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Toolset With Resources",
-		Description:            conv.Ptr("A toolset that includes resources"),
+		Description:            new("A toolset that includes resources"),
 		ToolUrns:               []string{},
 		ResourceUrns:           resourceUrns,
 		DefaultEnvironmentSlug: nil,
@@ -342,7 +342,7 @@ func TestToolsetsService_GetToolset_MixedToolsAndResources(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Mixed Toolset",
-		Description:            conv.Ptr("A toolset with both tools and resources"),
+		Description:            new("A toolset with both tools and resources"),
 		ToolUrns:               toolUrns,
 		ResourceUrns:           resourceUrns,
 		DefaultEnvironmentSlug: nil,
@@ -406,7 +406,7 @@ func TestToolsetsService_GetToolset_VerifyResourceDetails(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Resource Details Toolset",
-		Description:            conv.Ptr("Toolset to verify resource details"),
+		Description:            new("Toolset to verify resource details"),
 		ToolUrns:               []string{},
 		ResourceUrns:           []string{apiRefUrn},
 		DefaultEnvironmentSlug: nil,
@@ -467,7 +467,7 @@ func TestToolsetsService_GetToolset_WithMultipleFunctionToolsAndResources(t *tes
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Function Tools and Resources",
-		Description:            conv.Ptr("A toolset with function tools and resources"),
+		Description:            new("A toolset with function tools and resources"),
 		ToolUrns:               toolUrns,
 		ResourceUrns:           resourceUrns,
 		DefaultEnvironmentSlug: nil,

@@ -95,7 +95,7 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 	return string(j) == "true", nil
 }
 
-func (p *Posthog) CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]interface{}) error {
+func (p *Posthog) CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]any) error {
 	// If posthog is disabled, we return true so we don't block the user from using the product
 	if p.disabled {
 		p.logger.InfoContext(ctx, "posthog is disabled, dropping event")
@@ -104,7 +104,7 @@ func (p *Posthog) CaptureEvent(ctx context.Context, eventName string, distinctID
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	groups := map[string]interface{}{}
+	groups := map[string]any{}
 	properties := posthog.NewProperties().
 		Set("start_time", time.Now()).
 		Set("is_gram", true)

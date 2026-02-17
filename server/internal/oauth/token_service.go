@@ -153,10 +153,7 @@ func (ts *TokenService) generateToken() (string, error) {
 
 // CreateTokenResponse creates a standardized token response
 func (ts *TokenService) CreateTokenResponse(token *Token) *TokenResponse {
-	expiresIn := int(time.Until(token.ExpiresAt).Seconds())
-	if expiresIn < 0 {
-		expiresIn = 0
-	}
+	expiresIn := max(int(time.Until(token.ExpiresAt).Seconds()), 0)
 
 	return &TokenResponse{
 		AccessToken: token.AccessToken,
@@ -167,8 +164,8 @@ func (ts *TokenService) CreateTokenResponse(token *Token) *TokenResponse {
 }
 
 // CreateErrorResponse creates a standardized error response
-func (ts *TokenService) CreateErrorResponse(errorType, description string) map[string]interface{} {
-	response := map[string]interface{}{
+func (ts *TokenService) CreateErrorResponse(errorType, description string) map[string]any {
+	response := map[string]any{
 		"error": errorType,
 	}
 

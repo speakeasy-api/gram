@@ -88,10 +88,10 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 
 				// Verify it's valid JSON with the expected structure
 				var response struct {
-					ID      interface{} `json:"id"`
-					Code    int         `json:"code"`
-					Message string      `json:"message"`
-					Data    interface{} `json:"data"`
+					ID      any    `json:"id"`
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+					Data    any    `json:"data"`
 				}
 				unmarshalErr := json.Unmarshal(rr.Body.Bytes(), &response)
 				require.NoError(t, unmarshalErr, "Response should be valid JSON")

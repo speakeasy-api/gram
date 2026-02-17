@@ -16,7 +16,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/tools"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -67,11 +66,11 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 		ProjectSlugInput: nil,
 		Name:             types.Slug("test-template-1"),
 		Prompt:           "Hello {{name}}!",
-		Description:      conv.Ptr("A test greeting template"),
+		Description:      new("A test greeting template"),
 		Engine:           "mustache",
 		Kind:             "prompt",
 		ToolsHint:        []string{"assistant"},
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 	})
 	require.NoError(t, err, "create first template")
 
@@ -81,11 +80,11 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 		ProjectSlugInput: nil,
 		Name:             types.Slug("test-template-2"),
 		Prompt:           "Summarize: {{text}}",
-		Description:      conv.Ptr("A summarization template"),
+		Description:      new("A summarization template"),
 		Engine:           "mustache",
 		Kind:             "prompt",
 		ToolsHint:        nil,
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}`),
 	})
 	require.NoError(t, err, "create second template")
 
@@ -212,7 +211,7 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 	})
 	require.NoError(t, err, "create deployment")
 
-	limit := conv.Ptr[int32](4)
+	limit := new(int32(4))
 
 	// Get first page - with enough tools we should get a cursor
 	firstPage, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
@@ -810,11 +809,11 @@ func TestToolsService_ListTools_WithMixedToolTypes(t *testing.T) {
 		ProjectSlugInput: nil,
 		Name:             types.Slug("mixed-template"),
 		Prompt:           "Process {{data}}",
-		Description:      conv.Ptr("A template for testing mixed types"),
+		Description:      new("A template for testing mixed types"),
 		Engine:           "mustache",
 		Kind:             "prompt",
 		ToolsHint:        []string{"assistant"},
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]}`),
 	})
 	require.NoError(t, err, "create template")
 

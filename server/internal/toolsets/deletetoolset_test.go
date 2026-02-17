@@ -7,7 +7,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestToolsetsService_DeleteToolset_Success(t *testing.T) {
@@ -19,7 +18,7 @@ func TestToolsetsService_DeleteToolset_Success(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Toolset to Delete",
-		Description:            conv.Ptr("This toolset will be deleted"),
+		Description:            new("This toolset will be deleted"),
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,

@@ -521,8 +521,6 @@ func TestE2E_ExternalMCP_Proxy_SSE(t *testing.T) {
 	require.Equal(t, "Result: 42", firstContent["text"])
 }
 
-func boolPtr(b bool) *bool { return &b }
-
 // TestE2E_ExternalMCP_Proxy_Annotations verifies that tool annotations from an
 // external MCP server are parsed and forwarded in the tools/list response.
 // This covers the ptrBool fix: explicit false values must be preserved as false,
@@ -543,9 +541,9 @@ func TestE2E_ExternalMCP_Proxy_Annotations(t *testing.T) {
 			Annotations: &mcp.ToolAnnotations{
 				Title:           "Read Data",
 				ReadOnlyHint:    true,
-				DestructiveHint: boolPtr(false), // explicit false — must not be dropped
+				DestructiveHint: new(false), // explicit false — must not be dropped
 				IdempotentHint:  true,
-				OpenWorldHint:   boolPtr(false), // explicit false — must not be dropped
+				OpenWorldHint:   new(false), // explicit false — must not be dropped
 			},
 			Response: mockToolResponse{
 				Content: []map[string]any{
@@ -562,9 +560,9 @@ func TestE2E_ExternalMCP_Proxy_Annotations(t *testing.T) {
 			},
 			Annotations: &mcp.ToolAnnotations{
 				ReadOnlyHint:    false,
-				DestructiveHint: boolPtr(true),
+				DestructiveHint: new(true),
 				IdempotentHint:  true,
-				OpenWorldHint:   boolPtr(true),
+				OpenWorldHint:   new(true),
 			},
 			Response: mockToolResponse{
 				Content: []map[string]any{

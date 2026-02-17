@@ -174,7 +174,7 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 
 	// Check if user was created in this upsert
 	if user.WasCreated {
-		if err := s.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, map[string]interface{}{
+		if err := s.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, map[string]any{
 			"email":        user.Email,
 			"display_name": user.DisplayName,
 		}); err != nil {
