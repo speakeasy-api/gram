@@ -160,8 +160,9 @@ PULSE_REGISTRY_KEY = "unset"
 ##############
 ## Elements ##
 ## Used for local development only
+## Storybook runs internally on 6007, but the protocol sniffing proxy serves on 6006
 ELEMENTS_STORYBOOK_PORT = "6007"
-VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:{{env.ELEMENTS_STORYBOOK_PORT}}"
+VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:6006"
 
 #########################
 ## Polar configuration ##
