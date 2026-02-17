@@ -232,7 +232,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 			ToolsetID:          toolsetUUID,
 			ToolsetVersion:     toolset.ToolsetVersion,
 			Tags:               tags,
-			ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
+			ResultLimit:        int32(limit),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("search toolset embeddings: %w", err)
@@ -244,7 +244,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 			ToolsetID:          toolsetUUID,
 			ToolsetVersion:     toolset.ToolsetVersion,
 			Tags:               tags,
-			ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
+			ResultLimit:        int32(limit),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("search toolset embeddings: %w", err)
