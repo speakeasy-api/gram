@@ -8,7 +8,7 @@ import {
 import type { DeploymentLogEvent } from "@gram/client/models/components";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-function generateSlug(name: string): string {
+export function generateSlug(name: string): string {
   const lastPart = name.split("/").pop() || name;
   return lastPart
     .toLowerCase()
@@ -32,36 +32,57 @@ export interface ServerToolsetStatus {
   error?: string;
 }
 
-export interface ExternalMcpReleaseState {
-  phase: ReleasePhase;
+interface WorkflowBase {
+  projectSlug?: string;
+  existingSpecifiers: Set<string>;
+  reset: () => void;
+}
+
+export interface ConfigurePhase extends WorkflowBase {
+  phase: "configure";
   serverConfigs: ServerConfig[];
   updateServerConfig: (
     index: number,
     updates: Partial<Pick<ServerConfig, "name">>,
   ) => void;
   canDeploy: boolean;
-  deploymentId?: string;
-  deploymentStatus?: string;
-  deploymentLogs: DeploymentLogEvent[];
-  toolsetStatuses: ServerToolsetStatus[];
   startDeployment: () => Promise<void>;
-  reset: () => void;
-  error?: string;
-  /** Registry specifiers of servers already in the target project */
-  existingSpecifiers: Set<string>;
-  /** Target project slug (for cross-project navigation) */
-  projectSlug?: string;
 }
 
-interface UseExternalMcpReleaseStateOptions {
+export interface DeployingPhase extends WorkflowBase {
+  phase: "deploying";
+  deploymentId: string;
+  deploymentStatus?: string;
+  deploymentLogs: DeploymentLogEvent[];
+}
+
+export interface CompletePhase extends WorkflowBase {
+  phase: "complete";
+  toolsetStatuses: ServerToolsetStatus[];
+}
+
+export interface ErrorPhase extends WorkflowBase {
+  phase: "error";
+  error: string;
+  deploymentId?: string;
+  deploymentLogs: DeploymentLogEvent[];
+}
+
+export type ExternalMcpReleaseWorkflow =
+  | ConfigurePhase
+  | DeployingPhase
+  | CompletePhase
+  | ErrorPhase;
+
+interface UseExternalMcpReleaseWorkflowOptions {
   servers: Server[];
   projectSlug?: string;
 }
 
-export function useExternalMcpReleaseState({
+export function useExternalMcpReleaseWorkflow({
   servers,
   projectSlug,
-}: UseExternalMcpReleaseStateOptions): ExternalMcpReleaseState {
+}: UseExternalMcpReleaseWorkflowOptions): ExternalMcpReleaseWorkflow {
   const client = useSdkClient();
   const { data: latestDeploymentResult } = useLatestDeployment(
     projectSlug ? { gramProject: projectSlug } : undefined,
@@ -329,19 +350,20 @@ export function useExternalMcpReleaseState({
     );
   }, [servers]);
 
-  return {
-    phase,
-    serverConfigs,
-    updateServerConfig,
-    canDeploy,
-    deploymentId,
-    deploymentStatus,
-    deploymentLogs,
-    toolsetStatuses,
-    startDeployment,
-    reset,
-    error,
-    existingSpecifiers,
+  const base: WorkflowBase = {
     projectSlug,
+    existingSpecifiers,
+    reset,
   };
+
+  switch (phase) {
+    case "configure":
+      return { phase, serverConfigs, updateServerConfig, canDeploy, startDeployment, ...base };
+    case "deploying":
+      return { phase, deploymentId: deploymentId!, deploymentStatus, deploymentLogs, ...base };
+    case "complete":
+      return { phase, toolsetStatuses, ...base };
+    case "error":
+      return { phase, error: error!, deploymentId, deploymentLogs, ...base };
+  }
 }
