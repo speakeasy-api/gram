@@ -287,10 +287,3 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 
 	return resp, nil
 }
-
-// ptrBool converts a bool to *bool.
-//
-//go:fix inline
-func ptrBool(b bool) *bool {
-	return new(b)
-}
