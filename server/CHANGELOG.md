@@ -1,5 +1,12 @@
 # server
 
+## 0.23.2
+
+### Patch Changes
+
+- 84736c7: Support tool annotations in functions framework. Adds `ToolAnnotations` type allowing function authors to specify annotations via `Gram.tool({ annotations: { ... } })`
+- 7dae1a8: Persist annotations from external MCP servers in the Catalog to the database
+
 ## 0.23.1
 
 ### Patch Changes
