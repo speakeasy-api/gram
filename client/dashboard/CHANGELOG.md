@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.28.3
+
+### Patch Changes
+
+- bb8f3d2: Add CLI commands tab to OpenAPI version update modal
+- Updated dependencies [e5500f7]
+  - @gram-ai/elements@1.27.1
+
 ## 0.28.2
 
 ### Patch Changes
