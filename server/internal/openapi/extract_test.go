@@ -27,16 +27,16 @@ type MockedDBTX struct {
 	recordedQueryRows [][]any
 }
 
-func (m *MockedDBTX) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+func (m *MockedDBTX) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	m.recordedExec = append(m.recordedExec, args)
 	return pgconn.CommandTag{}, nil
 }
 
-func (m *MockedDBTX) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+func (m *MockedDBTX) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	panic("not implemented")
 }
 
-func (m *MockedDBTX) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+func (m *MockedDBTX) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	m.recordedQueryRows = append(m.recordedQueryRows, args)
 	return &MockedRow{}
 }

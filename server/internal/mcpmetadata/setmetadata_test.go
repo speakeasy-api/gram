@@ -42,7 +42,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		payload := &gen.SetMcpMetadataPayload{
 			ToolsetSlug:              types.Slug(toolset.Slug),
 			LogoAssetID:              nil,
-			ExternalDocumentationURL: conv.Ptr("https://docs.example.com"),
+			ExternalDocumentationURL: new("https://docs.example.com"),
 			SessionToken:             nil,
 			ProjectSlugInput:         nil,
 		}
@@ -83,7 +83,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		firstPayload := &gen.SetMcpMetadataPayload{
 			ToolsetSlug:              types.Slug(toolset.Slug),
 			LogoAssetID:              nil,
-			ExternalDocumentationURL: conv.Ptr("https://docs.example.com/v1"),
+			ExternalDocumentationURL: new("https://docs.example.com/v1"),
 			SessionToken:             nil,
 			ProjectSlugInput:         nil,
 		}
@@ -95,7 +95,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		secondPayload := &gen.SetMcpMetadataPayload{
 			ToolsetSlug:              types.Slug(toolset.Slug),
 			LogoAssetID:              nil,
-			ExternalDocumentationURL: conv.Ptr("https://docs.example.com/v2"),
+			ExternalDocumentationURL: new("https://docs.example.com/v2"),
 			SessionToken:             nil,
 			ProjectSlugInput:         nil,
 		}

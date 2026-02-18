@@ -14,7 +14,7 @@ func parseSimpleParams(parentName string, objType reflect.Type, objValue reflect
 		return nil
 	}
 
-	if objType.Kind() == reflect.Ptr {
+	if objType.Kind() == reflect.Pointer {
 		objType = objType.Elem()
 		objValue = objValue.Elem()
 	}

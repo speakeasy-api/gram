@@ -125,26 +125,26 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 	}
 
 	return &gen.GetDeploymentResult{
-		ID:                 dep.ID,
-		CreatedAt:          dep.CreatedAt,
-		OrganizationID:     dep.OrganizationID,
-		ProjectID:          dep.ProjectID,
-		UserID:             dep.UserID,
-		IdempotencyKey:     dep.IdempotencyKey,
-		Status:             dep.Status,
-		ExternalID:         dep.ExternalID,
-		ExternalURL:        dep.ExternalURL,
-		GithubRepo:         dep.GithubRepo,
-		GithubPr:           dep.GithubPr,
-		GithubSha:          dep.GithubSha,
-		ClonedFrom:         dep.ClonedFrom,
-		Packages:           dep.Packages,
-		Openapiv3Assets:    dep.Openapiv3Assets,
+		ID:                   dep.ID,
+		CreatedAt:            dep.CreatedAt,
+		OrganizationID:       dep.OrganizationID,
+		ProjectID:            dep.ProjectID,
+		UserID:               dep.UserID,
+		IdempotencyKey:       dep.IdempotencyKey,
+		Status:               dep.Status,
+		ExternalID:           dep.ExternalID,
+		ExternalURL:          dep.ExternalURL,
+		GithubRepo:           dep.GithubRepo,
+		GithubPr:             dep.GithubPr,
+		GithubSha:            dep.GithubSha,
+		ClonedFrom:           dep.ClonedFrom,
+		Packages:             dep.Packages,
+		Openapiv3Assets:      dep.Openapiv3Assets,
 		Openapiv3ToolCount:   dep.Openapiv3ToolCount,
 		FunctionsToolCount:   dep.FunctionsToolCount,
 		ExternalMcpToolCount: dep.ExternalMcpToolCount,
-		FunctionsAssets:       dep.FunctionsAssets,
-		ExternalMcps:          dep.ExternalMcps,
+		FunctionsAssets:      dep.FunctionsAssets,
+		ExternalMcps:         dep.ExternalMcps,
 	}, nil
 }
 
@@ -186,7 +186,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 	for _, r := range rows {
 		var attachmentID *string
 		if r.AttachmentID.Valid {
-			attachmentID = conv.Ptr(r.AttachmentID.UUID.String())
+			attachmentID = new(r.AttachmentID.UUID.String())
 		}
 		items = append(items, &gen.DeploymentLogEvent{
 			ID:             r.ID.String(),
@@ -201,7 +201,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 	var nextCursor *string
 	limit := 50
 	if len(rows) >= limit+1 {
-		nextCursor = conv.Ptr(encodeCursor(rows[limit].Seq, rows[limit].ID))
+		nextCursor = new(encodeCursor(rows[limit].Seq, rows[limit].ID))
 		items = items[:limit]
 	}
 
@@ -339,7 +339,7 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 	var nextCursor *string
 	limit := 50
 	if len(items) >= limit+1 {
-		nextCursor = conv.Ptr(items[limit].ID)
+		nextCursor = new(items[limit].ID)
 		items = items[:limit]
 	}
 

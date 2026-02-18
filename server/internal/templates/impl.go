@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/cbroglie/mustache"
 	"github.com/google/uuid"
@@ -475,19 +476,19 @@ func RenderTemplateJSON(ctx context.Context, logger *slog.Logger, promptJSON str
 		inputsPortion = "  No inputs needed\n"
 	}
 
-	stepsPortion := ""
+	var stepsPortion strings.Builder
 	for _, step := range prompt.Steps {
-		stepInputs := ""
+		var stepInputs strings.Builder
 		for _, input := range step.Inputs {
-			stepInputs += fmt.Sprintf("    <Input name=\"%s\" />\n", input)
+			fmt.Fprintf(&stepInputs, "    <Input name=\"%s\" />\n", input)
 		}
 
-		stepInstructions := fmt.Sprintf("  <Instruction>%s</Instruction>\n%s", step.Instructions, stepInputs)
+		stepInstructions := fmt.Sprintf("  <Instruction>%s</Instruction>\n%s", step.Instructions, stepInputs.String())
 		if step.Tool == "" {
 			// When tool is empty, just show the instruction without CallTool wrapper
-			stepsPortion += stepInstructions
+			stepsPortion.WriteString(stepInstructions)
 		} else {
-			stepsPortion += fmt.Sprintf("  <CallTool tool_name=\"%s\">\n  %s  </CallTool>\n", step.Tool, stepInstructions)
+			fmt.Fprintf(&stepsPortion, "  <CallTool tool_name=\"%s\">\n  %s  </CallTool>\n", step.Tool, stepInstructions)
 		}
 	}
 
@@ -507,7 +508,7 @@ func RenderTemplateJSON(ctx context.Context, logger *slog.Logger, promptJSON str
   </Instruction>
 %s</Inputs>
 <Plan>
-%s</Plan>`, prompt.ToolName, prompt.Purpose, inputsPortion, stepsPortion)
+%s</Plan>`, prompt.ToolName, prompt.Purpose, inputsPortion, stepsPortion.String())
 
 	return renderedPrompt, nil
 }

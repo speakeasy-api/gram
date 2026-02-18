@@ -32,7 +32,7 @@ func formatChatMessages(messages []repo.ChatMessage) string {
 			content = "[original system prompt redacted]"
 		}
 
-		sb.WriteString(fmt.Sprintf("[%d] %s%s: %s\n\n", i, msg.Role, timeGap, content))
+		fmt.Fprintf(&sb, "[%d] %s%s: %s\n\n", i, msg.Role, timeGap, content)
 	}
 
 	return sb.String()

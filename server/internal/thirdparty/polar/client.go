@@ -526,10 +526,10 @@ func (p *Client) extractCustomerTier(ctx context.Context, customerState *polarCo
 			}
 			activeSubscription := customerState.ActiveSubscriptions[0]
 			if activeSubscription.ProductID == p.catalog.ProductIDBase {
-				return conv.Ptr(billing.TierBase), true, nil
+				return new(billing.TierBase), true, nil
 			}
 			// Fallback case for old accounts
-			return conv.Ptr(billing.TierPro), true, nil
+			return new(billing.TierPro), true, nil
 		}
 	}
 

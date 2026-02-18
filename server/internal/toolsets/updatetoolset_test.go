@@ -33,7 +33,7 @@ func TestToolsetsService_UpdateToolset_Success(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Original Toolset",
-		Description:            conv.Ptr("Original description"),
+		Description:            new("Original description"),
 		ToolUrns:               []string{tools[0].ToolUrn.String()},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -46,8 +46,8 @@ func TestToolsetsService_UpdateToolset_Success(t *testing.T) {
 	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		Slug:                   created.Slug,
-		Name:                   conv.Ptr("Updated Toolset"),
-		Description:            conv.Ptr("Updated description"),
+		Name:                   new("Updated Toolset"),
+		Description:            new("Updated description"),
 		DefaultEnvironmentSlug: nil,
 		ToolUrns:               []string{tools[1].ToolUrn.String(), tools[2].ToolUrn.String()},
 		ResourceUrns:           nil,
@@ -93,7 +93,7 @@ func TestToolsetsService_UpdateToolset_PartialUpdate(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Original Toolset",
-		Description:            conv.Ptr("Original description"),
+		Description:            new("Original description"),
 		ToolUrns:               []string{tools[0].ToolUrn.String()},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -105,7 +105,7 @@ func TestToolsetsService_UpdateToolset_PartialUpdate(t *testing.T) {
 	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		Slug:                   created.Slug,
-		Name:                   conv.Ptr("Updated Name Only"),
+		Name:                   new("Updated Name Only"),
 		Description:            nil,
 		DefaultEnvironmentSlug: nil,
 		ToolUrns:               nil,
@@ -165,7 +165,7 @@ func TestToolsetsService_UpdateToolset_WithEnvironment(t *testing.T) {
 		Slug:                   created.Slug,
 		Name:                   nil,
 		Description:            nil,
-		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("update-test-env")),
+		DefaultEnvironmentSlug: (*types.Slug)(new("update-test-env")),
 		ToolUrns:               nil,
 		ResourceUrns:           nil,
 		PromptTemplateNames:    nil,
@@ -188,7 +188,7 @@ func TestToolsetsService_UpdateToolset_NotFound(t *testing.T) {
 	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		Slug:                   "non-existent-slug",
-		Name:                   conv.Ptr("New Name"),
+		Name:                   new("New Name"),
 		Description:            nil,
 		DefaultEnvironmentSlug: nil,
 		ToolUrns:               nil,
@@ -227,7 +227,7 @@ func TestToolsetsService_UpdateToolset_InvalidEnvironment(t *testing.T) {
 		Slug:                   created.Slug,
 		Name:                   nil,
 		Description:            nil,
-		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("non-existent-env")),
+		DefaultEnvironmentSlug: (*types.Slug)(new("non-existent-env")),
 		ToolUrns:               nil,
 		ResourceUrns:           nil,
 		PromptTemplateNames:    nil,
@@ -252,7 +252,7 @@ func TestToolsetsService_UpdateToolset_Unauthorized(t *testing.T) {
 	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		Slug:                   "some-slug",
-		Name:                   conv.Ptr("New Name"),
+		Name:                   new("New Name"),
 		Description:            nil,
 		DefaultEnvironmentSlug: nil,
 		ToolUrns:               nil,
@@ -282,7 +282,7 @@ func TestToolsetsService_UpdateToolset_NoProjectID(t *testing.T) {
 	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		Slug:                   "some-slug",
-		Name:                   conv.Ptr("New Name"),
+		Name:                   new("New Name"),
 		Description:            nil,
 		DefaultEnvironmentSlug: nil,
 		ToolUrns:               nil,
@@ -355,7 +355,7 @@ func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "MCP Toolset",
-		Description:            conv.Ptr("Toolset for MCP testing"),
+		Description:            new("Toolset for MCP testing"),
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -375,7 +375,7 @@ func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
 		PromptTemplateNames:    nil,
 		McpSlug:                nil,
 		McpIsPublic:            nil,
-		McpEnabled:             conv.Ptr(true),
+		McpEnabled:             new(true),
 		CustomDomainID:         nil,
 		ProjectSlugInput:       nil,
 	})
@@ -407,7 +407,7 @@ func TestToolsetsService_UpdateToolset_ResourceUrnsNil_PreservesResources(t *tes
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Toolset With Resources",
-		Description:            conv.Ptr("A toolset with resources"),
+		Description:            new("A toolset with resources"),
 		ToolUrns:               []string{},
 		ResourceUrns:           resourceUrns,
 		DefaultEnvironmentSlug: nil,
@@ -420,8 +420,8 @@ func TestToolsetsService_UpdateToolset_ResourceUrnsNil_PreservesResources(t *tes
 	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		Slug:                   created.Slug,
-		Name:                   conv.Ptr("Updated Name"),
-		Description:            conv.Ptr("Updated description"),
+		Name:                   new("Updated Name"),
+		Description:            new("Updated description"),
 		DefaultEnvironmentSlug: nil,
 		ToolUrns:               nil,
 		ResourceUrns:           nil, // nil should preserve existing resources
@@ -473,7 +473,7 @@ func TestToolsetsService_UpdateToolset_ResourceUrnsEmpty_RemovesResources(t *tes
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Toolset With Resources",
-		Description:            conv.Ptr("A toolset with resources to be removed"),
+		Description:            new("A toolset with resources to be removed"),
 		ToolUrns:               []string{},
 		ResourceUrns:           resourceUrns,
 		DefaultEnvironmentSlug: nil,
@@ -486,7 +486,7 @@ func TestToolsetsService_UpdateToolset_ResourceUrnsEmpty_RemovesResources(t *tes
 	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
 		Slug:                   created.Slug,
-		Name:                   conv.Ptr("Updated Without Resources"),
+		Name:                   new("Updated Without Resources"),
 		Description:            nil,
 		DefaultEnvironmentSlug: nil,
 		ToolUrns:               nil,

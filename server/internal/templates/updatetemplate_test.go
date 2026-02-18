@@ -8,7 +8,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
@@ -20,11 +19,11 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
 		Name:             types.Slug("update-test-template"),
 		Prompt:           "Original prompt",
-		Description:      conv.Ptr("Original description"),
+		Description:      new("Original description"),
 		Engine:           "mustache",
 		Kind:             "prompt",
 		ToolsHint:        []string{"system"},
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -34,12 +33,12 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 	// Update the template
 	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:               created.Template.ID,
-		Prompt:           conv.Ptr("Updated prompt {{name}}!"),
-		Description:      conv.Ptr("Updated description"),
-		Engine:           conv.Ptr("mustache"),
-		Kind:             conv.Ptr("prompt"),
+		Prompt:           new("Updated prompt {{name}}!"),
+		Description:      new("Updated description"),
+		Engine:           new("mustache"),
+		Kind:             new("prompt"),
 		ToolsHint:        []string{"user", "assistant"},
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -82,7 +81,7 @@ func TestTemplatesService_UpdateTemplate_PartialUpdate(t *testing.T) {
 	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
 		Name:             types.Slug("partial-update-template"),
 		Prompt:           "Original prompt",
-		Description:      conv.Ptr("Original description"),
+		Description:      new("Original description"),
 		Engine:           "mustache",
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -96,7 +95,7 @@ func TestTemplatesService_UpdateTemplate_PartialUpdate(t *testing.T) {
 	// Update only the prompt
 	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:               created.Template.ID,
-		Prompt:           conv.Ptr("Only updated prompt"),
+		Prompt:           new("Only updated prompt"),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -177,7 +176,7 @@ func TestTemplatesService_UpdateTemplateName_Success(t *testing.T) {
 	// Update the template name
 	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:   created.Template.ID,
-		Name: conv.Ptr("New name"),
+		Name: new("New name"),
 	})
 	require.NoError(t, err, "update template name")
 
@@ -193,7 +192,7 @@ func TestTemplatesService_UpdateTemplate_InvalidID(t *testing.T) {
 	// Try to update with invalid UUID
 	_, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:               "invalid-uuid",
-		Prompt:           conv.Ptr("Updated prompt"),
+		Prompt:           new("Updated prompt"),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -216,7 +215,7 @@ func TestTemplatesService_UpdateTemplate_NotFound(t *testing.T) {
 	nonExistentID := uuid.New().String()
 	_, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:               nonExistentID,
-		Prompt:           conv.Ptr("Updated prompt"),
+		Prompt:           new("Updated prompt"),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -322,7 +321,7 @@ func TestTemplatesService_UpdateTemplate_ArgumentsWithoutEngine(t *testing.T) {
 		Engine:           nil, // Not setting engine
 		Kind:             nil,
 		ToolsHint:        nil,
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -360,7 +359,7 @@ func TestTemplatesService_UpdateTemplate_ArgumentsWithExistingEngine(t *testing.
 		Engine:           nil, // Not changing engine
 		Kind:             nil,
 		ToolsHint:        nil,
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -383,7 +382,7 @@ func TestTemplatesService_UpdateTemplate_Unauthorized(t *testing.T) {
 
 	_, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
 		ID:               templateID,
-		Prompt:           conv.Ptr("Updated prompt"),
+		Prompt:           new("Updated prompt"),
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,

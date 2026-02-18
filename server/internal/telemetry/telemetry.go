@@ -8,7 +8,7 @@ import (
 
 // PosthogClient defines the interface for capturing events in PostHog.
 type PosthogClient interface {
-	CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]interface{}) error
+	CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]any) error
 }
 
 // LogsEnabled is a function to determine whether logs are enabled or not for a function

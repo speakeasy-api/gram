@@ -8,7 +8,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -33,7 +32,7 @@ func TestAgentsService_LoadToolsetTools_Success(t *testing.T) {
 	created, err := ti.toolsets.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Agent Test Toolset",
-		Description:            conv.Ptr("A test toolset for agents"),
+		Description:            new("A test toolset for agents"),
 		ToolUrns:               []string{tools[0].ToolUrn.String(), tools[1].ToolUrn.String()},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -76,7 +75,7 @@ func TestAgentsService_LoadToolsetTools_EmptyToolset(t *testing.T) {
 	created, err := ti.toolsets.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Empty Toolset",
-		Description:            conv.Ptr("An empty toolset"),
+		Description:            new("An empty toolset"),
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -137,7 +136,7 @@ func TestAgentsService_LoadToolsetTools_VerifyToolDefinition(t *testing.T) {
 	created, err := ti.toolsets.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Single Tool Toolset",
-		Description:            conv.Ptr("Toolset with single tool"),
+		Description:            new("Toolset with single tool"),
 		ToolUrns:               []string{tools[0].ToolUrn.String()},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,

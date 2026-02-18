@@ -217,7 +217,7 @@ func (s *SlackClient) PostMessage(ctx context.Context, accessToken string, input
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}

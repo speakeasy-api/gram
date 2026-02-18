@@ -48,7 +48,7 @@ func (m *Manager) GenerateToken(ctx context.Context, claims ChatSessionClaims, e
 // ValidateToken validates a JWT token and returns the claims
 func (m *Manager) ValidateToken(ctx context.Context, tokenString string) (*ChatSessionClaims, error) {
 	//nolint:exhaustruct // no point in setting all the claims fields
-	token, err := jwt.ParseWithClaims(tokenString, &ChatSessionClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &ChatSessionClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}

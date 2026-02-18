@@ -8,13 +8,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -95,11 +96,8 @@ func (p *CustomProvider) ExchangeToken(
 	useBasicAuth := false
 	if len(provider.TokenEndpointAuthMethodsSupported) > 0 {
 		// Check if provider supports client_secret_basic
-		for _, method := range provider.TokenEndpointAuthMethodsSupported {
-			if method == "client_secret_basic" {
-				useBasicAuth = true
-				break
-			}
+		if slices.Contains(provider.TokenEndpointAuthMethodsSupported, "client_secret_basic") {
+			useBasicAuth = true
 		}
 	}
 
@@ -150,7 +148,7 @@ func (p *CustomProvider) ExchangeToken(
 		return nil, fmt.Errorf("failed to read OAuth token response: %w", err)
 	}
 
-	var oauthTokenResp map[string]interface{}
+	var oauthTokenResp map[string]any
 	if err := json.Unmarshal(tokenRespBody, &oauthTokenResp); err != nil {
 		p.logger.ErrorContext(ctx, "failed to parse OAuth token response",
 			attr.SlogOAuthProvider(provider.Slug),

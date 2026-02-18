@@ -9,7 +9,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -31,7 +30,7 @@ func TestToolsetsService_ListToolsets_Success(t *testing.T) {
 	toolset1, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "First Toolset",
-		Description:            conv.Ptr("First test toolset"),
+		Description:            new("First test toolset"),
 		ToolUrns:               []string{tools[0].ToolUrn.String(), tools[1].ToolUrn.String()},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -42,7 +41,7 @@ func TestToolsetsService_ListToolsets_Success(t *testing.T) {
 	toolset2, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Second Toolset",
-		Description:            conv.Ptr("Second test toolset"),
+		Description:            new("Second test toolset"),
 		ToolUrns:               []string{tools[2].ToolUrn.String(), tools[3].ToolUrn.String()},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -129,7 +128,7 @@ func TestToolsetsService_ListToolsets_VerifyDetails(t *testing.T) {
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Detailed Toolset",
-		Description:            conv.Ptr("A toolset with details"),
+		Description:            new("A toolset with details"),
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -178,7 +177,7 @@ func TestToolsetsService_ListToolsets_WithResources(t *testing.T) {
 	toolset, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Toolset With Resources",
-		Description:            conv.Ptr("A toolset that includes resources"),
+		Description:            new("A toolset that includes resources"),
 		ToolUrns:               []string{},
 		ResourceUrns:           resourceUrns,
 		DefaultEnvironmentSlug: nil,
@@ -242,7 +241,7 @@ func TestToolsetsService_ListToolsets_MixedToolsAndResources(t *testing.T) {
 	toolset, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Mixed Toolset",
-		Description:            conv.Ptr("A toolset with both tools and resources"),
+		Description:            new("A toolset with both tools and resources"),
 		ToolUrns:               toolUrns,
 		ResourceUrns:           resourceUrns,
 		DefaultEnvironmentSlug: nil,
@@ -287,7 +286,7 @@ func TestToolsetsService_ListToolsets_MultipleToolsetsWithResources(t *testing.T
 	toolset1, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "First Resource Toolset",
-		Description:            conv.Ptr("First toolset with resources"),
+		Description:            new("First toolset with resources"),
 		ToolUrns:               []string{},
 		ResourceUrns:           []string{resources[0].ResourceUrn.String(), resources[1].ResourceUrn.String()},
 		DefaultEnvironmentSlug: nil,
@@ -299,7 +298,7 @@ func TestToolsetsService_ListToolsets_MultipleToolsetsWithResources(t *testing.T
 	toolset2, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Second Resource Toolset",
-		Description:            conv.Ptr("Second toolset with resources"),
+		Description:            new("Second toolset with resources"),
 		ToolUrns:               []string{},
 		ResourceUrns:           []string{resources[2].ResourceUrn.String()},
 		DefaultEnvironmentSlug: nil,

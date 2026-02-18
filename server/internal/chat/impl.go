@@ -362,7 +362,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		ResolutionStatus: resolutionStatus,
 		SortBy:           payload.SortBy,
 		SortOrder:        payload.SortOrder,
-		PageLimit:        int32(limit),  //nolint:gosec // limit is bounded by validation above
+		PageLimit:        int32(limit),
 		PageOffset:       int32(offset), //nolint:gosec // offset is controlled by client pagination
 	})
 	if err != nil {
@@ -397,7 +397,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 			var messageIDs []string
 			if row.MessageIds != nil {
 				// PostgreSQL array comes back as []interface{} containing uuid.UUID values
-				if msgIDsSlice, ok := row.MessageIds.([]interface{}); ok {
+				if msgIDsSlice, ok := row.MessageIds.([]any); ok {
 					messageIDs = make([]string, len(msgIDsSlice))
 					for i, msgID := range msgIDsSlice {
 						if uid, ok := msgID.(uuid.UUID); ok {
@@ -1042,7 +1042,7 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 		if lastNewline >= 0 {
 			// Process all complete lines
 			completeLines := bufData[:lastNewline]
-			for _, line := range strings.Split(completeLines, "\n") {
+			for line := range strings.SplitSeq(completeLines, "\n") {
 				r.processLine(line)
 			}
 
@@ -1146,8 +1146,8 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 }
 
 func (r *responseCaptor) processLine(line string) {
-	if strings.HasPrefix(line, "data: ") {
-		data := strings.TrimPrefix(line, "data: ")
+	if after, ok := strings.CutPrefix(line, "data: "); ok {
+		data := after
 
 		// Check if this is the [DONE] marker
 		if strings.TrimSpace(data) == "[DONE]" {

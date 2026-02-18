@@ -39,7 +39,7 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 	result, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
-		Description:            conv.Ptr("A test toolset"),
+		Description:            new("A test toolset"),
 		ToolUrns:               toolUrns[:2], // Use first two tools
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
@@ -102,10 +102,10 @@ func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {
 	result, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Test Toolset with Env",
-		Description:            conv.Ptr("A test toolset with environment"),
+		Description:            new("A test toolset with environment"),
 		ToolUrns:               []string{tools[0].ToolUrn.String()}, // Use first tool from deployment
 		ResourceUrns:           nil,
-		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("test-env")),
+		DefaultEnvironmentSlug: (*types.Slug)(new("test-env")),
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
@@ -170,7 +170,7 @@ func TestToolsetsService_CreateToolset_InvalidEnvironment(t *testing.T) {
 		Description:            nil,
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
-		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("non-existent-env")),
+		DefaultEnvironmentSlug: (*types.Slug)(new("non-existent-env")),
 		ProjectSlugInput:       nil,
 	})
 	require.Error(t, err)

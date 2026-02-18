@@ -65,6 +65,18 @@ linters:
           - exhaustruct
           - gosec
   settings:
+    gosec:
+      excludes:
+        # Temporarily ignore this lint rule because it needs to be a separate
+        # refactor to address properly.
+        - G117
+        # Taint analysis engine introduced in gosec v2.23.0 throws up a lot of
+        # false positives that peppering the codebase with `#nosec` comments
+        # starts the defeat the value of the linter. We'll parking these lints
+        # for now and review in newer versions of gosec.
+        - G703
+        - G704
+        - G705
     forbidigo:
       analyze-types: true
       forbid:

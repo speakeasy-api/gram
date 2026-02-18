@@ -17,7 +17,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
 	pkggen "github.com/speakeasy-api/gram/server/gen/packages"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -125,7 +124,7 @@ func TestDeploymentsService_CreateDeployment_NonBlocking(t *testing.T) {
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey: "test-non-blocking-deployment",
-		NonBlocking:    conv.Ptr(true),
+		NonBlocking:    new(true),
 		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
 			{
 				AssetID: ares.Asset.ID,
@@ -505,7 +504,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 			Packages: []*gen.AddDeploymentPackageForm{
 				{
 					Name:    "test-package",
-					Version: conv.Ptr("invalid-version"),
+					Version: new("invalid-version"),
 				},
 			},
 			ApikeyToken:      nil,
@@ -592,7 +591,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 			Packages: []*gen.AddDeploymentPackageForm{
 				{
 					Name:    "test-package",
-					Version: conv.Ptr(ver.Version.Semver),
+					Version: new(ver.Version.Semver),
 				},
 			},
 			ApikeyToken:      nil,

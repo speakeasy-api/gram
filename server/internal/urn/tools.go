@@ -101,7 +101,7 @@ func (u *Tool) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (u *Tool) Scan(value interface{}) error {
+func (u *Tool) Scan(value any) error {
 	if value == nil {
 		return nil
 	}

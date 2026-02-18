@@ -98,7 +98,7 @@ func DelayedChatResolutionAnalysisWorkflow(ctx workflow.Context, params DelayedC
 
 		// Case 2: Signal received (new activity, reset timer)
 		selector.AddReceive(resetTimerChan, func(c workflow.ReceiveChannel, more bool) {
-			var signal interface{}
+			var signal any
 			c.Receive(ctx, &signal)
 			logger.Info("Inactivity timer reset due to new activity",
 				"chat_id", params.ChatID.String(),
@@ -108,7 +108,7 @@ func DelayedChatResolutionAnalysisWorkflow(ctx workflow.Context, params DelayedC
 
 		// Case 3: Signal received (resolve immediately)
 		selector.AddReceive(resolveImmediatelyChan, func(c workflow.ReceiveChannel, more bool) {
-			var signal interface{}
+			var signal any
 			c.Receive(ctx, &signal)
 			logger.Info("Immediate resolution requested, triggering analysis",
 				"chat_id", params.ChatID.String(),

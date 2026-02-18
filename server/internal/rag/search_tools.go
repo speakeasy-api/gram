@@ -27,8 +27,8 @@ import (
 const (
 	// This is the only embedding model currently supported
 	// If you would like to add another embedding model you must modify the table to handle and index embeddings of that dimension
-	defaultEmbeddingModel         = "openai/text-embedding-3-small"
-	defaultFindToolsResultSize    = 3
+	defaultEmbeddingModel      = "openai/text-embedding-3-small"
+	defaultFindToolsResultSize = 3
 	// OpenAI embedding limit: 300,000 tokens max per request, 8192 tokens per input
 	// Using ~4 bytes per token approximation: 300k tokens * 4 bytes = 1.2MB
 	// Use conservative 800KB to account for JSON overhead
@@ -232,7 +232,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 			ToolsetID:          toolsetUUID,
 			ToolsetVersion:     toolset.ToolsetVersion,
 			Tags:               tags,
-			ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
+			ResultLimit:        int32(limit),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("search toolset embeddings: %w", err)
@@ -244,7 +244,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 			ToolsetID:          toolsetUUID,
 			ToolsetVersion:     toolset.ToolsetVersion,
 			Tags:               tags,
-			ResultLimit:        int32(limit), //nolint:gosec // limit is validated to be positive
+			ResultLimit:        int32(limit),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("search toolset embeddings: %w", err)
@@ -335,7 +335,6 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 
 	return candidates, nil
 }
-
 
 func extractTags(tool *types.Tool) []string {
 	var tags []string
@@ -441,9 +440,7 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 	}
 
 	for range workerCount {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for batch := range workChan {
 				if firstErr != nil {
 					return
@@ -471,7 +468,7 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 				}
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

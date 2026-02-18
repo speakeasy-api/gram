@@ -180,7 +180,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	// Compute next cursor using limit+1 pattern
 	var nextCursor *string
 	if len(items) > params.limit {
-		nextCursor = conv.Ptr(items[params.limit-1].ID)
+		nextCursor = new(items[params.limit-1].ID)
 		items = items[:params.limit]
 	}
 
@@ -704,7 +704,7 @@ func (s *Service) CaptureEvent(ctx context.Context, payload *telem_gen.CaptureEv
 	}
 
 	// Build event properties
-	properties := make(map[string]interface{})
+	properties := make(map[string]any)
 	if payload.Properties != nil {
 		properties = payload.Properties
 	}

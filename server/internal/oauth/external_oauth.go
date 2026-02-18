@@ -623,9 +623,9 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	}
 
 	if connected {
-		response.ExpiresAt = conv.Ptr(token.ExpiresAt.Time.Format(time.RFC3339))
+		response.ExpiresAt = new(token.ExpiresAt.Time.Format(time.RFC3339))
 		if token.ProviderName.Valid {
-			response.ProviderName = conv.Ptr(token.ProviderName.String)
+			response.ProviderName = new(token.ProviderName.String)
 		}
 	}
 

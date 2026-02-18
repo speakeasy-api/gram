@@ -9,7 +9,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/constants"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestTemplatesService_CreateTemplate_Success(t *testing.T) {
@@ -23,11 +22,11 @@ func TestTemplatesService_CreateTemplate_Success(t *testing.T) {
 		ProjectSlugInput: nil,
 		Name:             types.Slug("test-template"),
 		Prompt:           "Hello {{name}}!",
-		Description:      conv.Ptr("A test template"),
+		Description:      new("A test template"),
 		Engine:           "mustache",
 		Kind:             "prompt",
 		ToolsHint:        []string{"assistant"},
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 	})
 	require.NoError(t, err, "create template")
 
@@ -177,7 +176,7 @@ func TestTemplatesService_CreateTemplate_EmptyArgumentsSchema(t *testing.T) {
 		Engine:           "",
 		Kind:             "prompt",
 		ToolsHint:        nil,
-		Arguments:        conv.Ptr(`{"type": "object"}`),
+		Arguments:        new(`{"type": "object"}`),
 	})
 	require.NoError(t, err, "create template with empty arguments schema should succeed")
 	require.NotNil(t, result, "result is nil")
@@ -199,7 +198,7 @@ func TestTemplatesService_CreateTemplate_ArgumentsWithoutEngine(t *testing.T) {
 		Engine:           "", // No engine specified
 		Kind:             "prompt",
 		ToolsHint:        nil,
-		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+		Arguments:        new(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 	})
 	require.NoError(t, err, "creating template with arguments but no engine should succeed")
 	require.NotNil(t, result, "result should not be nil")

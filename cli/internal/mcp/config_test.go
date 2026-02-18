@@ -123,14 +123,14 @@ func TestMarshalConfigJSON_OmitsEmptyFields(t *testing.T) {
 	require.NoError(t, err)
 
 	// Parse JSON
-	var result map[string]interface{}
+	var result map[string]any
 	err = json.Unmarshal([]byte(jsonStr), &result)
 	require.NoError(t, err)
 
 	// Navigate to server config
-	mcpServers, ok := result["mcpServers"].(map[string]interface{})
+	mcpServers, ok := result["mcpServers"].(map[string]any)
 	require.True(t, ok, "mcpServers should be a map")
-	serverConfig, ok := mcpServers["test-server"].(map[string]interface{})
+	serverConfig, ok := mcpServers["test-server"].(map[string]any)
 	require.True(t, ok, "test-server config should be a map")
 
 	// Verify command-based fields are omitted
@@ -235,7 +235,7 @@ func TestCursorDeepLinkEncoding_NoWrapping(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify it's NOT wrapped
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	err = json.Unmarshal(configJSON, &parsed)
 	require.NoError(t, err)
 

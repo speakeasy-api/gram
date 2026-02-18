@@ -126,8 +126,8 @@ func TestService_ExportMcpMetadata_WithMetadata(t *testing.T) {
 	// Set MCP metadata (uses toolset slug)
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		ToolsetSlug:              types.Slug(toolset.Slug),
-		ExternalDocumentationURL: conv.Ptr("https://docs.example.com"),
-		Instructions:             conv.Ptr("Use this server to interact with our API."),
+		ExternalDocumentationURL: new("https://docs.example.com"),
+		Instructions:             new("Use this server to interact with our API."),
 	})
 	require.NoError(t, err, "set mcp metadata")
 

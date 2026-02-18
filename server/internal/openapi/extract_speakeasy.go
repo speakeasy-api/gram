@@ -715,7 +715,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 
 	var confirm *string
 	if descriptor.confirm != nil {
-		confirm = conv.Ptr(string(*descriptor.confirm))
+		confirm = new(string(*descriptor.confirm))
 	}
 
 	tags := op.Tags
@@ -754,10 +754,10 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		PathSettings:        pathSettings,
 		RequestContentType:  conv.PtrToPGText(requestContentType),
 		ResponseFilter:      responseFilter,
-		ReadOnlyHint:    pgtype.Bool{Bool: inferReadOnlyHint(method), Valid: true},
-		DestructiveHint: pgtype.Bool{Bool: inferDestructiveHint(method), Valid: true},
-		IdempotentHint:  pgtype.Bool{Bool: inferIdempotentHint(method), Valid: true},
-		OpenWorldHint:   pgtype.Bool{Bool: true, Valid: true},
+		ReadOnlyHint:        pgtype.Bool{Bool: inferReadOnlyHint(method), Valid: true},
+		DestructiveHint:     pgtype.Bool{Bool: inferDestructiveHint(method), Valid: true},
+		IdempotentHint:      pgtype.Bool{Bool: inferIdempotentHint(method), Valid: true},
+		OpenWorldHint:       pgtype.Bool{Bool: true, Valid: true},
 	}, deploymentEvents, nil
 }
 
@@ -898,7 +898,7 @@ func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 			s := param.Schema.GetResolvedSchema()
 
 			if s.IsLeft() && s.GetLeft().GetDescription() == "" && param.GetDescription() != "" {
-				s.GetLeft().Description = pointer.From(param.GetDescription())
+				s.GetLeft().Description = new(param.GetDescription())
 			}
 
 			es, d, err := extractJSONSchemaSpeakeasy(ctx, doc, schemaCache, param.Name, param.Schema)
@@ -912,7 +912,7 @@ func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 
 		required := param.Required
 		if param.GetIn() == openapi.ParameterInPath {
-			required = pointer.From(true)
+			required = new(true)
 		}
 
 		proxy := &OpenapiV3ParameterProxy{

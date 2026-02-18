@@ -15,7 +15,6 @@ import (
 	pkggen "github.com/speakeasy-api/gram/server/gen/packages"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -92,7 +91,7 @@ func TestDeploymentsService_Evolve_NonBlocking(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		DeploymentID:     nil,
-		NonBlocking:      conv.Ptr(true),
+		NonBlocking:      new(true),
 		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
 			{
 				AssetID: ares.Asset.ID,
@@ -549,7 +548,7 @@ func TestDeploymentsService_Evolve_UpsertPackages(t *testing.T) {
 		UpsertPackages: []*gen.AddPackageForm{
 			{
 				Name:    "test-package",
-				Version: conv.Ptr("1.0.0"),
+				Version: new("1.0.0"),
 			},
 		},
 		ExcludeOpenapiv3Assets: []string{},
@@ -704,11 +703,11 @@ func TestDeploymentsService_Evolve_ExcludePackages(t *testing.T) {
 		UpsertPackages: []*gen.AddPackageForm{
 			{
 				Name:    "test-package-1",
-				Version: conv.Ptr("1.0.0"),
+				Version: new("1.0.0"),
 			},
 			{
 				Name:    "test-package-2",
-				Version: conv.Ptr("1.0.0"),
+				Version: new("1.0.0"),
 			},
 		},
 		ExcludeOpenapiv3Assets: []string{},
@@ -854,7 +853,7 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 			UpsertPackages: []*gen.AddPackageForm{
 				{
 					Name:    "test-package",
-					Version: conv.Ptr("invalid-version"),
+					Version: new("invalid-version"),
 				},
 			},
 			ExcludeOpenapiv3Assets: []string{},
@@ -941,7 +940,7 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 			UpsertPackages: []*gen.AddPackageForm{
 				{
 					Name:    "self-package",
-					Version: conv.Ptr("1.0.0"),
+					Version: new("1.0.0"),
 				},
 			},
 			ExcludeOpenapiv3Assets: []string{},
@@ -1056,7 +1055,7 @@ func TestDeploymentsService_Evolve_ComplexScenario(t *testing.T) {
 		UpsertPackages: []*gen.AddPackageForm{
 			{
 				Name:    "external-package",
-				Version: conv.Ptr("1.0.0"),
+				Version: new("1.0.0"),
 			},
 		},
 		UpsertFunctions:        []*gen.AddFunctionsForm{},

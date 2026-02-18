@@ -281,7 +281,7 @@ func DescribeToolsetEntry(
 		promptTemplates = append(promptTemplates, &types.PromptTemplateEntry{
 			ID:   pt.ID.String(),
 			Name: types.Slug(pt.Name),
-			Kind: conv.Ptr(parseKind(pt)),
+			Kind: new(parseKind(pt)),
 		})
 	}
 
@@ -428,7 +428,7 @@ func DescribeToolset(
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").Log(ctx, logger)
 		}
 		if len(externalOauthMetadata.Metadata) > 0 {
-			var metadata interface{}
+			var metadata any
 			if err := json.Unmarshal(externalOauthMetadata.Metadata, &metadata); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal external oauth metadata").Log(ctx, logger)
 			}
@@ -636,7 +636,7 @@ func readToolsetTools(
 				CanonicalName:       name,
 				Summary:             "", // Slowly phasing this out
 				Description:         description,
-				Confirm:             conv.Ptr(string(confirm)),
+				Confirm:             new(string(confirm)),
 				ConfirmPrompt:       confirmPrompt,
 				Summarizer:          summarizer,
 				Tags:                tags,
@@ -795,7 +795,7 @@ func readToolsetTools(
 					ID:          def.ID.String(),
 					ProjectID:   pid.String(),
 					ToolUrn:     def.ToolUrn,
-					Type:        conv.Ptr(def.Type),
+					Type:        new(def.Type),
 					Name:        def.Name.String,
 					Description: def.Description.String,
 					Schema:      string(def.Schema),

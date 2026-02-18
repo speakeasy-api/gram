@@ -126,11 +126,11 @@ func (c *Client) Close() error {
 
 // ToolAnnotations contains MCP tool behavior hints.
 type ToolAnnotations struct {
-	Title          string `json:"title,omitempty"`
-	ReadOnlyHint   *bool  `json:"readOnlyHint,omitempty"`
-	DestructiveHint *bool `json:"destructiveHint,omitempty"`
-	IdempotentHint *bool  `json:"idempotentHint,omitempty"`
-	OpenWorldHint  *bool  `json:"openWorldHint,omitempty"`
+	Title           string `json:"title,omitempty"`
+	ReadOnlyHint    *bool  `json:"readOnlyHint,omitempty"`
+	DestructiveHint *bool  `json:"destructiveHint,omitempty"`
+	IdempotentHint  *bool  `json:"idempotentHint,omitempty"`
+	OpenWorldHint   *bool  `json:"openWorldHint,omitempty"`
 }
 
 // Tool represents a tool discovered from an external MCP server.
@@ -171,9 +171,9 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		if tool.Annotations != nil {
 			annotations = &ToolAnnotations{
 				Title:           tool.Annotations.Title,
-				ReadOnlyHint:    ptrBool(tool.Annotations.ReadOnlyHint),
+				ReadOnlyHint:    new(tool.Annotations.ReadOnlyHint),
 				DestructiveHint: tool.Annotations.DestructiveHint, // already *bool
-				IdempotentHint:  ptrBool(tool.Annotations.IdempotentHint),
+				IdempotentHint:  new(tool.Annotations.IdempotentHint),
 				OpenWorldHint:   tool.Annotations.OpenWorldHint, // already *bool
 			}
 		}
@@ -286,9 +286,4 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 
 	return resp, nil
-}
-
-// ptrBool converts a bool to *bool.
-func ptrBool(b bool) *bool {
-	return &b
 }

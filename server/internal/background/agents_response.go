@@ -573,14 +573,14 @@ func createSubAgentTool(name, description string) openrouter.Tool {
 		toolDescription = "A specialized sub-agent"
 	}
 
-	schema := map[string]interface{}{
+	schema := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
-			"task": map[string]interface{}{
+		"properties": map[string]any{
+			"task": map[string]any{
 				"type":        "string",
 				"description": "The specific task or request to send to this sub-agent",
 			},
-			"context": map[string]interface{}{
+			"context": map[string]any{
 				"type":        "string",
 				"description": "Additional conversation context or information relevant to completing the task",
 			},

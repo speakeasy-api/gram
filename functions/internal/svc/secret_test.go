@@ -110,7 +110,7 @@ func TestSecret_MarshalJSON_InStruct(t *testing.T) {
 	t.Parallel()
 
 	type Config struct {
-		Username string        `json:"username"`
+		Username string         `json:"username"`
 		Password Secret[string] `json:"password"`
 		APIKey   Secret[string] `json:"api_key"`
 	}
@@ -199,8 +199,8 @@ func TestSecret_DifferentTypes(t *testing.T) {
 	t.Run("struct secret", func(t *testing.T) {
 		t.Parallel()
 		type Credentials struct {
-			Username string
-			Password string
+			Username string `json:"-"`
+			Password string `json:"-"`
 		}
 		creds := Credentials{Username: "admin", Password: "pass123"}
 		secret := NewSecret(creds)

@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -32,7 +31,7 @@ func newTestToolDescriptor() *ToolDescriptor {
 	return &ToolDescriptor{
 		ID:               uuid.New().String(),
 		Name:             "test_tool",
-		Description:      conv.Ptr("test_tool_description"),
+		Description:      new("test_tool_description"),
 		DeploymentID:     uuid.New().String(),
 		ProjectID:        uuid.New().String(),
 		ProjectSlug:      "test-project",
@@ -241,7 +240,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				plan.PathParams[paramName] = &HTTPParameter{
 					Name:            paramName,
 					Style:           "simple",
-					Explode:         conv.Ptr(false),
+					Explode:         new(false),
 					AllowEmptyValue: false,
 				}
 			}
@@ -370,7 +369,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				plan.HeaderParams[paramName] = &HTTPParameter{
 					Name:            paramName,
 					Style:           "simple",
-					Explode:         conv.Ptr(false),
+					Explode:         new(false),
 					AllowEmptyValue: true,
 				}
 			}
@@ -450,7 +449,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"page": {
 					Name:            "page",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -467,7 +466,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"price": {
 					Name:            "price",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -486,19 +485,19 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"min": {
 					Name:            "min",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"max": {
 					Name:            "max",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"rate": {
 					Name:            "rate",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -517,7 +516,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"timestamp": {
 					Name:            "timestamp",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -534,7 +533,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"value": {
 					Name:            "value",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -551,7 +550,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"offset": {
 					Name:            "offset",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -568,7 +567,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"amount": {
 					Name:            "amount",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -587,19 +586,19 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"name": {
 					Name:            "name",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"category": {
 					Name:            "category",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"status": {
 					Name:            "status",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -619,13 +618,13 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"created_at": {
 					Name:            "created_at",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"expires": {
 					Name:            "expires",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -647,31 +646,31 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"id": {
 					Name:            "id",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"name": {
 					Name:            "name",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"created_at": {
 					Name:            "created_at",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"price": {
 					Name:            "price",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 				"active": {
 					Name:            "active",
 					Style:           "form",
-					Explode:         conv.Ptr(true),
+					Explode:         new(true),
 					AllowEmptyValue: false,
 				},
 			},

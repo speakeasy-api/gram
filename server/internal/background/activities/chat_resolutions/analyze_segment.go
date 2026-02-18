@@ -126,10 +126,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	}
 
 	// Insert resolution
-	score := max(result.Score, 0)
-	if score > 100 {
-		score = 100
-	}
+	score := min(max(result.Score, 0), 100)
 
 	resolutionID, err := txRepo.InsertChatResolution(ctx, repo.InsertChatResolutionParams{
 		ProjectID:       args.ProjectID,
@@ -354,12 +351,12 @@ If there are no tool calls, return an empty array.`, userPromptText)
 }
 
 func (a *AnalyzeSegment) formatUserFeedback(userFeedback []UserFeedback) string {
-	feedbackText := ""
+	var feedbackText strings.Builder
 	for _, fb := range userFeedback {
-		feedbackText += fmt.Sprintf(`User feedback at message index %d: %s\n`, fb.MessageIndex, fb.Resolution)
+		fmt.Fprintf(&feedbackText, `User feedback at message index %d: %s\n`, fb.MessageIndex, fb.Resolution)
 		if fb.ResolutionNotes != "" {
-			feedbackText += fmt.Sprintf(`-- User feedback notes: %s\n`, fb.ResolutionNotes)
+			fmt.Fprintf(&feedbackText, `-- User feedback notes: %s\n`, fb.ResolutionNotes)
 		}
 	}
-	return feedbackText
+	return feedbackText.String()
 }

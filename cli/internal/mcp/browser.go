@@ -13,11 +13,11 @@ func OpenURL(url string) error {
 
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", url)
+		cmd = exec.Command("open", url) //#nosec G204 -- url is passed to system browser opener
 	case "linux":
-		cmd = exec.Command("xdg-open", url)
+		cmd = exec.Command("xdg-open", url) //#nosec G204 -- url is passed to system browser opener
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
+		cmd = exec.Command("cmd", "/c", "start", url) //#nosec G204 -- url is passed to system browser opener
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}

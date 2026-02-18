@@ -276,18 +276,18 @@ func applyAnnotationVariation(base *types.ToolAnnotations, variation types.ToolV
 func variedToolSchema(baseSchema string, summarizer *string) (string, error) {
 	schema := baseSchema
 	if summarizer != nil {
-		var jsonSchema map[string]interface{}
+		var jsonSchema map[string]any
 		err := json.Unmarshal([]byte(schema), &jsonSchema)
 		if err != nil {
 			return "", errors.New("failed to unmarshal schema")
 		}
 
-		properties, ok := jsonSchema["properties"].(map[string]interface{})
+		properties, ok := jsonSchema["properties"].(map[string]any)
 		if !ok {
-			properties = make(map[string]interface{})
+			properties = make(map[string]any)
 		}
 
-		properties["gram-request-summary"] = map[string]interface{}{
+		properties["gram-request-summary"] = map[string]any{
 			"type":        "string",
 			"description": "REQUIRED: A summary of the request to the tool. Distill the user's intention in order to ensure the response contains all the necessary information, without unnecessary details.",
 		}

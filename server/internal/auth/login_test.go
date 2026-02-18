@@ -77,7 +77,7 @@ func TestService_Login(t *testing.T) {
 		stateBytes, err := base64.RawURLEncoding.DecodeString(stateParam)
 		require.NoError(t, err)
 
-		var state map[string]interface{}
+		var state map[string]any
 		err = json.Unmarshal(stateBytes, &state)
 		require.NoError(t, err)
 		require.Empty(t, state["final_destination_url"])
@@ -106,7 +106,7 @@ func TestService_Login(t *testing.T) {
 		stateBytes, err := base64.RawURLEncoding.DecodeString(stateParam)
 		require.NoError(t, err)
 
-		var state map[string]interface{}
+		var state map[string]any
 		err = json.Unmarshal(stateBytes, &state)
 		require.NoError(t, err)
 		require.Equal(t, redirectURL, state["final_destination_url"])
@@ -135,7 +135,7 @@ func TestService_Login(t *testing.T) {
 		stateBytes, err := base64.RawURLEncoding.DecodeString(stateParam)
 		require.NoError(t, err)
 
-		var state map[string]interface{}
+		var state map[string]any
 		err = json.Unmarshal(stateBytes, &state)
 		require.NoError(t, err)
 		require.Equal(t, redirectURL, state["final_destination_url"])
