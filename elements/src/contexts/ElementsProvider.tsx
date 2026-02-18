@@ -25,8 +25,8 @@ import { Plugin } from '@/types/plugins'
 import {
   AssistantRuntimeProvider,
   AssistantTool,
-  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
   useAssistantState,
+  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
 } from '@assistant-ui/react'
 import {
   frontendTools as convertFrontendToolsToAISDKTools,
@@ -36,6 +36,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   convertToModelMessages,
+  createUIMessageStream,
   smoothStream,
   stepCountIs,
   streamText,
@@ -52,14 +53,14 @@ import {
   useState,
 } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { ElementsContext } from './contexts'
-import { ToolApprovalProvider } from './ToolApprovalContext'
+import { ChatIdContext } from './ChatIdContext'
 import {
   ConnectionStatusProvider,
   useConnectionStatusOptional,
 } from './ConnectionStatusContext'
+import { ElementsContext } from './contexts'
+import { ToolApprovalProvider } from './ToolApprovalContext'
 import { ToolExecutionProvider } from './ToolExecutionContext'
-import { ChatIdContext } from './ChatIdContext'
 
 /**
  * Extracts executable tools from frontend tool definitions.
@@ -331,10 +332,10 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         const openRouterModel = usingCustomModel
           ? null
           : createOpenRouter({
-              baseURL: apiUrl,
-              apiKey: 'unused, but must be set',
-              headers: headersWithChatId,
-            })
+            baseURL: apiUrl,
+            apiKey: 'unused, but must be set',
+            headers: headersWithChatId,
+          })
 
         if (config.languageModel) {
           console.log('Using custom language model', config.languageModel)
@@ -375,19 +376,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
               console.error('Stream error in onError callback:', error)
               trackError(error, { source: 'streaming' })
 
-              // Check if this is a credit/billing error (402)
-              const isCreditError =
-                error instanceof Error &&
-                (error.message.includes('insufficient_credits') ||
-                  error.message.includes('chat credits') ||
-                  ('statusCode' in error &&
-                    (error as { statusCode: number }).statusCode === 402))
-
-              // Credit errors should surface via MessagePrimitive.Error, not as connection issues
-              if (isCreditError) {
-                return
-              }
-
               // Check if this is a network/connection error
               const isNetworkError =
                 error instanceof TypeError ||
@@ -408,35 +396,28 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // Mark as connected when stream starts successfully
           connectionStatus?.markConnected()
 
-          return result.toUIMessageStream()
+          return createUIMessageStream({
+            execute: ({ writer }) => {
+              writer.merge(result.toUIMessageStream())
+            },
+          })
         } catch (error) {
           console.error('Error creating stream:', error)
           trackError(error, { source: 'stream-creation' })
 
-          // Check if this is a credit/billing error (402)
-          const isCreditError =
-            error instanceof Error &&
-            (error.message.includes('insufficient_credits') ||
-              error.message.includes('chat credits') ||
-              ('statusCode' in error &&
-                (error as { statusCode: number }).statusCode === 402))
+          // Check if this is a network/connection error
+          const isNetworkError =
+            error instanceof TypeError ||
+            (error instanceof Error &&
+              (error.message.includes('fetch') ||
+                error.message.includes('network') ||
+                error.message.includes('Failed to fetch') ||
+                error.message.includes('NetworkError') ||
+                error.message.includes('ECONNREFUSED') ||
+                error.message.includes('ETIMEDOUT')))
 
-          // Credit errors should propagate as-is to surface via MessagePrimitive.Error
-          if (!isCreditError) {
-            // Check if this is a network/connection error
-            const isNetworkError =
-              error instanceof TypeError ||
-              (error instanceof Error &&
-                (error.message.includes('fetch') ||
-                  error.message.includes('network') ||
-                  error.message.includes('Failed to fetch') ||
-                  error.message.includes('NetworkError') ||
-                  error.message.includes('ECONNREFUSED') ||
-                  error.message.includes('ETIMEDOUT')))
-
-            if (isNetworkError) {
-              connectionStatus?.markDisconnected()
-            }
+          if (isNetworkError) {
+            connectionStatus?.markDisconnected()
           }
 
           throw error
@@ -650,7 +631,7 @@ const ElementsProviderWithHistory = ({
                   ROOT_SELECTOR,
                   (contextValue?.config.variant === 'standalone' ||
                     contextValue?.config.variant === 'sidecar') &&
-                    'h-full'
+                  'h-full'
                 )}
               >
                 {children}
@@ -702,7 +683,7 @@ const ElementsProviderWithoutHistory = ({
                 ROOT_SELECTOR,
                 (contextValue?.config.variant === 'standalone' ||
                   contextValue?.config.variant === 'sidecar') &&
-                  'h-full'
+                'h-full'
               )}
             >
               {children}
