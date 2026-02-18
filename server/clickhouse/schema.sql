@@ -30,11 +30,6 @@ create table if not exists http_requests_raw
       SETTINGS index_granularity = 8192
       COMMENT 'Stores raw HTTP tool call requests and responses';
 
-CREATE INDEX IF NOT EXISTS idx_tool_type ON http_requests_raw (tool_type) TYPE set (0) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_status_code ON http_requests_raw (status_code) TYPE set (100) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_tool_urn_exact ON http_requests_raw (tool_urn) TYPE bloom_filter(0.01) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_tool_urn_substring ON http_requests_raw (tool_urn) TYPE ngrambf_v1(4, 30720, 3, 0) GRANULARITY 4;
-
 CREATE TABLE IF NOT EXISTS tool_logs (
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.',
     timestamp DateTime64(3, 'UTC') COMMENT 'Timestamp at which log was generated.' CODEC(Delta, ZSTD),
