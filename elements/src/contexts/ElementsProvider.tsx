@@ -332,10 +332,10 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         const openRouterModel = usingCustomModel
           ? null
           : createOpenRouter({
-            baseURL: apiUrl,
-            apiKey: 'unused, but must be set',
-            headers: headersWithChatId,
-          })
+              baseURL: apiUrl,
+              apiKey: 'unused, but must be set',
+              headers: headersWithChatId,
+            })
 
         if (config.languageModel) {
           console.log('Using custom language model', config.languageModel)
@@ -396,6 +396,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // Mark as connected when stream starts successfully
           connectionStatus?.markConnected()
 
+          // This weird construction is necessary to get errors to propagate properly to assistant-ui
           return createUIMessageStream({
             execute: ({ writer }) => {
               writer.merge(result.toUIMessageStream())
@@ -631,7 +632,7 @@ const ElementsProviderWithHistory = ({
                   ROOT_SELECTOR,
                   (contextValue?.config.variant === 'standalone' ||
                     contextValue?.config.variant === 'sidecar') &&
-                  'h-full'
+                    'h-full'
                 )}
               >
                 {children}
@@ -683,7 +684,7 @@ const ElementsProviderWithoutHistory = ({
                 ROOT_SELECTOR,
                 (contextValue?.config.variant === 'standalone' ||
                   contextValue?.config.variant === 'sidecar') &&
-                'h-full'
+                  'h-full'
               )}
             >
               {children}

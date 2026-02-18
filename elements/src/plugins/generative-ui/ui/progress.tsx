@@ -5,10 +5,8 @@ import { Progress as ProgressPrimitive } from 'radix-ui'
 
 import { cn } from '@/lib/utils'
 
-interface ProgressProps extends Omit<
-  React.ComponentProps<typeof ProgressPrimitive.Root>,
-  'max'
-> {
+interface ProgressProps
+  extends Omit<React.ComponentProps<typeof ProgressPrimitive.Root>, 'max'> {
   /** Label to display above the progress bar (matches LLM prompt) */
   label?: string
   /** Maximum value (matches LLM prompt) */
