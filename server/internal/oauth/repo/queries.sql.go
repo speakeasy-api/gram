@@ -585,11 +585,14 @@ const upsertOAuthProxyServer = `-- name: UpsertOAuthProxyServer :one
 
 INSERT INTO oauth_proxy_servers (
     project_id,
-    slug
+    slug,
+    audience
 ) VALUES (
     $1,
-    $2
+    $2,
+    $3
 ) ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO UPDATE SET
+    audience = $3,
     updated_at = clock_timestamp()
 RETURNING id, project_id, slug, created_at, updated_at, deleted_at, deleted
 `
@@ -597,11 +600,12 @@ RETURNING id, project_id, slug, created_at, updated_at, deleted_at, deleted
 type UpsertOAuthProxyServerParams struct {
 	ProjectID uuid.UUID
 	Slug      string
+	Audience  pgtype.Text
 }
 
 // OAuth Proxy Servers Queries
 func (q *Queries) UpsertOAuthProxyServer(ctx context.Context, arg UpsertOAuthProxyServerParams) (OauthProxyServer, error) {
-	row := q.db.QueryRow(ctx, upsertOAuthProxyServer, arg.ProjectID, arg.Slug)
+	row := q.db.QueryRow(ctx, upsertOAuthProxyServer, arg.ProjectID, arg.Slug, arg.Audience)
 	var i OauthProxyServer
 	err := row.Scan(
 		&i.ID,

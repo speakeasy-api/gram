@@ -494,6 +494,7 @@ func DescribeToolset(
 				ID:                  oauthProxyServerData.ID.String(),
 				ProjectID:           oauthProxyServerData.ProjectID.String(),
 				Slug:                types.Slug(oauthProxyServerData.Slug),
+				Audience:            conv.FromPGText[string](oauthProxyServerData.Audience),
 				OauthProxyProviders: providers,
 				CreatedAt:           oauthProxyServerData.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:           oauthProxyServerData.UpdatedAt.Time.Format(time.RFC3339),

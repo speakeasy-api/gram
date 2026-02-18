@@ -183,6 +183,7 @@ var OAuthProxyServer = Type("OAuthProxyServer", func() {
 	Attribute("id", String, "The ID of the OAuth proxy server")
 	Attribute("project_id", String, "The project ID this OAuth proxy server belongs to")
 	Attribute("slug", Slug, "The slug of the OAuth proxy server")
+	Attribute("audience", String, "The audience parameter to send to the upstream OAuth provider")
 	Attribute("oauth_proxy_providers", ArrayOf(OAuthProxyProvider), "The OAuth proxy providers for this server")
 	Attribute("created_at", String, func() {
 		Description("When the OAuth proxy server was created.")
@@ -207,6 +208,7 @@ var OAuthProxyServerForm = Type("OAuthProxyServerForm", func() {
 	Meta("struct:pkg:path", "types")
 
 	Attribute("slug", Slug, "The slug of the OAuth proxy server")
+	Attribute("audience", String, "The audience parameter to send to the upstream OAuth provider")
 	Attribute("provider_type", String, func() {
 		Description("The type of OAuth provider")
 		Enum("custom", "gram")

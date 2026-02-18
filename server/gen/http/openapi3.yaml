@@ -15002,6 +15002,9 @@ components:
         OAuthProxyServer:
             type: object
             properties:
+                audience:
+                    type: string
+                    description: The audience parameter to send to the upstream OAuth provider
                 created_at:
                     type: string
                     description: When the OAuth proxy server was created.
@@ -15035,6 +15038,9 @@ components:
         OAuthProxyServerForm:
             type: object
             properties:
+                audience:
+                    type: string
+                    description: The audience parameter to send to the upstream OAuth provider
                 authorization_endpoint:
                     type: string
                     description: The authorization endpoint URL

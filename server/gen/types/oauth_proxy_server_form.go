@@ -10,6 +10,8 @@ package types
 type OAuthProxyServerForm struct {
 	// The slug of the OAuth proxy server
 	Slug Slug
+	// The audience parameter to send to the upstream OAuth provider
+	Audience *string
 	// The type of OAuth provider
 	ProviderType string
 	// The authorization endpoint URL

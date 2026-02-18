@@ -26,11 +26,14 @@ WHERE project_id = @project_id AND id = @id;
 -- name: UpsertOAuthProxyServer :one
 INSERT INTO oauth_proxy_servers (
     project_id,
-    slug
+    slug,
+    audience
 ) VALUES (
     @project_id,
-    @slug
+    @slug,
+    @audience
 ) ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO UPDATE SET
+    audience = @audience,
     updated_at = clock_timestamp()
 RETURNING *;
 
