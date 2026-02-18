@@ -1,14 +1,17 @@
 import { useReplayContext } from '@/contexts/ReplayContext'
 import {
   hasExplicitSessionAuth,
+  isAnyStaticSession,
   isDangerousApiKeyAuth,
   isStaticSessionAuth,
   isUnifiedFunctionSession,
   isUnifiedStaticSession,
 } from '@/lib/auth'
-import { useMemo } from 'react'
+import { getTokenExpiry } from '@/lib/token'
+import { useCallback, useMemo } from 'react'
 import { ApiConfig, GetSessionFn } from '../types'
-import { useSession } from './useSession'
+import { getChatSessionQueryKey, useSession } from './useSession'
+import { useQueryClient } from '@tanstack/react-query'
 
 declare const __GRAM_API_URL__: string | undefined
 
@@ -16,10 +19,12 @@ export type Auth =
   | {
       headers: Record<string, string>
       isLoading: false
+      ensureValidHeaders: () => Promise<Record<string, string>>
     }
   | {
       headers?: Record<string, string>
       isLoading: true
+      ensureValidHeaders: () => Promise<Record<string, string>>
     }
 
 async function defaultGetSession(init: {
@@ -62,7 +67,7 @@ function createDangerousApiKeySessionFn(
 
 /**
  * Hook to fetch or retrieve the session token for the chat.
- * @returns The session token string or null
+ * @returns Auth object with headers and ensureValidHeaders for pre-request token refresh
  */
 export const useAuth = ({
   projectSlug,
@@ -73,6 +78,7 @@ export const useAuth = ({
 }): Auth => {
   const replayCtx = useReplayContext()
   const isReplay = replayCtx?.isReplay ?? false
+  const queryClient = useQueryClient()
 
   const apiUrl = useMemo(() => {
     const envUrl =
@@ -117,17 +123,58 @@ export const useAuth = ({
     projectSlug,
   })
 
+  const shouldRefresh = !isAnyStaticSession(auth) && !isReplay
+
+  const ensureValidHeaders = useCallback(async (): Promise<
+    Record<string, string>
+  > => {
+    const queryKey = getChatSessionQueryKey(projectSlug)
+    const cachedToken = queryClient.getQueryData<string>(queryKey)
+
+    if (!shouldRefresh || !getSession) {
+      return {
+        'Gram-Project': projectSlug,
+        ...(cachedToken && { 'Gram-Chat-Session': cachedToken }),
+      }
+    }
+
+    // Check if the cached token is expired (or within 30s of expiry).
+    // staleTime=0 forces a refetch; Infinity keeps the cached value.
+    const exp = cachedToken ? getTokenExpiry(cachedToken) : null
+    const isExpired = exp !== null && Date.now() >= exp * 1000 - 30_000
+    const staleTime = isExpired ? 0 : Infinity
+
+    try {
+      const token = await queryClient.fetchQuery({
+        queryKey,
+        queryFn: () => getSession({ projectSlug }),
+        staleTime,
+      })
+      return {
+        'Gram-Project': projectSlug,
+        ...(token && { 'Gram-Chat-Session': token }),
+      }
+    } catch {
+      return {
+        'Gram-Project': projectSlug,
+        ...(cachedToken && { 'Gram-Chat-Session': cachedToken }),
+      }
+    }
+  }, [shouldRefresh, getSession, projectSlug, queryClient])
+
   // In replay mode, return immediately without waiting for session
   if (isReplay) {
     return {
       headers: {},
       isLoading: false,
+      ensureValidHeaders: async () => ({}),
     }
   }
 
   return !session
     ? {
         isLoading: true,
+        ensureValidHeaders,
       }
     : {
         headers: {
@@ -135,5 +182,6 @@ export const useAuth = ({
           'Gram-Chat-Session': session,
         },
         isLoading: false,
+        ensureValidHeaders,
       }
 }
