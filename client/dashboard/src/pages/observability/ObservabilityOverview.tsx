@@ -86,7 +86,7 @@ function hasSummaryData(summary?: {
  */
 function NoDataOverlay() {
   return (
-    <div className="absolute inset-0 bg-background/80 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center rounded">
+    <div className="absolute inset-0 bg-background/80 backdrop-blur-[1px] flex flex-col items-center justify-center rounded">
       <Icon
         name="chart-line"
         className="size-8 text-muted-foreground/50 mb-2"
@@ -1541,7 +1541,7 @@ function ToolCallsChart({
       <h3 className="text-sm font-semibold mb-4">{title}</h3>
       <div className="relative">
         {isLoading && (
-          <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded">
+          <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded">
             <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
@@ -1673,7 +1673,7 @@ function ResolvedChatsChart({
       </div>
       <div className="relative">
         {isLoading && (
-          <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded">
+          <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded">
             <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
@@ -1906,7 +1906,7 @@ function ResolutionStatusChart({
       </div>
       <div className="relative">
         {isLoading && (
-          <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded">
+          <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded">
             <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
@@ -2043,7 +2043,7 @@ function SessionDurationChart({
       </div>
       <div className="relative">
         {isLoading && (
-          <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded">
+          <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded">
             <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
           </div>
         )}

@@ -12,7 +12,7 @@ export const ProductTierBadge = ({
   const name = {
     base: "Base",
     base_PAID: "Base",
-    __deprecated__pro: "Pro (Deprecated)",
+    __deprecated__pro: "Pro",
     enterprise: "Enterprise",
   }[finalTier];
 
@@ -20,7 +20,7 @@ export const ProductTierBadge = ({
 
   return (
     <div
-      className={`text-xs text-muted-foreground px-1 py-0.5 rounded-sm ${classes.bg} ${classes.text}`}
+      className={`w-fit text-xs text-muted-foreground px-1 py-0.5 rounded-sm ${classes.bg} ${classes.text}`}
     >
       {name}
     </div>
