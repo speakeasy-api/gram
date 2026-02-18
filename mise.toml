@@ -20,6 +20,8 @@ nodejs = "24.10.0"
 pnpm = "10.28.2"
 watchexec = "2.3.3"
 mprocs = "0.8.3"
+hk = "latest"
+pkl = "latest"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
