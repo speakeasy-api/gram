@@ -30,8 +30,8 @@ func PtrEmpty[T comparable](v T) *T {
 // is nil. Example:
 //
 //	PtrValOr[int](nil, 5)         // returns *int with value 5
-//	PtrValOr(Ptr(""), "foo")      // returns ""
-//	PtrValOr(Ptr("jane"), "joe")  // returns *string with value "jane"
+//	PtrValOr(new(""), "foo")      // returns ""
+//	PtrValOr(new("jane"), "joe")  // returns *string with value "jane"
 func PtrValOr[T any](ptr *T, def T) T {
 	if ptr == nil {
 		return def
@@ -44,8 +44,8 @@ func PtrValOr[T any](ptr *T, def T) T {
 // is is nil or the zero value. Example:
 //
 //	PtrValOrEmpty[int](nil, 5)         // returns *int with value 5
-//	PtrValOrEmpty(Ptr(""), "foo")      // returns "foo"
-//	PtrValOrEmpty(Ptr("jane"), "joe")  // returns *string with value "jane"
+//	PtrValOrEmpty(new(""), "foo")      // returns "foo"
+//	PtrValOrEmpty(new("jane"), "joe")  // returns *string with value "jane"
 func PtrValOrEmpty[T comparable](ptr *T, def T) T {
 	if ptr == nil {
 		return def
