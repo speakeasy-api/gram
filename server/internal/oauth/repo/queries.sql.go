@@ -208,7 +208,7 @@ func (q *Queries) GetExternalOAuthServerMetadata(ctx context.Context, arg GetExt
 }
 
 const getOAuthProxyServer = `-- name: GetOAuthProxyServer :one
-SELECT id, project_id, slug, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, audience, created_at, updated_at, deleted_at, deleted
 FROM oauth_proxy_servers s
 WHERE s.project_id = $1 AND s.id = $2 AND s.deleted IS FALSE
 `
@@ -225,6 +225,7 @@ func (q *Queries) GetOAuthProxyServer(ctx context.Context, arg GetOAuthProxyServ
 		&i.ID,
 		&i.ProjectID,
 		&i.Slug,
+		&i.Audience,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -591,7 +592,7 @@ INSERT INTO oauth_proxy_servers (
     $2
 ) ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO UPDATE SET
     updated_at = clock_timestamp()
-RETURNING id, project_id, slug, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, slug, audience, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertOAuthProxyServerParams struct {
@@ -607,6 +608,7 @@ func (q *Queries) UpsertOAuthProxyServer(ctx context.Context, arg UpsertOAuthPro
 		&i.ID,
 		&i.ProjectID,
 		&i.Slug,
+		&i.Audience,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

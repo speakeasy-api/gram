@@ -508,6 +508,7 @@ type OauthProxyServer struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
 	Slug      string
+	Audience  pgtype.Text
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
