@@ -762,6 +762,8 @@ CREATE TABLE IF NOT EXISTS chats (
   user_id TEXT,
   external_user_id TEXT,
   title TEXT,
+  source TEXT, -- 'elements', 'mcp', 'playground', etc.
+  connection_fingerprint TEXT, -- hash of IP/user-agent for anonymous MCP users
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -771,6 +773,9 @@ CREATE TABLE IF NOT EXISTS chats (
   CONSTRAINT chats_pkey PRIMARY KEY (id),
   CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS chats_source_idx ON chats (project_id, source) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS chats_fingerprint_idx ON chats (project_id, connection_fingerprint) WHERE deleted IS FALSE;
 
 -- Create the chat_messages table to store individual messages in each chat
 CREATE TABLE IF NOT EXISTS chat_messages (

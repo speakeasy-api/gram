@@ -80,6 +80,8 @@ func handleToolsList(
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build dynamic session tools").Log(ctx, logger)
 		}
+		// Inject session fields for MCP session tracking
+		injectSessionFieldsToTools(tools)
 	case ToolModeStatic:
 		fallthrough
 	default:
@@ -155,10 +157,14 @@ func buildToolListEntries(
 		}
 
 		for _, extTool := range proxyTools {
+			// Inject session fields for Gram session tracking
+			// Even though external MCP servers manage their own sessions,
+			// we inject Gram session fields so LLMs can maintain continuity
+			// across the Gram MCP proxy layer
 			tools = append(tools, &toolListEntry{
 				Name:        extTool.Name,
-				Description: extTool.Description,
-				InputSchema: extTool.Schema,
+				Description: injectSessionDescription(extTool.Description),
+				InputSchema: injectSessionFields(extTool.Schema),
 				Annotations: extTool.Annotations,
 				Meta:        nil,
 			})
@@ -189,10 +195,14 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 		return nil
 	}
 
+	// Inject session fields and description for MCP session tracking (non-proxy tools only)
+	inputSchema := injectSessionFields(toolEntry.InputSchema)
+	description := injectSessionDescription(toolEntry.Description)
+
 	return &toolListEntry{
 		Name:        toolEntry.Name,
-		Description: toolEntry.Description,
-		InputSchema: toolEntry.InputSchema,
+		Description: description,
+		InputSchema: inputSchema,
 		Annotations: convertConvAnnotations(toolEntry.Annotations),
 		Meta:        toolEntry.Meta,
 	}

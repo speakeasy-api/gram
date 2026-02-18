@@ -11,16 +11,18 @@ import (
 )
 
 type Chat struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserID                pgtype.Text
+	ExternalUserID        pgtype.Text
+	Title                 pgtype.Text
+	Source                pgtype.Text
+	ConnectionFingerprint pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
 }
 
 type ChatMessage struct {

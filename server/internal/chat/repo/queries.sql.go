@@ -149,7 +149,7 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
+SELECT id, project_id, organization_id, user_id, external_user_id, title, source, connection_fingerprint, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
@@ -162,6 +162,8 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.UserID,
 		&i.ExternalUserID,
 		&i.Title,
+		&i.Source,
+		&i.ConnectionFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -172,7 +174,7 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 
 const getChatWithResolutions = `-- name: GetChatWithResolutions :one
 SELECT
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.source, c.connection_fingerprint, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -206,18 +208,20 @@ WHERE c.id = $1
 `
 
 type GetChatWithResolutionsRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
-	NumMessages    int32
-	Resolutions    interface{}
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserID                pgtype.Text
+	ExternalUserID        pgtype.Text
+	Title                 pgtype.Text
+	Source                pgtype.Text
+	ConnectionFingerprint pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+	NumMessages           int32
+	Resolutions           interface{}
 }
 
 func (q *Queries) GetChatWithResolutions(ctx context.Context, id uuid.UUID) (GetChatWithResolutionsRow, error) {
@@ -230,6 +234,8 @@ func (q *Queries) GetChatWithResolutions(ctx context.Context, id uuid.UUID) (Get
 		&i.UserID,
 		&i.ExternalUserID,
 		&i.Title,
+		&i.Source,
+		&i.ConnectionFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -416,7 +422,7 @@ func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedback
 
 const listAllChats = `-- name: ListAllChats :many
 SELECT
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.source, c.connection_fingerprint, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -435,18 +441,20 @@ ORDER BY c.updated_at DESC
 `
 
 type ListAllChatsRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
-	NumMessages    int32
-	TotalTokens    int32
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserID                pgtype.Text
+	ExternalUserID        pgtype.Text
+	Title                 pgtype.Text
+	Source                pgtype.Text
+	ConnectionFingerprint pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+	NumMessages           int32
+	TotalTokens           int32
 }
 
 func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]ListAllChatsRow, error) {
@@ -465,6 +473,8 @@ func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]List
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Title,
+			&i.Source,
+			&i.ConnectionFingerprint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -578,7 +588,7 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 
 const listChatsForExternalUser = `-- name: ListChatsForExternalUser :many
 SELECT
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.source, c.connection_fingerprint, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -602,18 +612,20 @@ type ListChatsForExternalUserParams struct {
 }
 
 type ListChatsForExternalUserRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
-	NumMessages    int32
-	TotalTokens    int32
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserID                pgtype.Text
+	ExternalUserID        pgtype.Text
+	Title                 pgtype.Text
+	Source                pgtype.Text
+	ConnectionFingerprint pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+	NumMessages           int32
+	TotalTokens           int32
 }
 
 func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsForExternalUserParams) ([]ListChatsForExternalUserRow, error) {
@@ -632,6 +644,8 @@ func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsFor
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Title,
+			&i.Source,
+			&i.ConnectionFingerprint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -651,7 +665,7 @@ func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsFor
 
 const listChatsForUser = `-- name: ListChatsForUser :many
 SELECT
-    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.source, c.connection_fingerprint, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         COALESCE(
             (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
@@ -675,18 +689,20 @@ type ListChatsForUserParams struct {
 }
 
 type ListChatsForUserRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
-	NumMessages    int32
-	TotalTokens    int32
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserID                pgtype.Text
+	ExternalUserID        pgtype.Text
+	Title                 pgtype.Text
+	Source                pgtype.Text
+	ConnectionFingerprint pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+	NumMessages           int32
+	TotalTokens           int32
 }
 
 func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserParams) ([]ListChatsForUserRow, error) {
@@ -705,6 +721,8 @@ func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserPara
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Title,
+			&i.Source,
+			&i.ConnectionFingerprint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -998,6 +1016,63 @@ func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UU
 		arg.UserID,
 		arg.ExternalUserID,
 		arg.Title,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertMCPSession = `-- name: UpsertMCPSession :one
+INSERT INTO chats (
+    id
+  , project_id
+  , organization_id
+  , user_id
+  , external_user_id
+  , title
+  , source
+  , connection_fingerprint
+  , created_at
+  , updated_at
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    'MCP',
+    $7,
+    NOW(),
+    NOW()
+)
+ON CONFLICT (id) DO UPDATE SET
+    title = COALESCE(NULLIF($6, ''), chats.title),
+    updated_at = NOW()
+RETURNING id
+`
+
+type UpsertMCPSessionParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserID                pgtype.Text
+	ExternalUserID        pgtype.Text
+	Title                 pgtype.Text
+	ConnectionFingerprint pgtype.Text
+}
+
+// Upsert an MCP session chat record. Creates if not exists, updates title if provided.
+func (q *Queries) UpsertMCPSession(ctx context.Context, arg UpsertMCPSessionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertMCPSession,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.Title,
+		arg.ConnectionFingerprint,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
