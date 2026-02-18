@@ -59,7 +59,7 @@ linters:
         # Temporarily ignore this lint rule because it needs to be a separate
         # refactor to address properly.
         - G117
-        # Taint analysis engine introduces in gosec v2.23.0 throws up a lot of
+        # Taint analysis engine introduced in gosec v2.23.0 throws up a lot of
         # false positives that peppering the codebase with `#nosec` comments
         # starts the defeat the value of the linter. We'll parking these lints
         # for now and review in newer versions of gosec.
