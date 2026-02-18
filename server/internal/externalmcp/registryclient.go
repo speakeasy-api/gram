@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -28,23 +29,46 @@ type RegistryBackend interface {
 
 // RegistryClient handles communication with external MCP registries.
 type RegistryClient struct {
-	httpClient *http.Client
-	logger     *slog.Logger
-	backend    RegistryBackend
+	httpClient   *http.Client
+	logger       *slog.Logger
+	backend      RegistryBackend
+	listCache    *cache.TypedCacheObject[CachedListServersResponse]
+	detailsCache *cache.TypedCacheObject[CachedServerDetailsResponse]
 }
 
-// NewRegistryClient creates a new registry client.
-func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, backend RegistryBackend) *RegistryClient {
-	return &RegistryClient{
+// NewRegistryClient creates a new registry client. The cacheImpl parameter is
+// optional — pass nil to disable caching.
+func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, backend RegistryBackend, cacheImpl cache.Cache) *RegistryClient {
+	rc := &RegistryClient{
 		httpClient: &http.Client{
 			Transport: otelhttp.NewTransport(
 				retryablehttp.NewClient().StandardClient().Transport,
 				otelhttp.WithTracerProvider(tracerProvider),
 			),
 		},
-		logger:  logger.With(attr.SlogComponent("mcp-registry-client")),
-		backend: backend,
+		logger:       logger.With(attr.SlogComponent("mcp-registry-client")),
+		backend:      backend,
+		listCache:    nil,
+		detailsCache: nil,
 	}
+
+	if cacheImpl != nil {
+		listCache := cache.NewTypedObjectCache[CachedListServersResponse](
+			logger.With(attr.SlogCacheNamespace("registry-list")),
+			cacheImpl,
+			cache.SuffixNone,
+		)
+		rc.listCache = &listCache
+
+		detailsCache := cache.NewTypedObjectCache[CachedServerDetailsResponse](
+			logger.With(attr.SlogCacheNamespace("registry-details")),
+			cacheImpl,
+			cache.SuffixNone,
+		)
+		rc.detailsCache = &detailsCache
+	}
+
+	return rc
 }
 
 // Registry represents an MCP registry endpoint.
@@ -173,6 +197,16 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		}
 	}
 
+	// Check cache after authorization so headers are populated.
+	if c.listCache != nil {
+		cacheKey := registryCacheKey("list", req)
+		cached, err := c.listCache.Get(ctx, cacheKey)
+		if err == nil {
+			c.logger.DebugContext(ctx, "registry list cache hit", attr.SlogCacheKey(cacheKey))
+			return cached.Servers, nil
+		}
+	}
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch from registry: %w", err)
@@ -231,6 +265,17 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		servers = append(servers, server)
 	}
 
+	// Store in cache on success.
+	if c.listCache != nil {
+		cacheKey := registryCacheKey("list", req)
+		if storeErr := c.listCache.Store(ctx, CachedListServersResponse{
+			Key:     cacheKey,
+			Servers: servers,
+		}); storeErr != nil {
+			c.logger.WarnContext(ctx, "failed to store registry list in cache", attr.SlogError(storeErr))
+		}
+	}
+
 	return servers, nil
 }
 
@@ -263,6 +308,16 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	if c.backend.Match(req) {
 		if err := c.backend.Authorize(req); err != nil {
 			return nil, fmt.Errorf("authorize external mcp server details request: %w", err)
+		}
+	}
+
+	// Check cache after authorization so headers are populated.
+	if c.detailsCache != nil {
+		cacheKey := registryCacheKey("details", req)
+		cached, err := c.detailsCache.Get(ctx, cacheKey)
+		if err == nil {
+			c.logger.DebugContext(ctx, "registry details cache hit", attr.SlogCacheKey(cacheKey))
+			return cached.Details, nil
 		}
 	}
 
@@ -326,7 +381,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		tools = serverResp.Meta.Version.FifthRemote.Tools
 	}
 
-	return &ServerDetails{
+	details := &ServerDetails{
 		Name:          serverResp.Server.Name,
 		Description:   serverResp.Server.Description,
 		Version:       serverResp.Server.Version,
@@ -334,5 +389,18 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		TransportType: transportType,
 		Tools:         tools,
 		Headers:       headers,
-	}, nil
+	}
+
+	// Store in cache on success.
+	if c.detailsCache != nil {
+		cacheKey := registryCacheKey("details", req)
+		if storeErr := c.detailsCache.Store(ctx, CachedServerDetailsResponse{
+			Key:     cacheKey,
+			Details: details,
+		}); storeErr != nil {
+			c.logger.WarnContext(ctx, "failed to store registry details in cache", attr.SlogError(storeErr))
+		}
+	}
+
+	return details, nil
 }

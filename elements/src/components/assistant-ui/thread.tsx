@@ -4,7 +4,9 @@ import {
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CircleIcon,
   CopyIcon,
+  DownloadIcon,
   PencilIcon,
   Settings2,
   Square,
@@ -18,35 +20,55 @@ import {
   ImageMessagePartProps,
   MessagePrimitive,
   ThreadPrimitive,
+  useAssistantState,
 } from '@assistant-ui/react'
 
-import { LazyMotion, MotionConfig, domAnimation } from 'motion/react'
+import {
+  AnimatePresence,
+  LazyMotion,
+  MotionConfig,
+  domAnimation,
+} from 'motion/react'
 import * as m from 'motion/react-m'
-import { useEffect, useRef, useState, type FC } from 'react'
-import { AnimatePresence } from 'motion/react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FC,
+} from 'react'
 
 import {
   ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
 } from '@/components/assistant-ui/attachment'
+import { FollowOnSuggestions } from '@/components/assistant-ui/follow-on-suggestions'
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'
+import { MentionedToolsBadges } from '@/components/assistant-ui/mentioned-tools-badges'
+import { MessageFeedback } from '@/components/assistant-ui/message-feedback'
 import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
 import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
 import { ToolMentionAutocomplete } from '@/components/assistant-ui/tool-mention-autocomplete'
-import { MentionedToolsBadges } from '@/components/assistant-ui/mentioned-tools-badges'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import { Button } from '@/components/ui/button'
-import { useToolMentions } from '@/hooks/useToolMentions'
-
+import { useChatId } from '@/contexts/ChatIdContext'
+import { useReplayContext } from '@/contexts/ReplayContext'
+import { useAuth } from '@/hooks/useAuth'
 import { useDensity } from '@/hooks/useDensity'
 import { useElements } from '@/hooks/useElements'
+import { isLocalThreadId } from '@/hooks/useGramThreadListAdapter'
 import { useRadius } from '@/hooks/useRadius'
+import { useRecordCassette } from '@/hooks/useRecordCassette'
 import { useThemeProps } from '@/hooks/useThemeProps'
+import { useToolMentions } from '@/hooks/useToolMentions'
+import { getApiUrl } from '@/lib/api'
 import { EASE_OUT_QUINT } from '@/lib/easing'
 import { MODELS } from '@/lib/models'
 import { cn } from '@/lib/utils'
-import { ConnectionStatusIndicatorSafe } from './connection-status-indicator'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import {
   Tooltip,
@@ -54,20 +76,35 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip'
+import { ConnectionStatusIndicatorSafe } from './connection-status-indicator'
 import { ToolGroup } from './tool-group'
 
-const StaticSessionWarning = () => (
-  <div className="m-2 rounded-md border border-amber-500 bg-amber-100 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
-    <strong>Warning:</strong> You are using a static session token in the
-    client. It will expire shortly. Please{' '}
-    <a
-      href="https://github.com/speakeasy-api/gram/tree/main/elements#setting-up-your-backend"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-amber-700 underline hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
-    >
-      set up a session endpoint to avoid this warning.
-    </a>
+type Feedback = 'success' | 'failure'
+
+// Context for chat resolution state
+const ChatResolutionContext = createContext<{
+  isResolved: boolean
+  feedbackHidden: boolean
+  setResolved: () => void
+  setUnresolved: () => void
+  resetFeedbackHidden: () => void
+  submitFeedback: (feedback: Feedback) => Promise<void>
+}>({
+  isResolved: false,
+  feedbackHidden: false,
+  setResolved: () => {},
+  setUnresolved: () => {},
+  resetFeedbackHidden: () => {},
+  submitFeedback: async () => {},
+})
+
+const useChatResolution = () => useContext(ChatResolutionContext)
+
+const DangerousApiKeyWarning = () => (
+  <div className="m-2 rounded-md border border-red-500 bg-red-100 px-4 py-3 text-sm text-red-800 dark:border-red-600 dark:bg-red-900/30 dark:text-red-200">
+    <strong>Danger:</strong> You are using a Gram API key directly in the
+    browser. This exposes your key to anyone who inspects this page. Do NOT use
+    this in production.
   </div>
 )
 
@@ -80,53 +117,131 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const d = useDensity()
   const { config } = useElements()
   const components = config.components ?? {}
-  const showStaticSessionWarning = config.api && 'sessionToken' in config.api
+  const showDangerousApiKeyWarning =
+    config.api && 'dangerousApiKey' in config.api
+  const showFeedback = config.thread?.showFeedback ?? false
+  const [isResolved, setIsResolved] = useState(false)
+  const [feedbackHidden, setFeedbackHidden] = useState(false)
+  const chatId = useChatId()
+
+  const apiUrl = getApiUrl(config)
+  const auth = useAuth({
+    auth: config.api,
+    projectSlug: config.projectSlug,
+  })
+
+  const setResolved = () => setIsResolved(true)
+  const setUnresolved = () => {
+    setIsResolved(false)
+    setFeedbackHidden(true)
+  }
+  const resetFeedbackHidden = () => setFeedbackHidden(false)
+
+  // Submit feedback to the API
+  const submitFeedback = useCallback(
+    async (feedback: Feedback) => {
+      if (!chatId) return
+      if (isLocalThreadId(chatId)) {
+        console.error("Local thread ID, can't submit feedback")
+        return
+      }
+
+      try {
+        const response = await fetch(`${apiUrl}/rpc/chat.submitFeedback`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...auth.headers,
+          },
+          body: JSON.stringify({
+            id: chatId,
+            feedback,
+          }),
+        })
+
+        if (!response.ok) {
+          console.error('Failed to submit feedback:', response.statusText)
+        }
+      } catch (error) {
+        console.error('Failed to submit feedback:', error)
+      }
+    },
+    [chatId, apiUrl, auth.headers]
+  )
 
   return (
-    <LazyMotion features={domAnimation}>
-      <MotionConfig reducedMotion="user">
-        <ThreadPrimitive.Root
-          className={cn(
-            'aui-root aui-thread-root bg-background @container relative flex h-full flex-col',
-            themeProps.className,
-            className
-          )}
-        >
-          <ConnectionStatusIndicatorSafe />
-          <ThreadPrimitive.Viewport
+    <ChatResolutionContext.Provider
+      value={{
+        isResolved: showFeedback && isResolved,
+        feedbackHidden,
+        setResolved,
+        setUnresolved,
+        resetFeedbackHidden,
+        submitFeedback,
+      }}
+    >
+      <LazyMotion features={domAnimation}>
+        <MotionConfig reducedMotion="user">
+          <ThreadPrimitive.Root
             className={cn(
-              'aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!',
-              d('p-lg')
+              'aui-root aui-thread-root bg-background @container relative flex h-full flex-col',
+              themeProps.className,
+              className
             )}
           >
-            <ThreadPrimitive.If empty>
-              {components.ThreadWelcome ? (
-                <components.ThreadWelcome />
-              ) : (
-                <ThreadWelcome />
+            <ConnectionStatusIndicatorSafe />
+            <ThreadPrimitive.Viewport
+              className={cn(
+                'aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!',
+                d('p-lg')
               )}
-            </ThreadPrimitive.If>
+            >
+              <ThreadPrimitive.If empty>
+                {components.ThreadWelcome ? (
+                  <components.ThreadWelcome />
+                ) : (
+                  <ThreadWelcome />
+                )}
+              </ThreadPrimitive.If>
 
-            {showStaticSessionWarning && <StaticSessionWarning />}
+              {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
 
-            <ThreadPrimitive.Messages
-              components={{
-                UserMessage: components.UserMessage ?? UserMessage,
-                EditComposer: components.EditComposer ?? EditComposer,
-                AssistantMessage:
-                  components.AssistantMessage ?? AssistantMessage,
-              }}
-            />
+              <ThreadPrimitive.Messages
+                components={{
+                  UserMessage: components.UserMessage ?? UserMessage,
+                  EditComposer: components.EditComposer ?? EditComposer,
+                  AssistantMessage:
+                    components.AssistantMessage ?? AssistantMessage,
+                }}
+              />
 
-            <ThreadPrimitive.If empty={false}>
-              <div className="aui-thread-viewport-spacer min-h-8 grow" />
-            </ThreadPrimitive.If>
+              <ThreadPrimitive.If empty={false} running={false}>
+                <FollowOnSuggestions />
+              </ThreadPrimitive.If>
 
-            <Composer />
-          </ThreadPrimitive.Viewport>
-        </ThreadPrimitive.Root>
-      </MotionConfig>
-    </LazyMotion>
+              <ThreadPrimitive.If empty={false}>
+                <div className="aui-thread-viewport-spacer min-h-8 grow" />
+              </ThreadPrimitive.If>
+
+              <Composer showFeedback={showFeedback} />
+            </ThreadPrimitive.Viewport>
+
+            {/* Resolution overlay - subtle readonly effect */}
+            <AnimatePresence>
+              {showFeedback && isResolved && (
+                <m.div
+                  className="bg-background/40 pointer-events-none absolute inset-0 z-50"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
+                />
+              )}
+            </AnimatePresence>
+          </ThreadPrimitive.Root>
+        </MotionConfig>
+      </LazyMotion>
+    </ChatResolutionContext.Provider>
   )
 }
 
@@ -136,7 +251,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
+        className="aui-thread-scroll-to-bottom dark:bg-background dark:text-foreground dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
@@ -220,7 +335,7 @@ const ThreadSuggestions: FC = () => {
         d('gap-md'),
         d('py-lg'),
         isStandalone
-          ? 'flex flex-wrap items-center justify-center'
+          ? 'flex flex-col @sm:flex-row @sm:flex-wrap @sm:items-center @sm:justify-center'
           : suggestions.length === 1
             ? 'flex'
             : 'grid max-w-fit @md:grid-cols-2'
@@ -249,7 +364,7 @@ const ThreadSuggestions: FC = () => {
                 'aui-thread-welcome-suggestion dark:hover:bg-accent/60 h-auto w-full border text-left whitespace-break-spaces',
                 d('text-base'),
                 isStandalone
-                  ? `flex-row items-center ${d('gap-sm')} ${d('px-md')} ${d('py-sm')} ${r('full')}`
+                  ? `flex-col items-start @sm:flex-row @sm:items-center ${d('gap-sm')} ${d('px-lg')} ${d('py-sm')} ${r('full')}`
                   : `w-full flex-1 flex-col flex-wrap items-start justify-start ${d('gap-sm')} ${d('px-lg')} ${d('py-md')} ${r('xl')}`
               )}
               aria-label={suggestion.prompt}
@@ -289,12 +404,22 @@ const ComposerToolMentions: FC<{
     isActive,
   } = useToolMentions({ tools })
 
-  // Find and attach to the textarea within the composer
+  // Find and attach to the textarea within the composer.
+  // Uses getRootNode() so it works inside Shadow DOM (where document.querySelector can't reach).
   useEffect(() => {
     if (!isActive) return
 
+    const rootNode = containerRef.current?.getRootNode() as
+      | Document
+      | ShadowRoot
+      | undefined
+    if (!rootNode) return
+
+    const observeTarget =
+      rootNode instanceof ShadowRoot ? rootNode : document.body
+
     const findTextarea = () => {
-      const textarea = document.querySelector(
+      const textarea = rootNode.querySelector(
         '.aui-composer-input'
       ) as HTMLTextAreaElement | null
       if (textarea && textareaRef.current !== textarea) {
@@ -319,7 +444,7 @@ const ComposerToolMentions: FC<{
       findTextarea()
     })
 
-    observer.observe(document.body, {
+    observer.observe(observeTarget, {
       childList: true,
       subtree: true,
     })
@@ -357,10 +482,70 @@ const ComposerToolMentions: FC<{
   )
 }
 
-const Composer: FC = () => {
+// Resets feedbackHidden when a new message starts generating
+const FeedbackHiddenResetter: FC = () => {
+  const { resetFeedbackHidden } = useChatResolution()
+
+  useEffect(() => {
+    resetFeedbackHidden()
+  }, [resetFeedbackHidden])
+
+  return null
+}
+
+const ComposerFeedback: FC = () => {
+  const { isResolved, feedbackHidden, setResolved, submitFeedback } =
+    useChatResolution()
+
+  const handleFeedback = useCallback(
+    async (type: 'like' | 'dislike') => {
+      const feedback = type === 'like' ? 'success' : 'failure'
+      await submitFeedback(feedback)
+    },
+    [submitFeedback]
+  )
+
+  return (
+    <ThreadPrimitive.If empty={false}>
+      {/* Reset feedbackHidden when a new message starts generating */}
+      <ThreadPrimitive.If running>
+        <FeedbackHiddenResetter />
+      </ThreadPrimitive.If>
+      <ThreadPrimitive.If running={false}>
+        <AnimatePresence>
+          {!isResolved && !feedbackHidden && (
+            <m.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
+              className="mb-3"
+            >
+              <MessageFeedback
+                className="mx-auto"
+                onResolved={setResolved}
+                onFeedback={handleFeedback}
+              />
+            </m.div>
+          )}
+        </AnimatePresence>
+      </ThreadPrimitive.If>
+    </ThreadPrimitive.If>
+  )
+}
+
+interface ComposerProps {
+  showFeedback?: boolean
+}
+
+const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
   const { config, mcpTools } = useElements()
+  const { isResolved, setUnresolved } = useChatResolution()
   const r = useRadius()
   const d = useDensity()
+  const replayCtx = useReplayContext()
+
+  const isReplay = replayCtx?.isReplay ?? false
   const composerConfig = config.composer ?? {
     placeholder: 'Send a message...',
     attachments: true,
@@ -383,37 +568,61 @@ const Composer: FC = () => {
   return (
     <div
       className={cn(
-        'aui-composer-wrapper bg-background sticky bottom-0 flex w-full flex-col overflow-visible',
+        'aui-composer-wrapper bg-background sticky bottom-0 z-[60] flex w-full flex-col overflow-visible',
         d('gap-md'),
         d('py-md'),
         r('xl')
       )}
     >
+      {showFeedback && <ComposerFeedback />}
       <ThreadScrollToBottom />
-      <ComposerPrimitive.Root
-        ref={composerRootRef}
-        className={cn(
-          'aui-composer-root group/input-group border-input bg-background has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-ring/5 dark:bg-background relative flex w-full flex-col border px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:ring-1',
-          r('xl')
-        )}
-      >
-        {composerConfig.attachments && <ComposerAttachments />}
-
-        {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
-
-        <ComposerPrimitive.Input
-          placeholder={composerConfig.placeholder}
+      {showFeedback && isResolved ? (
+        <m.div
+          className="aui-composer-resolved border-input flex min-h-[118px] flex-col items-center justify-center gap-2 border-t px-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
+        >
+          <span className="text-muted-foreground text-sm">
+            This conversation has been resolved
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-foreground"
+            onClick={setUnresolved}
+          >
+            Reopen conversation
+          </Button>
+        </m.div>
+      ) : (
+        <ComposerPrimitive.Root
+          ref={composerRootRef}
           className={cn(
-            'aui-composer-input placeholder:text-muted-foreground mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 outline-none focus-visible:ring-0',
-            d('h-input'),
-            d('text-base')
+            'aui-composer-root group/input-group border-input bg-background has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-ring/5 dark:bg-background relative flex min-h-[118px] w-full flex-col border px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:ring-1',
+            r('xl'),
+            isReplay && 'pointer-events-none opacity-50'
           )}
-          rows={1}
-          autoFocus
-          aria-label="Message input"
-        />
-        <ComposerAction />
-      </ComposerPrimitive.Root>
+        >
+          {composerConfig.attachments && <ComposerAttachments />}
+
+          {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
+
+          <ComposerPrimitive.Input
+            placeholder={composerConfig.placeholder}
+            className={cn(
+              'aui-composer-input text-foreground placeholder:text-muted-foreground mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 outline-none focus-visible:ring-0',
+              d('h-input'),
+              d('text-base')
+            )}
+            rows={1}
+            autoFocus={!isReplay}
+            disabled={isReplay}
+            aria-label="Message input"
+          />
+          <ComposerAction />
+        </ComposerPrimitive.Root>
+      )}
     </div>
   )
 }
@@ -508,13 +717,90 @@ const ComposerModelPicker: FC = () => {
   )
 }
 
+const CASSETTE_RECORDING_ENABLED =
+  import.meta.env.VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING === 'true'
+
+const ComposerCassetteRecorder: FC = () => {
+  const [popoverOpen, setPopoverOpen] = useState(false)
+  const [tooltipOpen, setTooltipOpen] = useState(false)
+  const { isRecording, startRecording, stopRecording, download } =
+    useRecordCassette()
+
+  useEffect(() => {
+    if (popoverOpen) setTooltipOpen(false)
+  }, [popoverOpen])
+
+  return (
+    <TooltipProvider>
+      <Tooltip open={tooltipOpen && !popoverOpen} onOpenChange={setTooltipOpen}>
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                data-state={popoverOpen ? 'open' : 'closed'}
+                className={cn(
+                  'aui-composer-cassette-recorder data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30 flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold',
+                  isRecording && 'text-red-500'
+                )}
+                aria-label="Cassette Recorder"
+              >
+                <CircleIcon
+                  className={cn(
+                    'size-5 stroke-[1.5px]',
+                    isRecording && 'animate-pulse fill-red-500 text-red-500'
+                  )}
+                />
+              </Button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <PopoverContent side="top" align="start" className="w-64 p-3">
+            <div className="flex flex-col gap-3">
+              <div className="text-sm font-medium">Cassette Recorder</div>
+              {!isRecording ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full justify-start gap-2"
+                  onClick={startRecording}
+                >
+                  <CircleIcon className="size-3 fill-red-500 text-red-500" />
+                  Start Recording
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full justify-start gap-2"
+                  onClick={() => {
+                    stopRecording()
+                    download()
+                    setPopoverOpen(false)
+                  }}
+                >
+                  <DownloadIcon className="size-3" />
+                  Stop &amp; Download
+                </Button>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+        <TooltipContent side="bottom" align="start">
+          {isRecording ? 'Recording…' : 'Cassette Recorder'}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 const ComposerAction: FC = () => {
   const { config } = useElements()
   const r = useRadius()
   const composerConfig = config.composer ?? { attachments: true }
   return (
     <div className="aui-composer-action-wrapper relative mx-1 mt-2 mb-2 flex items-center justify-between">
-      <div className="aui-composer-action-wrapper-inner flex items-center">
+      <div className="aui-composer-action-wrapper-inner text-muted-foreground flex items-center">
         {composerConfig.attachments ? (
           <ComposerAddAttachment />
         ) : (
@@ -524,6 +810,8 @@ const ComposerAction: FC = () => {
         {config.model?.showModelPicker && !config.languageModel && (
           <ComposerModelPicker />
         )}
+
+        {CASSETTE_RECORDING_ENABLED && <ComposerCassetteRecorder />}
       </div>
 
       <ThreadPrimitive.If running={false}>
@@ -572,10 +860,41 @@ const MessageError: FC = () => {
   )
 }
 
+/**
+ * Shows the pulsing dot indicator when the message is still running but the
+ * last rendered part is a tool call (not text). Without this, there's no
+ * visual feedback that the model is still working after a tool call.
+ */
+const ToolCallStreamingIndicator: FC = () => {
+  const show = useAssistantState(({ message }) => {
+    if (message.status?.type !== 'running') return false
+    const lastPart = message.parts[message.parts.length - 1]
+    return lastPart?.type === 'tool-call'
+  })
+  if (!show) return null
+  return <div className="aui-md mt-2" data-status="running" />
+}
+
 const AssistantMessage: FC = () => {
   const { config } = useElements()
   const toolsConfig = config.tools ?? {}
   const components = config.components ?? {}
+
+  const partsComponents = useMemo(
+    () => ({
+      Text: components.Text ?? MarkdownText,
+      Image: components.Image ?? Image,
+      tools: {
+        by_name: toolsConfig.components,
+        Fallback: components.ToolFallback ?? ToolFallback,
+      },
+      Reasoning: components.Reasoning ?? Reasoning,
+      ReasoningGroup: components.ReasoningGroup ?? ReasoningGroup,
+      ToolGroup: components.ToolGroup ?? ToolGroup,
+    }),
+    [components, toolsConfig.components]
+  )
+
   return (
     <MessagePrimitive.Root asChild>
       <div
@@ -583,23 +902,12 @@ const AssistantMessage: FC = () => {
         data-role="assistant"
       >
         <div className="aui-assistant-message-content text-foreground mx-2 leading-7 wrap-break-word">
-          <MessagePrimitive.Parts
-            components={{
-              Text: components.Text ?? MarkdownText,
-              Image: components.Image ?? Image,
-              tools: {
-                by_name: toolsConfig.components,
-                Fallback: components.ToolFallback ?? ToolFallback,
-              },
-              Reasoning: components.Reasoning ?? Reasoning,
-              ReasoningGroup: components.ReasoningGroup ?? ReasoningGroup,
-              ToolGroup: components.ToolGroup ?? ToolGroup,
-            }}
-          />
+          <MessagePrimitive.Parts components={partsComponents} />
+          <ToolCallStreamingIndicator />
           <MessageError />
         </div>
 
-        <div className="aui-assistant-message-footer mt-2 ml-2 flex">
+        <div className="aui-assistant-message-footer mt-2 ml-2 flex items-center gap-3">
           {/* <BranchPicker /> */}
           <AssistantActionBar />
         </div>

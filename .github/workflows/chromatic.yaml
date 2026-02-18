@@ -15,7 +15,7 @@ permissions:
 jobs:
   changes:
     name: Check for elements changes
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
       pull-requests: read
@@ -41,7 +41,7 @@ jobs:
 
   chromatic:
     name: Visual regression tests
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     steps:
       - name: Skip if no elements changes exist
@@ -68,7 +68,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.elements == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -90,7 +90,7 @@ jobs:
 
       - name: Run Chromatic
         if: ${{ needs.changes.outputs.elements == 'true' }}
-        uses: chromaui/action@07791f8243f4cb2698bf4d00426baf4b2d1cb7e0 # v13.3.5
+        uses: chromaui/action@a8ce9c58f59be5cc7090cadfc8f130fb08fcf0c3 # v15.1.0
         with:
           workingDir: elements
           storybookBuildDir: storybook-static

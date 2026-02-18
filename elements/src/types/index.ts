@@ -308,6 +308,19 @@ export interface ElementsConfig {
    * }
    */
   errorTracking?: ErrorTrackingConfigOption
+
+  /**
+   * Configuration for the chat thread display and behavior.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   thread: {
+   *     showFeedback: true,
+   *     followUpSuggestions: true,
+   *   },
+   * }
+   */
+  thread?: ThreadConfig
 }
 
 /**
@@ -350,10 +363,15 @@ export type BaseApiConfig = {
   headers?: Record<string, string>
 }
 
+/**
+ * @deprecated Use `{ session: mySessionFn }` instead. Will be removed in a future major version.
+ */
 export type SessionAuthConfig = {
   /**
    * The function to use to retrieve the session token from the backend endpoint.
    * By default, this will attempt to fetch the session token from `/chat/session`.
+   *
+   * @deprecated Use `session` instead: `{ session: mySessionFn }`.
    *
    * @example
    * const config: ElementsConfig = {
@@ -368,18 +386,13 @@ export type SessionAuthConfig = {
 }
 
 /**
- * The static session auth config is used to authenticate the Elements library using a static session token only.
- *
- * @example
- * const config: ElementsConfig = {
- *   api: {
- *     sessionToken: 'your-session-token',
- *   },
- * }
+ * @deprecated Use `{ session: 'your-token' }` instead. Will be removed in a future major version.
  */
 export type StaticSessionAuthConfig = {
   /**
    * A static session token to use if you haven't yet configured a session endpoint.
+   *
+   * @deprecated Use `session` instead: `{ session: 'your-token' }`.
    *
    * @example
    * const config: ElementsConfig = {
@@ -391,11 +404,27 @@ export type StaticSessionAuthConfig = {
   sessionToken: string
 }
 
+export type DangerousApiKeyAuthConfig = {
+  /** WARNING: Exposes API key in browser. Dev/testing only. */
+  dangerousApiKey: string
+}
+
+export type UnifiedSessionAuthConfig = {
+  /** String = static token (shows expiry warning). Function = dynamic fetcher. */
+  session: string | GetSessionFn
+}
+
 /**
- * API configuration - can be just the URL, or URL with session auth, or URL with API key auth.
+ * API configuration - base URL, session auth (static token or fetcher function),
+ * or dangerousApiKey for quick dev/testing without a backend session endpoint.
+ *
+ * The legacy `sessionFn` / `sessionToken` fields still work but are deprecated
+ * in favour of the unified `session` field.
  */
 export type ApiConfig =
   | BaseApiConfig
+  | (BaseApiConfig & UnifiedSessionAuthConfig)
+  | (BaseApiConfig & DangerousApiKeyAuthConfig)
   | (BaseApiConfig & SessionAuthConfig)
   | (BaseApiConfig & StaticSessionAuthConfig)
 
@@ -832,6 +861,33 @@ export interface SidecarConfig extends ExpandableConfig {
    * @default 'Chat'
    */
   title?: string
+}
+
+/**
+ * Configuration for the chat thread display and behavior.
+ *
+ * @example
+ * const config: ElementsConfig = {
+ *   thread: {
+ *     showFeedback: true,
+ *     followUpSuggestions: true,
+ *   },
+ * }
+ */
+export interface ThreadConfig {
+  /**
+   * Whether to show feedback buttons (like/dislike) after assistant messages.
+   * When enabled, users can mark conversations as resolved or provide feedback.
+   * @default true
+   */
+  showFeedback?: boolean
+
+  /**
+   * Whether to show AI-generated follow-up question suggestions after each assistant response.
+   * When enabled, suggestions appear below the assistant's message to help guide the conversation.
+   * @default true
+   */
+  followUpSuggestions?: boolean
 }
 
 /**

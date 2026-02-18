@@ -1,4 +1,5 @@
 mise.local.toml
+mise.*.local.toml
 flags.local.csv
 *.tsbuildinfo
 node_modules
@@ -10,8 +11,12 @@ junit-report.xml
 !.vscode/extensions.json
 *.code-workspace
 .idea
+/client/sdk/docs
 /server/goa*
 /server/gram
+# Goa generates OpenAPI v2 specs with non-deterministic examples. Nothing consumes them.
+/server/gen/http/openapi.yaml
+/server/gen/http/openapi.json
 scratch/
 /local/cache
 /local/ssl
@@ -40,3 +45,4 @@ cover.*
 poetry-installer-error-*.log
 package-lock.json
 /examples/*/pnpm-lock.yaml
+.worktrees

@@ -1,5 +1,120 @@
 # @gram-ai/elements
 
+## 1.27.1
+
+### Patch Changes
+
+- e5500f7: fix: remove createTanStackStartSessionFn to prevent API key exposure
+
+## 1.27.0
+
+### Minor Changes
+
+- 3d0ce56: Add `dangerousApiKey` auth option for quick dev/testing without a backend session endpoint. The client exchanges the API key for a session token automatically.
+
+  Also introduce a unified `session` field on `ApiConfig` that accepts either a static token string or an async fetcher function. The previous `sessionToken` and `sessionFn` fields both still work but are now deprecated in favour of the new `session` field.
+
+## 1.26.1
+
+### Patch Changes
+
+- f635e22: Support for [MCP tool annotations](https://modelcontextprotocol.io/legacy/concepts/tools#tool-annotations). Tool annotations provide additional metadata about a tool’s behavior,
+  helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool, but should not be relied upon for security decisions.
+
+  The MCP specification defines the following annotations for tools that Gram now supports for external mcp servers sourced from the Catalog as well as HTTP based tools.
+
+  | Annotation        | Type    | Default | Description                                                                                                                          |
+  | ----------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `title`           | string  | -       | A human-readable title for the tool, useful for UI display                                                                           |
+  | `readOnlyHint`    | boolean | false   | If true, indicates the tool does not modify its environment                                                                          |
+  | `destructiveHint` | boolean | true    | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false)                                     |
+  | `idempotentHint`  | boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when `readOnlyHint` is false) |
+  | `openWorldHint`   | boolean | true    | If true, the tool may interact with an "open world" of external entities                                                             |
+
+  Tool annotations can be edited in the playground or in the tools tab of a specific MCP server.
+
+## 1.26.0
+
+### Minor Changes
+
+- 9cb2f0e: Chart plugin and generative UI overhaul
+
+  **Chart Plugin**
+  - Replace Vega-Lite with Recharts for React 19 compatibility
+  - Add themed tooltips using CSS variables (oklch colors)
+  - Update chart stories to use MCP orders summary tool
+
+  **Generative UI**
+  - Add macOS-style window frames with traffic light buttons
+  - Add whimsical cycling loading messages (50 messages, 2s fade transitions)
+  - Streamline LLM prompt from ~150 lines to concise bulleted format
+
+  **Component Fixes**
+  - ActionButton executes tools via useToolExecution hook
+  - Align Text, Badge, Progress props with LLM prompt specification
+  - Fix catalog schema toolName → action mismatch
+  - Fix setTimeout cleanup in CyclingLoadingMessage
+
+  **Storybook**
+  - Fix theme toggle causing full component remount
+
+## 1.25.2
+
+### Patch Changes
+
+- e08b45e: Adds support for forwarding and storing user feedback. Incorporates the stored user feedback into chat resolution analysis
+
+## 1.25.1
+
+### Patch Changes
+
+- 63bb328: Fix tool group count showing inflated numbers when loading chat history. The server accumulates all tool calls from a turn into each assistant message, causing duplicate tool-call parts when converting messages for the UI. Added deduplication in the message converter so each tool call only appears once. Also fixed `buildAssistantContentParts` silently dropping tool calls when assistant content is a string.
+
+## 1.25.0
+
+### Minor Changes
+
+- feea712: Add `reactCompat()` Vite plugin for React 16/17 support. Users on older React versions can add one line to their Vite config to polyfill React 18 APIs (`useSyncExternalStore`, `useId`, `useInsertionEffect`, `startTransition`, `useTransition`, `useDeferredValue`) used by Elements and its dependencies.
+
+## 1.24.2
+
+### Patch Changes
+
+- 46004f8: Fix tool mentions not working inside Shadow DOM. The composer's tool mention autocomplete used `document.querySelector` to find the textarea, which can't reach elements inside a shadow root. Changed to use `getRootNode()` so it correctly queries within the Shadow DOM when present.
+
+## 1.24.1
+
+### Patch Changes
+
+- ca387c6: Fix dark mode text colors for approval and deny buttons in tool approval UI
+- 6793e29: Fix thread list and tool approval UI for small containers and dark mode:
+  - Fix scroll-to-bottom arrow invisible in dark mode
+  - Make tool approval Deny/Approve buttons responsive with container queries
+  - Fix popover toggle race condition using composedPath() for Shadow DOM support
+  - Fix popover and tooltip z-index ordering
+  - Fix thread list item title text wrapping
+  - Resize welcome suggestions layout for small containers
+
+## 1.24.0
+
+### Minor Changes
+
+- 08e4fb5: Add experimental message feedback UI with like/dislike buttons that appear after assistant messages. Enable with `thread.experimental_showFeedback: true` config option. Allows users to mark conversations as resolved.
+- 2d520cb: Add support for follow-on suggestions within the Elements library
+- 51b9f17: Add replay mode and cassette recording for Elements. The `<Replay>` component plays back pre-recorded conversations with streaming animations — no auth, MCP, or network calls required. The `useRecordCassette` hook and built-in composer recorder button (gated behind `VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING` env var) allow capturing live conversations as cassette JSON files.
+
+### Patch Changes
+
+- c17b9f7: Fix logs page performance, responsive charts, tool output rendering, and streaming indicator
+  - Memoize config objects and callbacks in Logs page and thread to prevent unnecessary re-renders
+  - Fix tool group count using startIndex/endIndex instead of filtering all message parts
+  - Fix shimmer CSS in shadow DOM by setting custom properties on .gram-elements
+  - Auto-size charts to container width via ResizeObserver instead of fixed 400px minimum
+  - Truncate large tool output to 50-line preview, skip shiki for content over 8K chars
+  - Show pulsing dot indicator after tool calls while model is still running
+
+- 438e1a7: Dropped the catalog dependency on react-query in favor of a direct dependency. This allows the elements package to be (p)npm linked into other local projects.
+
 ## 1.23.0
 
 ### Minor Changes

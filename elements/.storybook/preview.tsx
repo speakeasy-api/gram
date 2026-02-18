@@ -4,6 +4,7 @@ import { ElementsDecorator } from './GlobalDecorator'
 import React from 'react'
 import '../src/global.css'
 import type { ElementsConfig } from '../src/types'
+import { ROOT_SELECTOR } from '../src/constants/tailwind'
 import { allModes } from './modes.ts'
 import { withThemeByClassName } from '@storybook/addon-themes'
 import { initialize, mswLoader } from 'msw-storybook-addon'
@@ -83,6 +84,16 @@ const preview: Preview = {
       const elementsParams = context.parameters.elements ?? {}
       const baseConfig: Partial<ElementsConfig> = elementsParams.config ?? {}
 
+      // Allow stories to skip ElementsProvider (e.g. Replay provides its own)
+      // Still wrap in ROOT_SELECTOR so Tailwind scoped utilities work in story decorators
+      if (elementsParams.skipProvider) {
+        return (
+          <div className={ROOT_SELECTOR}>
+            <Story />
+          </div>
+        )
+      }
+
       // Storybook users control these args using the controls panel
       const projectSlugArg = context.args.projectSlug
       const mcpUrlArg = context.args.mcpUrl
@@ -102,7 +113,7 @@ const preview: Preview = {
       }
 
       return (
-        <ElementsDecorator config={elementsConfig} key={storybookTheme}>
+        <ElementsDecorator config={elementsConfig}>
           <Story />
         </ElementsDecorator>
       )

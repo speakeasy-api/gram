@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -376,10 +377,11 @@ func newBillingProvider(
 	switch {
 	case c.String("polar-api-key") != "":
 		catalog := &polar.Catalog{
-			ProductIDFree:    c.String("polar-product-id-free"),
+			ProductIDBase:    c.String("polar-product-id-free"),
 			ProductIDPro:     c.String("polar-product-id-pro"),
 			MeterIDToolCalls: c.String("polar-meter-id-tool-calls"),
 			MeterIDServers:   c.String("polar-meter-id-servers"),
+			MeterIDCredits:   c.String("polar-meter-id-credits"),
 		}
 		if err := catalog.Validate(); err != nil {
 			return nil, nil, fmt.Errorf("invalid polar catalog configuration: %w", err)
@@ -545,6 +547,7 @@ func newFunctionOrchestrator(
 type mcpRegistryClientOptions struct {
 	pulseTenantID string
 	pulseAPIKey   conv.Secret
+	cacheImpl     cache.Cache
 }
 
 func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
@@ -555,5 +558,5 @@ func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvid
 
 	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
 
-	return externalmcp.NewRegistryClient(logger, tracerProvider, backend), nil
+	return externalmcp.NewRegistryClient(logger, tracerProvider, backend, opts.cacheImpl), nil
 }

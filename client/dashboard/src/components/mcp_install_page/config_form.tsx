@@ -33,7 +33,9 @@ interface ConfigFormProps {
 interface MetadataParams {
   logoAssetId: string | undefined;
   externalDocumentationUrl: string | undefined;
+  externalDocumentationText: string | undefined;
   instructions: string | undefined;
+  installationOverrideUrl: string | undefined;
 }
 
 type ValidationResult =
@@ -60,9 +62,19 @@ interface UseMcpMetadataMetadataFormResult {
     error?: boolean;
     onChange: ChangeEventHandler<HTMLInputElement>;
   };
+  docsTextInputHandlers: {
+    value: string | undefined;
+    error?: boolean;
+    onChange: ChangeEventHandler<HTMLInputElement>;
+  };
   instructionsHandlers: {
     value: string | undefined;
     onChange: ChangeEventHandler<HTMLTextAreaElement>;
+  };
+  installationOverrideUrlInputHandlers: {
+    value: string | undefined;
+    error?: boolean;
+    onChange: ChangeEventHandler<HTMLInputElement>;
   };
   reset: () => void;
   save: () => void;
@@ -87,8 +99,12 @@ function useMcpMetadataMetadataForm(
   const queryClient = useQueryClient();
 
   const [metadataParams, setMetadataParams] = useState<MetadataParams>({
+    installationOverrideUrl:
+      currentMetadata?.installationOverrideUrl ?? undefined,
     externalDocumentationUrl:
       currentMetadata?.externalDocumentationUrl ?? undefined,
+    externalDocumentationText:
+      currentMetadata?.externalDocumentationText ?? undefined,
     logoAssetId: currentMetadata?.logoAssetId ?? undefined,
     instructions: currentMetadata?.instructions ?? undefined,
   });
@@ -107,7 +123,9 @@ function useMcpMetadataMetadataForm(
       !equalsServerState(metadataParams, currentMetadata)
     ) {
       setMetadataParams({
+        installationOverrideUrl: currentMetadata?.installationOverrideUrl,
         externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
+        externalDocumentationText: currentMetadata?.externalDocumentationText,
         logoAssetId: currentMetadata?.logoAssetId,
         instructions: currentMetadata?.instructions,
       });
@@ -171,7 +189,9 @@ function useMcpMetadataMetadataForm(
     setMetadataParams({
       logoAssetId: currentMetadata?.logoAssetId,
       externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
+      externalDocumentationText: currentMetadata?.externalDocumentationText,
       instructions: currentMetadata?.instructions,
+      installationOverrideUrl: currentMetadata?.installationOverrideUrl,
     });
   }, [currentMetadata]);
 
@@ -215,6 +235,24 @@ function useMcpMetadataMetadataForm(
             e.target.value === "" ? undefined : e.target.value,
         })),
     },
+    docsTextInputHandlers: {
+      value: metadataParams.externalDocumentationText ?? "",
+      onChange: (e) =>
+        setMetadataParams((prev) => ({
+          ...prev,
+          externalDocumentationText:
+            e.target.value === "" ? undefined : e.target.value,
+        })),
+    },
+    installationOverrideUrlInputHandlers: {
+      value: metadataParams.installationOverrideUrl ?? "",
+      onChange: (e) =>
+        setMetadataParams((prev) => ({
+          ...prev,
+          installationOverrideUrl:
+            e.target.value === "" ? undefined : e.target.value,
+        })),
+    },
     instructionsHandlers: {
       value: metadataParams.instructions ?? "",
       onChange: (e) =>
@@ -228,7 +266,7 @@ function useMcpMetadataMetadataForm(
   };
 }
 
-export function ConfigForm({ toolset }: ConfigFormProps) {
+export function InstallPageConfigForm({ toolset }: ConfigFormProps) {
   const { installPageUrl } = useMcpUrl(toolset);
   const [open, setOpen] = useState(false);
 
@@ -315,6 +353,45 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
               )}
             </div>
             <div>
+              <Heading> Documentation Text </Heading>
+              <Type muted small className="max-w-2xl">
+                What your custom link will say on the MCP page
+              </Type>
+            </div>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="View Docs"
+                className="w-full"
+                {...form.docsTextInputHandlers}
+              />
+              {form.valid.message && (
+                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                  {form.valid.message}
+                </span>
+              )}
+            </div>
+            <div>
+              <Heading> Installation Override URL </Heading>
+              <Type muted small className="max-w-2xl">
+                A URL to redirect to instead of the default installation page
+                when someone navigates to your MCP URL in their browser.
+              </Type>
+            </div>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Leave unset to use the default installation page"
+                className="w-full"
+                {...form.installationOverrideUrlInputHandlers}
+              />
+              {form.valid.message && (
+                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                  {form.valid.message}
+                </span>
+              )}
+            </div>
+            <div>
               <Heading> Server Instructions </Heading>
               <Type muted small className="max-w-2xl">
                 Instructions returned to LLMs when they connect to your MCP
@@ -341,7 +418,7 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
 ## Performance
 
 [Expected behavior, timing, limits]`}
-                className="w-full min-h-[120px]"
+                className="w-full min-h-[120px] max-h-[200px]"
                 {...form.instructionsHandlers}
               />
             </div>

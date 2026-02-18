@@ -1,7 +1,16 @@
-import { hasExplicitSessionAuth, isStaticSessionAuth } from '@/lib/auth'
+import { useReplayContext } from '@/contexts/ReplayContext'
+import {
+  hasExplicitSessionAuth,
+  isDangerousApiKeyAuth,
+  isStaticSessionAuth,
+  isUnifiedFunctionSession,
+  isUnifiedStaticSession,
+} from '@/lib/auth'
 import { useMemo } from 'react'
-import { ApiConfig } from '../types'
+import { ApiConfig, GetSessionFn } from '../types'
 import { useSession } from './useSession'
+
+declare const __GRAM_API_URL__: string | undefined
 
 export type Auth =
   | {
@@ -21,9 +30,34 @@ async function defaultGetSession(init: {
     headers: {
       'Gram-Project': init.projectSlug,
     },
+    body: JSON.stringify({
+      embedOrigin: window.location.origin,
+    }),
   })
   const data = await response.json()
   return data.client_token
+}
+
+function createDangerousApiKeySessionFn(
+  apiKey: string,
+  apiUrl: string
+): GetSessionFn {
+  return async ({ projectSlug }) => {
+    const response = await fetch(`${apiUrl}/rpc/chatSessions.create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Gram-Key': apiKey,
+        'Gram-Project': projectSlug,
+      },
+      body: JSON.stringify({
+        embed_origin: window.location.origin,
+        user_identifier: 'elements-dev',
+      }),
+    })
+    const data = await response.json()
+    return data.client_token
+  }
 }
 
 /**
@@ -37,23 +71,59 @@ export const useAuth = ({
   auth?: ApiConfig
   projectSlug: string
 }): Auth => {
+  const replayCtx = useReplayContext()
+  const isReplay = replayCtx?.isReplay ?? false
+
+  const apiUrl = useMemo(() => {
+    const envUrl =
+      typeof __GRAM_API_URL__ !== 'undefined' ? __GRAM_API_URL__ : undefined
+    const url = auth?.url || envUrl || 'https://app.getgram.ai'
+    return url.replace(/\/+$/, '')
+  }, [auth?.url])
+
   const getSession = useMemo(() => {
+    // In replay mode, skip session fetching entirely
+    if (isReplay) {
+      return null
+    }
+    // dangerousApiKey — exchange key for session via API
+    if (isDangerousApiKeyAuth(auth)) {
+      return createDangerousApiKeySessionFn(auth.dangerousApiKey, apiUrl)
+    }
+    // Unified session: static string
+    if (isUnifiedStaticSession(auth)) {
+      return () => Promise.resolve(auth.session)
+    }
+    // Unified session: function
+    if (isUnifiedFunctionSession(auth)) {
+      return auth.session
+    }
+    // Legacy: static sessionToken (deprecated)
     if (isStaticSessionAuth(auth)) {
       return () => Promise.resolve(auth.sessionToken)
     }
-    return !isStaticSessionAuth(auth) && hasExplicitSessionAuth(auth)
-      ? auth.sessionFn
-      : defaultGetSession
-  }, [auth])
+    // Legacy: explicit sessionFn (deprecated)
+    if (hasExplicitSessionAuth(auth)) {
+      return auth.sessionFn
+    }
+    return defaultGetSession
+  }, [auth, isReplay, apiUrl])
 
-  // The session request is only neccessary if we are not using an API key auth
+  // The session request is only necessary if we are not using static session auth
   // configuration. If a custom session fetcher is provided, we use it,
   // otherwise we fallback to the default session fetcher
   const session = useSession({
-    // We want to check it's NOT API key auth, as the default auth scheme is session auth (if the user hasn't provided an explicit API config, we have a session auth config by default)
     getSession,
     projectSlug,
   })
+
+  // In replay mode, return immediately without waiting for session
+  if (isReplay) {
+    return {
+      headers: {},
+      isLoading: false,
+    }
+  }
 
   return !session
     ? {

@@ -111,6 +111,7 @@ type hostedPageData struct {
 	SiteURL           string
 	LogoAssetURL      string
 	DocsURL           string
+	DocsText          string
 	Instructions      string
 	IsPublic          bool
 }
@@ -212,6 +213,11 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		externalDocURL = conv.ToPGText(*payload.ExternalDocumentationURL)
 	}
 
+	var externalDocText pgtype.Text
+	if payload.ExternalDocumentationText != nil {
+		externalDocText = conv.ToPGText(*payload.ExternalDocumentationText)
+	}
+
 	var instructions pgtype.Text
 	if payload.Instructions != nil {
 		instructions = conv.ToPGText(*payload.Instructions)
@@ -226,13 +232,20 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		defaultEnvironmentID = uuid.NullUUID{UUID: parsedDefaultEnvironmentID, Valid: true}
 	}
 
+	var installationOverrideURL pgtype.Text
+	if payload.InstallationOverrideURL != nil {
+		installationOverrideURL = conv.ToPGText(*payload.InstallationOverrideURL)
+	}
+
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
-		ToolsetID:                toolset.ID,
-		ProjectID:                *authCtx.ProjectID,
-		ExternalDocumentationUrl: externalDocURL,
-		LogoID:                   logoID,
-		Instructions:             instructions,
-		DefaultEnvironmentID:     defaultEnvironmentID,
+		ToolsetID:                 toolset.ID,
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  externalDocURL,
+		ExternalDocumentationText: externalDocText,
+		LogoID:                    logoID,
+		Instructions:              instructions,
+		DefaultEnvironmentID:      defaultEnvironmentID,
+		InstallationOverrideUrl:   installationOverrideURL,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
@@ -274,7 +287,10 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	}
 
 	mcpSlug := conv.ToLower(payload.McpSlug)
-	toolset, err := s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
+	toolset, err := s.toolsetRepo.GetToolsetByMcpSlugAndProject(ctx, toolsets_repo.GetToolsetByMcpSlugAndProjectParams{
+		McpSlug:   conv.ToPGText(mcpSlug),
+		ProjectID: *authCtx.ProjectID,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
@@ -282,13 +298,18 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").Log(ctx, s.logger, slog.String("mcp_slug", mcpSlug))
 	}
 
-	// Verify the toolset belongs to the user's project
-	if toolset.ProjectID != *authCtx.ProjectID {
+	if !toolset.McpEnabled {
 		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
 	}
 
-	if !toolset.McpEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
+	// Resolve custom domain from the toolset's organization if not already set
+	// Only use domains that are both activated and verified
+	if !toolset.CustomDomainID.Valid {
+		domainRecord, err := s.domainsRepo.GetCustomDomainByOrganization(ctx, toolset.OrganizationID)
+		if err == nil && domainRecord.Activated && domainRecord.Verified {
+			toolset.CustomDomainID = uuid.NullUUID{UUID: domainRecord.ID, Valid: true}
+		}
+		// Ignore errors - custom domain is optional
 	}
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
@@ -495,15 +516,17 @@ func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 	}
 
 	metadata := &types.McpMetadata{
-		ID:                       record.ID.String(),
-		ToolsetID:                record.ToolsetID.String(),
-		CreatedAt:                record.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                record.UpdatedAt.Time.Format(time.RFC3339),
-		ExternalDocumentationURL: conv.FromPGText[string](record.ExternalDocumentationUrl),
-		LogoAssetID:              conv.FromNullableUUID(record.LogoID),
-		Instructions:             conv.FromPGText[string](record.Instructions),
-		DefaultEnvironmentID:     conv.FromNullableUUID(record.DefaultEnvironmentID),
-		EnvironmentConfigs:       environmentConfigs,
+		ID:                        record.ID.String(),
+		ToolsetID:                 record.ToolsetID.String(),
+		CreatedAt:                 record.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                 record.UpdatedAt.Time.Format(time.RFC3339),
+		ExternalDocumentationURL:  conv.FromPGText[string](record.ExternalDocumentationUrl),
+		ExternalDocumentationText: conv.FromPGText[string](record.ExternalDocumentationText),
+		LogoAssetID:               conv.FromNullableUUID(record.LogoID),
+		Instructions:              conv.FromPGText[string](record.Instructions),
+		DefaultEnvironmentID:      conv.FromNullableUUID(record.DefaultEnvironmentID),
+		InstallationOverrideURL:   conv.FromPGText[string](record.InstallationOverrideUrl),
+		EnvironmentConfigs:        environmentConfigs,
 	}
 	return metadata, nil
 }
@@ -623,6 +646,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	logoAssetURL := s.siteURL.String() + "/external/sticker-logo.png"
 
 	var docsURL string
+	var docsText string
 	var instructions string
 	headerDisplayNames := make(map[string]string)
 	variableProvidedBy := make(map[string]string)
@@ -632,6 +656,12 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			s.logger.WarnContext(ctx, "failed to load MCP install page metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))
 		}
 	} else {
+		// Check for installation override URL and redirect if set
+		if overrideURL := conv.FromPGText[string](metadataRecord.InstallationOverrideUrl); overrideURL != nil && *overrideURL != "" {
+			http.Redirect(w, r, *overrideURL, http.StatusFound)
+			return nil
+		}
+
 		if metadataRecord.LogoID.Valid {
 			logoURL := *s.serverURL
 			logoURL.Path = "/rpc/assets.serveImage"
@@ -642,6 +672,9 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
+		}
+		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationText); docs != nil {
+			docsText = strings.TrimSpace(*docs)
 		}
 		if inst := conv.FromPGText[string](metadataRecord.Instructions); inst != nil {
 			instructions = strings.TrimSpace(*inst)
@@ -735,6 +768,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		SiteURL:           s.siteURL.String(),
 		LogoAssetURL:      logoAssetURL,
 		DocsURL:           docsURL,
+		DocsText:          docsText,
 		Instructions:      instructions,
 		IsPublic:          toolset.McpIsPublic,
 	}

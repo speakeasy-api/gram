@@ -39,21 +39,23 @@ export const TraceSummaryRecord$inboundSchema: z.ZodType<
   TraceSummaryRecord,
   z.ZodTypeDef,
   unknown
-> = z.object({
-  gram_urn: z.string(),
-  http_status_code: z.number().int().optional(),
-  log_count: z.number().int(),
-  start_time_unix_nano: z.number().int(),
-  trace_id: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    "gram_urn": "gramUrn",
-    "http_status_code": "httpStatusCode",
-    "log_count": "logCount",
-    "start_time_unix_nano": "startTimeUnixNano",
-    "trace_id": "traceId",
+> = z
+  .object({
+    gram_urn: z.string(),
+    http_status_code: z.number().int().optional(),
+    log_count: z.number().int(),
+    start_time_unix_nano: z.number().int(),
+    trace_id: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      gram_urn: "gramUrn",
+      http_status_code: "httpStatusCode",
+      log_count: "logCount",
+      start_time_unix_nano: "startTimeUnixNano",
+      trace_id: "traceId",
+    });
   });
-});
 
 export function traceSummaryRecordFromJSON(
   jsonString: string,

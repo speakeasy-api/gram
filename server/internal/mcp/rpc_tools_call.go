@@ -247,7 +247,7 @@ func handleToolsCall(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
-			ChatID:                nil,
+			ChatID:                conv.PtrEmpty(payload.chatID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
 			FunctionCPUUsage:      functionCPU,
@@ -258,6 +258,19 @@ func handleToolsCall(
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
+		logAttrs.RecordTraceContext(ctx)
+		if payload.chatID != "" {
+			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
+		}
+		if payload.userID != "" {
+			logAttrs[attr.UserIDKey] = payload.userID
+		}
+		if payload.externalUserID != "" {
+			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
+		}
+		if payload.apiKeyID != "" {
+			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
+		}
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{
@@ -392,7 +405,7 @@ func resolveUserConfiguration(
 }
 
 func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {
-	if accountType != string(billing.TierFree) {
+	if accountType != string(billing.TierBase) {
 		return nil
 	}
 
@@ -404,7 +417,12 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 		return nil
 	}
 
-	hardToolCallsLimit := 2 * periodUsage.MaxToolCalls
+	// If the org has an active subscription, we don't need to check the tool usage limits
+	if periodUsage.HasActiveSubscription {
+		return nil
+	}
+
+	hardToolCallsLimit := 2 * periodUsage.IncludedToolCalls
 	if hardToolCallsLimit == 0 {
 		hardToolCallsLimit = 2000 // Just in case
 	}

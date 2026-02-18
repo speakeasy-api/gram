@@ -63,12 +63,7 @@ type TelemetryLog struct {
 	GramURN          string  `ch:"gram_urn"`           // String
 	ServiceName      string  `ch:"service_name"`       // LowCardinality(String)
 	ServiceVersion   *string `ch:"service_version"`    // Nullable(String)
-
-	// Denormalized HTTP Fields (Wide Event Pattern - for HTTP logs only, NULL for function logs)
-	HTTPRequestMethod      *string `ch:"http_request_method"`       // LowCardinality(Nullable(String))
-	HTTPResponseStatusCode *int32  `ch:"http_response_status_code"` // Nullable(Int32)
-	HTTPRoute              *string `ch:"http_route"`                // Nullable(String)
-	HTTPServerURL          *string `ch:"http_server_url"`           // Nullable(String)
+	GramChatID       *string `ch:"gram_chat_id"`       // Nullable(String)
 }
 
 // TraceSummary represents an aggregated view of a trace (one row per trace).
@@ -81,9 +76,31 @@ type TraceSummary struct {
 	GramURN           string `ch:"gram_urn"`             // String - any gram_urn from the trace
 }
 
+// ChatSummary represents an aggregated view of a chat session (one row per gram_chat_id).
+// Used for displaying a list of chat sessions in the UI.
+type ChatSummary struct {
+	GramChatID        string  `ch:"gram_chat_id"`
+	StartTimeUnixNano int64   `ch:"start_time_unix_nano"`
+	EndTimeUnixNano   int64   `ch:"end_time_unix_nano"`
+	LogCount          uint64  `ch:"log_count"`
+	ToolCallCount     uint64  `ch:"tool_call_count"`
+	MessageCount      uint64  `ch:"message_count"`
+	DurationSeconds   float64 `ch:"duration_seconds"`
+	Status            string  `ch:"status"` // "success" or "error"
+	UserID            *string `ch:"user_id"`
+	Model             *string `ch:"model"`
+	TotalInputTokens  int64   `ch:"total_input_tokens"`
+	TotalOutputTokens int64   `ch:"total_output_tokens"`
+	TotalTokens       int64   `ch:"total_tokens"`
+}
+
 // MetricsSummaryRow represents aggregated AI metrics from ClickHouse.
-// Used for the getAIMetrics endpoint.
+// Used for the getProjectMetricsSummary and getUserMetricsSummary endpoints.
 type MetricsSummaryRow struct {
+	// Activity timestamps
+	FirstSeenUnixNano int64 `ch:"first_seen_unix_nano"`
+	LastSeenUnixNano  int64 `ch:"last_seen_unix_nano"`
+
 	// Cardinality metrics (project scope only)
 	TotalChats        uint64 `ch:"total_chats"`
 	DistinctModels    uint64 `ch:"distinct_models"`
@@ -109,6 +126,13 @@ type MetricsSummaryRow struct {
 	ToolCallFailure   uint64  `ch:"tool_call_failure"`
 	AvgToolDurationMs float64 `ch:"avg_tool_duration_ms"`
 
+	// Chat resolution metrics
+	ChatResolutionSuccess   uint64  `ch:"chat_resolution_success"`
+	ChatResolutionFailure   uint64  `ch:"chat_resolution_failure"`
+	ChatResolutionPartial   uint64  `ch:"chat_resolution_partial"`
+	ChatResolutionAbandoned uint64  `ch:"chat_resolution_abandoned"`
+	AvgChatResolutionScore  float64 `ch:"avg_chat_resolution_score"`
+
 	// Model breakdown (map of model name -> count)
 	Models map[string]uint64 `ch:"models"`
 
@@ -116,4 +140,85 @@ type MetricsSummaryRow struct {
 	ToolCounts        map[string]uint64 `ch:"tool_counts"`
 	ToolSuccessCounts map[string]uint64 `ch:"tool_success_counts"`
 	ToolFailureCounts map[string]uint64 `ch:"tool_failure_counts"`
+}
+
+// UserSummary represents aggregated usage metrics for a single user from ClickHouse.
+// Used for the searchUsers endpoint, grouping by user_id or external_user_id.
+// The UserID field holds whichever identifier was used for grouping; the caller
+// knows which one it represents based on the group_by parameter.
+type UserSummary struct {
+	UserID string `ch:"user_id"`
+
+	// Activity timestamps
+	FirstSeenUnixNano int64 `ch:"first_seen_unix_nano"`
+	LastSeenUnixNano  int64 `ch:"last_seen_unix_nano"`
+
+	// Chat metrics
+	TotalChats        uint64 `ch:"total_chats"`
+	TotalChatRequests uint64 `ch:"total_chat_requests"`
+
+	// Token metrics
+	TotalInputTokens  int64   `ch:"total_input_tokens"`
+	TotalOutputTokens int64   `ch:"total_output_tokens"`
+	TotalTokens       int64   `ch:"total_tokens"`
+	AvgTokensPerReq   float64 `ch:"avg_tokens_per_request"`
+
+	// Tool call metrics
+	TotalToolCalls  uint64 `ch:"total_tool_calls"`
+	ToolCallSuccess uint64 `ch:"tool_call_success"`
+	ToolCallFailure uint64 `ch:"tool_call_failure"`
+
+	// Tool breakdowns (maps of tool URN -> count)
+	ToolCounts        map[string]uint64 `ch:"tool_counts"`
+	ToolSuccessCounts map[string]uint64 `ch:"tool_success_counts"`
+	ToolFailureCounts map[string]uint64 `ch:"tool_failure_counts"`
+}
+
+// TimeSeriesBucket represents a single time bucket for time series metrics.
+// Used for plotting metrics over time in the observability overview.
+type TimeSeriesBucket struct {
+	BucketTimeUnixNano   int64   `ch:"bucket_time_unix_nano"`
+	TotalChats           uint64  `ch:"total_chats"`
+	ResolvedChats        uint64  `ch:"resolved_chats"`
+	FailedChats          uint64  `ch:"failed_chats"`
+	PartialChats         uint64  `ch:"partial_chats"`
+	AbandonedChats       uint64  `ch:"abandoned_chats"`
+	TotalToolCalls       uint64  `ch:"total_tool_calls"`
+	FailedToolCalls      uint64  `ch:"failed_tool_calls"`
+	AvgToolLatencyMs     float64 `ch:"avg_tool_latency_ms"`
+	AvgSessionDurationMs float64 `ch:"avg_session_duration_ms"`
+}
+
+// ToolMetric represents aggregated metrics for a single tool.
+// Used for the top tools tables in the observability overview.
+type ToolMetric struct {
+	GramURN      string  `ch:"gram_urn"`
+	CallCount    uint64  `ch:"call_count"`
+	SuccessCount uint64  `ch:"success_count"`
+	FailureCount uint64  `ch:"failure_count"`
+	AvgLatencyMs float64 `ch:"avg_latency_ms"`
+	FailureRate  float64 `ch:"failure_rate"`
+}
+
+// OverviewSummary represents aggregated summary metrics for the observability overview.
+// Includes metrics for a single time period (used for both current and comparison periods).
+type OverviewSummary struct {
+	// Chat metrics
+	TotalChats           uint64  `ch:"total_chats"`
+	ResolvedChats        uint64  `ch:"resolved_chats"`
+	FailedChats          uint64  `ch:"failed_chats"`
+	AvgSessionDurationMs float64 `ch:"avg_session_duration_ms"`
+	AvgResolutionTimeMs  float64 `ch:"avg_resolution_time_ms"`
+
+	// Tool metrics
+	TotalToolCalls  uint64  `ch:"total_tool_calls"`
+	FailedToolCalls uint64  `ch:"failed_tool_calls"`
+	AvgLatencyMs    float64 `ch:"avg_latency_ms"`
+}
+
+// FilterOption represents a single option for filtering (API key or user).
+type FilterOption struct {
+	ID    string `ch:"id"`
+	Label string `ch:"label"` // Display label (may be same as ID or a friendly name)
+	Count uint64 `ch:"count"` // Number of events for this option
 }

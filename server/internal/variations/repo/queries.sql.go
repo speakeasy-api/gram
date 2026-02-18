@@ -47,7 +47,7 @@ WITH global_group AS (
   ORDER BY project_tool_variations.id DESC
   LIMIT 1
 )
-SELECT id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
+SELECT id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM tool_variations
 WHERE
   group_id = (SELECT id FROM global_group)
@@ -81,6 +81,11 @@ func (q *Queries) FindGlobalVariationsByToolURNs(ctx context.Context, arg FindGl
 			&i.Description,
 			&i.Tags,
 			&i.Summarizer,
+			&i.Title,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -130,7 +135,7 @@ func (q *Queries) InitGlobalToolVariationsGroup(ctx context.Context, arg InitGlo
 }
 
 const listGlobalToolVariations = `-- name: ListGlobalToolVariations :many
-SELECT tool_variations.id, tool_variations.group_id, tool_variations.src_tool_urn, tool_variations.src_tool_name, tool_variations.confirm, tool_variations.confirm_prompt, tool_variations.name, tool_variations.summary, tool_variations.description, tool_variations.tags, tool_variations.summarizer, tool_variations.created_at, tool_variations.updated_at, tool_variations.deleted_at, tool_variations.deleted
+SELECT tool_variations.id, tool_variations.group_id, tool_variations.src_tool_urn, tool_variations.src_tool_name, tool_variations.confirm, tool_variations.confirm_prompt, tool_variations.name, tool_variations.summary, tool_variations.description, tool_variations.tags, tool_variations.summarizer, tool_variations.title, tool_variations.read_only_hint, tool_variations.destructive_hint, tool_variations.idempotent_hint, tool_variations.open_world_hint, tool_variations.created_at, tool_variations.updated_at, tool_variations.deleted_at, tool_variations.deleted
 FROM tool_variations
 INNER JOIN tool_variations_groups
   ON tool_variations.group_id = tool_variations_groups.id
@@ -167,6 +172,11 @@ func (q *Queries) ListGlobalToolVariations(ctx context.Context, projectID uuid.U
 			&i.ToolVariation.Description,
 			&i.ToolVariation.Tags,
 			&i.ToolVariation.Summarizer,
+			&i.ToolVariation.Title,
+			&i.ToolVariation.ReadOnlyHint,
+			&i.ToolVariation.DestructiveHint,
+			&i.ToolVariation.IdempotentHint,
+			&i.ToolVariation.OpenWorldHint,
 			&i.ToolVariation.CreatedAt,
 			&i.ToolVariation.UpdatedAt,
 			&i.ToolVariation.DeletedAt,
@@ -207,7 +217,12 @@ INSERT INTO tool_variations (
   summary,
   description,
   tags,
-  summarizer
+  summarizer,
+  title,
+  read_only_hint,
+  destructive_hint,
+  idempotent_hint,
+  open_world_hint
 ) VALUES (
   $1,
   $2,
@@ -218,7 +233,12 @@ INSERT INTO tool_variations (
   $7,
   $8,
   $9,
-  $10
+  $10,
+  $11,
+  $12,
+  $13,
+  $14,
+  $15
 ) ON CONFLICT (group_id, src_tool_urn) WHERE deleted IS FALSE DO UPDATE SET
   confirm = EXCLUDED.confirm,
   confirm_prompt = EXCLUDED.confirm_prompt,
@@ -227,21 +247,31 @@ INSERT INTO tool_variations (
   description = EXCLUDED.description,
   tags = EXCLUDED.tags,
   summarizer = EXCLUDED.summarizer,
+  title = EXCLUDED.title,
+  read_only_hint = EXCLUDED.read_only_hint,
+  destructive_hint = EXCLUDED.destructive_hint,
+  idempotent_hint = EXCLUDED.idempotent_hint,
+  open_world_hint = EXCLUDED.open_world_hint,
   updated_at = clock_timestamp()
-RETURNING id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
+RETURNING id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertToolVariationParams struct {
-	GroupID       uuid.UUID
-	SrcToolUrn    urn.Tool
-	SrcToolName   string
-	Confirm       pgtype.Text
-	ConfirmPrompt pgtype.Text
-	Name          pgtype.Text
-	Summary       pgtype.Text
-	Description   pgtype.Text
-	Tags          []string
-	Summarizer    pgtype.Text
+	GroupID         uuid.UUID
+	SrcToolUrn      urn.Tool
+	SrcToolName     string
+	Confirm         pgtype.Text
+	ConfirmPrompt   pgtype.Text
+	Name            pgtype.Text
+	Summary         pgtype.Text
+	Description     pgtype.Text
+	Tags            []string
+	Summarizer      pgtype.Text
+	Title           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
 }
 
 func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariationParams) (ToolVariation, error) {
@@ -256,6 +286,11 @@ func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariati
 		arg.Description,
 		arg.Tags,
 		arg.Summarizer,
+		arg.Title,
+		arg.ReadOnlyHint,
+		arg.DestructiveHint,
+		arg.IdempotentHint,
+		arg.OpenWorldHint,
 	)
 	var i ToolVariation
 	err := row.Scan(
@@ -270,6 +305,11 @@ func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariati
 		&i.Description,
 		&i.Tags,
 		&i.Summarizer,
+		&i.Title,
+		&i.ReadOnlyHint,
+		&i.DestructiveHint,
+		&i.IdempotentHint,
+		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

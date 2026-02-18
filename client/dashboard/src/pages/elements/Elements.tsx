@@ -22,15 +22,15 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
-import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useListToolsets } from "@gram/client/react-query/index.js";
-import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import {
   Chat,
   GramElementsProvider,
   type ElementsConfig,
 } from "@gram-ai/elements";
+import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
+import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import {
   ArrowRight,
   Check,
@@ -277,6 +277,7 @@ export default function ChatElements() {
           request: {
             createRequestBody: {
               embedOrigin: window.location.origin,
+              userIdentifier: session.user.id,
             },
           },
         });
@@ -839,7 +840,7 @@ function ElementsPreview({
     ...config,
     api: {
       url: apiUrl,
-      sessionFn: async () => sessionToken,
+      session: async () => sessionToken,
     },
   };
 
@@ -1131,8 +1132,8 @@ app.listen(3001, () => {
       );
     }
 
-    // Add the api.sessionFn config
-    configLines.push(`  api: {\n    sessionFn: getSession,\n  },`);
+    // Add the api.session config
+    configLines.push(`  api: {\n    session: getSession,\n  },`);
 
     return `${useClientDirective}import { Chat, ElementsConfig, GramElementsProvider } from "@gram-ai/elements";
 

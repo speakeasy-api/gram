@@ -94,7 +94,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
+		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 

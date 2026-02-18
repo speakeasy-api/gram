@@ -45,10 +45,7 @@ import (
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
-var allowedEnabledServers = map[string]int{
-	"free": 5,
-	"pro":  20,
-}
+const maxUnpaidEnabledServers = 1
 
 type Service struct {
 	tracer          trace.Tracer
@@ -315,15 +312,15 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug is required to set mcp is public")
 		}
 
-		enabledServerLimit, ok := allowedEnabledServers[authCtx.AccountType]
-		if *payload.McpEnabled && !existingToolset.McpEnabled && ok {
+		isUnpaidAccount := !authCtx.HasActiveSubscription
+		if *payload.McpEnabled && !existingToolset.McpEnabled && isUnpaidAccount {
 			enabledServers, err := s.repo.ListEnabledToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error listing enabled toolsets").Log(ctx, logger)
 			}
 
-			if len(enabledServers) >= enabledServerLimit {
-				return nil, oops.E(oops.CodeForbidden, nil, "%s", fmt.Sprintf("you have reached the maximum number of public MCP servers for your account type: %d", enabledServerLimit)).Log(ctx, logger)
+			if len(enabledServers) >= maxUnpaidEnabledServers {
+				return nil, oops.E(oops.CodeForbidden, nil, "%s", fmt.Sprintf("you have reached the maximum number of public MCP servers for your account type: %d", maxUnpaidEnabledServers)).Log(ctx, logger)
 			}
 		}
 

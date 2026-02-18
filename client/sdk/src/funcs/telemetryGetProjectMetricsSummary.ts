@@ -129,26 +129,14 @@ async function $do(
     ],
     [
       {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.option2?.apikeyHeaderGramKey,
-      },
-      {
         fieldName: "Gram-Project",
         type: "apiKey:header",
         value: security?.option2?.projectSlugHeaderGramProject,
       },
-    ],
-    [
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option3?.projectSlugHeaderGramProject,
-      },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option3?.sessionHeaderGramSession,
+        value: security?.option2?.sessionHeaderGramSession,
       },
     ],
   );

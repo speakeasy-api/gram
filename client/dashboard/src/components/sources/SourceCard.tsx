@@ -14,8 +14,7 @@ import { Badge } from "@speakeasy-api/moonshine";
 import { CircleAlertIcon } from "lucide-react";
 import {
   ExternalMCPIllustration,
-  FunctionIllustration,
-  OpenAPIIllustration,
+  MCPPatternIllustration,
 } from "./SourceCardIllustrations";
 
 export type NamedAsset =
@@ -50,12 +49,14 @@ const sourceTypeConfig = {
 export function SourceCard({
   asset,
   causingFailure,
+  deploymentId,
   handleRemove,
   handleViewAsset,
   setChangeDocumentTargetSlug,
 }: {
   asset: NamedAsset;
   causingFailure?: boolean | undefined;
+  deploymentId?: string;
   handleRemove: (assetId: string) => void;
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
@@ -82,6 +83,15 @@ export function SourceCard({
             label: "Update",
             onClick: () => setChangeDocumentTargetSlug(asset.slug),
             icon: "upload" as const,
+          },
+        ]
+      : []),
+    ...(deploymentId
+      ? [
+          {
+            label: "Deployment",
+            onClick: () => routes.deployments.deployment.goTo(deploymentId),
+            icon: "history" as const,
           },
         ]
       : []),
@@ -113,12 +123,20 @@ export function SourceCard({
   const renderIllustration = () => {
     switch (asset.type) {
       case "openapi":
-        return <OpenAPIIllustration />;
       case "function":
-        return <FunctionIllustration />;
+        return (
+          <MCPPatternIllustration
+            toolsetSlug={asset.slug}
+            className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
+          />
+        );
       case "externalmcp":
         return (
-          <ExternalMCPIllustration logoUrl={asset.iconUrl} name={asset.name} />
+          <ExternalMCPIllustration
+            logoUrl={asset.iconUrl}
+            name={asset.name}
+            slug={asset.slug}
+          />
         );
     }
   };

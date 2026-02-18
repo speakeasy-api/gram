@@ -3,10 +3,12 @@ SELECT id,
        toolset_id,
        project_id,
        external_documentation_url,
+       external_documentation_text,
        logo_id,
        instructions,
        header_display_names,
        default_environment_id,
+       installation_override_url,
        created_at,
        updated_at
 FROM mcp_metadata
@@ -19,25 +21,31 @@ INSERT INTO mcp_metadata (
     toolset_id,
     project_id,
     external_documentation_url,
+    external_documentation_text,
     logo_id,
     instructions,
-    default_environment_id
-) VALUES (@toolset_id, @project_id, @external_documentation_url, @logo_id, @instructions, @default_environment_id)
+    default_environment_id,
+    installation_override_url
+) VALUES (@toolset_id, @project_id, @external_documentation_url, @external_documentation_text, @logo_id, @instructions, @default_environment_id, @installation_override_url)
 ON CONFLICT (toolset_id)
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
+              external_documentation_text = EXCLUDED.external_documentation_text,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
               default_environment_id = EXCLUDED.default_environment_id,
+              installation_override_url = EXCLUDED.installation_override_url,
               updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
           project_id,
           external_documentation_url,
+          external_documentation_text,
           logo_id,
           instructions,
           header_display_names,
           default_environment_id,
+          installation_override_url,
           created_at,
           updated_at;
 

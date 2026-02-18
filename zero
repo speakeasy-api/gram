@@ -2,6 +2,28 @@
 
 set -e
 
+# Parse command line arguments
+agent_mode=false
+auto_yes=false
+for arg in "$@"; do
+    case $arg in
+        --agent)
+            agent_mode=true
+            shift
+            ;;
+        -y|--yes)
+            auto_yes=true
+            shift
+            ;;
+    esac
+done
+
+interactive_only() {
+    if ! $agent_mode; then
+        "$@"
+    fi
+}
+
 onboarding_pass=true
 
 # region: Onboarding checks
@@ -23,6 +45,11 @@ EOF
     echo "✅ Created mise.local.toml file"
 fi
 
+if [ -f "mise.worktree.local.toml" ]; then
+    echo "ℹ️ Found mise.worktree.local.toml. Running zero with MISE_ENV=worktree."
+    export MISE_ENV=worktree
+fi
+
 check_command() {
     local cmd=$1
     local instructions=$2
@@ -36,15 +63,26 @@ check_command() {
     fi
 }
 
-check_command "mise" "
-Install it from here: https://mise.jdx.dev/
-- Make sure to update your .zprofile (zsh), .profile (bash), ...
-- Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion
-"
+# Install mise automatically in agent mode
+if $agent_mode && ! command -v mise &> /dev/null; then
+    echo "⏳ Installing mise..."
+    curl -fsSL https://mise.run | sh
+    export PATH="$HOME/.local/bin:$PATH"
+    mise trust
+else
+    check_command "mise" "
+    Install it from here: https://mise.jdx.dev/
+    - Make sure to update your .zprofile (zsh), .profile (bash), ...
+    - Additionaly enable completions for better DX: https://mise.jdx.dev/installing-mise.html#autocompletion
+    "
+fi
 
-check_command "docker" "
-Install it from here: https://www.docker.com/
-"
+
+if ! $agent_mode; then
+    check_command "docker" "
+    Install it from here: https://www.docker.com/
+    "
+fi
 
 if [ $onboarding_pass = "false" ]; then
     echo "❌ Onboarding checks failed. Please fix the issues above and rerun this script."
@@ -60,12 +98,12 @@ echo -e "\n⏳ Installing dependencies"
 mise run install
 
 echo -e "\n⏳ Setting up API keys and secrets"
-mise run zero:github
-mise run zero:openrouter
+interactive_only mise run zero:github
+interactive_only mise run zero:openrouter
+interactive_only mise run zero:melange
+interactive_only mise run zero:fly
 mise run zero:encryption
 mise run zero:tls
-mise run zero:melange
-mise run zero:fly
 
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk
@@ -73,21 +111,30 @@ mise run build:internal-sdk
 echo -e "\n⏳ Updating VS Code and Cursor editor settings"
 mise run install:vscode
 
+echo -e "\n⏳ Cleaning up stale processes and Temporal state"
+interactive_only mise run zero:cleanup
+echo "✅ Cleaned up stale state"
+
 echo -e "\n⏳ Starting infra"
-mise infra:start
+interactive_only mise infra:start
 
 echo -e "\n⏳ Running migrations"
 mise run zero:migrations
 mise db:migrate
 mise clickhouse:migrate
 
-mise zero:summary
+interactive_only mise zero:summary
 
 echo -e "\n✅ All set up!"
-echo "Want me to start the server and dashboard (\`mise run start\`)?"
-echo -n "[y/N] "
-read -r answer
-answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
-if [ "$answer" = "y" ]; then
-  exec mise run start
+
+if $auto_yes; then
+    exec mise run start
+elif ! $agent_mode; then
+    echo "Want me to start the server and dashboard (\`mise run start\`)?"
+    echo -n "[y/N] "
+    read -r answer
+    answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
+    if [ "$answer" = "y" ]; then
+    exec mise run start
+    fi
 fi

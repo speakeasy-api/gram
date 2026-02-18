@@ -34,7 +34,12 @@ INSERT INTO tool_variations (
   summary,
   description,
   tags,
-  summarizer
+  summarizer,
+  title,
+  read_only_hint,
+  destructive_hint,
+  idempotent_hint,
+  open_world_hint
 ) VALUES (
   @group_id,
   @src_tool_urn,
@@ -45,7 +50,12 @@ INSERT INTO tool_variations (
   @summary,
   @description,
   @tags,
-  @summarizer
+  @summarizer,
+  @title,
+  @read_only_hint,
+  @destructive_hint,
+  @idempotent_hint,
+  @open_world_hint
 ) ON CONFLICT (group_id, src_tool_urn) WHERE deleted IS FALSE DO UPDATE SET
   confirm = EXCLUDED.confirm,
   confirm_prompt = EXCLUDED.confirm_prompt,
@@ -54,6 +64,11 @@ INSERT INTO tool_variations (
   description = EXCLUDED.description,
   tags = EXCLUDED.tags,
   summarizer = EXCLUDED.summarizer,
+  title = EXCLUDED.title,
+  read_only_hint = EXCLUDED.read_only_hint,
+  destructive_hint = EXCLUDED.destructive_hint,
+  idempotent_hint = EXCLUDED.idempotent_hint,
+  open_world_hint = EXCLUDED.open_world_hint,
   updated_at = clock_timestamp()
 RETURNING *;
 

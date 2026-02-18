@@ -193,9 +193,12 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 	// We don't populate the maximums using GetUsageTiers because we want to reflect the actual granted credits, not the current product limits which may have changed.
 	return &gen.PeriodUsage{
 		ToolCalls:                periodUsage.ToolCalls,
-		MaxToolCalls:             periodUsage.MaxToolCalls,
+		IncludedToolCalls:        periodUsage.IncludedToolCalls,
 		Servers:                  periodUsage.Servers,
-		MaxServers:               periodUsage.MaxServers,
+		IncludedServers:          periodUsage.IncludedServers,
+		Credits:                  periodUsage.Credits,
+		IncludedCredits:          periodUsage.IncludedCredits,
+		HasActiveSubscription:    periodUsage.HasActiveSubscription,
 		ActualEnabledServerCount: int(actualEnabledServerCount),
 	}, nil
 }

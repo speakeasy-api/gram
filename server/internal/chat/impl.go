@@ -64,22 +64,28 @@ type ChatTitleGenerator interface {
 	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID string) error
 }
 
+// ChatResolutionAnalyzer schedules async chat resolution analysis.
+type ChatResolutionAnalyzer interface {
+	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
+}
+
 type Service struct {
-	auth                 *auth.Auth
-	db                   *pgxpool.Pool
-	repo                 *repo.Queries
-	tracer               trace.Tracer
-	openRouter           openrouter.Provisioner
-	chatClient           *openrouter.ChatClient
-	logger               *slog.Logger
-	sessions             *sessions.Manager
-	chatSessions         *chatsessions.Manager
-	assetStorage         assets.BlobStore
-	proxyTransport       http.RoundTripper
-	fallbackUsageTracker FallbackModelUsageTracker
-	chatTitleGenerator   ChatTitleGenerator
-	posthog              *posthog.Posthog
-	telemetryService     *telemetry.Service
+	auth                   *auth.Auth
+	db                     *pgxpool.Pool
+	repo                   *repo.Queries
+	tracer                 trace.Tracer
+	openRouter             openrouter.Provisioner
+	chatClient             *openrouter.ChatClient
+	logger                 *slog.Logger
+	sessions               *sessions.Manager
+	chatSessions           *chatsessions.Manager
+	assetStorage           assets.BlobStore
+	proxyTransport         http.RoundTripper
+	fallbackUsageTracker   FallbackModelUsageTracker
+	chatTitleGenerator     ChatTitleGenerator
+	chatResolutionAnalyzer ChatResolutionAnalyzer
+	posthog                *posthog.Posthog
+	telemetryService       *telemetry.Service
 }
 
 func NewService(
@@ -91,6 +97,7 @@ func NewService(
 	chatClient *openrouter.ChatClient,
 	fallbackUsageTracker FallbackModelUsageTracker,
 	chatTitleGenerator ChatTitleGenerator,
+	chatResolutionAnalyzer ChatResolutionAnalyzer,
 	posthog *posthog.Posthog,
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
@@ -98,21 +105,22 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:                 auth.New(logger, db, sessions),
-		db:                   db,
-		sessions:             sessions,
-		chatSessions:         chatSessions,
-		logger:               logger,
-		repo:                 repo.New(db),
-		tracer:               otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
-		openRouter:           openRouter,
-		chatClient:           chatClient,
-		assetStorage:         assetStorage,
-		proxyTransport:       cleanhttp.DefaultPooledTransport(),
-		fallbackUsageTracker: fallbackUsageTracker,
-		chatTitleGenerator:   chatTitleGenerator,
-		posthog:              posthog,
-		telemetryService:     telemetryService,
+		auth:                   auth.New(logger, db, sessions),
+		db:                     db,
+		sessions:               sessions,
+		chatSessions:           chatSessions,
+		logger:                 logger,
+		repo:                   repo.New(db),
+		tracer:                 otel.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		openRouter:             openRouter,
+		chatClient:             chatClient,
+		assetStorage:           assetStorage,
+		proxyTransport:         cleanhttp.DefaultPooledTransport(),
+		fallbackUsageTracker:   fallbackUsageTracker,
+		chatTitleGenerator:     chatTitleGenerator,
+		chatResolutionAnalyzer: chatResolutionAnalyzer,
+		posthog:                posthog,
+		telemetryService:       telemetryService,
 	}
 }
 
@@ -281,6 +289,149 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	return &gen.ListChatsResult{Chats: result}, nil
 }
 
+func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.ListChatsWithResolutionsPayload) (*gen.ListChatsWithResolutionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Check if logs are enabled for this organization
+	if err := s.telemetryService.CheckLogsEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, fmt.Errorf("checking logs enabled: %w", err)
+	}
+
+	// If an external user ID is set, restrict to only their chats
+	// This prevents chat-session users from viewing other users' chats
+	if authCtx.ExternalUserID != "" {
+		if payload.ExternalUserID == nil || *payload.ExternalUserID != authCtx.ExternalUserID {
+			// Force filter to their own external user ID
+			payload.ExternalUserID = &authCtx.ExternalUserID
+		}
+	}
+
+	// Set up pagination with safe int32 conversion
+	limit := payload.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	offset := payload.Offset
+
+	// Convert optional filter parameters (use empty string for SQL NULL check)
+	search := conv.PtrValOr(payload.Search, "")
+	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	resolutionStatus := conv.PtrValOr(payload.ResolutionStatus, "")
+
+	// Parse time filters
+	var fromTime, toTime pgtype.Timestamptz
+	if payload.From != nil {
+		t, err := time.Parse(time.RFC3339, *payload.From)
+		if err == nil {
+			fromTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+		}
+	}
+	if payload.To != nil {
+		t, err := time.Parse(time.RFC3339, *payload.To)
+		if err == nil {
+			toTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+		}
+	}
+
+	// Get total count (before pagination)
+	totalCount, err := s.repo.CountChatsWithResolutions(ctx, repo.CountChatsWithResolutionsParams{
+		ProjectID:        *authCtx.ProjectID,
+		Search:           search,
+		ExternalUserID:   externalUserID,
+		FromTime:         fromTime,
+		ToTime:           toTime,
+		ResolutionStatus: resolutionStatus,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to count chats").Log(ctx, s.logger)
+	}
+
+	// Query database - returns denormalized rows (one row per chat+resolution combination)
+	rows, err := s.repo.ListChatsWithResolutions(ctx, repo.ListChatsWithResolutionsParams{
+		ProjectID:        *authCtx.ProjectID,
+		Search:           search,
+		ExternalUserID:   externalUserID,
+		FromTime:         fromTime,
+		ToTime:           toTime,
+		ResolutionStatus: resolutionStatus,
+		SortBy:           payload.SortBy,
+		SortOrder:        payload.SortOrder,
+		PageLimit:        int32(limit),  //nolint:gosec // limit is bounded by validation above
+		PageOffset:       int32(offset), //nolint:gosec // offset is controlled by client pagination
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats with resolutions").Log(ctx, s.logger)
+	}
+
+	// Group denormalized rows by chat_id
+	chatMap := make(map[string]*gen.ChatOverviewWithResolutions)
+	chatOrder := make([]string, 0) // Preserve order
+
+	for _, row := range rows {
+		chatID := row.ChatID.String()
+
+		// If this is the first row for this chat, create the chat entry
+		if _, exists := chatMap[chatID]; !exists {
+			chatMap[chatID] = &gen.ChatOverviewWithResolutions{
+				ID:             chatID,
+				Title:          row.Title.String,
+				UserID:         conv.FromPGText[string](row.UserID),
+				ExternalUserID: conv.FromPGText[string](row.ExternalUserID),
+				NumMessages:    int(row.NumMessages),
+				CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
+				Resolutions:    make([]*gen.ChatResolution, 0),
+			}
+			chatOrder = append(chatOrder, chatID)
+		}
+
+		// Add resolution to this chat (if one exists - ResolutionID can be NULL from LEFT JOIN)
+		if row.ResolutionID.Valid {
+			// Convert message_ids from interface{} to []string
+			var messageIDs []string
+			if row.MessageIds != nil {
+				// PostgreSQL array comes back as []interface{} containing uuid.UUID values
+				if msgIDsSlice, ok := row.MessageIds.([]interface{}); ok {
+					messageIDs = make([]string, len(msgIDsSlice))
+					for i, msgID := range msgIDsSlice {
+						if uid, ok := msgID.(uuid.UUID); ok {
+							messageIDs[i] = uid.String()
+						}
+					}
+				}
+			}
+
+			resolution := &gen.ChatResolution{
+				ID:              row.ResolutionID.UUID.String(),
+				UserGoal:        row.UserGoal.String,
+				Resolution:      row.Resolution.String,
+				ResolutionNotes: row.ResolutionNotes.String,
+				Score:           int(row.Score.Int32),
+				CreatedAt:       row.ResolutionCreatedAt.Time.Format(time.RFC3339),
+				MessageIds:      messageIDs,
+			}
+			chatMap[chatID].Resolutions = append(chatMap[chatID].Resolutions, resolution)
+		}
+	}
+
+	// Convert map to ordered slice
+	chats := make([]*gen.ChatOverviewWithResolutions, len(chatOrder))
+	for i, chatID := range chatOrder {
+		chats[i] = chatMap[chatID]
+	}
+
+	return &gen.ListChatsWithResolutionsResult{
+		Chats: chats,
+		Total: int(totalCount),
+	}, nil
+}
+
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -305,8 +456,11 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-		return nil, oops.C(oops.CodeUnauthorized)
+	// If this isn't coming from the dashboard, make sure the external user ID matches
+	if authCtx.SessionID == nil {
+		if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+			return nil, oops.C(oops.CodeUnauthorized)
+		}
 	}
 
 	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
@@ -327,7 +481,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			Model:          msg.Model.String,
 			UserID:         &msg.UserID.String,
 			ExternalUserID: &msg.ExternalUserID.String,
-			Content:        content,
+			Content:        &content,
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
@@ -400,6 +554,14 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		"organization_slug": authCtx.OrganizationSlug,
 		"project_slug":      *authCtx.ProjectSlug,
 		"success":           false,
+		"source":            metadata.Source,
+		"user_agent":        metadata.UserAgent,
+		"origin":            metadata.Origin,
+	}
+
+	source := billing.ModelUsageSource(metadata.Source)
+	if source == "" {
+		source = billing.ModelUsageSourcePlayground
 	}
 
 	defer func() {
@@ -448,50 +610,62 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	eventProperties["chat_id"] = chatIDHeader
 
 	respCaptor := w
+	isFirstMessage := true
 
 	if chatIDHeader != "" {
 		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 		}
+		isFirstMessage = chatResult.IsFirstMessage
+	}
 
-		// Check if this is a streaming request
-		isStreaming := chatRequest.Stream
-
-		// Create a custom response writer to capture the response
-		respCaptor = &responseCaptor{
-			ResponseWriter:       w,
-			logger:               s.logger,
-			ctx:                  ctx,
-			isStreaming:          isStreaming,
-			orgID:                orgID,
-			chatID:               chatResult.ChatID,
-			projectID:            *authCtx.ProjectID,
-			repo:                 s.repo,
-			messageContent:       &strings.Builder{},
-			lineBuf:              &strings.Builder{},
-			accumulatedToolCalls: make(map[int]openrouter.ToolCall),
-			messageID:            "",
-			model:                "",
-			isDone:               false,
-			messageWritten:       false,
-			finishReason:         nil,
-			toolCallID:           "",
-			usage: openrouter.Usage{
-				PromptTokens:     0,
-				CompletionTokens: 0,
-				TotalTokens:      0,
-			},
-			usageSet:           false,
-			isFirstMessage:     chatResult.IsFirstMessage,
-			chatTitleGenerator: s.chatTitleGenerator,
-			// GenAI telemetry fields
-			telemetryService: s.telemetryService,
-			userID:           userID,
-			externalUserID:   authCtx.ExternalUserID,
-			startTime:        time.Now(),
-			httpMetadata:     metadata,
+	chatID := uuid.Nil
+	if chatIDHeader != "" {
+		chatID, err = uuid.Parse(chatIDHeader)
+		if err != nil {
+			return oops.E(oops.CodeInvalid, err, "invalid chat ID").Log(ctx, s.logger)
 		}
+	}
+
+	// Check if this is a streaming request
+	isStreaming := chatRequest.Stream
+
+	// Create a custom response writer to capture the response
+	respCaptor = &responseCaptor{
+		ResponseWriter:       w,
+		logger:               s.logger,
+		ctx:                  ctx,
+		isStreaming:          isStreaming,
+		orgID:                orgID,
+		chatID:               chatID,
+		projectID:            *authCtx.ProjectID,
+		repo:                 s.repo,
+		messageContent:       &strings.Builder{},
+		lineBuf:              &strings.Builder{},
+		accumulatedToolCalls: make(map[int]openrouter.ToolCall),
+		messageID:            "",
+		model:                "",
+		isDone:               false,
+		messageWritten:       false,
+		finishReason:         nil,
+		toolCallID:           "",
+		usage: openrouter.Usage{
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
+		},
+		usageSet:               false,
+		isFirstMessage:         isFirstMessage,
+		chatTitleGenerator:     s.chatTitleGenerator,
+		chatResolutionAnalyzer: s.chatResolutionAnalyzer,
+		// GenAI telemetry fields
+		telemetryService: s.telemetryService,
+		userID:           userID,
+		externalUserID:   authCtx.ExternalUserID,
+		startTime:        time.Now(),
+		httpMetadata:     metadata,
+		apiKeyID:         authCtx.APIKeyID,
 	}
 
 	target, err := url.Parse(openrouter.OpenRouterBaseURL)
@@ -540,7 +714,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 					respCaptorWithTracking.messageID,
 					orgID,
 					authCtx.ProjectID.String(),
-					billing.ModelUsageSourceChat,
+					source,
 					respCaptorWithTracking.chatID.String(),
 				); err != nil {
 					// Only schedule fallback for 404 errors (generation not found yet)
@@ -555,7 +729,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 								respCaptorWithTracking.messageID,
 								orgID,
 								authCtx.ProjectID.String(),
-								billing.ModelUsageSourceChat,
+								source,
 								respCaptorWithTracking.chatID.String(),
 							); scheduleErr != nil {
 								s.logger.ErrorContext(ctx, "failed to schedule fallback model usage tracking",
@@ -573,15 +747,20 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				}
 			}()
 		} else {
-			msg := "no message ID"
+			msg := fmt.Sprintf("no response captor (source: %s)", source)
 			if respCaptorWithTracking != nil {
+				msg = "no message ID"
 				msg += "; model: " + respCaptorWithTracking.model
 				msg += "; org ID: " + respCaptorWithTracking.orgID
 				msg += "; project ID: " + respCaptorWithTracking.projectID.String()
 				msg += "; chat ID: " + respCaptorWithTracking.chatID.String()
 				msg += fmt.Sprintf("; isStreaming: %t", respCaptorWithTracking.isStreaming)
 			}
-			s.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(errors.New(msg)))
+
+			// This happens when you dont have a chat ID, but for internal Gram usage we dont care
+			if source != billing.ModelUsageSourceGram {
+				s.logger.ErrorContext(ctx, "failed to track model usage", attr.SlogError(errors.New(msg)))
+			}
 		}
 	}()
 
@@ -639,6 +818,87 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 		title = chat.Title.String
 	}
 	return &gen.GenerateTitleResult{Title: title}, nil
+}
+
+func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbackPayload) (*gen.SubmitFeedbackResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+
+	// Load the chat to verify access
+	chat, err := s.repo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Validate feedback value
+	if payload.Feedback != "success" && payload.Feedback != "failure" {
+		return nil, oops.E(oops.CodeInvalid, nil, "feedback must be 'success' or 'failure'")
+	}
+
+	// Get the most recent message ID to track where user gave feedback
+	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list messages").Log(ctx, s.logger)
+	}
+
+	var lastMessageID uuid.NullUUID
+	if len(messages) > 0 {
+		lastMessageID = uuid.NullUUID{UUID: messages[len(messages)-1].ID, Valid: true}
+	} else {
+		return nil, oops.E(oops.CodeInvalid, nil, "no messages found for chat")
+	}
+
+	// Insert user feedback
+	_, err = s.repo.InsertUserFeedback(ctx, repo.InsertUserFeedbackParams{
+		ProjectID:           *authCtx.ProjectID,
+		ChatID:              chatID,
+		MessageID:           lastMessageID.UUID,
+		UserResolution:      payload.Feedback,
+		UserResolutionNotes: conv.ToPGTextEmpty(""),
+		ChatResolutionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to store feedback").Log(ctx, s.logger)
+	}
+
+	// Schedule chat resolution analysis to fill in the details
+	if s.chatResolutionAnalyzer != nil {
+		if err := s.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
+			context.WithoutCancel(ctx),
+			chatID,
+			*authCtx.ProjectID,
+			authCtx.ActiveOrganizationID,
+			authCtx.APIKeyID,
+		); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
+			// Don't fail the request if analysis scheduling fails
+		}
+	}
+
+	s.logger.InfoContext(ctx, "user feedback submitted",
+		attr.SlogChatID(chatID.String()),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogOutcome(payload.Feedback),
+	)
+
+	return &gen.SubmitFeedbackResult{Success: true}, nil
 }
 
 // startOrResumeChatResult contains the result of starting or resuming a chat.
@@ -744,14 +1004,16 @@ type responseCaptor struct {
 	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
 	usage                openrouter.Usage
 	// Title generation
-	isFirstMessage     bool
-	chatTitleGenerator ChatTitleGenerator
+	isFirstMessage         bool
+	chatTitleGenerator     ChatTitleGenerator
+	chatResolutionAnalyzer ChatResolutionAnalyzer
 	// GenAI telemetry
 	telemetryService *telemetry.Service
 	userID           string
 	externalUserID   string
 	startTime        time.Time // Track request start time for duration calculation
 	httpMetadata     httpMetadata
+	apiKeyID         string
 }
 
 func (r *responseCaptor) WriteHeader(statusCode int) {
@@ -855,6 +1117,19 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 				r.orgID,
 			); err != nil {
 				r.logger.WarnContext(r.ctx, "failed to schedule chat title generation", attr.SlogError(err))
+			}
+		}
+
+		// Schedule chat resolution analysis (will reset timer if already scheduled)
+		if r.chatResolutionAnalyzer != nil {
+			if err := r.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
+				context.WithoutCancel(r.ctx),
+				r.chatID,
+				r.projectID,
+				r.orgID,
+				r.apiKeyID,
+			); err != nil {
+				r.logger.WarnContext(r.ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
 			}
 		}
 
@@ -967,6 +1242,7 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 		attr.GenAIUsageTotalTokensKey:  r.usage.TotalTokens,
 		attr.GenAIConversationIDKey:    r.chatID.String(),
 		attr.GenAIConversationDuration: duration,
+		attr.APIKeyIDKey:               r.apiKeyID,
 	}
 
 	if r.messageID != "" {
@@ -983,6 +1259,15 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 	}
 	if r.externalUserID != "" {
 		attrs[attr.ExternalUserIDKey] = r.externalUserID
+	}
+
+	// Extract trace context from the request context
+	spanCtx := trace.SpanContextFromContext(r.ctx)
+	if spanCtx.HasTraceID() {
+		attrs[attr.TraceIDKey] = spanCtx.TraceID().String()
+	}
+	if spanCtx.HasSpanID() {
+		attrs[attr.SpanIDKey] = spanCtx.SpanID().String()
 	}
 
 	toolInfo := telemetry.ToolInfo{

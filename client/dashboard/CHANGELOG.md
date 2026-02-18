@@ -1,5 +1,162 @@
 # dashboard
 
+## 0.28.3
+
+### Patch Changes
+
+- bb8f3d2: Add CLI commands tab to OpenAPI version update modal
+- Updated dependencies [e5500f7]
+  - @gram-ai/elements@1.27.1
+
+## 0.28.2
+
+### Patch Changes
+
+- Updated dependencies [3d0ce56]
+  - @gram-ai/elements@1.27.0
+
+## 0.28.1
+
+### Patch Changes
+
+- 78f81f6: Bring back resources and prompts tabs to MCP details page
+- d9506c5: Show tool annotation badges in tool list sidebar
+- e87ada8:
+
+## 0.28.0
+
+### Minor Changes
+
+- 514fce6: Improve observability chat logs with server-side sorting (sort_by/sort_order params), sticky pagination with page count, N/A score indicator with tooltip for unscored sessions, Shiki syntax highlighting for code blocks, character-based truncation with "Show more" button, System Prompt tab in chat detail panel, and Tool Result labeling for tool messages.
+- 9df7d84: Add observability features including telemetry logs, traces, chat logs with AI-powered resolution analysis, and an overview dashboard with time-series metrics.
+- ab5142f: fix UI bug where the openapi spec provided by URL upload is not fetched, leading to a blank preview.
+
+### Patch Changes
+
+- 292eab4: Add system prompt instruction to treat 4xx HTTP responses as errors in AI observability analysis.
+- Updated dependencies [514fce6]
+  - @gram/client@0.27.0
+
+## 0.27.9
+
+### Patch Changes
+
+- f635e22: Support for [MCP tool annotations](https://modelcontextprotocol.io/legacy/concepts/tools#tool-annotations). Tool annotations provide additional metadata about a tool’s behavior,
+  helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool, but should not be relied upon for security decisions.
+
+  The MCP specification defines the following annotations for tools that Gram now supports for external mcp servers sourced from the Catalog as well as HTTP based tools.
+
+  | Annotation        | Type    | Default | Description                                                                                                                          |
+  | ----------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `title`           | string  | -       | A human-readable title for the tool, useful for UI display                                                                           |
+  | `readOnlyHint`    | boolean | false   | If true, indicates the tool does not modify its environment                                                                          |
+  | `destructiveHint` | boolean | true    | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false)                                     |
+  | `idempotentHint`  | boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when `readOnlyHint` is false) |
+  | `openWorldHint`   | boolean | true    | If true, the tool may interact with an "open world" of external entities                                                             |
+
+  Tool annotations can be edited in the playground or in the tools tab of a specific MCP server.
+
+- Updated dependencies [f635e22]
+  - @gram/client@0.27.4
+  - @gram-ai/elements@1.26.1
+
+## 0.27.8
+
+### Patch Changes
+
+- 6d195c5: Show date in deployment log line timestamps on the deployments page
+- Updated dependencies [b2347fc]
+- Updated dependencies [a34d18a]
+  - @gram/client@0.27.3
+
+## 0.27.7
+
+### Patch Changes
+
+- Updated dependencies [9cb2f0e]
+  - @gram-ai/elements@1.26.0
+
+## 0.27.6
+
+### Patch Changes
+
+- Updated dependencies [e08b45e]
+  - @gram/client@0.27.1
+  - @gram-ai/elements@1.25.2
+
+## 0.27.5
+
+### Patch Changes
+
+- a7422f8: feat: add OAuth support for external MCP servers in the Playground
+- a753172: feat: customize documentation button text on MCP install page
+- 7505433: fix: allow creating MCP server when project has sources but no toolsets
+- 1f74200: Fixes issue with loading of metrics when logs are disabled.
+- Updated dependencies [a7422f8]
+- Updated dependencies [a753172]
+- Updated dependencies [6e29702]
+- Updated dependencies [1f74200]
+  - @gram/client@0.26.18
+
+## 0.27.4
+
+### Patch Changes
+
+- a7cb2d9: reinstate deployments access in Sources page UI and make relevant deployment accessible from a source card
+- Updated dependencies [63bb328]
+  - @gram-ai/elements@1.25.1
+
+## 0.27.3
+
+### Patch Changes
+
+- 85d64ad: Add support links to user dropdown menu (Get Support, Chat with Team, Bug or Feature Request)
+- Updated dependencies [feea712]
+- Updated dependencies [c9b74af]
+  - @gram-ai/elements@1.25.0
+  - @gram/client@0.26.13
+
+## 0.27.2
+
+### Patch Changes
+
+- Updated dependencies [46004f8]
+  - @gram-ai/elements@1.24.2
+
+## 0.27.1
+
+### Patch Changes
+
+- Updated dependencies [ca387c6]
+- Updated dependencies [6793e29]
+  - @gram-ai/elements@1.24.1
+
+## 0.27.0
+
+### Minor Changes
+
+- 0a550bc: Adds experimental metrics insights to dashboard.
+- 567289d: Major UX overhaul with redesigned MCP cards, pattern-based illustrations, and improved environment variable management
+- b85bfd5: Last accessed date is now available for Gram API keys and can be viewed via the
+  API and dashboard settings page.
+
+### Patch Changes
+
+- 75eff56: Restored the organization override feature for admin users and ensures that both organization and project IDs are also displayed.
+- 6a35424: Various UX improvements to the new dashboard
+- 73304b3: UX improvements for Sources and MCP pages: tabbed interfaces, function tools table with runtime column, dynamic tab validation, softer delete warning styling
+- 90ad1ba: Add support for install page redirect URLs
+- Updated dependencies [659d955]
+- Updated dependencies [c17b9f7]
+- Updated dependencies [08e4fb5]
+- Updated dependencies [438e1a7]
+- Updated dependencies [2d520cb]
+- Updated dependencies [afb9fbb]
+- Updated dependencies [51b9f17]
+- Updated dependencies [90ad1ba]
+  - @gram/client@0.26.9
+  - @gram-ai/elements@1.24.0
+
 ## 0.26.19
 
 ### Patch Changes

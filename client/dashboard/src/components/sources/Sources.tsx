@@ -246,7 +246,7 @@ export default function Sources() {
             ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"
             : "OpenAPI documents and third-party MCP servers providing tools for your project"}
         </Page.Section.Description>
-        <DeploymentHistoryCTA deploymentId={deployment?.id} />
+        <DeploymentsButton deploymentId={deployment?.id} />
         <Page.Section.CTA>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -324,6 +324,7 @@ export default function Sources() {
                   causingFailure={assetsCausingFailure.has(
                     asset.deploymentAssetId,
                   )}
+                  deploymentId={deployment?.id}
                   handleRemove={() => openRemoveSource(asset)}
                   handleViewAsset={() => openViewAsset(asset)}
                   setChangeDocumentTargetSlug={openUploadOpenApi}
@@ -408,17 +409,14 @@ const useUnusedAssetIds = () => {
   return unusedAssetIds;
 };
 
-function DeploymentHistoryCTA({ deploymentId }: { deploymentId?: string }) {
+function DeploymentsButton({ deploymentId }: { deploymentId?: string }) {
   const routes = useRoutes();
   const { data: deploymentResult } = useLatestDeployment();
   const deployment = deploymentResult?.deployment;
   const deploymentLogsSummary = useDeploymentLogsSummary(deploymentId);
 
-  if (!deployment || !deploymentLogsSummary) {
-    return null;
-  }
-
-  const hasErrors = deploymentLogsSummary.errors > 0;
+  const hasErrors = deploymentLogsSummary && deploymentLogsSummary.errors > 0;
+  const deploymentFailed = deployment?.status === "failed";
 
   const icon = hasErrors ? (
     <Icon name="triangle-alert" className="text-yellow-500" />
@@ -426,19 +424,21 @@ function DeploymentHistoryCTA({ deploymentId }: { deploymentId?: string }) {
     <Icon name="history" className="text-muted-foreground" />
   );
 
-  const deploymentFailed = deployment.status === "failed";
-  let tooltip = deploymentFailed
-    ? "Latest deployment failed"
-    : "Latest deployment succeeded";
+  let tooltip = "View deployment history";
+  if (deployment && deploymentLogsSummary) {
+    tooltip = deploymentFailed
+      ? "Latest deployment failed"
+      : "Latest deployment succeeded";
 
-  if (deploymentLogsSummary.skipped > 0) {
-    tooltip += ` (${deploymentLogsSummary.skipped} operations skipped)`;
+    if (deploymentLogsSummary.skipped > 0) {
+      tooltip += ` (${deploymentLogsSummary.skipped} operations skipped)`;
+    }
   }
 
   return (
     <Page.Section.CTA>
       <SimpleTooltip tooltip={tooltip}>
-        <a href={routes.deployments.deployment.href(deployment.id)}>
+        <a href={routes.deployments.href()}>
           <Button
             variant="tertiary"
             className={cn(
@@ -447,7 +447,7 @@ function DeploymentHistoryCTA({ deploymentId }: { deploymentId?: string }) {
             )}
           >
             <Button.LeftIcon>{icon}</Button.LeftIcon>
-            HISTORY
+            Deployments
           </Button>
         </a>
       </SimpleTooltip>

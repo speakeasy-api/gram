@@ -162,7 +162,10 @@ func (f *FreeTierReportingUsageMetrics) Do(ctx context.Context, orgIDs []string)
 				slog.Int(logKeyServers, usage.Servers),
 			)
 
-			if org.GramAccountType == "free" && (usage.ToolCalls > usage.MaxToolCalls || usage.Servers > usage.MaxServers) {
+			anyOverage := usage.ToolCalls > usage.IncludedToolCalls || usage.Servers > usage.IncludedServers || usage.Credits > usage.IncludedCredits
+
+			// An org is over the free tier limits if it exceeds the included limits and does not have an active subscription (to pay for the overage)
+			if org.GramAccountType == "free" && anyOverage && !usage.HasActiveSubscription {
 				eventData := map[string]any{
 					"org_id":        org.ID,
 					"org_name":      org.Name,
@@ -171,6 +174,8 @@ func (f *FreeTierReportingUsageMetrics) Do(ctx context.Context, orgIDs []string)
 					"servers":       usage.Servers,
 					"is_gram":       true,
 					"is_legacy_org": org.CreatedAt.Time.Before(time.Date(2025, 9, 5, 0, 0, 0, 0, time.UTC)), // This is when free tier limit enforcement started
+					// format start_time as ISO8601 - overrides time.Now() set in posthog.go for Loops compat
+					"start_time": time.Now().UTC().Format("2006-01-02T15:04:05.000Z07:00"),
 				}
 
 				// Add email if available

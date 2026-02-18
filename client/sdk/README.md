@@ -1,6 +1,6 @@
 # @gram/client
 
-Developer-friendly & type-safe Typescript SDK specifically catered to leverage *@gram/client* API.
+Developer-friendly & type-safe Typescript SDK specifically catered to leverage _@gram/client_ API.
 
 <div align="left">
     <a href="https://www.speakeasy.com/?utm_source=@gram/client&utm_campaign=typescript"><img src="https://custom-icon-badges.demolab.com/badge/-Built%20By%20Speakeasy-212015?style=for-the-badge&logoColor=FBE331&logo=speakeasy&labelColor=545454" /></a>
@@ -9,8 +9,8 @@ Developer-friendly & type-safe Typescript SDK specifically catered to leverage *
     </a>
 </div>
 
-
 <br /><br />
+
 > [!IMPORTANT]
 > This SDK is not yet ready for production use. To complete setup please follow the steps outlined in your [workspace](https://app.speakeasy.com/org/speakeasy-self/speakeasy-self). Delete this section before > publishing to a package manager.
 
@@ -158,7 +158,9 @@ run();
 * [creditUsage](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 * [generateTitle](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
+* [listChatsWithResolutions](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
+* [submitFeedback](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 
 ### [ChatSessions](docs/sdks/chatsessions/README.md)
 
@@ -258,9 +260,14 @@ run();
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
 * [captureEvent](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
+* [getObservabilityOverview](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 * [getProjectMetricsSummary](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
+* [getUserMetricsSummary](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
+* [listFilterOptions](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
+* [searchChats](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
+* [searchUsers](docs/sdks/telemetry/README.md#searchusers) - searchUsers telemetry
 
 ### [Templates](docs/sdks/templates/README.md)
 
@@ -344,9 +351,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`chatGenerateTitle`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
+- [`chatListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`chatSessionsRevoke`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
+- [`chatSubmitFeedback`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`deploymentsActive`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
@@ -399,9 +408,14 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`slackSlackLogin`](docs/sdks/slack/README.md#slacklogin) - login slack
 - [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
+- [`telemetryGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`telemetryGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
+- [`telemetryGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
+- [`telemetryListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
+- [`telemetrySearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`telemetrySearchToolCalls`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
+- [`telemetrySearchUsers`](docs/sdks/telemetry/README.md#searchusers) - searchUsers telemetry
 - [`templatesCreate`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`templatesDelete`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 - [`templatesGet`](docs/sdks/templates/README.md#get) - getTemplate templates
@@ -462,6 +476,7 @@ To learn about this feature and how to get started, check
 - [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
+- [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
@@ -492,12 +507,14 @@ To learn about this feature and how to get started, check
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
+- [`useGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`useGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
-- [`useGetProjectMetricsSummaryMutation`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
+- [`useGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
+- [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
@@ -506,8 +523,10 @@ To learn about this feature and how to get started, check
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
+- [`useListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
+- [`useListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
@@ -528,8 +547,10 @@ To learn about this feature and how to get started, check
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`useSearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
+- [`useSearchUsers`](docs/sdks/telemetry/README.md#searchusers) - searchUsers telemetry
 - [`useServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 - [`useServeChatAttachmentSigned`](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
@@ -839,7 +860,7 @@ looking for the latest version.
 
 ## Contributions
 
-While we value open-source contributions to this SDK, this library is generated programmatically. Any manual changes added to internal files will be overwritten on the next generation. 
-We look forward to hearing your feedback. Feel free to open a PR or an issue with a proof of concept and we'll do our best to include it in a future release. 
+While we value open-source contributions to this SDK, this library is generated programmatically. Any manual changes added to internal files will be overwritten on the next generation.
+We look forward to hearing your feedback. Feel free to open a PR or an issue with a proof of concept and we'll do our best to include it in a future release.
 
 ### SDK Created by [Speakeasy](https://www.speakeasy.com/?utm_source=@gram/client&utm_campaign=typescript)

@@ -35,6 +35,7 @@ var ErrGenerationNotFound = errors.New("generation not found")
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
+	"anthropic/claude-opus-4.6":     true,
 	"anthropic/claude-sonnet-4.5":   true,
 	"anthropic/claude-haiku-4.5":    true,
 	"anthropic/claude-sonnet-4":     true,
@@ -436,10 +437,22 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 }
 
 // TriggerModelUsageTracking fetches generation details from OpenRouter and tracks model usage.
-func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID string, orgID string, projectID string, source billing.ModelUsageSource, chatID string) error {
+func (o *OpenRouter) TriggerModelUsageTracking(
+	ctx context.Context,
+	generationID string,
+	orgID string,
+	projectID string,
+	source billing.ModelUsageSource,
+	chatID string,
+) error {
 	var genResp *generationResponse
 	var statusCode int
 	var err error
+
+	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
+	}
 
 	// The generation is typically not available synchronously with the chat completion but becomes available quickly.
 	// Temporal could handle reliability here, but given we don't want to move this action to temporal right now,
@@ -485,6 +498,7 @@ func (o *OpenRouter) TriggerModelUsageTracking(ctx context.Context, generationID
 	}
 
 	event := billing.ModelUsageEvent{
+		OrganizationSlug:      org.Slug,
 		OrganizationID:        orgID,
 		ProjectID:             projectID,
 		Source:                source,

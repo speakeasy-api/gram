@@ -58,6 +58,7 @@ const breadcrumbSubstitutions = {
   "add-openapi": "Add OpenAPI",
   "add-function": "Add Function",
   "add-from-catalog": "Add from Catalog",
+  "chat-sessions": "Chat Sessions",
 };
 
 function PageHeaderBreadcrumbs({

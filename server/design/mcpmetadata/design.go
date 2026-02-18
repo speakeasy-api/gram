@@ -100,9 +100,13 @@ var McpMetadata = Type("McpMetadata", func() {
 	Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page", func() {
 		Format(FormatURI)
 	})
+	Attribute("external_documentation_text", String, "A blob of text for the button on the MCP server page")
 	Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
 	Attribute("default_environment_id", String, "The default environment to load variables from", func() {
 		Format(FormatUUID)
+	})
+	Attribute("installation_override_url", String, "URL to redirect to instead of showing the default installation page", func() {
+		Format(FormatURI)
 	})
 	Attribute("environment_configs", ArrayOf(McpEnvironmentConfig), "The list of environment variables configured for this MCP")
 
@@ -171,9 +175,13 @@ var _ = Service("mcpMetadata", func() {
 			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
 			Attribute("logo_asset_id", String, "The asset ID for the MCP install page logo")
 			Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page")
+			Attribute("external_documentation_text", String, "A blob of text for the button on the MCP server page")
 			Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
 			Attribute("default_environment_id", String, "The default environment to load variables from", func() {
 				Format(FormatUUID)
+			})
+			Attribute("installation_override_url", String, "URL to redirect to instead of showing the default installation page", func() {
+				Format(FormatURI)
 			})
 			Attribute("environment_configs", ArrayOf(McpEnvironmentConfigInput), "The list of environment variables to configure for this MCP")
 

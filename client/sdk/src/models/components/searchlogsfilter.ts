@@ -47,6 +47,10 @@ export type SearchLogsFilter = {
    */
   deploymentId?: string | undefined;
   /**
+   * External user ID filter
+   */
+  externalUserId?: string | undefined;
+  /**
    * Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
    */
   from?: Date | undefined;
@@ -54,6 +58,10 @@ export type SearchLogsFilter = {
    * Function ID filter
    */
   functionId?: string | undefined;
+  /**
+   * Chat ID filter
+   */
+  gramChatId?: string | undefined;
   /**
    * Gram URN filter (single URN, use gram_urns for multiple)
    */
@@ -90,6 +98,10 @@ export type SearchLogsFilter = {
    * Trace ID filter (32 hex characters)
    */
   traceId?: string | undefined;
+  /**
+   * User ID filter
+   */
+  userId?: string | undefined;
 };
 
 /** @internal */
@@ -103,8 +115,10 @@ export const SeverityText$outboundSchema: z.ZodNativeEnum<typeof SeverityText> =
 /** @internal */
 export type SearchLogsFilter$Outbound = {
   deployment_id?: string | undefined;
+  external_user_id?: string | undefined;
   from?: string | undefined;
   function_id?: string | undefined;
+  gram_chat_id?: string | undefined;
   gram_urn?: string | undefined;
   gram_urns?: Array<string> | undefined;
   http_method?: string | undefined;
@@ -114,6 +128,7 @@ export type SearchLogsFilter$Outbound = {
   severity_text?: string | undefined;
   to?: string | undefined;
   trace_id?: string | undefined;
+  user_id?: string | undefined;
 };
 
 /** @internal */
@@ -123,8 +138,10 @@ export const SearchLogsFilter$outboundSchema: z.ZodType<
   SearchLogsFilter
 > = z.object({
   deploymentId: z.string().optional(),
+  externalUserId: z.string().optional(),
   from: z.date().transform(v => v.toISOString()).optional(),
   functionId: z.string().optional(),
+  gramChatId: z.string().optional(),
   gramUrn: z.string().optional(),
   gramUrns: z.array(z.string()).optional(),
   httpMethod: HttpMethod$outboundSchema.optional(),
@@ -134,10 +151,13 @@ export const SearchLogsFilter$outboundSchema: z.ZodType<
   severityText: SeverityText$outboundSchema.optional(),
   to: z.date().transform(v => v.toISOString()).optional(),
   traceId: z.string().optional(),
+  userId: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     deploymentId: "deployment_id",
+    externalUserId: "external_user_id",
     functionId: "function_id",
+    gramChatId: "gram_chat_id",
     gramUrn: "gram_urn",
     gramUrns: "gram_urns",
     httpMethod: "http_method",
@@ -146,6 +166,7 @@ export const SearchLogsFilter$outboundSchema: z.ZodType<
     serviceName: "service_name",
     severityText: "severity_text",
     traceId: "trace_id",
+    userId: "user_id",
   });
 });
 

@@ -105,6 +105,11 @@ var UpsertGlobalToolVariationForm = Type("UpsertGlobalToolVariationForm", func()
 	Attribute("description", String, "The description of the tool variation")
 	Attribute("tags", ArrayOf(String), "The tags of the tool variation")
 	Attribute("summarizer", String, "The summarizer of the tool variation")
+	Attribute("title", String, "Display name override for the tool")
+	Attribute("read_only_hint", Boolean, "Override: if true, the tool does not modify its environment")
+	Attribute("destructive_hint", Boolean, "Override: if true, the tool may perform destructive updates")
+	Attribute("idempotent_hint", Boolean, "Override: if true, repeated calls have no additional effect")
+	Attribute("open_world_hint", Boolean, "Override: if true, the tool interacts with external entities")
 })
 
 var UpsertGlobalToolVariationResult = Type("UpsertGlobalToolVariationResult", func() {

@@ -744,12 +744,6 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		}
 	}
 
-	// Parse media type to get just the mime type without parameters
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		mediaType = contentType
-	}
-
 	// Validate content type is an allowed OpenAPI format
 	allowedContentTypes := []string{
 		"application/yaml",
@@ -759,8 +753,28 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		"application/json",
 		"text/json",
 	}
-	if !slices.Contains(allowedContentTypes, mediaType) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported content type: %s. Expected YAML or JSON", mediaType)
+	// Check if any allowed content type appears in the contentType string
+	// (handles malformed headers with multiple types like "application/octet-stream, application/json")
+	hasAllowedType := slices.ContainsFunc(allowedContentTypes, func(allowed string) bool {
+		return strings.Contains(contentType, allowed)
+	})
+	if !hasAllowedType {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported content type: %s. Expected YAML or JSON", contentType)
+	}
+
+	// Parse media type to get just the mime type without parameters for logging/storage
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		// If parsing fails, try to extract the first valid content type we found
+		for _, allowed := range allowedContentTypes {
+			if strings.Contains(contentType, allowed) {
+				mediaType = allowed
+				break
+			}
+		}
+		if mediaType == "" {
+			mediaType = contentType
+		}
 	}
 
 	contentLength := resp.ContentLength

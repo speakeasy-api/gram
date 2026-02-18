@@ -18,6 +18,20 @@ var ResponseFilter = Type("ResponseFilter", func() {
 	Required("content_types")
 })
 
+// ToolAnnotations provides hints about tool behavior per MCP specification.
+// All fields are optional hints - clients should not rely on these for security decisions.
+var ToolAnnotations = Type("ToolAnnotations", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Tool annotations providing behavioral hints about the tool")
+
+	Attribute("title", String, "Human-readable display name for the tool")
+	Attribute("read_only_hint", Boolean, "If true, the tool does not modify its environment")
+	Attribute("destructive_hint", Boolean, "If true, the tool may perform destructive updates (only meaningful when read_only_hint is false)")
+	Attribute("idempotent_hint", Boolean, "If true, repeated calls with same arguments have no additional effect (only meaningful when read_only_hint is false)")
+	Attribute("open_world_hint", Boolean, "If true, the tool interacts with external entities beyond its local environment")
+})
+
 // BaseToolAttributes contains common fields shared by all tool types
 var BaseToolAttributes = Type("BaseToolAttributes", func() {
 	Meta("struct:pkg:path", "types")
@@ -50,6 +64,7 @@ var BaseToolAttributes = Type("BaseToolAttributes", func() {
 
 	Attribute("canonical", CanonicalToolAttributes, "The original details of a tool, excluding any variations")
 	Attribute("variation", ToolVariation, "The variation details of a tool. Only includes explicitly varied fields.")
+	Attribute("annotations", ToolAnnotations, "MCP tool annotations providing hints about tool behavior")
 
 	Required("id", "project_id", "name", "canonical_name", "description", "schema", "tool_urn", "created_at", "updated_at")
 })

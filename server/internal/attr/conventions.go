@@ -15,10 +15,13 @@ const (
 	ErrorMessageKey                   = semconv.ErrorMessageKey
 	ExceptionStacktraceKey            = semconv.ExceptionStacktraceKey
 	ExternalUserIDKey                 = attribute.Key("gram.external_user.id")
+	APIKeyIDKey                       = attribute.Key("gram.api_key.id")
 	ContainerIDKey                    = semconv.ContainerIDKey
 	ContainerNetworkIDKey             = attribute.Key("container.network.id")
 	FilePathKey                       = semconv.FilePathKey
 	HostNameKey                       = semconv.HostNameKey
+	HTTPRefererHostKey                = attribute.Key("http.request.referer_host")
+	HTTPRequestHeaderRefererKey       = attribute.Key("http.request.header.referer")
 	HTTPRequestHeaderContentTypeKey   = attribute.Key("http.request.header.content_type")
 	HTTPRequestHeaderUserAgentKey     = attribute.Key("http.request.header.user_agent")
 	HTTPRequestMethodKey              = semconv.HTTPRequestMethodKey
@@ -82,6 +85,7 @@ const (
 	AssetIDKey                     = attribute.Key("gram.asset.id")
 	AssetURLKey                    = attribute.Key("gram.asset.url")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
+	MessageIDKey                   = attribute.Key("gram.message.id")
 	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey              = attribute.Key("gram.mcp_registry.url")
 	ExternalMCPIDKey               = attribute.Key("gram.external_mcp.id")
@@ -130,6 +134,7 @@ const (
 	OAuthCodeKey                   = attribute.Key("gram.oauth.code")
 	OAuthExternalCodeKey           = attribute.Key("gram.oauth.external_code")
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
+	OAuthIssuerKey                 = attribute.Key("gram.oauth.issuer")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
 	OAuthRedirectURIFullKey        = attribute.Key("gram.oauth.redirect_uri.full")
 	OAuthRegistrationEndpointKey   = attribute.Key("gram.oauth.registration_endpoint")
@@ -137,6 +142,9 @@ const (
 	OAuthScopeKey                  = attribute.Key("gram.oauth.scope")
 	OAuthTokenEndpointKey          = attribute.Key("gram.oauth.token_endpoint")
 	OAuthVersionKey                = attribute.Key("gram.oauth.version")
+	OAuthStatusKey                 = attribute.Key("gram.oauth.status")
+	OAuthConnectedKey              = attribute.Key("gram.oauth.connected")
+	OAuthExpiredKey                = attribute.Key("gram.oauth.expired")
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
 	OpenAPIPathKey                 = attribute.Key("gram.openapi.path")
@@ -220,6 +228,12 @@ const (
 	GenAIToolCallsKey         = attribute.Key("gen_ai.tool.calls")         // Array of tool calls
 	GenAIUsageTotalTokensKey  = attribute.Key("gen_ai.usage.total_tokens") // Total tokens (input + output)
 	GenAIConversationDuration = attribute.Key("gen_ai.conversation.duration")
+
+	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
+	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
+	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)
+	GenAIEvaluationScoreLabelKey  = attribute.Key("gen_ai.evaluation.score.label") // Low cardinality label (success, failure, partial, abandoned)
+	GenAIEvaluationExplanationKey = attribute.Key("gen_ai.evaluation.explanation") // Free-form explanation
 )
 
 const (
@@ -250,6 +264,16 @@ func SlogFilePath(v string) slog.Attr      { return slog.String(string(FilePathK
 
 func HostName(v string) attribute.KeyValue { return HostNameKey.String(v) }
 func SlogHostName(v string) slog.Attr      { return slog.String(string(HostNameKey), v) }
+
+func HTTPReferrerHost(v string) attribute.KeyValue { return HTTPRefererHostKey.String(v) }
+func SlogHTTPReferrerHost(v string) slog.Attr      { return slog.String(string(HTTPRefererHostKey), v) }
+
+func HTTPRequestHeaderReferer(v string) attribute.KeyValue {
+	return HTTPRequestHeaderRefererKey.String(v)
+}
+func SlogHTTPRequestHeaderReferer(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderRefererKey), v)
+}
 
 func HTTPRequestHeaderContentType(v string) attribute.KeyValue {
 	return HTTPRequestHeaderContentTypeKey.String(v)
@@ -332,6 +356,9 @@ func SlogUserID(v string) slog.Attr      { return slog.String(string(UserIDKey),
 func ExternalUserID(v string) attribute.KeyValue { return ExternalUserIDKey.String(v) }
 func SlogExternalUserID(v string) slog.Attr      { return slog.String(string(ExternalUserIDKey), v) }
 
+func APIKeyID(v string) attribute.KeyValue { return APIKeyIDKey.String(v) }
+func SlogAPIKeyID(v string) slog.Attr      { return slog.String(string(APIKeyIDKey), v) }
+
 func Actual(v any) attribute.KeyValue { return ActualKey.String(fmt.Sprintf("%v", v)) }
 func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
 
@@ -404,6 +431,9 @@ func SlogAssetURL(v string) slog.Attr      { return slog.String(string(AssetURLK
 
 func ChatID(v string) attribute.KeyValue { return ChatIDKey.String(v) }
 func SlogChatID(v string) slog.Attr      { return slog.String(string(ChatIDKey), v) }
+
+func MessageID(v string) attribute.KeyValue { return MessageIDKey.String(v) }
+func SlogMessageID(v string) slog.Attr      { return slog.String(string(MessageIDKey), v) }
 
 func CacheKey(v string) attribute.KeyValue { return CacheKeyKey.String(v) }
 func SlogCacheKey(v string) slog.Attr      { return slog.String(string(CacheKeyKey), v) }
@@ -568,6 +598,9 @@ func SlogOAuthExternalCode(v string) slog.Attr      { return slog.String(string(
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
 func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGrantKey), v) }
 
+func OAuthIssuer(v string) attribute.KeyValue { return OAuthIssuerKey.String(v) }
+func SlogOAuthIssuer(v string) slog.Attr      { return slog.String(string(OAuthIssuerKey), v) }
+
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }
 
@@ -596,6 +629,15 @@ func SlogOAuthTokenEndpoint(v string) slog.Attr {
 
 func OAuthVersion(v string) attribute.KeyValue { return OAuthVersionKey.String(v) }
 func SlogOAuthVersion(v string) slog.Attr      { return slog.String(string(OAuthVersionKey), v) }
+
+func OAuthStatus(v string) attribute.KeyValue { return OAuthStatusKey.String(v) }
+func SlogOAuthStatus(v string) slog.Attr      { return slog.String(string(OAuthStatusKey), v) }
+
+func OAuthConnected(v bool) attribute.KeyValue { return OAuthConnectedKey.Bool(v) }
+func SlogOAuthConnected(v bool) slog.Attr      { return slog.Bool(string(OAuthConnectedKey), v) }
+
+func OAuthExpired(v bool) attribute.KeyValue { return OAuthExpiredKey.Bool(v) }
+func SlogOAuthExpired(v bool) slog.Attr      { return slog.Bool(string(OAuthExpiredKey), v) }
 
 func OpenAPIMethod(v string) attribute.KeyValue { return OpenAPIMethodKey.String(v) }
 func SlogOpenAPIMethod(v string) slog.Attr      { return slog.String(string(OpenAPIMethodKey), v) }
@@ -919,6 +961,31 @@ func GenAIConversationDurationMs(v float64) attribute.KeyValue {
 }
 func SlogGenAIConversationDurationMs(v float64) slog.Attr {
 	return slog.Float64(string(GenAIConversationDuration), v)
+}
+
+// GenAI Evaluation helpers
+func GenAIEvaluationName(v string) attribute.KeyValue { return GenAIEvaluationNameKey.String(v) }
+func SlogGenAIEvaluationName(v string) slog.Attr {
+	return slog.String(string(GenAIEvaluationNameKey), v)
+}
+
+func GenAIEvaluationScoreValue(v int) attribute.KeyValue { return GenAIEvaluationScoreValueKey.Int(v) }
+func SlogGenAIEvaluationScoreValue(v int) slog.Attr {
+	return slog.Int(string(GenAIEvaluationScoreValueKey), v)
+}
+
+func GenAIEvaluationScoreLabel(v string) attribute.KeyValue {
+	return GenAIEvaluationScoreLabelKey.String(v)
+}
+func SlogGenAIEvaluationScoreLabel(v string) slog.Attr {
+	return slog.String(string(GenAIEvaluationScoreLabelKey), v)
+}
+
+func GenAIEvaluationExplanation(v string) attribute.KeyValue {
+	return GenAIEvaluationExplanationKey.String(v)
+}
+func SlogGenAIEvaluationExplanation(v string) slog.Attr {
+	return slog.String(string(GenAIEvaluationExplanationKey), v)
 }
 
 func TimeUnixNano(v int64) attribute.KeyValue { return TimeUnixNanoKey.Int64(v) }

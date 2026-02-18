@@ -62,15 +62,17 @@ export const ListLogsForTraceSecurityOption1$outboundSchema: z.ZodType<
   ListLogsForTraceSecurityOption1$Outbound,
   z.ZodTypeDef,
   ListLogsForTraceSecurityOption1
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+> = z
+  .object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
   });
-});
 
 export function listLogsForTraceSecurityOption1ToJSON(
   listLogsForTraceSecurityOption1: ListLogsForTraceSecurityOption1,
@@ -93,15 +95,17 @@ export const ListLogsForTraceSecurityOption2$outboundSchema: z.ZodType<
   ListLogsForTraceSecurityOption2$Outbound,
   z.ZodTypeDef,
   ListLogsForTraceSecurityOption2
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+> = z
+  .object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
   });
-});
 
 export function listLogsForTraceSecurityOption2ToJSON(
   listLogsForTraceSecurityOption2: ListLogsForTraceSecurityOption2,
@@ -124,15 +128,17 @@ export const ListLogsForTraceSecurityOption3$outboundSchema: z.ZodType<
   ListLogsForTraceSecurityOption3$Outbound,
   z.ZodTypeDef,
   ListLogsForTraceSecurityOption3
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+> = z
+  .object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
   });
-});
 
 export function listLogsForTraceSecurityOption3ToJSON(
   listLogsForTraceSecurityOption3: ListLogsForTraceSecurityOption3,
@@ -155,15 +161,17 @@ export const ListLogsForTraceSecurityOption4$outboundSchema: z.ZodType<
   ListLogsForTraceSecurityOption4$Outbound,
   z.ZodTypeDef,
   ListLogsForTraceSecurityOption4
-> = z.object({
-  projectSlugHeaderGramProject: z.string(),
-  sessionHeaderGramSession: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+> = z
+  .object({
+    projectSlugHeaderGramProject: z.string(),
+    sessionHeaderGramSession: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+    });
   });
-});
 
 export function listLogsForTraceSecurityOption4ToJSON(
   listLogsForTraceSecurityOption4: ListLogsForTraceSecurityOption4,
@@ -188,23 +196,29 @@ export const ListLogsForTraceSecurity$outboundSchema: z.ZodType<
   ListLogsForTraceSecurity$Outbound,
   z.ZodTypeDef,
   ListLogsForTraceSecurity
-> = z.object({
-  option1: z.lazy(() => ListLogsForTraceSecurityOption1$outboundSchema)
-    .optional(),
-  option2: z.lazy(() => ListLogsForTraceSecurityOption2$outboundSchema)
-    .optional(),
-  option3: z.lazy(() => ListLogsForTraceSecurityOption3$outboundSchema)
-    .optional(),
-  option4: z.lazy(() => ListLogsForTraceSecurityOption4$outboundSchema)
-    .optional(),
-}).transform((v) => {
-  return remap$(v, {
-    option1: "Option1",
-    option2: "Option2",
-    option3: "Option3",
-    option4: "Option4",
+> = z
+  .object({
+    option1: z
+      .lazy(() => ListLogsForTraceSecurityOption1$outboundSchema)
+      .optional(),
+    option2: z
+      .lazy(() => ListLogsForTraceSecurityOption2$outboundSchema)
+      .optional(),
+    option3: z
+      .lazy(() => ListLogsForTraceSecurityOption3$outboundSchema)
+      .optional(),
+    option4: z
+      .lazy(() => ListLogsForTraceSecurityOption4$outboundSchema)
+      .optional(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      option1: "Option1",
+      option2: "Option2",
+      option3: "Option3",
+      option4: "Option4",
+    });
   });
-});
 
 export function listLogsForTraceSecurityToJSON(
   listLogsForTraceSecurity: ListLogsForTraceSecurity,
@@ -227,19 +241,21 @@ export const ListLogsForTraceRequest$outboundSchema: z.ZodType<
   ListLogsForTraceRequest$Outbound,
   z.ZodTypeDef,
   ListLogsForTraceRequest
-> = z.object({
-  traceId: z.string(),
-  gramKey: z.string().optional(),
-  gramSession: z.string().optional(),
-  gramProject: z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    traceId: "trace_id",
-    gramKey: "Gram-Key",
-    gramSession: "Gram-Session",
-    gramProject: "Gram-Project",
+> = z
+  .object({
+    traceId: z.string(),
+    gramKey: z.string().optional(),
+    gramSession: z.string().optional(),
+    gramProject: z.string().optional(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      traceId: "trace_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+    });
   });
-});
 
 export function listLogsForTraceRequestToJSON(
   listLogsForTraceRequest: ListLogsForTraceRequest,

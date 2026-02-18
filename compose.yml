@@ -1,3 +1,7 @@
+# Fixed project name so all git worktrees share the same infra containers
+# instead of each worktree creating its own set and causing port conflicts.
+name: ${COMPOSE_PROJECT_NAME:-gram}
+
 services:
   gram-db:
     image: pgvector/pgvector:pg17
@@ -21,7 +25,7 @@ services:
     volumes:
       - cache_data:/var/lib/gram-cache/data
     ports:
-      - "${GRAM_REDIS_CACHE_ADDR}:35299"
+      - "${GRAM_REDIS_CACHE_PORT}:35299"
     command: redis-server --port 35299 --requirepass xi9XILbY
 
   gram-temporal:
@@ -54,19 +58,17 @@ services:
 
   oteltui:
     image: ymtdzzz/otel-tui@sha256:67010920b012ee998888cf39a794f32e97ca4b01cd02681f25e8f47c261e305b
-    container_name: otel-tui
+
     stdin_open: true
     tty: true
     ports:
-      - "4317:4317"
+      - "${OTLP_GRPC_PORT}:4317"
 
   clickhouse:
     image: clickhouse/clickhouse-server:25.8.3
     restart: unless-stopped
     ports:
-      - "8123:8123"
-      - "9000:9000"
-      - "9440:9440"
+      - "${CLICKHOUSE_NATIVE_PORT}:9440"
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: gram

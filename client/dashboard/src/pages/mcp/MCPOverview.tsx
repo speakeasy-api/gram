@@ -36,8 +36,48 @@ export function MCPOverview() {
     navigate(routes.mcp.details.href(result.slug) + "#tools");
   };
 
+  const newMcpServerButton = (
+    <Button size="sm" onClick={() => setNewMcpDialogOpen(true)}>
+      <Button.LeftIcon>
+        <Plus />
+      </Button.LeftIcon>
+      <Button.Text>New MCP Server</Button.Text>
+    </Button>
+  );
+
+  const newMcpServerDialog = (
+    <InputDialog
+      open={newMcpDialogOpen}
+      onOpenChange={setNewMcpDialogOpen}
+      title="Create MCP Server"
+      description={`Create a new MCP server`}
+      submitButtonText="Create"
+      inputs={{
+        label: "MCP server name",
+        placeholder: "My MCP Server",
+        value: newMcpServerName,
+        onChange: setNewMcpServerName,
+        onSubmit: handleCreateMcpServerSubmit,
+        validate: (value) => value.length > 0 && value.length <= 40,
+        hint: (value) => (
+          <div className="flex justify-between w-full">
+            <p className="text-destructive">
+              {value.length > 40 && "Must be 40 characters or less"}
+            </p>
+            <p>{value.length}/40</p>
+          </div>
+        ),
+      }}
+    />
+  );
+
   if (!toolsets.isLoading && toolsets.length === 0) {
-    return <MCPEmptyState />;
+    return (
+      <>
+        <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
+        {newMcpServerDialog}
+      </>
+    );
   }
 
   return (
@@ -48,14 +88,7 @@ export function MCPOverview() {
       <Page.Body>
         <Page.Section>
           <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
-          <Page.Section.CTA>
-            <Button onClick={() => setNewMcpDialogOpen(true)}>
-              <Button.LeftIcon>
-                <Plus />
-              </Button.LeftIcon>
-              <Button.Text>New MCP Server</Button.Text>
-            </Button>
-          </Page.Section.CTA>
+          <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
           <Page.Section.Description>
             Each source is exposed as an MCP server. First-party sources like
             functions and OpenAPI specs are private by default, while catalog
@@ -69,29 +102,7 @@ export function MCPOverview() {
             </div>
           </Page.Section.Body>
         </Page.Section>
-        <InputDialog
-          open={newMcpDialogOpen}
-          onOpenChange={setNewMcpDialogOpen}
-          title="Create MCP Server"
-          description={`Create a new MCP server`}
-          submitButtonText="Create"
-          inputs={{
-            label: "MCP server name",
-            placeholder: "My MCP Server",
-            value: newMcpServerName,
-            onChange: setNewMcpServerName,
-            onSubmit: handleCreateMcpServerSubmit,
-            validate: (value) => value.length > 0 && value.length <= 40,
-            hint: (value) => (
-              <div className="flex justify-between w-full">
-                <p className="text-destructive">
-                  {value.length > 40 && "Must be 40 characters or less"}
-                </p>
-                <p>{value.length}/40</p>
-              </div>
-            ),
-          }}
-        />
+        {newMcpServerDialog}
       </Page.Body>
     </Page>
   );

@@ -56,10 +56,12 @@ SELECT id,
        toolset_id,
        project_id,
        external_documentation_url,
+       external_documentation_text,
        logo_id,
        instructions,
        header_display_names,
        default_environment_id,
+       installation_override_url,
        created_at,
        updated_at
 FROM mcp_metadata
@@ -76,10 +78,12 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID
 		&i.ToolsetID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
 		&i.LogoID,
 		&i.Instructions,
 		&i.HeaderDisplayNames,
 		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -186,36 +190,44 @@ INSERT INTO mcp_metadata (
     toolset_id,
     project_id,
     external_documentation_url,
+    external_documentation_text,
     logo_id,
     instructions,
-    default_environment_id
-) VALUES ($1, $2, $3, $4, $5, $6)
+    default_environment_id,
+    installation_override_url
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (toolset_id)
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
+              external_documentation_text = EXCLUDED.external_documentation_text,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
               default_environment_id = EXCLUDED.default_environment_id,
+              installation_override_url = EXCLUDED.installation_override_url,
               updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
           project_id,
           external_documentation_url,
+          external_documentation_text,
           logo_id,
           instructions,
           header_display_names,
           default_environment_id,
+          installation_override_url,
           created_at,
           updated_at
 `
 
 type UpsertMetadataParams struct {
-	ToolsetID                uuid.UUID
-	ProjectID                uuid.UUID
-	ExternalDocumentationUrl pgtype.Text
-	LogoID                   uuid.NullUUID
-	Instructions             pgtype.Text
-	DefaultEnvironmentID     uuid.NullUUID
+	ToolsetID                 uuid.UUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
 }
 
 func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpMetadatum, error) {
@@ -223,9 +235,11 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		arg.ToolsetID,
 		arg.ProjectID,
 		arg.ExternalDocumentationUrl,
+		arg.ExternalDocumentationText,
 		arg.LogoID,
 		arg.Instructions,
 		arg.DefaultEnvironmentID,
+		arg.InstallationOverrideUrl,
 	)
 	var i McpMetadatum
 	err := row.Scan(
@@ -233,10 +247,12 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		&i.ToolsetID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
 		&i.LogoID,
 		&i.Instructions,
 		&i.HeaderDisplayNames,
 		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -29,8 +29,8 @@ const SERVER_WEBSITE_MAP: Record<string, string> = {
   "com.stripe/mcp": "stripe.com",
   "app.linear/linear": "linear.app",
   "io.github.getsentry/sentry-mcp": "sentry.io",
-  "io.github.aws/mcp-proxy-for-aws": "aws.amazon.com",
-  "io.github.grafana/mcp-grafana": "grafana.com",
+  "io.github.github/github-mcp-server": "github.com",
+  "com.notion/mcp": "notion.so",
 };
 
 export function CatalogDetailRoot() {
@@ -426,6 +426,8 @@ type Tool = {
     title?: string;
     readOnlyHint?: boolean;
     destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
   };
 };
 
@@ -461,13 +463,32 @@ function ToolCard({ tool }: { tool: Tool }) {
           justify="space-between"
           className="w-full"
         >
-          <Stack direction="horizontal" gap={2} align="center">
-            <Type className="font-mono text-sm font-medium">{tool.name}</Type>
+          <Stack
+            direction="horizontal"
+            gap={2}
+            align="center"
+            className="flex-wrap"
+          >
+            <Type className="font-mono text-sm font-medium">
+              {tool.annotations?.title || tool.name}
+            </Type>
             {tool.annotations?.readOnlyHint && (
               <Badge variant="neutral" className="text-xs">
                 Read-only
               </Badge>
             )}
+            {tool.annotations?.destructiveHint &&
+              !tool.annotations?.readOnlyHint && (
+                <Badge variant="warning" className="text-xs">
+                  Destructive
+                </Badge>
+              )}
+            {tool.annotations?.idempotentHint &&
+              !tool.annotations?.readOnlyHint && (
+                <Badge variant="information" className="text-xs">
+                  Idempotent
+                </Badge>
+              )}
           </Stack>
           {hasMoreContent && (
             <motion.div

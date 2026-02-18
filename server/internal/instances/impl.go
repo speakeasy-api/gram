@@ -172,6 +172,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			Summarizer:    template.Summarizer,
 			Canonical:     template.Canonical,
 			Variation:     template.Variation,
+			Annotations:   template.Annotations,
 		}
 	}
 
@@ -418,6 +419,21 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		attrRecorder.RecordStatusCode(interceptor.statusCode)
 		attrRecorder.RecordRequestBody(requestNumBytes)
 		attrRecorder.RecordResponseBody(outputNumBytes)
+		attrRecorder.RecordTraceContext(ctx)
+		if chatID != "" {
+			attrRecorder[attr.GenAIConversationIDKey] = chatID
+		}
+		if authCtx != nil {
+			if authCtx.UserID != "" {
+				attrRecorder[attr.UserIDKey] = authCtx.UserID
+			}
+			if authCtx.ExternalUserID != "" {
+				attrRecorder[attr.ExternalUserIDKey] = authCtx.ExternalUserID
+			}
+			if authCtx.APIKeyID != "" {
+				attrRecorder[attr.APIKeyIDKey] = authCtx.APIKeyID
+			}
+		}
 
 		logParams := tm.LogParams{
 			Timestamp: time.Now(),

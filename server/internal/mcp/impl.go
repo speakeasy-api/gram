@@ -28,6 +28,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -45,7 +46,6 @@ import (
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	temporal_client "go.temporal.io/sdk/client"
 )
@@ -88,6 +89,7 @@ type Service struct {
 	chatSessionsManager *chatsessions.Manager
 	externalmcpRepo     *externalmcp_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
+	enc                 *encryption.Client
 }
 
 type oauthTokenInputs struct {
@@ -110,7 +112,11 @@ type mcpInputs struct {
 	oauthTokenInputs []oauthTokenInputs
 	authenticated    bool
 	sessionID        string
+	chatID           string
 	mode             ToolMode
+	userID           string
+	externalUserID   string
+	apiKeyID         string
 }
 
 func NewService(
@@ -175,6 +181,7 @@ func NewService(
 		temporal:            temporal,
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
+		enc:                 enc,
 	}
 }
 
@@ -394,7 +401,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	authToken := r.Header.Get("Authorization")
 	authToken = strings.TrimPrefix(authToken, "Bearer ")
 	authToken = strings.TrimPrefix(authToken, "bearer ")
-	sessionToken := r.Header.Get(constants.ChatSessionsTokenHeader)
+	chatSessionJwt := r.Header.Get(constants.ChatSessionsTokenHeader)
 
 	var tokenInputs []oauthTokenInputs
 
@@ -418,6 +425,14 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		oAuthProxyProvider = &providers[0]
 	}
 
+	// Switch handling auth based on both MCP configuration and request context.
+	//
+	// Possible MCP configurations, for reference:
+	// - "External OAuth" - User-provided OAuth server separate from Gram
+	// - "External MCP OAuth" - OAuth provided by a 3rd party MCP server
+	//   (usually via catalog)
+	// - "OAuth Proxy" - Gram acts as the OAuth2.1 DCR server between MCP client
+	//   & non-DCR OAuth Server
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 		// External OAuth server flow - only accept Authorization header
@@ -447,25 +462,45 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 	case toolset.McpIsPublic && hasExternalMCPOAuth:
-		// External MCP OAuth flow - only accept Authorization header
-		if authToken == "" {
-			w.Header().Set(
-				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
-			)
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		wwwAuth := fmt.Sprintf(`Bearer resource_metadata=%s`,
+			baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug)
+
+		// Prioritize literal tokens sent by the client. Pass through directly
+		// to underlying server.
+		if authToken != "" {
+			tokenInputs = append(tokenInputs, oauthTokenInputs{
+				securityKeys: []string{},
+				Token:        authToken,
+			})
+
+			break
 		}
-		// Token provided - pass it through as OAuth token for external MCP
-		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{},
-			Token:        authToken,
-		})
+
+		// Attempt to look for a stored OAuth credential if the requests comes
+		// from a Gram app (eg: Dashboard/Playground)
+		if gramSession, _ := r.Cookie(constants.SessionCookie); gramSession != nil {
+			resolvedToken, err := s.resolveExternalMcpOAuthToken(ctx, fullToolset)
+			if err != nil {
+				w.Header().Set("WWW-Authenticate", wwwAuth)
+				return oops.E(oops.CodeUnauthorized, err, "unauthorized")
+			}
+
+			tokenInputs = append(tokenInputs, oauthTokenInputs{
+				securityKeys: []string{},
+				Token:        resolvedToken,
+			})
+
+			break
+		}
+
+		w.Header().Set("WWW-Authenticate", wwwAuth)
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	case !toolset.McpIsPublic:
-		// Private MCP - always allow sessionToken fallback since private servers require user authentication
+		// Private MCP - always allow chatSessionJwt fallback since private servers require user authentication
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
 		token := authToken
 		if token == "" {
-			token = sessionToken
+			token = chatSessionJwt
 		}
 
 		ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
@@ -482,10 +517,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
-		// Public MCP without OAuth - allow sessionToken fallback
+		// Public MCP without OAuth - allow chatSessionJwt fallback
 		token := authToken
 		if token == "" {
-			token = sessionToken
+			token = chatSessionJwt
 		}
 		if token != "" {
 			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
@@ -557,6 +592,14 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Load header display names for remapping
 	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
 
+	// Extract user IDs for telemetry
+	var userID, externalUserID, apiKeyID string
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		userID = authCtx.UserID
+		externalUserID = authCtx.ExternalUserID
+		apiKeyID = authCtx.APIKeyID
+	}
+
 	mcpInputs := &mcpInputs{
 		projectID:        toolset.ProjectID,
 		toolset:          toolset.Slug,
@@ -565,7 +608,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		authenticated:    authenticated,
 		oauthTokenInputs: tokenInputs,
 		sessionID:        sessionID,
+		chatID:           r.Header.Get("Gram-Chat-ID"),
 		mode:             resolveToolMode(r, *toolset),
+		userID:           userID,
+		externalUserID:   externalUserID,
+		apiKeyID:         apiKeyID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -715,7 +762,11 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		authenticated:    true,
 		oauthTokenInputs: []oauthTokenInputs{},
 		sessionID:        sessionID,
+		chatID:           r.Header.Get("Gram-Chat-ID"),
 		mode:             resolveToolMode(r, toolset),
+		userID:           authCtx.UserID,
+		externalUserID:   authCtx.ExternalUserID,
+		apiKeyID:         authCtx.APIKeyID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -934,4 +985,47 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 
 	// All strategies failed
 	return ctx, oops.E(oops.CodeUnauthorized, nil, "failed to authorize").Log(ctx, s.logger)
+}
+
+func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *types.Toolset) (string, error) {
+	sessionCtx, err := s.sessions.AuthenticateWithCookie(ctx)
+	if err != nil {
+		return "", oops.E(oops.CodeUnauthorized, err, "failed to authenticate session for OAuth token lookup")
+	}
+
+	authCtx, ok := contextvalues.GetAuthContext(sessionCtx)
+	if !ok || authCtx == nil {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+
+	oauthConfig := externalmcp.ResolveOAuthConfig(toolset)
+	if oauthConfig == nil {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "invalid toolset ID")
+	}
+
+	token, err := s.oauthRepo.GetUserOAuthToken(ctx, oauth_repo.GetUserOAuthTokenParams{
+		UserID:         authCtx.UserID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ToolsetID:      toolsetID,
+	})
+
+	if err != nil {
+		return "", oops.E(oops.CodeUnauthorized, err, "failed to get user OAuth token")
+	}
+
+	if token.ExpiresAt.Valid && token.ExpiresAt.Time.Before(time.Now()) {
+		return "", oops.E(oops.CodeUnauthorized, err, "OAuth token has expired")
+	}
+
+	accessToken, err := s.enc.Decrypt(token.AccessTokenEncrypted)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "unable to access oauth token")
+	}
+
+	return accessToken, nil
 }

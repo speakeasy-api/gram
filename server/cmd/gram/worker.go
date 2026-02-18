@@ -23,13 +23,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
@@ -214,6 +215,13 @@ func newWorkerCommand() *cli.Command {
 			Aliases:  []string{"polar.meter_id_servers"},
 			Usage:    "The ID of the servers meter in Polar",
 			EnvVars:  []string{"POLAR_METER_ID_SERVERS"},
+			Required: false,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:     "polar-meter-id-credits",
+			Aliases:  []string{"polar.meter_id_credits"},
+			Usage:    "The ID of the credits meter in Polar",
+			EnvVars:  []string{"POLAR_METER_ID_CREDITS"},
 			Required: false,
 		}),
 		&cli.StringFlag{
@@ -401,6 +409,7 @@ func newWorkerCommand() *cli.Command {
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
+				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
@@ -420,6 +429,23 @@ func newWorkerCommand() *cli.Command {
 				openRouter,
 				baseChatClient,
 			)
+
+			// Create ClickHouse client and telemetry service for resolution events
+			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, chShutdown)
+
+			logsEnabled := func(ctx context.Context, orgID string) (bool, error) {
+				isEnabled, err := productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureLogs)
+				if err != nil {
+					logger.ErrorContext(ctx, "error checking if logs are enabled", attr.SlogError(err))
+					return false, fmt.Errorf("error checking if logs are enabled: %w", err)
+				}
+				return isEnabled, nil
+			}
+			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, posthogClient)
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				DB:                   db,
@@ -441,6 +467,7 @@ func newWorkerCommand() *cli.Command {
 				RagService:           ragService,
 				AgentsService:        agentsService,
 				MCPRegistryClient:    mcpRegistryClient,
+				TelemetryService:     telemetryService,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

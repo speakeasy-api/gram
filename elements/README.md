@@ -43,36 +43,104 @@ pnpm add @gram-ai/elements
 
 ## Setting up your backend
 
-At the moment, we provide a set of handlers via the `@gram-ai/elements/server` package that you can use to automatically setup your backend for usage with Gram Elements. The example below demonstrates the setup for Express:
+We provide framework-specific adapters to make it easy to set up a backend endpoint for Gram Elements. These adapters handle the session token creation securely on your server without exposing your `GRAM_API_KEY` to the browser.
+
+### Express
 
 ```typescript
-import { createElementsServerHandlers } from '@gram-ai/elements/server'
+import { createExpressHandler } from '@gram-ai/elements/server/express'
 import express from 'express'
 
-const handlers = createElementsServerHandlers()
 const app = express()
-
 app.use(express.json())
 
-app.post('/chat/session', (req, res) =>
-  handlers.session(req, res, {
-    // The origin from which the token will be used
-    embedOrigin: 'http://localhost:3000',
-    // A free-form user identifier
-    userIdentifier: 'user-123',
-    // Token expiration in seconds (max / default 3600)
+app.post('/chat/session', createExpressHandler({
+  embedOrigin: 'http://localhost:3000',
+  userIdentifier: 'user-123',
+  expiresAfter: 3600, // optional, max 3600 seconds
+}))
+
+app.listen(3000)
+```
+
+For dynamic options based on the request:
+
+```typescript
+app.post('/chat/session', createExpressHandler((req) => ({
+  embedOrigin: req.headers.origin || 'http://localhost:3000',
+  userIdentifier: req.user?.id || 'anonymous',
+  expiresAfter: 3600,
+})))
+```
+
+### Next.js App Router
+
+```typescript
+// app/chat/session/route.ts
+import { createNextHandler } from '@gram-ai/elements/server/nextjs'
+
+export const POST = createNextHandler({
+  embedOrigin: 'http://localhost:3000',
+  userIdentifier: 'user-123',
+  expiresAfter: 3600,
+})
+import { cookies } from 'next/headers'
+
+export const POST = createNextHandler(async (request) => {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value || 'anonymous'
+
+  return {
+    embedOrigin: request.headers.get('origin') || 'http://localhost:3000',
+    userIdentifier: userId,
     expiresAfter: 3600,
-  })
-)
+  }
+})
 ```
 
-You will need to add an environment variable to your backend and make it available to the process:
+### Fastify
 
+```typescript
+import { createFastifyHandler } from '@gram-ai/elements/server/fastify'
+import Fastify from 'fastify'
+
+const fastify = Fastify()
+
+fastify.post('/chat/session', createFastifyHandler({
+  embedOrigin: 'http://localhost:3000',
+  userIdentifier: 'user-123',
+  expiresAfter: 3600,
+}))
+
+fastify.listen({ port: 3000 })
 ```
+
+### Hono
+
+```typescript
+import { createHonoHandler } from '@gram-ai/elements/server/hono'
+import { Hono } from 'hono'
+
+const app = new Hono()
+
+app.post('/chat/session', createHonoHandler({
+  embedOrigin: 'http://localhost:3000',
+  userIdentifier: 'user-123',
+  expiresAfter: 3600,
+}))
+
+export default app
+```
+
+### Environment Variables
+
+All adapters require the `GRAM_API_KEY` environment variable to be set:
+
+```bash
 GRAM_API_KEY=xxx
 ```
 
-This will enable your backend chat endpoint to talk to our servers securely.
+This key is kept on your server and never exposed to the browser, ensuring secure communication with Gram's API.
 
 ## Setting up your frontend
 
@@ -262,6 +330,91 @@ To create your own plugins, see the comprehensive [Plugin Development Guide](./s
 - Best practices and common patterns
 - Real-world examples
 - Troubleshooting tips
+
+## Replay
+
+Replay lets you play back a pre-recorded conversation with streaming animations — no auth, MCP, or network calls required. This is useful for marketing demos, documentation, and testing.
+
+### Recording a cassette
+
+A cassette is a JSON file that captures a conversation. To record one from a live chat session, enable the built-in recorder by setting this environment variable:
+
+```
+VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING=true
+```
+
+This adds a record button to the composer. Click it to open the recorder popover, then start recording. Chat normally, and when you're done, click **Stop & Download** to save the cassette as a `.cassette.json` file.
+
+You can also record programmatically using the `useRecordCassette` hook:
+
+```tsx
+import {
+  GramElementsProvider,
+  Chat,
+  useRecordCassette,
+} from '@gram-ai/elements'
+
+function RecordableChat() {
+  const { isRecording, startRecording, download } = useRecordCassette()
+  return (
+    <>
+      <Chat />
+      <button onClick={startRecording}>Record</button>
+      <button onClick={() => download('demo')}>Save</button>
+    </>
+  )
+}
+```
+
+### Playing back a cassette
+
+Use the `<Replay>` component, which replaces `GramElementsProvider` entirely:
+
+```tsx
+import { Replay, Chat } from '@gram-ai/elements'
+import cassette from './demo.cassette.json'
+
+function MarketingDemo() {
+  return (
+    <Replay cassette={cassette} config={{ variant: 'standalone' }}>
+      <Chat />
+    </Replay>
+  )
+}
+```
+
+`<Replay>` accepts optional timing props to control the playback speed:
+
+| Prop                  | Default | Description                                     |
+| --------------------- | ------- | ----------------------------------------------- |
+| `typingSpeed`         | `15`    | Milliseconds per character for streaming        |
+| `userMessageDelay`    | `800`   | Milliseconds before each user message appears   |
+| `assistantStartDelay` | `400`   | Milliseconds before the assistant starts typing |
+| `onComplete`          | —       | Callback when replay finishes                   |
+
+## React Compatibility
+
+`@gram-ai/elements` supports React 16.8+, React 17, React 18, and React 19.
+
+React 18 and 19 work out of the box. For React 16 or 17, you need to configure your bundler to shim newer React APIs (`useSyncExternalStore`, `useId`, `useInsertionEffect`) that are used by transitive dependencies like zustand and @assistant-ui/react.
+
+> **Note:** React 16 and React 17 are not regularly tested. If you run into any issues using Elements with these versions, please reach out to us for support.
+
+### Vite Setup (React 16/17)
+
+Add the compatibility plugin to your Vite config:
+
+```typescript
+import react from '@vitejs/plugin-react'
+import { reactCompat } from '@gram-ai/elements/compat'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: [react(), reactCompat()],
+})
+```
+
+This automatically shims React 18 APIs (`useSyncExternalStore`, `useId`, `useInsertionEffect`) so that Elements and its dependencies work correctly on older React versions.
 
 ## Contributing
 

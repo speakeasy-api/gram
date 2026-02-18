@@ -20,7 +20,7 @@ env:
 jobs:
   changes:
     name: Tag branch changes
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: "read"
       pull-requests: read
@@ -31,6 +31,9 @@ jobs:
       functions: ${{ steps.gates.outputs.functions }}
       tsframework: ${{ steps.gates.outputs.tsframework }}
       elements: ${{ steps.gates.outputs.elements }}
+      migrations: ${{ steps.gates.outputs.migrations }}
+      plog: ${{ steps.gates.outputs.plog }}
+      elements-examples: ${{ steps.list-elements-examples.outputs.examples }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
@@ -86,8 +89,27 @@ jobs:
             echo "Elements jobs will be skipped."
           fi
 
+          if [[ "${{ steps.filter.outputs.migrations }}" == "true" ]]; then
+            echo "migrations=true" >> $GITHUB_OUTPUT
+            echo "Migrations jobs will run."
+          else
+            echo "Migrations jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.plog }}" == "true" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "plog=true" >> $GITHUB_OUTPUT
+            echo "Plog jobs will run."
+          else
+            echo "Plog jobs will be skipped."
+          fi
+      - id: list-elements-examples
+        name: List elements examples
+        run: |
+          examples=$(ls -d elements/examples/*/package.json 2>/dev/null | xargs -I{} dirname {} | xargs -I{} basename {} | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "examples=$examples" >> $GITHUB_OUTPUT
+
   docker-build-server:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
     env:
       GOMAXPROCS: 4
@@ -117,11 +139,23 @@ jobs:
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
       - name: Login to GCR
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
-        with:
-          registry: gcr.io/linen-analyst-344721
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
+        env:
+          GCR_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          max_attempts=3
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "Docker login attempt $i/$max_attempts..."
+            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
+              echo "Login successful"
+              exit 0
+            fi
+            if [ $i -lt $max_attempts ]; then
+              echo "Login failed, waiting 5s before retry..."
+              sleep 5
+            fi
+          done
+          echo "All login attempts failed"
+          exit 1
       - name: Build and Push Registry image to GCR
         id: build
         if: ${{ needs.changes.outputs.server == 'true' }}
@@ -144,9 +178,63 @@ jobs:
           echo "Running image..."
           docker run --rm ${{ steps.build.outputs.image-tag }} version
 
+  atlas-lint:
+    name: Lint migrations with Atlas
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: dev
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup Atlas
+        uses: ariga/setup-atlas@1ffa6444093025c9791791f0de623560359acd02 # v0
+        with:
+          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+
+      - name: Lint PostgreSQL migrations
+        uses: ariga/atlas-action/migrate/lint@v1.13.14 # 0a618492a098d16d0e1bd7778d6aaa73ba3978b5
+        with:
+          dir: file://server/migrations
+          dir-name: gram
+          dev-url: postgres://postgres:pass@localhost:5432/dev?search_path=public&sslmode=disable
+          config: file://server/atlas.hcl
+          git-base: origin/main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Lint ClickHouse migrations
+        uses: ariga/atlas-action/migrate/lint@v1.13.14 # 0a618492a098d16d0e1bd7778d6aaa73ba3978b5
+        with:
+          dir: file://server/clickhouse/migrations
+          dir-name: gram-clickhouse
+          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          git-base: origin/main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   atlas-push:
     name: Push migrations to Atlas Registry
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
     if: needs.changes.outputs.server == 'true'
     permissions:
@@ -176,7 +264,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Atlas
-        uses: ariga/setup-atlas@v0
+        uses: ariga/setup-atlas@1ffa6444093025c9791791f0de623560359acd02 # v0
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
@@ -192,7 +280,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@v1
+        uses: ariga/atlas-action/migrate/push@v1.13.14 # 0a618492a098d16d0e1bd7778d6aaa73ba3978b5
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -200,7 +288,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@v1
+        uses: ariga/atlas-action/migrate/push@v1.13.14 # 0a618492a098d16d0e1bd7778d6aaa73ba3978b5
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -208,7 +296,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
   server-build-lint:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GOMAXPROCS: 4
@@ -249,7 +337,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -292,6 +380,12 @@ jobs:
         if: ${{ needs.changes.outputs.server == 'true' }}
         run: mise run go:tidy
 
+      - name: Setup Atlas
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        uses: ariga/setup-atlas@1ffa6444093025c9791791f0de623560359acd02 # v0
+        with:
+          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+
       - name: Run migrations
         if: ${{ needs.changes.outputs.server == 'true' }}
         run: mise run db:migrate
@@ -306,7 +400,7 @@ jobs:
           mise run git:porcelain
 
   cli-build-lint:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GOMAXPROCS: 4
@@ -347,7 +441,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.cli == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -386,8 +480,74 @@ jobs:
         if: ${{ needs.changes.outputs.cli == 'true' }}
         run: mise run git:porcelain
 
+  plog-build-lint:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    env:
+      GOMAXPROCS: 4
+    steps:
+      - name: Skip if no plog changes exist
+        if: ${{ needs.changes.outputs.plog != 'true' }}
+        run: echo "No plog changes detected — skipping plog-build-lint job."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        uses: jdx/mise-action@6d1e696aa24c1aa1bcc1adea0212707c71ab78a8 # v3.6.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: mise run github
+
+      - name: Cache Go
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Install Go tools
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: go install tool
+        working-directory: plog
+
+      - name: Build
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: mise run build:plog --readonly
+
+      - name: Lint with golangci-lint
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          install-mode: none
+          working-directory: plog
+
+      - name: Test
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: mise run test:plog
+
+      - name: Run "go mod tidy"
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: mise run go:tidy
+
+      - name: Check for dirty files
+        if: ${{ needs.changes.outputs.plog == 'true' }}
+        run: mise run git:porcelain
+
   server-test:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GOMAXPROCS: 4
@@ -414,7 +574,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -433,7 +593,7 @@ jobs:
         run: mise run test:server
 
   docker-build-client:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
@@ -462,7 +622,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ env.SHOULD_BUILD_DOCKER == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -497,11 +657,23 @@ jobs:
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
       - name: Login to GCR
         if: env.SHOULD_BUILD_DOCKER == 'true'
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
-        with:
-          registry: gcr.io/linen-analyst-344721
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
+        env:
+          GCR_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          max_attempts=3
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "Docker login attempt $i/$max_attempts..."
+            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
+              echo "Login successful"
+              exit 0
+            fi
+            if [ $i -lt $max_attempts ]; then
+              echo "Login failed, waiting 5s before retry..."
+              sleep 5
+            fi
+          done
+          echo "All login attempts failed"
+          exit 1
       - name: Build and Push Registry image to GCR
         id: build
         if: env.SHOULD_BUILD_DOCKER == 'true'
@@ -520,7 +692,7 @@ jobs:
         run: pnpm store prune
 
   client-build-lint:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     steps:
       - name: Skip if no client changes exist
@@ -545,7 +717,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -581,7 +753,7 @@ jobs:
     strategy:
       matrix:
         target: ["client/sdk"]
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     steps:
       - name: Skip if no client changes exist
@@ -606,7 +778,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -638,7 +810,7 @@ jobs:
         run: mise run git:porcelain
 
   functions-build-host:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     steps:
       - name: Skip if no functions changes exist
@@ -663,7 +835,7 @@ jobs:
 
       - name: Cache Go
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -675,7 +847,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -750,7 +922,7 @@ jobs:
         run: pnpm store prune
 
   functions-image:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, functions-build-host]
     strategy:
       matrix:
@@ -778,7 +950,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -824,7 +996,7 @@ jobs:
 
       - name: "[DEV] Create fly app"
         id: flyCreateDev
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
@@ -837,7 +1009,7 @@ jobs:
 
       - name: "[PROD] Create fly app"
         id: flyCreateProd
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
@@ -849,11 +1021,11 @@ jobs:
             --force
 
       - name: Set up Docker Buildx
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Extract Docker metadata
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
@@ -868,7 +1040,7 @@ jobs:
             type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
 
       - name: Tag images
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
         working-directory: functions
         run: |
           set -x
@@ -882,7 +1054,7 @@ jobs:
           done
 
       - name: "[DEV] Push images"
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
         run: |
@@ -891,7 +1063,7 @@ jobs:
           docker push --all-tags "${{ steps.flyCreateDev.outputs.flyAppRegistry }}"
 
       - name: "[PROD] Push images"
-        if: ${{ needs.changes.outputs.functions == 'true' }}
+        if: ${{ needs.changes.outputs.functions == 'true' && github.event.pull_request.user.login != 'dependabot[bot]' }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
         run: |
@@ -904,7 +1076,7 @@ jobs:
         run: pnpm store prune
 
   ts-framework-test:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     steps:
       - name: Skip if no ts framework changes exist
@@ -929,7 +1101,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.tsframework == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -955,7 +1127,7 @@ jobs:
         run: pnpm store prune
 
   elements-build-lint:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
@@ -982,7 +1154,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.elements == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1015,7 +1187,7 @@ jobs:
         run: pnpm store prune
 
   elements-test:
-    runs-on: ubicloud-standard-4
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     steps:
       - name: Skip if no elements changes exist
@@ -1040,7 +1212,7 @@ jobs:
 
       - name: Cache PNPM
         if: ${{ needs.changes.outputs.elements == 'true' }}
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1062,22 +1234,88 @@ jobs:
         if: ${{ needs.changes.outputs.elements == 'true' && success() }}
         run: pnpm store prune
 
-  preview-label:
-    runs-on: ubicloud-standard-2
-    needs: [changes, docker-build-server, docker-build-client]
-    if: |
-      github.event_name == 'pull_request' &&
-      !github.event.pull_request.head.repo.fork &&
-      (needs.changes.outputs.server == 'true' || needs.changes.outputs.client == 'true')
-    permissions:
-      pull-requests: write
+  elements-examples:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJSON(needs.changes.outputs.elements-examples) }}
     steps:
-      - name: Add preview label
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      - name: Skip if no elements changes exist
+        if: ${{ needs.changes.outputs.elements != 'true' }}
+        run: echo "No elements changes detected — skipping elements-examples (${{ matrix.example }})."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: jdx/mise-action@6d1e696aa24c1aa1bcc1adea0212707c71ab78a8 # v3.6.1
         with:
-          script: |
-            await github.rest.issues.addLabels({
-              ...context.repo,
-              issue_number: context.payload.pull_request.number,
-              labels: ['preview']
-            });
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: mise run github
+
+      - name: Cache PNPM
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Build elements library
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm build
+        working-directory: elements
+
+      - name: Type check
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm run check
+        working-directory: elements/examples/${{ matrix.example }}
+
+      - name: Build example
+        if: ${{ needs.changes.outputs.elements == 'true' }}
+        run: pnpm run build:example
+        working-directory: elements/examples/${{ matrix.example }}
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Prune PNPM store
+        if: ${{ needs.changes.outputs.elements == 'true' && success() }}
+        run: pnpm store prune
+
+  dispatch-release:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [docker-build-server]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Generate GitHub App Token
+        id: generate-token
+        uses: actions/create-github-app-token@b96fde71c0080358ed6e2d162f11c612c92a97d1 # v2.1.4
+        with:
+          app-id: ${{ vars.GRAM_BOT_APP_ID }}
+          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          owner: speakeasy-api
+          repositories: gram-infra
+      - name: Dispatch prepare-release
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          gh workflow run "Prepare Release" \
+            -R speakeasy-api/gram-infra \
+            -f environment=dev \
+            -f commit_hash=${{ github.sha }}

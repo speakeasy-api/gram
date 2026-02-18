@@ -11,22 +11,21 @@ import (
 )
 
 type Chat struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	UserID          pgtype.Text
-	ExternalUserID  pgtype.Text
-	Title           pgtype.Text
-	Resolution      pgtype.Text
-	ResolutionNotes pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type ChatMessage struct {
 	ID               uuid.UUID
+	Seq              int64
 	ChatID           uuid.UUID
 	ProjectID        uuid.NullUUID
 	Role             string
@@ -52,4 +51,26 @@ type ChatMessage struct {
 	ToolOutcome      pgtype.Text
 	ToolOutcomeNotes pgtype.Text
 	CreatedAt        pgtype.Timestamptz
+}
+
+type ChatResolution struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	ChatID          uuid.UUID
+	UserGoal        string
+	Resolution      string
+	ResolutionNotes string
+	Score           int32
+	CreatedAt       pgtype.Timestamptz
+}
+
+type ChatUserFeedback struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	ChatID              uuid.UUID
+	MessageID           uuid.UUID
+	UserResolution      string
+	UserResolutionNotes pgtype.Text
+	ChatResolutionID    uuid.NullUUID
+	CreatedAt           pgtype.Timestamptz
 }

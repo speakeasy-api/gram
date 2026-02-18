@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.23.0**](../README.md)
+[**@gram-ai/elements v1.27.1**](../README.md)
 
 ***
 
@@ -388,6 +388,25 @@ By default, errors are reported to help improve the Elements library.
 const config: ElementsConfig = {
   errorTracking: {
     enabled: false, // Opt out of error reporting
+  },
+}
+```
+
+***
+
+### thread?
+
+> `optional` **thread**: `ThreadConfig`
+
+Configuration for the chat thread display and behavior.
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  thread: {
+    showFeedback: true,
+    followUpSuggestions: true,
   },
 }
 ```

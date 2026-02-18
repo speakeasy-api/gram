@@ -1,5 +1,108 @@
 # server
 
+## 0.23.3
+
+### Patch Changes
+
+- bc50d89: Attempt OAuth discovery for MCP servers returning AuthRejectedError. Previously when a user adds a catalog MCP server without OAuth2.1 (like HubSpot) to their project and opens it
+  in the playground, there's no way to configure authentication — the AUTHENTICATION section is completely missing. This happens because the server returns `401` without a `WWW-Authenticate header` (or `403`)
+  during the initial connection probe, which triggers the `AuthRejectedError` path. That path currently just logs and continues, storing zero auth metadata. The frontend then sees no OAuth config and no header
+  definitions, so it shows "No authentication required." Servers like linear with Oauth2.1 works correctly because its MCP server returns 401 with a WWW-Authenticate header, triggering the `OAuthRequiredError` path which runs full OAuth discovery.
+- e00adba: Fix same-origin requests failing with "Origin does not match audience claim" error in chat sessions CORS middleware.
+
+  Browsers don't send Origin headers for same-origin GET/HEAD requests. The middleware now validates the Host header against audience claims when Origin is absent, allowing legitimate same-origin requests while still preventing cross-origin bypass attacks.
+
+## 0.23.2
+
+### Patch Changes
+
+- 84736c7: Support tool annotations in functions framework. Adds `ToolAnnotations` type allowing function authors to specify annotations via `Gram.tool({ annotations: { ... } })`
+- 7dae1a8: Persist annotations from external MCP servers in the Catalog to the database
+
+## 0.23.1
+
+### Patch Changes
+
+- 02503b5: fix an issue wherein we fail to account external MCP tools in deployment stats
+
+## 0.23.0
+
+### Minor Changes
+
+- 9df7d84: Add observability features including telemetry logs, traces, chat logs with AI-powered resolution analysis, and an overview dashboard with time-series metrics.
+
+## 0.22.5
+
+### Patch Changes
+
+- f635e22: Support for [MCP tool annotations](https://modelcontextprotocol.io/legacy/concepts/tools#tool-annotations). Tool annotations provide additional metadata about a tool’s behavior,
+  helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool, but should not be relied upon for security decisions.
+
+  The MCP specification defines the following annotations for tools that Gram now supports for external mcp servers sourced from the Catalog as well as HTTP based tools.
+
+  | Annotation        | Type    | Default | Description                                                                                                                          |
+  | ----------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `title`           | string  | -       | A human-readable title for the tool, useful for UI display                                                                           |
+  | `readOnlyHint`    | boolean | false   | If true, indicates the tool does not modify its environment                                                                          |
+  | `destructiveHint` | boolean | true    | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false)                                     |
+  | `idempotentHint`  | boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when `readOnlyHint` is false) |
+  | `openWorldHint`   | boolean | true    | If true, the tool may interact with an "open world" of external entities                                                             |
+
+  Tool annotations can be edited in the playground or in the tools tab of a specific MCP server.
+
+## 0.22.4
+
+### Patch Changes
+
+- b2347fc: Adds a new telemetry endpoint to fetch user usage data
+- cd7a003: feat: record api key id in telemetry logs
+- a34d18a: Adds chat resolution stats in telemetry metrics
+
+## 0.22.3
+
+### Patch Changes
+
+- e246458: Starts writing chat resolution telemetry data.
+- a7422f8: feat: add OAuth support for external MCP servers in the Playground
+- a753172: feat: customize documentation button text on MCP install page
+- 4ef4d5e: fix: allow surfacing openapi parse errors in the UI
+- 6e29702: Adds a new endpoint to get metrics per user. Allows filtering logs per user.
+- 1f74200: Fixes issue with loading of metrics when logs are disabled.
+
+## 0.22.2
+
+### Patch Changes
+
+- 26ddbdd: Adds backend support for generating chat resolutions
+
+## 0.22.1
+
+### Patch Changes
+
+- 0fe62df: Fix internal: billing_usage_report now start_time to be correctly parsed in Loops
+- c9b74af: Adds a new endpoint to list chats grouped by ID
+
+## 0.22.0
+
+### Minor Changes
+
+- ca387c6: Add urn_prefix filter to tools.list API for server-side filtering of tools by URN prefix
+
+## 0.21.0
+
+### Minor Changes
+
+- 2d520cb: Add support for follow-on suggestions within the Elements library
+- b85bfd5: Last accessed date is now available for Gram API keys and can be viewed via the
+  API and dashboard settings page.
+
+### Patch Changes
+
+- 89bcd84: Support custom HTTP headers for external MCP servers, enabling authenticated access to registries requiring API keys
+- ed006b1: Support custom domains for MCP export api
+- afb9fbb: Adds new endpoint to retrieve summarized project metrics
+- 90ad1ba: Add support for install page redirect URLs
+
 ## 0.20.1
 
 ### Patch Changes

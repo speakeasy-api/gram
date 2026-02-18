@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
@@ -70,6 +71,7 @@ func NewKeyAuth(db *pgxpool.Pool, logger *slog.Logger, billingRepo billing.Repos
 }
 
 func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []string) (context.Context, error) {
+	logger := k.logger
 	if key == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
@@ -91,6 +93,14 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading api key details")
 	}
 
+	// Best-effort update of last accessed timestamp - don't fail auth if this fails
+	if err := k.keyDB.UpdateAPIKeyLastAccessedAt(ctx, apiKey.ID); err != nil {
+		logger.WarnContext(ctx, "failed to update api key last accessed at",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(apiKey.OrganizationID),
+		)
+	}
+
 	// a bit of a hack right now, the product intends to allow producer keys to act as a superset of consumer and chat keys
 	scopes := slices.Clone(apiKey.Scopes)
 	if slices.Contains(scopes, APIKeyScopeProducer.String()) && !slices.Contains(scopes, APIKeyScopeConsumer.String()) {
@@ -106,7 +116,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		}
 	}
 
-	org, err := mv.DescribeOrganization(ctx, k.logger, k.orgRepo, k.billingRepo, apiKey.OrganizationID)
+	org, err := mv.DescribeOrganization(ctx, logger, k.orgRepo, k.billingRepo, apiKey.OrganizationID)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading organization")
 	}
@@ -116,16 +126,18 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID: apiKey.OrganizationID,
-		UserID:               apiKey.CreatedByUserID,
-		ExternalUserID:       "",
-		SessionID:            nil,
-		ProjectID:            nil,
-		OrganizationSlug:     org.Slug,
-		Email:                nil,
-		AccountType:          org.GramAccountType,
-		ProjectSlug:          nil,
-		APIKeyScopes:         scopes,
+		ActiveOrganizationID:  apiKey.OrganizationID,
+		HasActiveSubscription: org.HasActiveSubscription,
+		UserID:                apiKey.CreatedByUserID,
+		ExternalUserID:        "",
+		APIKeyID:              apiKey.ID.String(),
+		SessionID:             nil,
+		ProjectID:             nil,
+		OrganizationSlug:      org.Slug,
+		Email:                 nil,
+		AccountType:           org.GramAccountType,
+		ProjectSlug:           nil,
+		APIKeyScopes:          scopes,
 	})
 
 	return ctx, nil

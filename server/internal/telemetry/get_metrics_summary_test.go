@@ -193,6 +193,7 @@ func insertToolCallLog(t *testing.T, ctx context.Context, projectID, deploymentI
 	attributes := map[string]any{
 		"gram.tool.urn":                toolURN,
 		"http.server.request.duration": durationSec,
+		"http.response.status_code":    statusCode,
 	}
 
 	attrsJSON, err := json.Marshal(attributes)
@@ -202,12 +203,150 @@ func insertToolCallLog(t *testing.T, ctx context.Context, projectID, deploymentI
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
 			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_deployment_id, gram_urn, service_name,
-			http_response_status_code
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool call",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, toolURN, "gram-tools",
-		statusCode)
+		projectID, deploymentID, toolURN, "gram-tools")
 	require.NoError(t, err)
+}
+
+func TestGetProjectMetricsSummary_StatusCodeBoundaries(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+
+	// Insert tool calls with various status codes to test boundaries
+	// Success range: 200-299
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:test:op1", 200, 0.1) // success
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), "tools:http:test:op2", 201, 0.1)  // success
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:test:op3", 299, 0.1)  // success
+
+	// Redirect range: 300-399 (should count as neither success nor failure based on current logic)
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), "tools:http:test:op4", 301, 0.1)
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-6*time.Minute), "tools:http:test:op5", 302, 0.1)
+
+	// Failure range: 400+
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-5*time.Minute), "tools:http:test:op6", 400, 0.1) // failure
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-4*time.Minute), "tools:http:test:op7", 404, 0.1) // failure
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-3*time.Minute), "tools:http:test:op8", 500, 0.1) // failure
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-2*time.Minute), "tools:http:test:op9", 503, 0.1) // failure
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+		From: from,
+		To:   to,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	m := result.Metrics
+	require.Equal(t, int64(9), m.TotalToolCalls)
+	require.Equal(t, int64(3), m.ToolCallSuccess) // 200, 201, 299
+	require.Equal(t, int64(4), m.ToolCallFailure) // 400, 404, 500, 503
+	// Note: 301, 302 are not counted as success (not 200-299) or failure (not 400+)
+}
+
+func TestGetProjectMetricsSummary_OnlyToolCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+
+	// Insert only tool calls, no chat completions
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:petstore:listPets", 200, 0.5)
+	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), "tools:http:petstore:getPet", 200, 0.3)
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+		From: from,
+		To:   to,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	m := result.Metrics
+	require.Equal(t, int64(2), m.TotalToolCalls)
+	require.Equal(t, int64(2), m.ToolCallSuccess)
+	require.Equal(t, int64(0), m.ToolCallFailure)
+
+	// Chat-related metrics should be zero
+	require.Equal(t, int64(0), m.TotalChatRequests)
+	require.Equal(t, int64(0), m.TotalChats)
+	require.Equal(t, int64(0), m.TotalInputTokens)
+	require.Equal(t, int64(0), m.TotalOutputTokens)
+	require.Equal(t, int64(0), m.TotalTokens)
+	require.Empty(t, m.Models)
+
+	// But tools should be present
+	require.Len(t, m.Tools, 2)
+}
+
+func TestGetProjectMetricsSummary_OnlyChatCompletions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	chatID := uuid.New().String()
+
+	// Insert only chat completions, no tool calls
+	insertChatCompletionLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, 100, 50, 150, 1.5, "stop", "gpt-4", "openai")
+	insertChatCompletionLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, 200, 100, 300, 2.0, "stop", "gpt-4", "openai")
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+		From: from,
+		To:   to,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	m := result.Metrics
+	require.Equal(t, int64(2), m.TotalChatRequests)
+	require.Equal(t, int64(1), m.TotalChats) // 1 unique chat ID
+	require.Equal(t, int64(300), m.TotalInputTokens)
+	require.Equal(t, int64(150), m.TotalOutputTokens)
+	require.Equal(t, int64(450), m.TotalTokens)
+
+	// Tool metrics should be zero
+	require.Equal(t, int64(0), m.TotalToolCalls)
+	require.Equal(t, int64(0), m.ToolCallSuccess)
+	require.Equal(t, int64(0), m.ToolCallFailure)
+	require.Empty(t, m.Tools)
+
+	// Models should be present
+	require.Len(t, m.Models, 1)
+	require.Equal(t, "gpt-4", m.Models[0].Name)
+	require.Equal(t, int64(2), m.Models[0].Count)
 }

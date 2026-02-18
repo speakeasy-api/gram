@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
@@ -331,6 +332,27 @@ func processManifestToolV0(
 		}
 	}
 
+	// Conservative defaults for function tools — potentially destructive, open-world.
+	// Override with manifest values when function authors specify annotations.
+	readOnlyHint := pgtype.Bool{Bool: false, Valid: true}
+	destructiveHint := pgtype.Bool{Bool: true, Valid: true}
+	idempotentHint := pgtype.Bool{Bool: false, Valid: true}
+	openWorldHint := pgtype.Bool{Bool: true, Valid: true}
+	if tool.Annotations != nil {
+		if tool.Annotations.ReadOnlyHint != nil {
+			readOnlyHint = conv.PtrToPGBool(tool.Annotations.ReadOnlyHint)
+		}
+		if tool.Annotations.DestructiveHint != nil {
+			destructiveHint = conv.PtrToPGBool(tool.Annotations.DestructiveHint)
+		}
+		if tool.Annotations.IdempotentHint != nil {
+			idempotentHint = conv.PtrToPGBool(tool.Annotations.IdempotentHint)
+		}
+		if tool.Annotations.OpenWorldHint != nil {
+			openWorldHint = conv.PtrToPGBool(tool.Annotations.OpenWorldHint)
+		}
+	}
+
 	t, err := tx.CreateFunctionsTool(ctx, repo.CreateFunctionsToolParams{
 		DeploymentID: deploymentID,
 		FunctionID:   attachementID,
@@ -342,7 +364,11 @@ func processManifestToolV0(
 		InputSchema:  inputSchema,
 		Variables:    varBs,
 		AuthInput:    authInput,
-		Meta:         metaBs,
+		Meta:            metaBs,
+		ReadOnlyHint:    readOnlyHint,
+		DestructiveHint: destructiveHint,
+		IdempotentHint:  idempotentHint,
+		OpenWorldHint:   openWorldHint,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("save tool: %w", err)

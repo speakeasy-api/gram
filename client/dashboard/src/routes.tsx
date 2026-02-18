@@ -19,8 +19,9 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
+import ChatSessions from "./pages/chatLogs/ChatLogs";
 import Logs from "./pages/logs/Logs";
-import Metrics from "./pages/metrics/Metrics";
+import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
@@ -251,17 +252,23 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  chatSessions: {
+    title: "Chat Sessions",
+    url: "chat-sessions",
+    icon: "messages-square",
+    component: ChatSessions,
+  },
   logs: {
     title: "Logs",
     url: "logs",
-    icon: "activity",
+    icon: "scroll-text",
     component: Logs,
   },
-  metrics: {
-    title: "Metrics",
-    url: "metrics",
-    icon: "chart-no-axes-combined",
-    component: Metrics,
+  observability: {
+    title: "Insights",
+    url: "observability",
+    icon: "layout-dashboard",
+    component: ObservabilityOverview,
   },
   sdks: {
     title: "SDKs",

@@ -1,0 +1,35 @@
+{
+  "name": "elements-tanstack-start-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "check": "tsc --noEmit",
+    "build:example": "vite build"
+  },
+  "dependencies": {
+    "@gram-ai/elements": "workspace:*",
+    "@assistant-ui/react": "^0.11.58",
+    "@assistant-ui/react-ai-sdk": "^1.1.21",
+    "@assistant-ui/react-markdown": "^0.11.10",
+    "@json-render/react": "^0.2.0",
+    "@tanstack/react-router": "^1.157.19",
+    "@tanstack/react-start": "^1.157.19",
+    "motion": "^12.23.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "remark-gfm": "^4.0.1",
+    "shiki": "^3.22.0",
+    "tailwindcss": "^4.0.6",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.6",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.3",
+    "typescript": "^5.7.2",
+    "vite": "^7.1.6"
+  }
+}

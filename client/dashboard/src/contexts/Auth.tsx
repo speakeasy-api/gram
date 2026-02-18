@@ -1,4 +1,4 @@
-import { getServerURL } from "@/lib/utils";
+import { FullPageError } from "@/components/full-page-error";
 import { LINKED_FROM_PARAM } from "@/pages/home/Home";
 import {
   InfoResponseBody,
@@ -23,10 +23,15 @@ import {
   useRegisterProjectForTelemetry,
 } from "./Telemetry";
 
-type Session = Omit<InfoResponseBody, "userEmail" | "userId" | "isAdmin"> & {
+// We don't include accountType here because it is actively confusing. See useProductTier
+type Session = Omit<
+  InfoResponseBody,
+  "userEmail" | "userId" | "isAdmin" | "gramAccountType"
+> & {
   user: User;
   session: string;
   organization: OrganizationEntry;
+  rawGramAccountType: string; // "raw" -- should not be used directly unless you know what you are doing
   refetch: () => Promise<Session>;
 };
 
@@ -55,7 +60,7 @@ const emptySession: Session = {
   organizations: [],
   activeOrganizationId: "",
   session: "",
-  gramAccountType: "",
+  rawGramAccountType: "",
   organization: emptyOrganization,
   refetch: () => Promise.resolve(emptySession),
 };
@@ -171,19 +176,9 @@ export const useOrganization = (): OrganizationEntry & {
   });
 };
 
-// Error fallback component
-const ErrorFallback = ({ error }: { error: Error }) => {
-  return (
-    <div role="alert">
-      <p>Something went wrong:</p>
-      <pre>{error.message}</pre>
-    </div>
-  );
-};
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
+    <ErrorBoundary FallbackComponent={FullPageError}>
       <AuthHandler>{children}</AuthHandler>
     </ErrorBoundary>
   );
@@ -237,11 +232,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const redirectParam = searchParams.get("redirect");
   if (redirectParam) {
     if (!import.meta.env.DEV) {
-      console.log("(0.2) redirecting to redirectParam", redirectParam);
       return <Navigate to={redirectParam} replace />;
     }
   } else if (session.organization && !projectSlug) {
-    console.log("(1) redirecting to preferred project", projectSlug);
     // if we're logged in but the URL doesn't have a project slug, redirect to
     // the default project
     let preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
@@ -270,8 +263,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
       />
     );
   } else if (session.organization.slug !== orgSlug) {
-    console.log("(2) redirecting to organization");
-
     // make sure we don't direct to an org we aren't authenticated with
     return (
       <Navigate to={`/${session.organization.slug}/${projectSlug}`} replace />
@@ -318,6 +309,7 @@ export const useSessionData = () => {
         photoUrl: result.userPhotoUrl,
       },
       session: sessionId ?? "",
+      rawGramAccountType: result.gramAccountType,
       refetch: async () => {
         const newSession = await refetch();
         return newSession.data ? asSession(newSession.data) : emptySession;
@@ -337,11 +329,7 @@ export const useUser = () => {
 
 export const useIsAdmin = () => {
   const { isAdmin } = useUser();
-  const devHostnames = import.meta.env.VITE_DEV_HOSTNAMES?.split(",") ?? [
-    "localhost",
-  ];
-  const isLocal = devHostnames.some((h) => getServerURL().includes(h));
-  return isAdmin || isLocal;
+  return isAdmin;
 };
 
 export function usePylonInAppChat(user: User | undefined) {

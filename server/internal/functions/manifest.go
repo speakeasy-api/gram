@@ -21,7 +21,16 @@ type ManifestToolV0 struct {
 	InputSchema json.RawMessage                         `json:"inputSchema"`
 	Variables   map[string]*ManifestVariableAttributeV0 `json:"variables"`
 	AuthInput   *ManifestAuthInputAttributeV0           `json:"authInput,omitempty"`
+	Annotations *ManifestAnnotationsV0                  `json:"annotations,omitempty"`
 	Meta        map[string]string                       `json:"meta"`
+}
+
+type ManifestAnnotationsV0 struct {
+	Title           *string `json:"title,omitempty"`
+	ReadOnlyHint    *bool   `json:"readOnlyHint,omitempty"`
+	DestructiveHint *bool   `json:"destructiveHint,omitempty"`
+	IdempotentHint  *bool   `json:"idempotentHint,omitempty"`
+	OpenWorldHint   *bool   `json:"openWorldHint,omitempty"`
 }
 
 type ManifestResourceV0 struct {

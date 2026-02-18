@@ -100,16 +100,18 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 	}
 
 	authCtx := &contextvalues.AuthContext{
-		ActiveOrganizationID: claims.OrgID,
-		ProjectID:            &projectID,
-		OrganizationSlug:     claims.OrganizationSlug,
-		ProjectSlug:          &claims.ProjectSlug,
-		UserID:               "",
-		ExternalUserID:       externalUserID,
-		Email:                nil,
-		AccountType:          "",
-		APIKeyScopes:         nil,
-		SessionID:            nil,
+		ActiveOrganizationID:  claims.OrgID,
+		ProjectID:             &projectID,
+		OrganizationSlug:      claims.OrganizationSlug,
+		ProjectSlug:           &claims.ProjectSlug,
+		UserID:                "",
+		ExternalUserID:        externalUserID,
+		APIKeyID:              claims.APIKeyID,
+		SessionID:             nil, // DO NOT SET THIS for chat sessions. The existence of this field implies that this is a dashboard-authenticated request.
+		Email:                 nil,
+		AccountType:           "",
+		HasActiveSubscription: false,
+		APIKeyScopes:          nil,
 	}
 
 	return contextvalues.SetAuthContext(ctx, authCtx), nil

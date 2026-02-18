@@ -30,16 +30,17 @@ import (
 )
 
 type Catalog struct {
-	ProductIDFree string
+	ProductIDBase string
 	ProductIDPro  string
 
 	MeterIDToolCalls string
 	MeterIDServers   string
+	MeterIDCredits   string
 }
 
 func (c *Catalog) Validate() error {
-	if c.ProductIDFree == "" {
-		return errors.New("missing free tier product id in catalog")
+	if c.ProductIDBase == "" {
+		return errors.New("missing base tier product id in catalog")
 	}
 	if c.ProductIDPro == "" {
 		return errors.New("missing pro tier product id in catalog")
@@ -49,6 +50,9 @@ func (c *Catalog) Validate() error {
 	}
 	if c.MeterIDServers == "" {
 		return errors.New("missing servers meter id in catalog")
+	}
+	if c.MeterIDCredits == "" {
+		return errors.New("missing credits meter id in catalog")
 	}
 	return nil
 }
@@ -161,13 +165,8 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 		return fmt.Errorf("failed to delete customer state cache: %w", err)
 	}
 
-	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID, PeriodUsage: gen.PeriodUsage{
-		ToolCalls:                0,
-		MaxToolCalls:             0,
-		Servers:                  0,
-		MaxServers:               0,
-		ActualEnabledServerCount: 0,
-	}}); err != nil {
+	//nolint:exhaustruct // only the org id is needed
+	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID}); err != nil {
 		return fmt.Errorf("failed todelete period usage storage: %w", err)
 	}
 
@@ -175,6 +174,11 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 }
 
 func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {
+	// For now, don't bill customers on "Gram" usage. Gram source means it is internal to the platform and not customer usage.
+	if event.Source == billing.ModelUsageSourceGram {
+		return
+	}
+
 	ctx, span := p.tracer.Start(ctx, "polar_client.track_model_usage")
 	defer span.End()
 
@@ -496,7 +500,7 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 }
 
 // This is used during auth, so keep it as lightweight as possible.
-func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.Tier, err error) {
+func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.Tier, hasActiveSubscription bool, err error) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer_tier", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
@@ -507,21 +511,29 @@ func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.
 
 	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return p.extractCustomerTier(customerState)
+	return p.extractCustomerTier(ctx, customerState)
 }
 
-func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (*billing.Tier, error) {
+func (p *Client) extractCustomerTier(ctx context.Context, customerState *polarComponents.CustomerState) (*billing.Tier, bool, error) {
 	if customerState != nil {
 		// Active enterprise subscriptions return earlier with the enterprise flag in the DB
 		if len(customerState.ActiveSubscriptions) >= 1 {
-			return conv.Ptr(billing.TierPro), nil
+			if len(customerState.ActiveSubscriptions) > 1 {
+				p.logger.ErrorContext(ctx, "multiple active subscriptions found", attr.SlogOrganizationID(customerState.OrganizationID))
+			}
+			activeSubscription := customerState.ActiveSubscriptions[0]
+			if activeSubscription.ProductID == p.catalog.ProductIDBase {
+				return conv.Ptr(billing.TierBase), true, nil
+			}
+			// Fallback case for old accounts
+			return conv.Ptr(billing.TierPro), true, nil
 		}
 	}
 
-	return nil, nil
+	return nil, false, nil
 }
 
 func (p *Client) GetCustomer(ctx context.Context, orgID string) (c *billing.Customer, err error) {
@@ -560,15 +572,21 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 	usage := gen.PeriodUsage{
 		// Set to -1 so we can tell if we've failed to get the usage
 		ToolCalls:                -1,
-		MaxToolCalls:             -1,
+		IncludedToolCalls:        -1,
 		Servers:                  -1,
-		MaxServers:               -1,
-		ActualEnabledServerCount: 0, // Not related to polar, popualted elsewhere
+		IncludedServers:          -1,
+		Credits:                  -1,
+		IncludedCredits:          -1,
+		HasActiveSubscription:    false,
+		ActualEnabledServerCount: 0, // Not related to polar, populated elsewhere
 	}
 
 	if customer != nil {
-		var toolCallMeter *polarComponents.CustomerStateMeter
-		var serverMeter *polarComponents.CustomerStateMeter
+		var toolCallMeter, serverMeter, creditMeter *polarComponents.CustomerStateMeter
+
+		if len(customer.ActiveSubscriptions) >= 1 {
+			usage.HasActiveSubscription = true
+		}
 
 		for _, meter := range customer.ActiveMeters {
 			if meter.MeterID == p.catalog.MeterIDToolCalls {
@@ -576,6 +594,9 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			}
 			if meter.MeterID == p.catalog.MeterIDServers {
 				serverMeter = &meter
+			}
+			if meter.MeterID == p.catalog.MeterIDCredits {
+				creditMeter = &meter
 			}
 		}
 
@@ -587,14 +608,21 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			// Don't set these if they are 0. This can happen for orgs that subscribed but then cancelled.
 			// For those, we want to fall back to the free tier limits which will be pulled below if the maxes are still unset.
 			if toolCallMeter.CreditedUnits > 0 {
-				usage.MaxToolCalls = int(toolCallMeter.CreditedUnits)
+				usage.IncludedToolCalls = int(toolCallMeter.CreditedUnits)
 			}
 		}
 
 		if serverMeter != nil {
 			usage.Servers = int(serverMeter.ConsumedUnits)
 			if serverMeter.CreditedUnits > 0 {
-				usage.MaxServers = int(serverMeter.CreditedUnits)
+				usage.IncludedServers = int(serverMeter.CreditedUnits)
+			}
+		}
+
+		if creditMeter != nil {
+			usage.Credits = int(creditMeter.ConsumedUnits)
+			if creditMeter.CreditedUnits > 0 {
+				usage.IncludedCredits = int(creditMeter.CreditedUnits)
 			}
 		}
 	}
@@ -623,23 +651,34 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 		usage.Servers = int(serversRes.Total)
 	}
 
-	if usage.MaxToolCalls == -1 || usage.MaxServers == -1 {
-		freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
+	if usage.Credits == -1 {
+		creditsRes, err := p.getMeterQuantitiesRaw(ctx, p.catalog.MeterIDCredits, orgID, time.Now().Add(-1*time.Hour*24*30), time.Now())
+		if err != nil {
+			return nil, fmt.Errorf("get credit usage: %w", err)
+		}
+
+		usage.Credits = int(creditsRes.Total)
+	}
+
+	if usage.IncludedToolCalls == -1 || usage.IncludedServers == -1 || usage.IncludedCredits == -1 {
+		freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDBase)
 		if err != nil {
 			return nil, fmt.Errorf("get free tier product: %w", err)
 		}
 
 		freeTierLimits := extractTierLimits(p.catalog, freeTierProduct)
-		if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
+		if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 || freeTierLimits.Credits == 0 {
 			return nil, fmt.Errorf(
-				"get free tier limits: missing limits (tool calls = %s, servers = %s)",
+				"get free tier limits: missing limits (tool calls = %s, servers = %s, credits = %s)",
 				conv.Ternary(freeTierLimits.ToolCalls == 0, "missing", "set"),
 				conv.Ternary(freeTierLimits.Servers == 0, "missing", "set"),
+				conv.Ternary(freeTierLimits.Credits == 0, "missing", "set"),
 			)
 		}
 
-		usage.MaxToolCalls = freeTierLimits.ToolCalls
-		usage.MaxServers = freeTierLimits.Servers
+		usage.IncludedToolCalls = conv.Ternary(usage.IncludedToolCalls == -1, freeTierLimits.ToolCalls, usage.IncludedToolCalls)
+		usage.IncludedServers = conv.Ternary(usage.IncludedServers == -1, freeTierLimits.Servers, usage.IncludedServers)
+		usage.IncludedCredits = conv.Ternary(usage.IncludedCredits == -1, freeTierLimits.Credits, usage.IncludedCredits)
 	}
 
 	return &usage, nil
@@ -694,7 +733,7 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 		EmbedOrigin:        &serverURL,
 		SuccessURL:         &successURL,
 		Products: []string{
-			p.catalog.ProductIDPro,
+			p.catalog.ProductIDBase,
 		},
 	})
 
@@ -727,8 +766,9 @@ func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (cpu s
 	return res.CustomerSession.CustomerPortalURL, nil
 }
 
-func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err error) {
+func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.get_usage_tiers")
+	var err error
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
@@ -736,7 +776,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 		span.End()
 	}()
 
-	freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
+	freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDBase)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Free tier product: %w", err)
 	}
@@ -750,11 +790,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 	proTierLimits := extractTierLimits(p.catalog, proTierProduct)
 
 	var toolCallPrice, mcpServerPrice float64
-
-	// Credits are hard-coded for now; keep bullets in sync dynamically
-	freeIncludedCredits := 5
-	proIncludedCredits := 25
-	additionalToolCallsBlock := 5000
+	var creditsPrice float64
 
 	for _, price := range proTierProduct.Prices {
 		if price.Type != polarComponents.PricesTypeProductPrice {
@@ -781,6 +817,15 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			}
 			mcpServerPrice /= 100 // Result from Polar is in cents
 		}
+
+		if price.ProductPrice.ProductPriceMeteredUnit.MeterID == p.catalog.MeterIDCredits {
+			meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
+			creditsPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse credits price: %w", err)
+			}
+			creditsPrice /= 100 // Result from Polar is in cents
+		}
 	}
 
 	// Helper to format prices cleanly (no trailing .00 for whole dollars)
@@ -796,7 +841,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			BasePrice:                  0,
 			IncludedToolCalls:          freeTierLimits.ToolCalls,
 			IncludedServers:            freeTierLimits.Servers,
-			IncludedCredits:            freeIncludedCredits, // Hard coded for now. TODO: Move to Polar
+			IncludedCredits:            freeTierLimits.Credits,
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
 			FeatureBullets: []string{
@@ -809,16 +854,20 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
-				fmt.Sprintf("%d chat based credits / month", freeIncludedCredits),
+				fmt.Sprintf("%d LLM credits / month", freeTierLimits.Credits),
 				"Slack community support",
 			},
-			AddOnBullets: []string{},
+			AddOnBullets: []string{
+				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
+				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
+				fmt.Sprintf("%s / 10 additional LLM credits", formatPrice(10*creditsPrice)), // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
+			},
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  29, // Hard coded for now. TODO: Move to Polar
 			IncludedToolCalls:          proTierLimits.ToolCalls,
 			IncludedServers:            proTierLimits.Servers,
-			IncludedCredits:            proIncludedCredits, // Hard coded for now. TODO: Move to Polar
+			IncludedCredits:            proTierLimits.Credits,
 			PricePerAdditionalToolCall: toolCallPrice,
 			PricePerAdditionalServer:   mcpServerPrice,
 			FeatureBullets: []string{
@@ -829,13 +878,13 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
-				fmt.Sprintf("%d chat based credits / month", proIncludedCredits),
+				fmt.Sprintf("%d LLM credits / month", proTierLimits.Credits),
 				"Email support",
 			},
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
-				fmt.Sprintf("%s / month / additional %d tool calls", formatPrice(toolCallPrice*float64(additionalToolCallsBlock)), additionalToolCallsBlock),
-				"$11 per 10 additional chat based credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
+				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
+				"$11 per 10 additional LLM credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
 		},
 		Enterprise: &gen.TierLimits{
@@ -847,6 +896,9 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			PricePerAdditionalServer:   0,
 			FeatureBullets: []string{
 				"Oauth 2.1 proxy support",
+				"Register your own OAuth server",
+				"Custom domain",
+				"30 day log retention",
 				"SSO",
 				"Audit logs",
 				"Self-hosting Gram dataplane",

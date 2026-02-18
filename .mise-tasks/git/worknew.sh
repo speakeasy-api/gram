@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+#MISE dir="{{ config_root }}"
 #MISE description="Create a git worktree"
 #MISE alias="gwn"
 #USAGE flag "--dir <dir>" default=".." help="The directory to create the worktree in"
@@ -22,6 +23,8 @@ git worktree add "${dest}" "${usage_branch:?}"
 cd "${dest}"
 mise trust
 git checkout -b "${new_branch}"
+
+mise run git:workinit
 
 # resolve absolute path to dest
 dest=$(realpath "${dest}")

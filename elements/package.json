@@ -2,7 +2,7 @@
   "name": "@gram-ai/elements",
   "description": "Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.",
   "type": "module",
-  "version": "1.23.0",
+  "version": "1.27.1",
   "main": "dist/index.js",
   "exports": {
     ".": {
@@ -15,10 +15,50 @@
       "import": "./dist/server.js",
       "require": "./dist/server.cjs"
     },
+    "./server/core": {
+      "types": "./dist/server/core.d.ts",
+      "import": "./dist/server/core.js",
+      "require": "./dist/server/core.cjs"
+    },
+    "./server/express": {
+      "types": "./dist/server/express.d.ts",
+      "import": "./dist/server/express.js",
+      "require": "./dist/server/express.cjs"
+    },
+    "./server/nextjs": {
+      "types": "./dist/server/nextjs.d.ts",
+      "import": "./dist/server/nextjs.js",
+      "require": "./dist/server/nextjs.cjs"
+    },
+    "./server/fastify": {
+      "types": "./dist/server/fastify.d.ts",
+      "import": "./dist/server/fastify.js",
+      "require": "./dist/server/fastify.cjs"
+    },
+    "./server/hono": {
+      "types": "./dist/server/hono.d.ts",
+      "import": "./dist/server/hono.js",
+      "require": "./dist/server/hono.cjs"
+    },
+    "./server/bun": {
+      "types": "./dist/server/bun.d.ts",
+      "import": "./dist/server/bun.js",
+      "require": "./dist/server/bun.cjs"
+    },
+    "./server/tanstack-start": {
+      "types": "./dist/server/tanstack-start.d.ts",
+      "import": "./dist/server/tanstack-start.js",
+      "require": "./dist/server/tanstack-start.cjs"
+    },
     "./plugins": {
       "types": "./dist/plugins/index.d.ts",
       "import": "./dist/plugins.js",
       "require": "./dist/plugins.cjs"
+    },
+    "./compat": {
+      "types": "./dist/compat-plugin.d.ts",
+      "import": "./dist/compat-plugin.js",
+      "require": "./dist/compat-plugin.cjs"
     },
     "./elements.css": "./dist/elements.css"
   },
@@ -43,7 +83,7 @@
     "test:watch": "vitest",
     "lint": "eslint src",
     "analyze": "pnpm dlx vite-bundle-visualizer",
-    "storybook": "storybook dev -p 6007 --no-open",
+    "storybook": "pnpm clean:cache && storybook dev -p ${ELEMENTS_STORYBOOK_PORT:-6007} --no-open",
     "build-storybook": "storybook build --stats-json",
     "chromatic": "chromatic --exit-zero-on-changes",
     "type-check": "tsc --noEmit",
@@ -51,31 +91,58 @@
     "docs:watch": "typedoc --watch",
     "prepack": "pnpm build",
     "knip": "pnpm dlx knip",
-    "knip:fix": "pnpm dlx knip --fix"
+    "knip:fix": "pnpm dlx knip --fix",
+    "clean:cache": "rm -rf node_modules/.cache node_modules/.vite",
+    "test:examples": "pnpm --filter \"./examples/*\" run check",
+    "build:examples": "pnpm --filter \"./examples/*\" run build:example"
   },
   "keywords": [],
   "author": "Adam Bull <adam@speakeasy.com>",
   "license": "ISC",
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@10.28.2",
   "peerDependencies": {
     "@assistant-ui/react": "^0.11.0",
     "@assistant-ui/react-ai-sdk": "^1.1.16",
     "@assistant-ui/react-markdown": "^0.11.0",
     "@json-render/react": "^0.2.0",
-    "@types/react": ">=18 <20",
-    "@types/react-dom": ">=18 <20",
+    "@tanstack/react-start": "^1.0.0",
+    "@types/express": "^4.17.0 || ^5.0.0",
+    "@types/node": ">=16",
+    "@types/react": ">=16.8",
+    "@types/react-dom": ">=16.8",
+    "express": "^4.17.0 || ^5.0.0",
+    "fastify": "^4.0.0 || ^5.0.0",
+    "hono": "^3.0.0 || ^4.0.0 || ^5.0.0",
     "motion": "^12.0.0",
-    "react": ">=18 <20",
-    "react-dom": ">=18 <20",
+    "react": ">=16.8",
+    "react-dom": ">=16.8",
     "remark-gfm": "^4.0.0",
     "shiki": "^3.20.0",
     "zustand": "^5.0.0"
   },
   "peerDependenciesMeta": {
+    "@types/express": {
+      "optional": true
+    },
+    "@types/node": {
+      "optional": true
+    },
     "@types/react": {
       "optional": true
     },
     "@types/react-dom": {
+      "optional": true
+    },
+    "express": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    },
+    "@tanstack/react-start": {
+      "optional": true
+    },
+    "hono": {
       "optional": true
     },
     "motion": {
@@ -122,12 +189,14 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@storybook/addon-themes": "^10.1.11",
-    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-query": "^5.90.10",
     "ai": "5.0.90",
     "assistant-stream": "^0.2.46",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",
+    "radix-ui": "^1.4.3",
+    "recharts": "^2.15.4",
     "tailwind-merge": "^3.3.1",
     "tw-shimmer": "^0.4.0",
     "vega": "^6.2.0",
@@ -143,6 +212,8 @@
     "@storybook/addon-docs": "^10.0.8",
     "@storybook/react-vite": "^10.0.8",
     "@tailwindcss/vite": "^4.1.13",
+    "@tanstack/react-start": "1.157.19",
+    "@types/express": "^5.0.6",
     "@types/lodash.merge": "^4.6.9",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-react": "^5.0.3",
@@ -153,6 +224,8 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "eslint-plugin-storybook": "^10.1.4",
     "eslint-plugin-unused-imports": "^4.3.0",
+    "fastify": "^5.7.4",
+    "hono": "^4.11.7",
     "lodash.merge": "^4.6.2",
     "motion": "^12.23.14",
     "msw": "^2.12.3",
@@ -161,6 +234,7 @@
     "prettier-plugin-tailwindcss": "^0.7.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-is": "19.2.3",
     "remark-gfm": "^4.0.1",
     "storybook": "^10.0.8",
     "tailwindcss": "^4.1.13",

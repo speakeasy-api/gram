@@ -101,15 +101,17 @@ export const ListTracesSecurityOption1$outboundSchema: z.ZodType<
   ListTracesSecurityOption1$Outbound,
   z.ZodTypeDef,
   ListTracesSecurityOption1
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+> = z
+  .object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
   });
-});
 
 export function listTracesSecurityOption1ToJSON(
   listTracesSecurityOption1: ListTracesSecurityOption1,
@@ -130,15 +132,17 @@ export const ListTracesSecurityOption2$outboundSchema: z.ZodType<
   ListTracesSecurityOption2$Outbound,
   z.ZodTypeDef,
   ListTracesSecurityOption2
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+> = z
+  .object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
   });
-});
 
 export function listTracesSecurityOption2ToJSON(
   listTracesSecurityOption2: ListTracesSecurityOption2,
@@ -159,15 +163,17 @@ export const ListTracesSecurityOption3$outboundSchema: z.ZodType<
   ListTracesSecurityOption3$Outbound,
   z.ZodTypeDef,
   ListTracesSecurityOption3
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+> = z
+  .object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
   });
-});
 
 export function listTracesSecurityOption3ToJSON(
   listTracesSecurityOption3: ListTracesSecurityOption3,
@@ -188,15 +194,17 @@ export const ListTracesSecurityOption4$outboundSchema: z.ZodType<
   ListTracesSecurityOption4$Outbound,
   z.ZodTypeDef,
   ListTracesSecurityOption4
-> = z.object({
-  projectSlugHeaderGramProject: z.string(),
-  sessionHeaderGramSession: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
+> = z
+  .object({
+    projectSlugHeaderGramProject: z.string(),
+    sessionHeaderGramSession: z.string(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+    });
   });
-});
 
 export function listTracesSecurityOption4ToJSON(
   listTracesSecurityOption4: ListTracesSecurityOption4,
@@ -219,19 +227,21 @@ export const ListTracesSecurity$outboundSchema: z.ZodType<
   ListTracesSecurity$Outbound,
   z.ZodTypeDef,
   ListTracesSecurity
-> = z.object({
-  option1: z.lazy(() => ListTracesSecurityOption1$outboundSchema).optional(),
-  option2: z.lazy(() => ListTracesSecurityOption2$outboundSchema).optional(),
-  option3: z.lazy(() => ListTracesSecurityOption3$outboundSchema).optional(),
-  option4: z.lazy(() => ListTracesSecurityOption4$outboundSchema).optional(),
-}).transform((v) => {
-  return remap$(v, {
-    option1: "Option1",
-    option2: "Option2",
-    option3: "Option3",
-    option4: "Option4",
+> = z
+  .object({
+    option1: z.lazy(() => ListTracesSecurityOption1$outboundSchema).optional(),
+    option2: z.lazy(() => ListTracesSecurityOption2$outboundSchema).optional(),
+    option3: z.lazy(() => ListTracesSecurityOption3$outboundSchema).optional(),
+    option4: z.lazy(() => ListTracesSecurityOption4$outboundSchema).optional(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      option1: "Option1",
+      option2: "Option2",
+      option3: "Option3",
+      option4: "Option4",
+    });
   });
-});
 
 export function listTracesSecurityToJSON(
   listTracesSecurity: ListTracesSecurity,
@@ -265,28 +275,30 @@ export const ListTracesRequest$outboundSchema: z.ZodType<
   ListTracesRequest$Outbound,
   z.ZodTypeDef,
   ListTracesRequest
-> = z.object({
-  timeStart: z.number().int().optional(),
-  timeEnd: z.number().int().optional(),
-  deploymentId: z.string().optional(),
-  functionId: z.string().optional(),
-  cursor: z.string().optional(),
-  limit: z.number().int().default(50),
-  sort: ListTracesQueryParamSort$outboundSchema.default("desc"),
-  gramKey: z.string().optional(),
-  gramSession: z.string().optional(),
-  gramProject: z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    timeStart: "time_start",
-    timeEnd: "time_end",
-    deploymentId: "deployment_id",
-    functionId: "function_id",
-    gramKey: "Gram-Key",
-    gramSession: "Gram-Session",
-    gramProject: "Gram-Project",
+> = z
+  .object({
+    timeStart: z.number().int().optional(),
+    timeEnd: z.number().int().optional(),
+    deploymentId: z.string().optional(),
+    functionId: z.string().optional(),
+    cursor: z.string().optional(),
+    limit: z.number().int().default(50),
+    sort: ListTracesQueryParamSort$outboundSchema.default("desc"),
+    gramKey: z.string().optional(),
+    gramSession: z.string().optional(),
+    gramProject: z.string().optional(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      timeStart: "time_start",
+      timeEnd: "time_end",
+      deploymentId: "deployment_id",
+      functionId: "function_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+    });
   });
-});
 
 export function listTracesRequestToJSON(
   listTracesRequest: ListTracesRequest,

@@ -16,11 +16,14 @@ const (
 type ModelUsageSource string
 
 const (
-	ModelUsageSourceChat   ModelUsageSource = "playground"
-	ModelUsageSourceAgents ModelUsageSource = "agents"
+	ModelUsageSourcePlayground ModelUsageSource = "playground"
+	ModelUsageSourceAgents     ModelUsageSource = "agents"
+	ModelUsageSourceElements   ModelUsageSource = "elements"
+	ModelUsageSourceGram       ModelUsageSource = "gram"
 )
 
 type ModelUsageEvent struct {
+	OrganizationSlug      string
 	OrganizationID        string
 	ProjectID             string
 	Source                ModelUsageSource

@@ -13,7 +13,8 @@ import (
 var chatSessionsAllowedRoutes = []string{
 	"/chat/completions",
 	"/mcp",
-	// "/rpc/chat", // TODO: Support listing / creating chats for elements
+	"/rpc/chat.",
+	"/rpc/chatSessions.",
 }
 
 // This isn't practical to do as a proper middleware because it needs to interoperate with the CORSMiddleware which does things like returning early for OPTIONS requests.
@@ -34,6 +35,11 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 
 			chatSession := r.Header.Get(constants.ChatSessionsTokenHeader)
 			if chatSession == "" {
+				// If the request uses API key auth (e.g. dangerousApiKey from Elements),
+				// allow the requesting origin so the browser doesn't block the response.
+				if r.Header.Get(constants.APIKeyHeader) != "" {
+					w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -44,12 +50,34 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 				return
 			}
 
-			// If the request origin is in the allowed origins, set the allowed origin in the context to be used in the CORS middleware
-			if slices.Contains(claims.Audience, r.Header.Get("Origin")) {
-				w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+			// Validate the origin against the audience claim.
+			// Browsers don't send Origin headers for same-origin GET/HEAD requests,
+			// so if Origin is empty, verify the Host matches an allowed audience domain.
+			origin := r.Header.Get("Origin")
+			if origin != "" {
+				if slices.Contains(claims.Audience, origin) {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+				} else {
+					http.Error(w, fmt.Sprintf("Origin %s does not match audience claim: %s", origin, strings.Join(claims.Audience, ", ")), http.StatusForbidden)
+					return
+				}
 			} else {
-				http.Error(w, fmt.Sprintf("Origin %s does not match audience claim: %s", r.Header.Get("Origin"), strings.Join(claims.Audience, ", ")), http.StatusForbidden)
-				return
+				// No Origin header - likely a same-origin request. Verify the Host
+				// matches one of the audience domains to prevent bypass via stripped Origin.
+				host := r.Host
+				hostAllowed := false
+				for _, aud := range claims.Audience {
+					// Audience is a full URL like "https://app.getgram.ai", extract host
+					audHost := strings.TrimPrefix(strings.TrimPrefix(aud, "https://"), "http://")
+					if host == audHost {
+						hostAllowed = true
+						break
+					}
+				}
+				if !hostAllowed {
+					http.Error(w, fmt.Sprintf("Host %s does not match audience claim: %s", host, strings.Join(claims.Audience, ", ")), http.StatusForbidden)
+					return
+				}
 			}
 
 			next.ServeHTTP(w, r)
