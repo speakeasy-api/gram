@@ -730,6 +730,7 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	oauthProxyServer, err := s.oauthRepo.UpsertOAuthProxyServer(ctx, oauthRepo.UpsertOAuthProxyServerParams{
 		ProjectID: *authCtx.ProjectID,
 		Slug:      conv.ToLower(payload.OauthProxyServer.Slug),
+		Audience:  conv.PtrToPGText(payload.OauthProxyServer.Audience),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create OAuth proxy server").Log(ctx, s.logger)

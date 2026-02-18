@@ -14,6 +14,10 @@ import {
 
 export type OAuthProxyServer = {
   /**
+   * The audience parameter to send to the upstream OAuth provider
+   */
+  audience?: string | undefined;
+  /**
    * When the OAuth proxy server was created.
    */
   createdAt: Date;
@@ -45,6 +49,7 @@ export const OAuthProxyServer$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  audience: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   id: z.string(),
   oauth_proxy_providers: z.array(OAuthProxyProvider$inboundSchema).optional(),

@@ -33,11 +33,11 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/providers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -261,6 +261,15 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return nil
 	}
 
+	// Get OAuth proxy server for this toolset
+	proxyServer, err := s.oauthRepo.GetOAuthProxyServer(ctx, repo.GetOAuthProxyServerParams{
+		ProjectID: toolset.ProjectID,
+		ID:        toolset.OauthProxyServerID.UUID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "OAuth proxy server not found").Log(ctx, s.logger)
+	}
+
 	// Get OAuth proxy providers for this toolset
 	availableProviders, err := s.oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
 		OauthProxyServerID: toolset.OauthProxyServerID.UUID,
@@ -358,6 +367,10 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			urlParams.Set("scope", strings.Join(provider.ScopesSupported, " "))
 		} else {
 			urlParams.Set("scope", req.Scope)
+		}
+
+		if proxyServer.Audience.Valid {
+			urlParams.Set("audience", proxyServer.Audience.String)
 		}
 
 		authURL.RawQuery = urlParams.Encode()

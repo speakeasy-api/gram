@@ -1970,6 +1970,7 @@ function OAuthTabModal({
   const [proxyEnvironmentSlug, setProxyEnvironmentSlug] = useState(
     toolset.defaultEnvironmentSlug ?? "",
   );
+  const [proxyAudience, setProxyAudience] = useState("");
   const [proxyError, setProxyError] = useState<string | null>(null);
 
   const hasMultipleOAuth2AuthCode =
@@ -2102,6 +2103,7 @@ function OAuthTabModal({
           oauthProxyServer: {
             providerType: "custom",
             slug: proxySlug,
+            audience: proxyAudience || undefined,
             authorizationEndpoint: proxyAuthorizationEndpoint,
             tokenEndpoint: proxyTokenEndpoint,
             scopesSupported: scopesArray,
@@ -2279,6 +2281,22 @@ function OAuthTabModal({
                       value={proxyScopes}
                       onChange={setProxyScopes}
                     />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">
+                      Audience (optional)
+                    </Type>
+                    <Input
+                      placeholder="https://api.example.com"
+                      value={proxyAudience}
+                      onChange={setProxyAudience}
+                    />
+                    <Type muted small className="mt-1">
+                      The audience parameter sent to the upstream OAuth
+                      provider. Required by some providers (e.g. Auth0) to
+                      return JWT access tokens.
+                    </Type>
                   </div>
 
                   <div>

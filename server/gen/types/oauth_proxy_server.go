@@ -14,6 +14,8 @@ type OAuthProxyServer struct {
 	ProjectID string
 	// The slug of the OAuth proxy server
 	Slug Slug
+	// The audience parameter to send to the upstream OAuth provider
+	Audience *string
 	// The OAuth proxy providers for this server
 	OauthProxyProviders []*OAuthProxyProvider
 	// When the OAuth proxy server was created.

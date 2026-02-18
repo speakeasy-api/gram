@@ -2904,6 +2904,7 @@ func unmarshalOAuthProxyServerResponseBodyToTypesOAuthProxyServer(v *OAuthProxyS
 		ID:        *v.ID,
 		ProjectID: *v.ProjectID,
 		Slug:      types.Slug(*v.Slug),
+		Audience:  v.Audience,
 		CreatedAt: *v.CreatedAt,
 		UpdatedAt: *v.UpdatedAt,
 	}
@@ -3134,6 +3135,7 @@ func marshalExternalOAuthServerFormRequestBodyToTypesExternalOAuthServerForm(v *
 func marshalTypesOAuthProxyServerFormToOAuthProxyServerFormRequestBody(v *types.OAuthProxyServerForm) *OAuthProxyServerFormRequestBody {
 	res := &OAuthProxyServerFormRequestBody{
 		Slug:                  string(v.Slug),
+		Audience:              v.Audience,
 		ProviderType:          v.ProviderType,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,
 		TokenEndpoint:         v.TokenEndpoint,
@@ -3164,6 +3166,7 @@ func marshalTypesOAuthProxyServerFormToOAuthProxyServerFormRequestBody(v *types.
 func marshalOAuthProxyServerFormRequestBodyToTypesOAuthProxyServerForm(v *OAuthProxyServerFormRequestBody) *types.OAuthProxyServerForm {
 	res := &types.OAuthProxyServerForm{
 		Slug:                  types.Slug(v.Slug),
+		Audience:              v.Audience,
 		ProviderType:          v.ProviderType,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,
 		TokenEndpoint:         v.TokenEndpoint,

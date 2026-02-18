@@ -22,6 +22,10 @@ export type OAuthProxyServerFormProviderType = ClosedEnum<
 
 export type OAuthProxyServerForm = {
   /**
+   * The audience parameter to send to the upstream OAuth provider
+   */
+  audience?: string | undefined;
+  /**
    * The authorization endpoint URL
    */
   authorizationEndpoint?: string | undefined;
@@ -58,6 +62,7 @@ export const OAuthProxyServerFormProviderType$outboundSchema: z.ZodNativeEnum<
 
 /** @internal */
 export type OAuthProxyServerForm$Outbound = {
+  audience?: string | undefined;
   authorization_endpoint?: string | undefined;
   environment_slug?: string | undefined;
   provider_type: string;
@@ -73,6 +78,7 @@ export const OAuthProxyServerForm$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   OAuthProxyServerForm
 > = z.object({
+  audience: z.string().optional(),
   authorizationEndpoint: z.string().optional(),
   environmentSlug: z.string().optional(),
   providerType: OAuthProxyServerFormProviderType$outboundSchema,

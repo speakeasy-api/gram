@@ -2817,6 +2817,8 @@ type OAuthProxyServerResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The slug of the OAuth proxy server
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The audience parameter to send to the upstream OAuth provider
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 	// The OAuth proxy providers for this server
 	OauthProxyProviders []*OAuthProxyProviderResponseBody `form:"oauth_proxy_providers,omitempty" json:"oauth_proxy_providers,omitempty" xml:"oauth_proxy_providers,omitempty"`
 	// When the OAuth proxy server was created.
@@ -2952,6 +2954,8 @@ type ExternalOAuthServerFormRequestBody struct {
 type OAuthProxyServerFormRequestBody struct {
 	// The slug of the OAuth proxy server
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The audience parameter to send to the upstream OAuth provider
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 	// The type of OAuth provider
 	ProviderType string `form:"provider_type" json:"provider_type" xml:"provider_type"`
 	// The authorization endpoint URL
