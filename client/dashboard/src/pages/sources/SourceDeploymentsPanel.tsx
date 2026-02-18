@@ -3,9 +3,7 @@ import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import {
-  useListDeploymentsSuspense,
-} from "@gram/client/react-query/index.js";
+import { useListDeploymentsSuspense } from "@gram/client/react-query/index.js";
 import type { DeploymentSummary } from "@gram/client/models/components";
 import { useRoutes } from "@/routes";
 import { Badge, Button } from "@speakeasy-api/moonshine";
@@ -157,9 +155,7 @@ function DeploymentDetailPanel({
 
           <div>
             <dt className="text-muted-foreground text-xs mb-0.5">Created</dt>
-            <dd>
-              {dateTimeFormatters.humanize(deployment.createdAt)}
-            </dd>
+            <dd>{dateTimeFormatters.humanize(deployment.createdAt)}</dd>
           </div>
 
           <div className="flex gap-6">
@@ -183,7 +179,11 @@ function DeploymentDetailPanel({
           <div className="text-sm text-muted-foreground">Loading logs...</div>
         }
       >
-        <LogsTabContent deploymentId={deployment.id} embeddedMode attachmentType={attachmentType} />
+        <LogsTabContent
+          deploymentId={deployment.id}
+          embeddedMode
+          attachmentType={attachmentType}
+        />
       </Suspense>
     </div>
   );

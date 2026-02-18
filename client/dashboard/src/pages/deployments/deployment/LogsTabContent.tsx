@@ -111,7 +111,11 @@ export const LogsTabContent = ({
   deploymentId: propDeploymentId,
   embeddedMode = false,
   attachmentType,
-}: { deploymentId?: string; embeddedMode?: boolean; attachmentType?: string } = {}) => {
+}: {
+  deploymentId?: string;
+  embeddedMode?: boolean;
+  attachmentType?: string;
+} = {}) => {
   const { deploymentId: paramDeploymentId } = useParams();
   const deploymentId = propDeploymentId ?? paramDeploymentId!;
   const { data: deploymentLogs } = useDeploymentLogsSuspense(
@@ -166,9 +170,7 @@ export const LogsTabContent = ({
 
   const parsedLogs = useMemo(
     () =>
-      visibleEvents.map((event) =>
-        parseLogMessage(event.message, event.event),
-      ),
+      visibleEvents.map((event) => parseLogMessage(event.message, event.event)),
     [visibleEvents],
   );
 
@@ -761,9 +763,7 @@ export const LogsTabContent = ({
                         (isError || isWarn) && "text-inherit",
                       )}
                     >
-                      {formatLogTimestamp(
-                        visibleEvents[index]!.createdAt,
-                      )}
+                      {formatLogTimestamp(visibleEvents[index]!.createdAt)}
                     </span>
                     <span
                       className={cn(

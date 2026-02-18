@@ -191,11 +191,7 @@ export default function SourceDetails() {
   );
   const { data: telemetryData, isLoading: isLoadingTelemetry } =
     useQuery<GetObservabilityOverviewResult>({
-      queryKey: [
-        "source-telemetry",
-        sourceSlug,
-        telemetryFrom.toISOString(),
-      ],
+      queryKey: ["source-telemetry", sourceSlug, telemetryFrom.toISOString()],
       queryFn: () =>
         unwrapAsync(
           telemetryGetObservabilityOverview(gramClient, {
@@ -478,71 +474,73 @@ export default function SourceDetails() {
                     Source Information
                   </Heading>
                   <div className="border rounded-lg divide-y flex-1">
-                      <OverviewRow label={isOpenAPI ? "API name" : "Function name"}>
-                        <Type className="font-medium">{source?.name || "—"}</Type>
-                      </OverviewRow>
-                      <OverviewRow label="Source ID">
-                        <span className="flex items-center gap-1">
-                          <Type className="font-mono text-sm">
-                            {source?.id ? `${source.id.slice(0, 8)}…` : "—"}
-                          </Type>
-                          {source?.id && (
-                            <CopyButton text={source.id} size="inline" />
-                          )}
-                        </span>
-                      </OverviewRow>
-                      {isOpenAPI ? (
-                        <OverviewRow label="Format">
-                          <Type className="font-mono text-sm">
-                            {underlyingAsset?.contentType?.includes("yaml")
-                              ? "YAML"
-                              : underlyingAsset?.contentType?.includes("json")
-                                ? "JSON"
-                                : underlyingAsset?.contentType || "—"}
-                          </Type>
-                        </OverviewRow>
-                      ) : (
-                        <OverviewRow label="Runtime">
-                          <Type className="text-sm">
-                            {source && "runtime" in source
-                              ? String(source.runtime)
-                              : "—"}
-                          </Type>
-                        </OverviewRow>
-                      )}
-                      <OverviewRow label="File size">
-                        <Type className="text-sm">
-                          {underlyingAsset?.contentLength
-                            ? formatFileSize(underlyingAsset.contentLength)
-                            : "—"}
+                    <OverviewRow
+                      label={isOpenAPI ? "API name" : "Function name"}
+                    >
+                      <Type className="font-medium">{source?.name || "—"}</Type>
+                    </OverviewRow>
+                    <OverviewRow label="Source ID">
+                      <span className="flex items-center gap-1">
+                        <Type className="font-mono text-sm">
+                          {source?.id ? `${source.id.slice(0, 8)}…` : "—"}
                         </Type>
-                      </OverviewRow>
-                      <OverviewRow label="Created">
-                        <Type className="text-sm">
-                          {underlyingAsset?.createdAt
-                            ? dateTimeFormatters.humanize(
-                                new Date(underlyingAsset.createdAt),
-                              )
-                            : "—"}
-                        </Type>
-                      </OverviewRow>
-                      <OverviewRow label="Updated">
-                        <Type className="text-sm">{lastUpdated}</Type>
-                      </OverviewRow>
-                      <OverviewRow label="Active deployment">
-                        {activeDeploymentItem ? (
-                          <routes.deployments.deployment.Link
-                            params={[activeDeploymentItem.id]}
-                            className="flex items-center gap-1 hover:no-underline"
-                          >
-                            <Type className="font-mono text-sm text-primary">
-                              {activeDeploymentItem.id.slice(0, 8)}
-                            </Type>
-                          </routes.deployments.deployment.Link>
-                        ) : (
-                          <Type className="text-sm text-muted-foreground">—</Type>
+                        {source?.id && (
+                          <CopyButton text={source.id} size="inline" />
                         )}
+                      </span>
+                    </OverviewRow>
+                    {isOpenAPI ? (
+                      <OverviewRow label="Format">
+                        <Type className="font-mono text-sm">
+                          {underlyingAsset?.contentType?.includes("yaml")
+                            ? "YAML"
+                            : underlyingAsset?.contentType?.includes("json")
+                              ? "JSON"
+                              : underlyingAsset?.contentType || "—"}
+                        </Type>
                       </OverviewRow>
+                    ) : (
+                      <OverviewRow label="Runtime">
+                        <Type className="text-sm">
+                          {source && "runtime" in source
+                            ? String(source.runtime)
+                            : "—"}
+                        </Type>
+                      </OverviewRow>
+                    )}
+                    <OverviewRow label="File size">
+                      <Type className="text-sm">
+                        {underlyingAsset?.contentLength
+                          ? formatFileSize(underlyingAsset.contentLength)
+                          : "—"}
+                      </Type>
+                    </OverviewRow>
+                    <OverviewRow label="Created">
+                      <Type className="text-sm">
+                        {underlyingAsset?.createdAt
+                          ? dateTimeFormatters.humanize(
+                              new Date(underlyingAsset.createdAt),
+                            )
+                          : "—"}
+                      </Type>
+                    </OverviewRow>
+                    <OverviewRow label="Updated">
+                      <Type className="text-sm">{lastUpdated}</Type>
+                    </OverviewRow>
+                    <OverviewRow label="Active deployment">
+                      {activeDeploymentItem ? (
+                        <routes.deployments.deployment.Link
+                          params={[activeDeploymentItem.id]}
+                          className="flex items-center gap-1 hover:no-underline"
+                        >
+                          <Type className="font-mono text-sm text-primary">
+                            {activeDeploymentItem.id.slice(0, 8)}
+                          </Type>
+                        </routes.deployments.deployment.Link>
+                      ) : (
+                        <Type className="text-sm text-muted-foreground">—</Type>
+                      )}
+                    </OverviewRow>
                   </div>
                 </div>
 
@@ -792,8 +790,7 @@ export default function SourceDetails() {
                       </button>
                       {uniqueRuntimes.map((runtime) => {
                         const count = relatedTools.filter(
-                          (t) =>
-                            t.type === "function" && t.runtime === runtime,
+                          (t) => t.type === "function" && t.runtime === runtime,
                         ).length;
                         const isActive = runtimeFilter === runtime;
                         const variant = runtimeBadgeVariant(runtime);
@@ -946,10 +943,7 @@ export default function SourceDetails() {
                             }
                           } else {
                             if (tool.type !== "function") return false;
-                            if (
-                              runtimeFilter &&
-                              tool.runtime !== runtimeFilter
-                            )
+                            if (runtimeFilter && tool.runtime !== runtimeFilter)
                               return false;
                             if (searchQuery) {
                               const query = searchQuery.toLowerCase();
@@ -1010,7 +1004,9 @@ export default function SourceDetails() {
                                 className="grid grid-cols-[120px_1fr_1.5fr] gap-4 items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
                               >
                                 <div>
-                                  <Badge variant={runtimeBadgeVariant(tool.runtime)}>
+                                  <Badge
+                                    variant={runtimeBadgeVariant(tool.runtime)}
+                                  >
                                     <Badge.Text>{tool.runtime}</Badge.Text>
                                   </Badge>
                                 </div>
@@ -1043,10 +1039,7 @@ export default function SourceDetails() {
               {associatedToolsets.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {associatedToolsets.map((toolset) => (
-                    <MCPServerPortalCard
-                      key={toolset.slug}
-                      toolset={toolset}
-                    />
+                    <MCPServerPortalCard key={toolset.slug} toolset={toolset} />
                   ))}
                 </div>
               ) : (
@@ -1112,8 +1105,15 @@ export default function SourceDetails() {
 
           {/* Deployments Tab */}
           <TabsContent value="deployments" className="mt-0 flex-1 min-h-0">
-            <Suspense fallback={<div className="p-8">Loading deployments...</div>}>
-              <SourceDeploymentsPanel sourceKind={sourceKind} attachmentType={sourceKind === "function" ? "function" : "openapi"} />
+            <Suspense
+              fallback={<div className="p-8">Loading deployments...</div>}
+            >
+              <SourceDeploymentsPanel
+                sourceKind={sourceKind}
+                attachmentType={
+                  sourceKind === "function" ? "function" : "openapi"
+                }
+              />
             </Suspense>
           </TabsContent>
 
