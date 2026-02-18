@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils'
 import { useToolExecution } from '@/contexts/ToolExecutionContext'
 
 export interface ActionButtonProps
-  extends Omit<React.ComponentProps<'button'>, 'onClick'>,
+  extends
+    Omit<React.ComponentProps<'button'>, 'onClick'>,
     VariantProps<typeof buttonVariants> {
   label: string
   /** Tool name to invoke when clicked (matches LLM prompt) */

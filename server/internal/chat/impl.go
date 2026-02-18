@@ -710,9 +710,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				originalBody = []byte("{}")
 			}
 
-			s.logger.ErrorContext(ctx, "upstream completions provider returned error",
-				slog.Int("status_code", resp.StatusCode),
-				slog.String("body", string(originalBody)),
+			s.logger.ErrorContext(ctx, fmt.Sprintf("upstream completions provider returned error: status=%d body=%s", resp.StatusCode, string(originalBody)),
 				attr.SlogOrganizationID(orgID),
 			)
 

@@ -33,8 +33,7 @@ const badgeVariants = cva(
 )
 
 interface BadgeProps
-  extends React.ComponentProps<'span'>,
-    VariantProps<typeof badgeVariants> {
+  extends React.ComponentProps<'span'>, VariantProps<typeof badgeVariants> {
   asChild?: boolean
   /** Content text (matches LLM prompt) - rendered as children */
   content?: string
