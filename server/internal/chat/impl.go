@@ -692,7 +692,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	// Handle CORS headers
+	// Handle CORS headers and intercept upstream errors
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		// Remove any existing CORS headers
 		resp.Header.Del("Access-Control-Allow-Origin")
@@ -700,6 +700,35 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		resp.Header.Del("Access-Control-Allow-Headers")
 
 		// TODO: Store chat history for non-streaming requests
+
+		// Intercept non-2xx responses from OpenRouter to avoid leaking internals
+		if resp.StatusCode >= 400 {
+			originalBody, err := io.ReadAll(resp.Body)
+			o11y.NoLogDefer(func() error { return resp.Body.Close() })
+			if err != nil {
+				s.logger.ErrorContext(ctx, "read upstream error body", attr.SlogError(err))
+				originalBody = []byte("{}")
+			}
+
+			s.logger.WarnContext(ctx, "upstream provider returned error",
+				slog.Int("status_code", resp.StatusCode),
+				slog.String("body", string(originalBody)),
+				attr.SlogOrganizationID(orgID),
+			)
+
+			var errorBody []byte
+			if resp.StatusCode == http.StatusPaymentRequired || bytes.Contains(originalBody, []byte("requires more credits")) {
+				resp.StatusCode = http.StatusPaymentRequired
+				errorBody = []byte(`{"error":{"message":"You've used all your chat credits for this billing period. Please upgrade your plan for more credits.","code":"insufficient_credits"}}`)
+			} else {
+				errorBody = []byte(`{"error":{"message":"An error occurred while processing your request. Please try again.","code":"gateway_error"}}`)
+			}
+
+			resp.Body = io.NopCloser(bytes.NewReader(errorBody))
+			resp.ContentLength = int64(len(errorBody))
+			resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(errorBody)))
+			resp.Header.Set("Content-Type", "application/json")
+		}
 
 		return nil
 	}

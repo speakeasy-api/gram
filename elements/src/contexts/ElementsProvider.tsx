@@ -375,6 +375,19 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
               console.error('Stream error in onError callback:', error)
               trackError(error, { source: 'streaming' })
 
+              // Check if this is a credit/billing error (402)
+              const isCreditError =
+                error instanceof Error &&
+                (error.message.includes('insufficient_credits') ||
+                  error.message.includes('chat credits') ||
+                  ('statusCode' in error &&
+                    (error as { statusCode: number }).statusCode === 402))
+
+              // Credit errors should surface via MessagePrimitive.Error, not as connection issues
+              if (isCreditError) {
+                return
+              }
+
               // Check if this is a network/connection error
               const isNetworkError =
                 error instanceof TypeError ||
@@ -400,19 +413,30 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           console.error('Error creating stream:', error)
           trackError(error, { source: 'stream-creation' })
 
-          // Check if this is a network/connection error
-          const isNetworkError =
-            error instanceof TypeError ||
-            (error instanceof Error &&
-              (error.message.includes('fetch') ||
-                error.message.includes('network') ||
-                error.message.includes('Failed to fetch') ||
-                error.message.includes('NetworkError') ||
-                error.message.includes('ECONNREFUSED') ||
-                error.message.includes('ETIMEDOUT')))
+          // Check if this is a credit/billing error (402)
+          const isCreditError =
+            error instanceof Error &&
+            (error.message.includes('insufficient_credits') ||
+              error.message.includes('chat credits') ||
+              ('statusCode' in error &&
+                (error as { statusCode: number }).statusCode === 402))
 
-          if (isNetworkError) {
-            connectionStatus?.markDisconnected()
+          // Credit errors should propagate as-is to surface via MessagePrimitive.Error
+          if (!isCreditError) {
+            // Check if this is a network/connection error
+            const isNetworkError =
+              error instanceof TypeError ||
+              (error instanceof Error &&
+                (error.message.includes('fetch') ||
+                  error.message.includes('network') ||
+                  error.message.includes('Failed to fetch') ||
+                  error.message.includes('NetworkError') ||
+                  error.message.includes('ECONNREFUSED') ||
+                  error.message.includes('ETIMEDOUT')))
+
+            if (isNetworkError) {
+              connectionStatus?.markDisconnected()
+            }
           }
 
           throw error
