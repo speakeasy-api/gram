@@ -566,6 +566,7 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_servers (
   project_id uuid NOT NULL,
 
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
+  audience TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
