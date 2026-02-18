@@ -25,8 +25,8 @@ import { Plugin } from '@/types/plugins'
 import {
   AssistantRuntimeProvider,
   AssistantTool,
-  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
   useAssistantState,
+  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
 } from '@assistant-ui/react'
 import {
   frontendTools as convertFrontendToolsToAISDKTools,
@@ -36,6 +36,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   convertToModelMessages,
+  createUIMessageStream,
   smoothStream,
   stepCountIs,
   streamText,
@@ -52,14 +53,14 @@ import {
   useState,
 } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { ElementsContext } from './contexts'
-import { ToolApprovalProvider } from './ToolApprovalContext'
+import { ChatIdContext } from './ChatIdContext'
 import {
   ConnectionStatusProvider,
   useConnectionStatusOptional,
 } from './ConnectionStatusContext'
+import { ElementsContext } from './contexts'
+import { ToolApprovalProvider } from './ToolApprovalContext'
 import { ToolExecutionProvider } from './ToolExecutionContext'
-import { ChatIdContext } from './ChatIdContext'
 
 /**
  * Extracts executable tools from frontend tool definitions.
@@ -409,7 +410,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // Mark as connected when stream starts successfully
           connectionStatus?.markConnected()
 
-          return result.toUIMessageStream()
+          // This weird construction is necessary to get errors to propagate properly to assistant-ui
+          return createUIMessageStream({
+            execute: ({ writer }) => {
+              writer.merge(result.toUIMessageStream())
+            },
+          })
         } catch (error) {
           console.error('Error creating stream:', error)
           trackError(error, { source: 'stream-creation' })
