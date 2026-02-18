@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.27.1
+
+### Patch Changes
+
+- e5500f7: fix: remove createTanStackStartSessionFn to prevent API key exposure
+
 ## 1.27.0
 
 ### Minor Changes
