@@ -29,10 +29,8 @@ import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
-import {
-  getExternalMcpOAuthConfig,
-  useExternalMcpOAuthStatus,
-} from "./PlaygroundAuth";
+import { useExternalMcpOAuthStatus } from "@/components/mcp/ExternalMcpOAuthConnection";
+import { getExternalMcpOAuthConfig } from "./PlaygroundAuth";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;

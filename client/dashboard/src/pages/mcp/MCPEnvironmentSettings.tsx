@@ -22,6 +22,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ExternalMcpOAuthConnection } from "@/components/mcp/ExternalMcpOAuthConnection";
+import { getExternalMcpOAuthConfig } from "@/pages/playground/PlaygroundAuth";
 import { AddVariableSheet } from "./AddVariableSheet";
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
 import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
@@ -67,6 +69,12 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     toolset,
     environments,
     mcpMetadata,
+  );
+
+  // Check if toolset has external MCP tools that require OAuth
+  const mcpOAuthConfig = useMemo(
+    () => getExternalMcpOAuthConfig(toolset.rawTools),
+    [toolset.rawTools],
   );
 
   // State for the list of environment variables (managed locally for UI updates)
@@ -656,161 +664,177 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+    <div className="space-y-14">
+      {/* External MCP OAuth Connection */}
+      {mcpOAuthConfig && (
+        <div className="space-y-4">
           <h2 className="text-2xl font-semibold tracking-tight">
-            Environment Variables
+            OAuth Connection
           </h2>
-          {missingRequiredCount > 0 && (
-            <Badge variant="warning">
-              <Badge.LeftIcon>
-                <AlertTriangle className="h-3.5 w-3.5" />
-              </Badge.LeftIcon>
-              <Badge.Text>
-                {missingRequiredCount} required not configured
-              </Badge.Text>
-            </Badge>
-          )}
+          <ExternalMcpOAuthConnection
+            toolsetSlug={toolset.slug}
+            mcpOAuthConfig={mcpOAuthConfig}
+            variant="wide"
+          />
         </div>
-        <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
-          <Button.Text>Add Variable</Button.Text>
-        </Button>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Configure required credentials and add custom variables. Click the state
-        button to cycle between User Provided (set at runtime), System (set
-        here), and Omitted (not included).
-      </p>
+      )}
 
-      {/* All Variables Section */}
-      <div className="space-y-4">
-        {/* Variables List */}
-        {envVars.length > 0 ? (
-          <div className="border rounded-lg overflow-hidden">
-            {/* Environment Switcher Tabs */}
-            <EnvironmentSwitcher
-              environments={environments}
-              selectedEnvironmentView={selectedEnvironmentView}
-              mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
-              defaultEnvironmentSlug={
-                toolset.defaultEnvironmentSlug || "default"
-              }
-              requiredVars={requiredVars}
-              hasAnyUserEdits={hasAnyUnsavedChanges}
-              hasExistingConfigs={environmentConfigs.length > 0}
-              onEnvironmentSelect={setSelectedEnvironmentView}
-              onSaveAll={handleSaveAll}
-              onCancelAll={handleCancelAll}
-              onSetDefaultEnvironment={handleSetDefaultEnvironment}
-              onCreateEnvironment={() => setIsCreateEnvDialogOpen(true)}
-            />
-            {envVars.map((envVar, index) => (
-              <EnvironmentVariableRow
-                key={envVar.id}
-                envVar={envVar}
-                index={index}
-                totalCount={envVars.length}
+      {/* Environment Variables Section */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Environment Variables
+            </h2>
+            {missingRequiredCount > 0 && (
+              <Badge variant="warning">
+                <Badge.LeftIcon>
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                </Badge.LeftIcon>
+                <Badge.Text>
+                  {missingRequiredCount} required not configured
+                </Badge.Text>
+              </Badge>
+            )}
+          </div>
+          <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
+            <Button.Text>Add Variable</Button.Text>
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Configure required credentials and add custom variables. Click the
+          state button to cycle between User Provided (set at runtime), System
+          (set here), and Omitted (not included).
+        </p>
+
+        {/* All Variables Section */}
+        <div className="space-y-4">
+          {/* Variables List */}
+          {envVars.length > 0 ? (
+            <div className="border rounded-lg overflow-hidden">
+              {/* Environment Switcher Tabs */}
+              <EnvironmentSwitcher
+                environments={environments}
                 selectedEnvironmentView={selectedEnvironmentView}
                 mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
                 defaultEnvironmentSlug={
                   toolset.defaultEnvironmentSlug || "default"
                 }
-                environmentConfigs={environmentConfigs}
-                editingState={editingState}
-                editingHeaderId={editingHeaderId}
-                hasUnsavedChanges={hasUnsavedChanges(envVar)}
-                onStateChange={handleStateChange}
-                onValueChange={handleValueChange}
-                onEditHeaderName={setEditingHeaderId}
-                onHeaderDisplayNameChange={handleHeaderDisplayNameChange}
-                onHeaderBlur={() => setEditingHeaderId(null)}
+                requiredVars={requiredVars}
+                hasAnyUserEdits={hasAnyUnsavedChanges}
+                hasExistingConfigs={environmentConfigs.length > 0}
+                onEnvironmentSelect={setSelectedEnvironmentView}
+                onSaveAll={handleSaveAll}
+                onCancelAll={handleCancelAll}
+                onSetDefaultEnvironment={handleSetDefaultEnvironment}
+                onCreateEnvironment={() => setIsCreateEnvDialogOpen(true)}
               />
-            ))}
-          </div>
-        ) : (
-          // Empty State
-          <div className="border rounded-lg border-dashed p-8 text-center">
-            <p className="text-muted-foreground mb-4">
-              No environment variables added yet.
-            </p>
-            <Button onClick={() => setIsAddingNew(true)} variant="secondary">
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Variable</Button.Text>
-            </Button>
-          </div>
-        )}
-
-        {/* Manage Environments Link */}
-        <div className="flex justify-end">
-          <routes.environments.Link className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Manage environments →
-          </routes.environments.Link>
-        </div>
-      </div>
-
-      {/* Add New Variable Sheet */}
-      <AddVariableSheet
-        open={isAddingNew}
-        onOpenChange={setIsAddingNew}
-        attachedEnvironment={attachedEnvironment || null}
-        availableEnvVarsFromAttached={availableEnvVarsFromAttached}
-        onAddVariable={handleAddVariable}
-        onLoadFromEnvironment={handleLoadFromEnvironment}
-      />
-
-      {/* Create Environment Dialog */}
-      <Dialog
-        open={isCreateEnvDialogOpen}
-        onOpenChange={setIsCreateEnvDialogOpen}
-      >
-        <Dialog.Content className="max-w-md">
-          <Dialog.Header>
-            <Dialog.Title>Create New Environment</Dialog.Title>
-          </Dialog.Header>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label className="text-sm font-medium mb-2 block">
-                Environment Name
-              </Label>
-              <Input
-                value={newEnvironmentName}
-                onChange={setNewEnvironmentName}
-                placeholder="staging, production, dev..."
-                autoFocus
-                onKeyDown={(e: React.KeyboardEvent) => {
-                  if (e.key === "Enter") {
-                    handleCreateEnvironment();
+              {envVars.map((envVar, index) => (
+                <EnvironmentVariableRow
+                  key={envVar.id}
+                  envVar={envVar}
+                  index={index}
+                  totalCount={envVars.length}
+                  selectedEnvironmentView={selectedEnvironmentView}
+                  mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
+                  defaultEnvironmentSlug={
+                    toolset.defaultEnvironmentSlug || "default"
                   }
-                }}
-              />
+                  environmentConfigs={environmentConfigs}
+                  editingState={editingState}
+                  editingHeaderId={editingHeaderId}
+                  hasUnsavedChanges={hasUnsavedChanges(envVar)}
+                  onStateChange={handleStateChange}
+                  onValueChange={handleValueChange}
+                  onEditHeaderName={setEditingHeaderId}
+                  onHeaderDisplayNameChange={handleHeaderDisplayNameChange}
+                  onHeaderBlur={() => setEditingHeaderId(null)}
+                />
+              ))}
             </div>
+          ) : (
+            // Empty State
+            <div className="border rounded-lg border-dashed p-8 text-center">
+              <p className="text-muted-foreground mb-4">
+                No environment variables added yet.
+              </p>
+              <Button onClick={() => setIsAddingNew(true)} variant="secondary">
+                <Button.LeftIcon>
+                  <Plus className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add Variable</Button.Text>
+              </Button>
+            </div>
+          )}
+
+          {/* Manage Environments Link */}
+          <div className="flex justify-end">
+            <routes.environments.Link className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Manage environments →
+            </routes.environments.Link>
           </div>
-          <Dialog.Footer className="flex justify-end gap-2">
-            <Button
-              variant="tertiary"
-              onClick={() => {
-                setIsCreateEnvDialogOpen(false);
-                setNewEnvironmentName("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateEnvironment}
-              disabled={
-                !newEnvironmentName.trim() ||
-                createEnvironmentMutation.isPending
-              }
-            >
-              {createEnvironmentMutation.isPending ? "Creating..." : "Create"}
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
+        </div>
+
+        {/* Add New Variable Sheet */}
+        <AddVariableSheet
+          open={isAddingNew}
+          onOpenChange={setIsAddingNew}
+          attachedEnvironment={attachedEnvironment || null}
+          availableEnvVarsFromAttached={availableEnvVarsFromAttached}
+          onAddVariable={handleAddVariable}
+          onLoadFromEnvironment={handleLoadFromEnvironment}
+        />
+
+        {/* Create Environment Dialog */}
+        <Dialog
+          open={isCreateEnvDialogOpen}
+          onOpenChange={setIsCreateEnvDialogOpen}
+        >
+          <Dialog.Content className="max-w-md">
+            <Dialog.Header>
+              <Dialog.Title>Create New Environment</Dialog.Title>
+            </Dialog.Header>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">
+                  Environment Name
+                </Label>
+                <Input
+                  value={newEnvironmentName}
+                  onChange={setNewEnvironmentName}
+                  placeholder="staging, production, dev..."
+                  autoFocus
+                  onKeyDown={(e: React.KeyboardEvent) => {
+                    if (e.key === "Enter") {
+                      handleCreateEnvironment();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <Dialog.Footer className="flex justify-end gap-2">
+              <Button
+                variant="tertiary"
+                onClick={() => {
+                  setIsCreateEnvDialogOpen(false);
+                  setNewEnvironmentName("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateEnvironment}
+                disabled={
+                  !newEnvironmentName.trim() ||
+                  createEnvironmentMutation.isPending
+                }
+              >
+                {createEnvironmentMutation.isPending ? "Creating..." : "Create"}
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
+      </div>
     </div>
   );
 }
