@@ -1,5 +1,11 @@
 # server
 
+## 0.23.4
+
+### Patch Changes
+
+- 62c6784: Show Elements errors inside the actual chat
+
 ## 0.23.3
 
 ### Patch Changes
