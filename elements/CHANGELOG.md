@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.27.3
+
+### Patch Changes
+
+- 7063e97: Fix stale toolsToInclude when client-side navigating between pages
+
 ## 1.27.2
 
 ### Patch Changes
