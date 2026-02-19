@@ -6,9 +6,16 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@speakeasy-api/moonshine";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { cn } from "@/lib/utils";
+import { useSlugs } from "@/contexts/Sdk";
 import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls";
 import {
   FeatureName,
@@ -20,12 +27,36 @@ import {
   useGramContext,
 } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
+import {
+  TimeRangePicker,
+  type DateRangePreset,
+  getPresetRange,
+} from "@gram-ai/elements";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { XIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { MoreHorizontal, XIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { LogDetailSheet } from "./LogDetailSheet";
 import { TraceRow } from "./TraceRow";
+
+// Valid date range presets
+const validPresets: DateRangePreset[] = [
+  "15m",
+  "1h",
+  "4h",
+  "1d",
+  "2d",
+  "3d",
+  "7d",
+  "15d",
+  "30d",
+  "90d",
+];
+
+function isValidPreset(value: string | null): value is DateRangePreset {
+  return value !== null && validPresets.includes(value as DateRangePreset);
+}
 
 const perPage = 25;
 
@@ -34,6 +65,9 @@ export default function LogsPage() {
 }
 
 function LogsContent() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { projectSlug } = useSlugs();
+
   // Copilot config - filter to logs-related tools only
   const logsToolFilter = useCallback(
     ({ toolName }: { toolName: string }) =>
@@ -53,6 +87,90 @@ function LogsContent() {
 
   const client = useGramContext();
 
+  // Parse URL params for time range
+  const urlRange = searchParams.get("range");
+  const urlFrom = searchParams.get("from");
+  const urlTo = searchParams.get("to");
+  const urlLabelEncoded = searchParams.get("label");
+  const urlLabel = useMemo(() => {
+    if (!urlLabelEncoded) return null;
+    try {
+      return atob(urlLabelEncoded);
+    } catch {
+      return null;
+    }
+  }, [urlLabelEncoded]);
+
+  // Derive state from URL
+  const dateRange: DateRangePreset = isValidPreset(urlRange) ? urlRange : "7d";
+
+  const customRange = useMemo(() => {
+    if (urlFrom && urlTo) {
+      const from = new Date(urlFrom);
+      const to = new Date(urlTo);
+      if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+        return { from, to };
+      }
+    }
+    return null;
+  }, [urlFrom, urlTo]);
+
+  // Update URL helpers
+  const updateSearchParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [key, value] of Object.entries(updates)) {
+          if (value === null) {
+            next.delete(key);
+          } else {
+            next.set(key, value);
+          }
+        }
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
+  const setDateRangeParam = useCallback(
+    (preset: DateRangePreset) => {
+      updateSearchParams({
+        range: preset,
+        from: null,
+        to: null,
+        label: null,
+      });
+    },
+    [updateSearchParams],
+  );
+
+  const setCustomRangeParam = useCallback(
+    (from: Date, to: Date, label?: string) => {
+      updateSearchParams({
+        range: null,
+        from: from.toISOString(),
+        to: to.toISOString(),
+        label: label ? btoa(label) : null,
+      });
+    },
+    [updateSearchParams],
+  );
+
+  const clearCustomRange = useCallback(() => {
+    updateSearchParams({
+      from: null,
+      to: null,
+      label: null,
+    });
+  }, [updateSearchParams]);
+
+  // Use custom range if set, otherwise use preset
+  const { from, to } = useMemo(
+    () => customRange ?? getPresetRange(dateRange),
+    [customRange, dateRange],
+  );
+
   const {
     data,
     error,
@@ -64,12 +182,21 @@ function LogsContent() {
     isLogsDisabled,
   } = useLogsEnabledErrorCheck(
     useInfiniteQuery({
-      queryKey: ["tool-calls", searchQuery],
+      queryKey: [
+        "tool-calls",
+        searchQuery,
+        from.toISOString(),
+        to.toISOString(),
+      ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
           telemetrySearchToolCalls(client, {
             searchToolCallsPayload: {
-              filter: searchQuery ? { gramUrn: searchQuery } : undefined,
+              filter: {
+                gramUrn: searchQuery || undefined,
+                from,
+                to,
+              },
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -184,6 +311,14 @@ function LogsContent() {
         isMutatingLogs={isMutatingLogs}
         handleSetLogs={handleSetLogs}
         refetch={refetch}
+        // Time range props
+        dateRange={dateRange}
+        customRange={customRange}
+        customRangeLabel={urlLabel}
+        onDateRangeChange={setDateRangeParam}
+        onCustomRangeChange={setCustomRangeParam}
+        onClearCustomRange={clearCustomRange}
+        projectSlug={projectSlug}
       />
     </InsightsSidebar>
   );
@@ -210,6 +345,14 @@ function LogsInnerContent({
   isMutatingLogs,
   handleSetLogs,
   refetch,
+  // Time range props
+  dateRange,
+  customRange,
+  customRangeLabel,
+  onDateRangeChange,
+  onCustomRangeChange,
+  onClearCustomRange,
+  projectSlug,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
@@ -231,6 +374,14 @@ function LogsInnerContent({
   isMutatingLogs: boolean;
   handleSetLogs: (enabled: boolean) => void;
   refetch: () => void;
+  // Time range props
+  dateRange: DateRangePreset;
+  customRange: { from: Date; to: Date } | null;
+  customRangeLabel: string | null;
+  onDateRangeChange: (preset: DateRangePreset) => void;
+  onCustomRangeChange: (from: Date, to: Date, label?: string) => void;
+  onClearCustomRange: () => void;
+  projectSlug?: string;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
 
@@ -288,17 +439,37 @@ function LogsInnerContent({
                       Browse raw tool call traces and telemetry data
                     </p>
                   </div>
-                  <div className="shrink-0">
-                    <Button
-                      onClick={() => handleSetLogs(false)}
-                      disabled={isMutatingLogs}
-                      size="sm"
-                      variant="secondary"
-                    >
-                      <Button.Text>
-                        {isMutatingLogs ? "Updating..." : "Disable Logs"}
-                      </Button.Text>
-                    </Button>
+                  <div
+                    className={cn(
+                      "flex items-center gap-3",
+                      isInsightsOpen ? "justify-start" : "flex-shrink-0",
+                    )}
+                  >
+                    <TimeRangePicker
+                      preset={customRange ? null : dateRange}
+                      customRange={customRange}
+                      customRangeLabel={customRangeLabel}
+                      onPresetChange={onDateRangeChange}
+                      onCustomRangeChange={onCustomRangeChange}
+                      onClearCustomRange={onClearCustomRange}
+                      projectSlug={projectSlug}
+                    />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="tertiary" size="sm">
+                          <MoreHorizontal className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => handleSetLogs(false)}
+                          disabled={isMutatingLogs}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          {isMutatingLogs ? "Updating..." : "Disable Logs"}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
                 {/* Search Row */}
