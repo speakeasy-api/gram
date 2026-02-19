@@ -396,9 +396,19 @@ export default function ObservabilityOverview() {
     }
   }, []);
 
-  // Copilot config - filters to metrics-related tools
+  // Telemetry tools available to the AI assistant on the overview page.
+  // These correspond to operationIds in server/design/telemetry/design.go.
   const metricsToolFilter = useCallback(
-    ({ toolName }: { toolName: string }) => toolName.includes("metrics"),
+    ({ toolName }: { toolName: string }) =>
+      [
+        "search_logs",
+        "search_tool_calls",
+        "search_chats",
+        "search_users",
+        "get_project_metrics_summary",
+        "get_user_metrics_summary",
+        "get_observability_overview",
+      ].some((tool) => toolName.includes(tool)),
     [],
   );
   const mcpConfig = useObservabilityMcpConfig({
