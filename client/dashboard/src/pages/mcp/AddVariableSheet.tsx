@@ -22,12 +22,18 @@ interface Environment {
   name: string;
 }
 
+export interface VariableEntry {
+  key: string;
+  value: string;
+  state: EnvVarState;
+}
+
 interface AddVariableSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   attachedEnvironment: Environment | null;
   availableEnvVarsFromAttached: string[];
-  onAddVariable: (key: string, value: string, state: EnvVarState) => void;
+  onAddVariables: (entries: VariableEntry[]) => void;
   onLoadFromEnvironment: (varKey: string) => void;
 }
 
@@ -36,7 +42,7 @@ export function AddVariableSheet({
   onOpenChange,
   attachedEnvironment,
   availableEnvVarsFromAttached,
-  onAddVariable,
+  onAddVariables,
   onLoadFromEnvironment,
 }: AddVariableSheetProps) {
   const emptyEntry = { key: "", value: "" };
@@ -47,14 +53,16 @@ export function AddVariableSheet({
   }, []);
 
   const handleSave = () => {
-    const validEntries = entries.filter((e) => e.key.trim());
+    const validEntries = entries
+      .filter((e) => e.key.trim())
+      .map((e) => ({
+        key: e.key.toUpperCase().replace(/\s+/g, "_"),
+        value: e.value,
+        state: "system" as EnvVarState,
+      }));
     if (validEntries.length === 0) return;
 
-    for (const entry of validEntries) {
-      const varKey = entry.key.toUpperCase().replace(/\s+/g, "_");
-      onAddVariable(varKey, entry.value, "system");
-    }
-
+    onAddVariables(validEntries);
     resetForm();
     onOpenChange(false);
   };
