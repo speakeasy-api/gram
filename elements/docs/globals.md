@@ -50,6 +50,7 @@
 - [ColorScheme](type-aliases/ColorScheme.md)
 - [RADII](type-aliases/RADII.md)
 - [Radius](type-aliases/Radius.md)
+- [ToolsFilter](type-aliases/ToolsFilter.md)
 - [ModalTriggerPosition](type-aliases/ModalTriggerPosition.md)
 
 ## Variables
