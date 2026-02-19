@@ -2,7 +2,7 @@ import { assert } from '@/lib/utils'
 import { ToolsFilter } from '@/types'
 import { experimental_createMCPClient as createMCPClient } from '@ai-sdk/mcp'
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { Auth } from './useAuth'
 
 type MCPToolsResult = Awaited<
@@ -67,25 +67,36 @@ export function useMCPTools({
         },
       })
 
-      const mcpTools = await mcpClient.tools()
-      if (!toolsToInclude) {
-        return mcpTools
-      }
-
-      return Object.fromEntries(
-        Object.entries(mcpTools).filter(([name]) =>
-          typeof toolsToInclude === 'function'
-            ? toolsToInclude({ toolName: name })
-            : toolsToInclude.includes(name)
-        )
-      )
+      return mcpClient.tools()
     },
     enabled: !auth.isLoading && !!mcp,
     staleTime: Infinity,
     gcTime: Infinity,
   })
 
-  return { ...queryResult, mcpHeaders }
+  // Filter tools outside of the query to ensure filtering is applied whenever
+  // toolsToInclude changes, even when the cached query result is reused.
+  const tools = useMemo(() => {
+    if (!queryResult.data || !toolsToInclude) {
+      return queryResult.data
+    }
+
+    return Object.fromEntries(
+      Object.entries(queryResult.data).filter(([name]) =>
+        typeof toolsToInclude === 'function'
+          ? toolsToInclude({ toolName: name })
+          : toolsToInclude.includes(name)
+      )
+    )
+  }, [queryResult.data, toolsToInclude])
+
+  return {
+    ...queryResult,
+    data: tools,
+    mcpHeaders,
+  } as UseQueryResult<MCPToolsResult, Error> & {
+    mcpHeaders: Record<string, string>
+  }
 }
 
 const HEADER_PREFIX = 'MCP-'

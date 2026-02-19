@@ -63,6 +63,7 @@ export type {
   ThemeConfig,
   ToolMentionsConfig,
   ToolsConfig,
+  ToolsFilter,
   UnifiedSessionAuthConfig,
   Variant,
   VARIANTS,
