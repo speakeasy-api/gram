@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows"
@@ -20,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -50,7 +50,7 @@ type testInstance struct {
 	service        *agentworkflows.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
-	temporalClient client.Client
+	temporalEnv    *temporal.Environment
 	temporalServer *testsuite.DevServer
 }
 
@@ -107,15 +107,15 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 	)
 
 	// Start temporal client and worker
-	temporalClient, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
+	temporalEnv, devserver := infra.NewTemporalEnv(t)
+	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 		DB:               conn,
 		EncryptionClient: enc,
 		AgentsService:    agentsService,
 	})
 	t.Cleanup(func() {
 		worker.Stop()
-		temporalClient.Close()
+		temporalEnv.Client().Close()
 		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
@@ -133,15 +133,14 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 		nil, // openrouter provisioner
 		nil, // chat client
 		authService,
-		temporalClient,
-		"default",
+		temporalEnv,
 	)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
-		temporalClient: temporalClient,
+		temporalEnv:    temporalEnv,
 		temporalServer: devserver,
 	}
 }

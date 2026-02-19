@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 // safely wait for polar rate limits
@@ -20,14 +21,14 @@ const (
 )
 
 type PlatformUsageMetricsClient struct {
-	Temporal client.Client
+	TemporalEnv *tenv.Environment
 }
 
 func (c *PlatformUsageMetricsClient) StartCollectPlatformUsageMetrics(ctx context.Context) (client.WorkflowRun, error) {
 	id := "v1:collect-platform-usage-metrics"
-	return c.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        id,
-		TaskQueue: string(TaskQueueMain),
+		TaskQueue: string(c.TemporalEnv.Queue()),
 		// Allow restarting if needed
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 	}, CollectPlatformUsageMetricsWorkflow)
@@ -98,11 +99,11 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 	return nil
 }
 
-func AddPlatformUsageMetricsSchedule(ctx context.Context, temporalClient client.Client) error {
+func AddPlatformUsageMetricsSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
 	scheduleID := "v1:collect-platform-usage-metrics-schedule"
 	workflowID := "v1:collect-platform-usage-metrics/scheduled"
 
-	_, err := temporalClient.ScheduleClient().Create(ctx, client.ScheduleOptions{
+	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
 		ID: scheduleID,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{
@@ -114,7 +115,7 @@ func AddPlatformUsageMetricsSchedule(ctx context.Context, temporalClient client.
 		Action: &client.ScheduleWorkflowAction{
 			ID:                 workflowID,
 			Workflow:           CollectPlatformUsageMetricsWorkflow,
-			TaskQueue:          string(TaskQueueMain),
+			TaskQueue:          string(temporalEnv.Queue()),
 			WorkflowRunTimeout: 30 * time.Minute,
 		},
 	})

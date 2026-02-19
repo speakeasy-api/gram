@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -59,7 +60,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	temporal_client "go.temporal.io/sdk/client"
 )
 
 type Service struct {
@@ -84,7 +84,7 @@ type Service struct {
 	features            *productfeatures.Client
 	telemetryService    *tm.Service
 	vectorToolStore     *rag.ToolsetVectorStore
-	temporal            temporal_client.Client
+	temporal            *temporal.Environment
 	sessions            *sessions.Manager
 	chatSessionsManager *chatsessions.Manager
 	externalmcpRepo     *externalmcp_repo.Queries
@@ -139,7 +139,7 @@ func NewService(
 	telemSvc *tm.Service,
 	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporal temporal_client.Client,
+	temporal *temporal.Environment,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")

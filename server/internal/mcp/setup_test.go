@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	temporal_client "go.temporal.io/sdk/client"
 )
 
 var (
@@ -123,17 +122,16 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		posthog,
 	)
 
-	var temporalClient temporal_client.Client
-	temporalClient, devserver := infra.NewTemporalClient(t)
+	temporalEnv, devserver := infra.NewTemporalEnv(t)
 	t.Cleanup(func() {
-		temporalClient.Close()
+		temporalEnv.Client().Close()
 		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
 	})
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalClient)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalEnv)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -202,10 +200,9 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	var temporalClient temporal_client.Client
-	temporalClient, devserver := infra.NewTemporalClient(t)
+	temporalEnv, devserver := infra.NewTemporalEnv(t)
 	t.Cleanup(func() {
-		temporalClient.Close()
+		temporalEnv.Client().Close()
 		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
 	})
 
@@ -223,7 +220,7 @@ func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (contex
 		logsEnabled,
 		posthog,
 	)
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalClient)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalEnv)
 
 	return ctx, &testInstance{
 		service:        svc,

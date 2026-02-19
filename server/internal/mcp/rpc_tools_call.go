@@ -36,10 +36,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	temporal_client "go.temporal.io/sdk/client"
 )
 
 type toolsCallParams struct {
@@ -68,7 +68,7 @@ func handleToolsCall(
 	telemSvc *tm.Service,
 	featuresClient *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporal temporal_client.Client,
+	temporalEnv *temporal.Environment,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
@@ -90,7 +90,7 @@ func handleToolsCall(
 	if payload.mode != ToolModeStatic {
 		switch params.Name {
 		case searchToolsToolName:
-			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporal)
+			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporalEnv)
 		case describeToolsToolName:
 			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
 		case executeToolToolName:

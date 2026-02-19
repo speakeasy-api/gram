@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -27,11 +28,11 @@ type ProcessDeploymentWorkflowResult struct {
 	Status       string
 }
 
-func ExecuteProcessDeploymentWorkflow(ctx context.Context, temporalClient client.Client, params ProcessDeploymentWorkflowParams) (client.WorkflowRun, error) {
+func ExecuteProcessDeploymentWorkflow(ctx context.Context, env *tenv.Environment, params ProcessDeploymentWorkflowParams) (client.WorkflowRun, error) {
 	id := conv.Default(params.IdempotencyKey, params.DeploymentID.String())
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                       fmt.Sprintf("v1:process-deployment:%s", id),
-		TaskQueue:                string(TaskQueueMain),
+		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 		WorkflowRunTimeout:       time.Minute * 2,
