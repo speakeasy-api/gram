@@ -66,6 +66,12 @@ func newWorkerCommand() *cli.Command {
 			Value:   "default",
 		},
 		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
 			Name:    "temporal-client-cert",
 			Usage:   "Client cert of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
@@ -264,6 +270,7 @@ func newWorkerCommand() *cli.Command {
 			temporalEnv, shutdown, err := newTemporalClient(logger, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
+				taskQueue:    c.String("temporal-task-queue"),
 				certPEMBlock: []byte(c.String("temporal-client-cert")),
 				keyPEMBlock:  []byte(c.String("temporal-client-key")),
 			})
