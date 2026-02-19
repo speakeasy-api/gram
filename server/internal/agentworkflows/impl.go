@@ -14,7 +14,6 @@ import (
 	commonv1 "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -33,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -40,14 +40,13 @@ import (
 var _ gen.Service = (*Service)(nil)
 
 type Service struct {
-	tracer            trace.Tracer
-	logger            *slog.Logger
-	agentsService     *agentspkg.Service
-	db                *pgxpool.Pool
-	agentExecRepo     *repo.Queries
-	auth              *auth.Auth
-	temporalClient    client.Client
-	temporalNamespace string // TODO: build a wrapper around temporal client to better encapsulate metadata like this
+	tracer        trace.Tracer
+	logger        *slog.Logger
+	agentsService *agentspkg.Service
+	db            *pgxpool.Pool
+	agentExecRepo *repo.Queries
+	auth          *auth.Auth
+	temporalEnv   *temporal.Environment
 }
 
 func NewService(
@@ -63,8 +62,7 @@ func NewService(
 	openRouter openrouter.Provisioner,
 	baseChatClient *openrouter.ChatClient,
 	authService *auth.Auth,
-	temporalClient client.Client,
-	temporalNamespace string,
+	temporalEnv *temporal.Environment,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agents-api"))
 
@@ -83,14 +81,13 @@ func NewService(
 	)
 
 	return &Service{
-		tracer:            otel.Tracer("github.com/speakeasy-api/gram/server/internal/agentworkflows"),
-		logger:            logger,
-		agentsService:     agentsService,
-		db:                db,
-		agentExecRepo:     repo.New(db),
-		auth:              authService,
-		temporalClient:    temporalClient,
-		temporalNamespace: temporalNamespace,
+		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/agentworkflows"),
+		logger:        logger,
+		agentsService: agentsService,
+		db:            db,
+		agentExecRepo: repo.New(db),
+		auth:          authService,
+		temporalEnv:   temporalEnv,
 	}
 }
 
@@ -126,7 +123,7 @@ func (s *Service) CreateResponse(ctx context.Context, payload *gen.CreateRespons
 		return nil, oops.E(oops.CodeBadRequest, nil, "async responses cannot have non stored agent history")
 	}
 
-	workflowRun, err := background.ExecuteAgentsResponseWorkflow(ctx, s.temporalClient, background.AgentsResponseWorkflowParams{
+	workflowRun, err := background.ExecuteAgentsResponseWorkflow(ctx, s.temporalEnv, background.AgentsResponseWorkflowParams{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		Request:     request,
@@ -187,7 +184,7 @@ func (s *Service) GetResponse(ctx context.Context, payload *gen.GetResponsePaylo
 
 	responseID := payload.ResponseID
 
-	desc, err := s.temporalClient.DescribeWorkflowExecution(ctx, responseID, "")
+	desc, err := s.temporalEnv.Client().DescribeWorkflowExecution(ctx, responseID, "")
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 	}
@@ -200,7 +197,7 @@ func (s *Service) GetResponse(ctx context.Context, payload *gen.GetResponsePaylo
 	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		// Query workflow for project_id and request parameters (only available while running)
 		var projectID uuid.UUID
-		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "project_id")
+		queryValue, queryErr := s.temporalEnv.Client().QueryWorkflow(ctx, responseID, "", "project_id")
 		if queryErr != nil {
 			return nil, oops.E(oops.CodeNotFound, queryErr, "workflow not found").Log(ctx, s.logger)
 		}
@@ -212,7 +209,7 @@ func (s *Service) GetResponse(ctx context.Context, payload *gen.GetResponsePaylo
 		}
 
 		var requestParams agentspkg.ResponseRequest
-		queryValue, queryErr = s.temporalClient.QueryWorkflow(ctx, responseID, "", "request")
+		queryValue, queryErr = s.temporalEnv.Client().QueryWorkflow(ctx, responseID, "", "request")
 		if queryErr != nil {
 			s.logger.DebugContext(ctx, "failed to query workflow request parameters", attr.SlogError(queryErr))
 		} else if err := queryValue.Get(&requestParams); err != nil {
@@ -237,7 +234,7 @@ func (s *Service) GetResponse(ctx context.Context, payload *gen.GetResponsePaylo
 		}
 	case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
 		// Workflow is complete, get the result which contains project_id and all request params
-		workflowRun := s.temporalClient.GetWorkflow(ctx, responseID, "")
+		workflowRun := s.temporalEnv.Client().GetWorkflow(ctx, responseID, "")
 		var workflowResult agentspkg.AgentsResponseWorkflowResult
 		err = workflowRun.Get(ctx, &workflowResult)
 		if err != nil {
@@ -250,7 +247,7 @@ func (s *Service) GetResponse(ctx context.Context, payload *gen.GetResponsePaylo
 		response = toHTTPResponse(workflowResult.ResponseOutput)
 	default:
 		// Workflow failed, cancelled, or terminated - try to get result for any available data
-		workflowRun := s.temporalClient.GetWorkflow(ctx, responseID, "")
+		workflowRun := s.temporalEnv.Client().GetWorkflow(ctx, responseID, "")
 		var workflowResult agentspkg.AgentsResponseWorkflowResult
 		err = workflowRun.Get(ctx, &workflowResult)
 		if err != nil {
@@ -278,7 +275,7 @@ func (s *Service) DeleteResponse(ctx context.Context, payload *gen.DeleteRespons
 
 	responseID := payload.ResponseID
 
-	desc, err := s.temporalClient.DescribeWorkflowExecution(ctx, responseID, "")
+	desc, err := s.temporalEnv.Client().DescribeWorkflowExecution(ctx, responseID, "")
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "workflow not found").Log(ctx, s.logger)
 	}
@@ -289,7 +286,7 @@ func (s *Service) DeleteResponse(ctx context.Context, payload *gen.DeleteRespons
 	switch workflowStatus {
 	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		var projectID uuid.UUID
-		queryValue, queryErr := s.temporalClient.QueryWorkflow(ctx, responseID, "", "project_id")
+		queryValue, queryErr := s.temporalEnv.Client().QueryWorkflow(ctx, responseID, "", "project_id")
 		if queryErr != nil {
 			return oops.E(oops.CodeNotFound, queryErr, "workflow not found").Log(ctx, s.logger)
 		}
@@ -301,7 +298,7 @@ func (s *Service) DeleteResponse(ctx context.Context, payload *gen.DeleteRespons
 		}
 	default:
 		// For failed, cancelled, or terminated workflows, try to get result
-		workflowRun := s.temporalClient.GetWorkflow(ctx, responseID, "")
+		workflowRun := s.temporalEnv.Client().GetWorkflow(ctx, responseID, "")
 		var workflowResult agentspkg.AgentsResponseWorkflowResult
 		if err := workflowRun.Get(ctx, &workflowResult); err != nil {
 			// Cannot verify ownership, deny access
@@ -329,8 +326,8 @@ func (s *Service) deleteAgentRun(ctx context.Context, responseID string, deleteD
 	}
 
 	// Delete workflow execution
-	_, err := s.temporalClient.WorkflowService().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
-		Namespace: s.temporalNamespace,
+	_, err := s.temporalEnv.Client().WorkflowService().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: string(s.temporalEnv.Namespace()),
 		WorkflowExecution: &commonv1.WorkflowExecution{
 			WorkflowId: responseID,
 			RunId:      "",

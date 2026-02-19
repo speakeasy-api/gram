@@ -66,6 +66,12 @@ func newWorkerCommand() *cli.Command {
 			Value:   "default",
 		},
 		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
 			Name:    "temporal-client-cert",
 			Usage:   "Client cert of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
@@ -261,16 +267,17 @@ func newWorkerCommand() *cli.Command {
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 
-			temporalClient, shutdown, err := newTemporalClient(logger, temporalClientOptions{
+			temporalEnv, shutdown, err := newTemporalClient(logger, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
+				taskQueue:    c.String("temporal-task-queue"),
 				certPEMBlock: []byte(c.String("temporal-client-cert")),
 				keyPEMBlock:  []byte(c.String("temporal-client-key")),
 			})
 			if err != nil {
 				return err
 			}
-			if temporalClient == nil {
+			if temporalEnv == nil {
 				return errors.New("insufficient options to create temporal client")
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
@@ -346,7 +353,7 @@ func newWorkerCommand() *cli.Command {
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
 					nil,
-					[]*o11y.NamedResource[client.Client]{{Name: "default", Resource: temporalClient}},
+					[]*o11y.NamedResource[client.Client]{{Name: "default", Resource: temporalEnv.Client()}},
 				))
 				if err != nil {
 					return fmt.Errorf("failed to start control server: %w", err)
@@ -366,7 +373,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, billingTracker)
+				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
 			}
 
 			// In local development, allow loopback addresses for internal tool-to-tool communication
@@ -447,7 +454,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, posthogClient)
 
-			temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
+			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				DB:                   db,
 				EncryptionClient:     encryptionClient,
 				FeatureProvider:      featureFlags,

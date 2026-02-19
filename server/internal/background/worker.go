@@ -9,7 +9,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
@@ -28,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -89,7 +89,7 @@ func ForDeploymentProcessing(
 }
 
 func NewTemporalWorker(
-	client client.Client,
+	env *tenv.Environment,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
@@ -143,7 +143,7 @@ func NewTemporalWorker(
 		}
 	}
 
-	temporalWorker := worker.New(client, string(TaskQueueMain), worker.Options{
+	temporalWorker := worker.New(env.Client(), string(env.Queue()), worker.Options{
 		Interceptors: []interceptor.WorkerInterceptor{
 			&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
 			&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
@@ -173,7 +173,7 @@ func NewTemporalWorker(
 		opts.RagService,
 		opts.AgentsService,
 		opts.MCPRegistryClient,
-		client,
+		env.Client(),
 		opts.TelemetryService,
 	)
 
@@ -225,13 +225,13 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
 	temporalWorker.RegisterWorkflow(SubAgentWorkflow)
 
-	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
+	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddRefreshBillingUsageSchedule(context.Background(), client); err != nil {
+	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
 		}

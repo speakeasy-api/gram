@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
+	temporalSDK "go.temporal.io/sdk/temporal"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -36,9 +37,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	packagesRepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	"github.com/speakeasy-api/gram/server/internal/packages/semver"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
 )
 
 type Service struct {
@@ -52,7 +52,7 @@ type Service struct {
 	assets         *assetsRepo.Queries
 	packages       *packagesRepo.Queries
 	assetStorage   assets.BlobStore
-	temporal       client.Client
+	temporalEnv    *temporal.Environment
 	posthog        *posthog.Posthog
 	siteURL        *url.URL
 }
@@ -63,7 +63,7 @@ func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
-	temporal client.Client,
+	temporalEnv *temporal.Environment,
 	sessions *sessions.Manager,
 	assetStorage assets.BlobStore,
 	posthog *posthog.Posthog,
@@ -83,7 +83,7 @@ func NewService(
 		assets:         assetsRepo.New(db),
 		packages:       packagesRepo.New(db),
 		assetStorage:   assetStorage,
-		temporal:       temporal,
+		temporalEnv:    temporalEnv,
 		posthog:        posthog,
 		siteURL:        siteURL,
 		registryClient: mcpRegistryClient,
@@ -910,8 +910,8 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment, nonBlocking bool) (string, error) {
 	defer func() {
 		logger.InfoContext(ctx, "starting project-scoped functions reaper")
-		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, s.temporal, projectID)
-		if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
+		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, s.temporalEnv, projectID)
+		if err != nil && !temporalSDK.IsWorkflowExecutionAlreadyStartedError(err) {
 			logger.ErrorContext(
 				ctx, "failed to start project-scoped functions reaper workflow",
 				attr.SlogError(err),
@@ -919,7 +919,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 		}
 	}()
 
-	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporal, background.ProcessDeploymentWorkflowParams{
+	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporalEnv, background.ProcessDeploymentWorkflowParams{
 		ProjectID:      projectID,
 		DeploymentID:   deploymentID,
 		IdempotencyKey: conv.PtrValOr(dep.IdempotencyKey, ""),

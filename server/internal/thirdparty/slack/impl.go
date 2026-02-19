@@ -40,11 +40,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 	toolset_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"go.temporal.io/sdk/client"
 )
 
 type Configurations struct {
@@ -67,7 +67,7 @@ type Service struct {
 	toolset             *toolset_repo.Queries
 	cfg                 *Configurations
 	client              *slack_client.SlackClient
-	temporal            client.Client
+	temporal            *temporal.Environment
 	watchedThreadsCache cache.TypedCacheObject[types.AppMentionedThreads]
 }
 
@@ -91,7 +91,7 @@ func SlackClientID(env string) string {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, redisClient *redis.Client, client *slack_client.SlackClient, temporal client.Client, cfg Configurations) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, redisClient *redis.Client, client *slack_client.SlackClient, temporal *temporal.Environment, cfg Configurations) *Service {
 	logger = logger.With(attr.SlogComponent("slack"))
 
 	return &Service{

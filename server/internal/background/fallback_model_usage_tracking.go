@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -23,11 +24,11 @@ type FallbackModelUsageTrackingParams struct {
 
 // FallbackModelUsageTracker implements chat.FallbackModelUsageTracker using Temporal.
 type FallbackModelUsageTracker struct {
-	Temporal client.Client
+	TemporalEnv *tenv.Environment
 }
 
 func (t *FallbackModelUsageTracker) ScheduleFallbackModelUsageTracking(ctx context.Context, generationID, orgID, projectID string, source billing.ModelUsageSource, chatID string) error {
-	_, err := ExecuteFallbackModelUsageTrackingWorkflow(ctx, t.Temporal, FallbackModelUsageTrackingParams{
+	_, err := ExecuteFallbackModelUsageTrackingWorkflow(ctx, t.TemporalEnv, FallbackModelUsageTrackingParams{
 		GenerationID: generationID,
 		OrgID:        orgID,
 		ProjectID:    projectID,
@@ -37,11 +38,11 @@ func (t *FallbackModelUsageTracker) ScheduleFallbackModelUsageTracking(ctx conte
 	return err
 }
 
-func ExecuteFallbackModelUsageTrackingWorkflow(ctx context.Context, temporalClient client.Client, params FallbackModelUsageTrackingParams) (client.WorkflowRun, error) {
+func ExecuteFallbackModelUsageTrackingWorkflow(ctx context.Context, env *tenv.Environment, params FallbackModelUsageTrackingParams) (client.WorkflowRun, error) {
 	id := fmt.Sprintf("v1:fallback-model-usage-tracking:%s", params.GenerationID)
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
-		TaskQueue:             string(TaskQueueMain),
+		TaskQueue:             string(env.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 		WorkflowRunTimeout:    10 * time.Minute,
 		StartDelay:            time.Minute, // Delay initial run by 1 minute to allow OpenRouter generation data to become available

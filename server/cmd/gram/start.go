@@ -220,6 +220,12 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"TEMPORAL_NAMESPACE"},
 		},
 		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
 			Name:    "temporal-client-cert",
 			Usage:   "Client cert of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
@@ -471,9 +477,10 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
 			}
 
-			temporalClient, shutdown, err := newTemporalClient(logger, temporalClientOptions{
+			temporalEnv, shutdown, err := newTemporalClient(logger, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
+				taskQueue:    c.String("temporal-task-queue"),
 				certPEMBlock: []byte(c.String("temporal-client-cert")),
 				keyPEMBlock:  []byte(c.String("temporal-client-key")),
 			})
@@ -481,7 +488,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create temporal client: %w", err)
 			}
 
-			if temporalClient == nil {
+			if temporalEnv == nil {
 				logger.WarnContext(ctx, "temporal disabled")
 			} else {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
@@ -493,7 +500,7 @@ func newStartCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{Temporal: temporalClient}, productFeatures, billingTracker)
+				openRouter = openrouter.New(logger, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
 			}
 
 			{
@@ -504,8 +511,8 @@ func newStartCommand() *cli.Command {
 				}
 
 				temporals := []*o11y.NamedResource[client.Client]{}
-				if temporalClient != nil {
-					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalClient})
+				if temporalEnv != nil {
+					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
 				}
 
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
@@ -629,7 +636,7 @@ func newStartCommand() *cli.Command {
 			authAuth := auth.New(logger, db, sessionManager)
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
-			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient, authAuth, temporalClient, c.String("temporal-namespace")))
+			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient, authAuth, temporalEnv))
 			auth.Attach(mux, auth.NewService(logger, db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
 				GramServerURL:          c.String("server-url"),
@@ -643,7 +650,7 @@ func newStartCommand() *cli.Command {
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger, db, sessionManager, toolsetsSvc))
 			assets.Attach(mux, assets.NewService(logger, db, sessionManager, chatSessionsManager, assetStorage, c.String("jwt-signing-key")))
-			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalClient, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient))
+			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient))
 			keys.Attach(mux, keys.NewService(logger, db, sessionManager, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, db, sessionManager, chatSessionsManager))
 			environments.Attach(mux, environments.NewService(logger, db, sessionManager, encryptionClient))
@@ -657,10 +664,10 @@ func newStartCommand() *cli.Command {
 			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
-			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, telemSvc, productFeatures, ragService, temporalClient), mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{Temporal: temporalClient}, &background.TemporalChatTitleGenerator{Temporal: temporalClient}, &background.TemporalDelayedChatResolutionAnalyzer{Temporal: temporalClient}, posthogClient, telemSvc, assetStorage))
+			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, telemSvc, productFeatures, ragService, temporalEnv), mcpMetadataService)
+			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, &background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv}, posthogClient, telemSvc, assetStorage))
 			if slackClient.Enabled() {
-				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
+				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
 					GramServerURL:      c.String("server-url"),
 					SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
 					SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
@@ -668,7 +675,7 @@ func newStartCommand() *cli.Command {
 				}))
 			}
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
-			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
+			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}))
 			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
@@ -687,7 +694,7 @@ func newStartCommand() *cli.Command {
 
 			group := pool.New()
 
-			if temporalClient != nil && c.Bool("dev-single-process") {
+			if temporalEnv != nil && c.Bool("dev-single-process") {
 				// Create agents service for the worker
 				agentsWorkerSvc := agents.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient)
 
@@ -697,7 +704,7 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
+					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						DB:                   db,
 						EncryptionClient:     encryptionClient,
 						FeatureProvider:      featureFlags,
