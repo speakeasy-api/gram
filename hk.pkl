@@ -1,0 +1,26 @@
+amends "package://github.com/jdx/hk/releases/download/v1.36.0/hk@1.36.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.36.0/hk@1.36.0#/Builtins.pkl"
+
+local linters = new Mapping<String, Step> {
+    ["gomodtidy"] = Builtins.gomod_tidy
+    ["gofmt"] = Builtins.go_fmt
+    ["gofix"] {
+        glob = "**/*.go"
+        fix = "mise run -q go:fix {{files}}"
+    }
+}
+
+hooks {
+    ["pre-commit"] {
+        fix = true
+        stash = "git"
+        steps = linters
+    }
+    ["fix"] {
+        fix = true
+        steps = linters
+    }
+    ["check"] {
+        steps = linters
+    }
+}
