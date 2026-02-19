@@ -58,6 +58,31 @@ function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
 }
 
+// Safely encode a string to base64, handling non-Latin1 characters
+function safeBase64Encode(str: string): string {
+  try {
+    return btoa(str);
+  } catch {
+    // btoa fails on non-Latin1 chars, so encode to URI component first
+    return btoa(encodeURIComponent(str));
+  }
+}
+
+// Safely decode a base64 string, handling URI-encoded content
+function safeBase64Decode(str: string): string | null {
+  try {
+    const decoded = atob(str);
+    // Check if it was URI-encoded by trying to decode
+    try {
+      return decodeURIComponent(decoded);
+    } catch {
+      return decoded;
+    }
+  } catch {
+    return null;
+  }
+}
+
 const perPage = 25;
 
 export default function LogsPage() {
@@ -94,11 +119,7 @@ function LogsContent() {
   const urlLabelEncoded = searchParams.get("label");
   const urlLabel = useMemo(() => {
     if (!urlLabelEncoded) return null;
-    try {
-      return atob(urlLabelEncoded);
-    } catch {
-      return null;
-    }
+    return safeBase64Decode(urlLabelEncoded);
   }, [urlLabelEncoded]);
 
   // Derive state from URL
@@ -151,7 +172,7 @@ function LogsContent() {
         range: null,
         from: from.toISOString(),
         to: to.toISOString(),
-        label: label ? btoa(label) : null,
+        label: label ? safeBase64Encode(label) : null,
       });
     },
     [updateSearchParams],
