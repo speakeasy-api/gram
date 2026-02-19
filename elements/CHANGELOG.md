@@ -1,5 +1,12 @@
 # @gram-ai/elements
 
+## 1.27.2
+
+### Patch Changes
+
+- 62c6784: Show Elements errors inside the actual chat
+- c26afea: Auto-refresh expired session tokens before chat requests. Adds JWT expiry detection with a 30s buffer, deduplicates concurrent refresh calls via `fetchQuery`, and falls back to the stale token on failure so the server can decide via 401. Refresh is automatic for non-static sessions and skipped during replays.
+
 ## 1.27.1
 
 ### Patch Changes
