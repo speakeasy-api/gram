@@ -1,15 +1,13 @@
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
-import type { ElementsConfig } from "@gram-ai/elements";
+import type { ElementsConfig, ToolsFilter } from "@gram-ai/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { useGramContext, useListToolsets } from "@gram/client/react-query";
 import { useCallback, useMemo } from "react";
 
-type ToolFilter = (params: { toolName: string }) => boolean;
-
 interface ObservabilityMcpConfigOptions {
-  toolsToInclude: ToolFilter;
+  toolsToInclude: ToolsFilter;
 }
 
 /**
