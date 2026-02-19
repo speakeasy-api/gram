@@ -1,11 +1,11 @@
-package agentsapi_test
+package agentworkflows_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	gen "github.com/speakeasy-api/gram/server/gen/agentworkflows"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )

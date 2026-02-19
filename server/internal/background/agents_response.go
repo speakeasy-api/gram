@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
-	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )

@@ -1,4 +1,4 @@
-package agentsapi
+package agentworkflows
 
 import (
 	"context"
@@ -18,10 +18,10 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	"github.com/speakeasy-api/gram/server/gen/agents"
-	srv "github.com/speakeasy-api/gram/server/gen/http/agents/server"
-	agentspkg "github.com/speakeasy-api/gram/server/internal/agents"
-	"github.com/speakeasy-api/gram/server/internal/agents/repo"
+	gen "github.com/speakeasy-api/gram/server/gen/agentworkflows"
+	srv "github.com/speakeasy-api/gram/server/gen/http/agentworkflows/server"
+	agentspkg "github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
+	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -37,7 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-var _ agents.Service = (*Service)(nil)
+var _ gen.Service = (*Service)(nil)
 
 type Service struct {
 	tracer            trace.Tracer
@@ -83,7 +83,7 @@ func NewService(
 	)
 
 	return &Service{
-		tracer:            otel.Tracer("github.com/speakeasy-api/gram/server/internal/agentsapi"),
+		tracer:            otel.Tracer("github.com/speakeasy-api/gram/server/internal/agentworkflows"),
 		logger:            logger,
 		agentsService:     agentsService,
 		db:                db,
@@ -95,7 +95,7 @@ func NewService(
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
-	endpoints := agents.NewEndpoints(service)
+	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
@@ -104,7 +104,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResponsePayload) (*agents.AgentResponseOutput, error) {
+func (s *Service) CreateResponse(ctx context.Context, payload *gen.CreateResponsePayload) (*gen.WorkflowAgentResponseOutput, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -138,7 +138,7 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 
 	if isAsync {
 		// Return immediately with workflow ID and in-progress status
-		return &agents.AgentResponseOutput{
+		return &gen.WorkflowAgentResponseOutput{
 			ID:                 workflowRun.GetID(),
 			Object:             "response",
 			CreatedAt:          time.Now().Unix(),
@@ -149,8 +149,8 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 			Output:             []any{},
 			PreviousResponseID: request.PreviousResponseID,
 			Temperature:        getTemperature(request.Temperature),
-			Text: &agents.AgentResponseText{
-				Format: &agents.AgentTextFormat{Type: "text"},
+			Text: &gen.WorkflowAgentResponseText{
+				Format: &gen.WorkflowAgentTextFormat{Type: "text"},
 			},
 			Result: "",
 		}, nil
@@ -179,7 +179,7 @@ func (s *Service) CreateResponse(ctx context.Context, payload *agents.CreateResp
 	return toHTTPResponse(workflowResult.ResponseOutput), nil
 }
 
-func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePayload) (*agents.AgentResponseOutput, error) {
+func (s *Service) GetResponse(ctx context.Context, payload *gen.GetResponsePayload) (*gen.WorkflowAgentResponseOutput, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -194,7 +194,7 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 
 	workflowStatus := desc.WorkflowExecutionInfo.Status
 
-	var response *agents.AgentResponseOutput
+	var response *gen.WorkflowAgentResponseOutput
 
 	switch workflowStatus {
 	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
@@ -219,7 +219,7 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 			s.logger.DebugContext(ctx, "failed to decode workflow request parameters", attr.SlogError(err))
 		}
 
-		response = &agents.AgentResponseOutput{
+		response = &gen.WorkflowAgentResponseOutput{
 			ID:                 responseID,
 			Object:             "response",
 			CreatedAt:          time.Now().Unix(),
@@ -230,8 +230,8 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 			Output:             []any{},
 			PreviousResponseID: requestParams.PreviousResponseID,
 			Temperature:        getTemperature(requestParams.Temperature),
-			Text: &agents.AgentResponseText{
-				Format: &agents.AgentTextFormat{Type: "text"},
+			Text: &gen.WorkflowAgentResponseText{
+				Format: &gen.WorkflowAgentTextFormat{Type: "text"},
 			},
 			Result: "",
 		}
@@ -270,7 +270,7 @@ func (s *Service) GetResponse(ctx context.Context, payload *agents.GetResponsePa
 	return response, nil
 }
 
-func (s *Service) DeleteResponse(ctx context.Context, payload *agents.DeleteResponsePayload) error {
+func (s *Service) DeleteResponse(ctx context.Context, payload *gen.DeleteResponsePayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
@@ -350,7 +350,7 @@ func getTemperature(temp *float64) float64 {
 }
 
 // toInternalRequest converts a Goa request to the internal request type.
-func toServiceRequest(req *agents.CreateResponsePayload) (agentspkg.ResponseRequest, error) {
+func toServiceRequest(req *gen.CreateResponsePayload) (agentspkg.ResponseRequest, error) {
 	var toolsets []agentspkg.Toolset
 	for _, ts := range req.Toolsets {
 		toolsets = append(toolsets, agentspkg.Toolset{
@@ -417,13 +417,13 @@ func toServiceRequest(req *agents.CreateResponsePayload) (agentspkg.ResponseRequ
 }
 
 // toGoaResponse converts an internal response to the Goa response type.
-func toHTTPResponse(resp agentspkg.ResponseOutput) *agents.AgentResponseOutput {
+func toHTTPResponse(resp agentspkg.ResponseOutput) *gen.WorkflowAgentResponseOutput {
 	var output []any
 	for _, item := range resp.Output {
 		output = append(output, item)
 	}
 
-	return &agents.AgentResponseOutput{
+	return &gen.WorkflowAgentResponseOutput{
 		ID:                 resp.ID,
 		Object:             resp.Object,
 		CreatedAt:          resp.CreatedAt,
@@ -434,8 +434,8 @@ func toHTTPResponse(resp agentspkg.ResponseOutput) *agents.AgentResponseOutput {
 		Output:             output,
 		PreviousResponseID: resp.PreviousResponseID,
 		Temperature:        resp.Temperature,
-		Text: &agents.AgentResponseText{
-			Format: &agents.AgentTextFormat{Type: resp.Text.Format.Type},
+		Text: &gen.WorkflowAgentResponseText{
+			Format: &gen.WorkflowAgentTextFormat{Type: resp.Text.Format.Type},
 		},
 		Result: resp.Result,
 	}

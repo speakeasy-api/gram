@@ -6,7 +6,7 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
-var _ = Service("agents", func() {
+var _ = Service("agentworkflows", func() {
 	Description("OpenAI Responses API compatible endpoint for running agent workflows.")
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("chat")
@@ -19,20 +19,19 @@ var _ = Service("agents", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.ProjectPayload()
-			Extend(AgentResponseRequest)
+			Extend(WorkflowAgentRequest)
 		})
 
-		Result(AgentResponseOutput, "The agent response output")
+		Result(WorkflowAgentResponseOutput, "The agent response output")
 
 		HTTP(func() {
-			POST("/rpc/agents.response")
+			POST("/rpc/workflows.createResponse")
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "createAgentResponse")
-		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:operationId", "createResponse")
 	})
 
 	Method("getResponse", func() {
@@ -45,18 +44,17 @@ var _ = Service("agents", func() {
 			Required("response_id")
 		})
 
-		Result(AgentResponseOutput, "The agent response output")
+		Result(WorkflowAgentResponseOutput, "The agent response output")
 
 		HTTP(func() {
-			GET("/rpc/agents.response")
+			GET("/rpc/workflows.getResponse")
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Param("response_id")
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "getAgentResponse")
-		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:operationId", "getResponse")
 	})
 
 	Method("deleteResponse", func() {
@@ -70,19 +68,18 @@ var _ = Service("agents", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/agents.response")
+			DELETE("/rpc/workflows.deleteResponse")
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Param("response_id")
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "deleteAgentResponse")
-		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+		Meta("openapi:operationId", "deleteResponse")
 	})
 })
 
-var AgentToolset = Type("AgentToolset", func() {
+var WorkflowAgentToolset = Type("WorkflowAgentToolset", func() {
 	Description("A toolset reference for agent execution")
 
 	Attribute("toolset_slug", String, "The slug of the toolset to use")
@@ -91,20 +88,20 @@ var AgentToolset = Type("AgentToolset", func() {
 	Required("toolset_slug", "environment_slug")
 })
 
-var AgentSubAgent = Type("AgentSubAgent", func() {
+var WorkflowSubAgent = Type("WorkflowSubAgent", func() {
 	Description("A sub-agent definition for the agent workflow")
 
 	Attribute("instructions", String, "Instructions for this sub-agent")
 	Attribute("name", String, "The name of this sub-agent")
 	Attribute("description", String, "Description of what this sub-agent does")
 	Attribute("tools", ArrayOf(String), "Tool URNs available to this sub-agent")
-	Attribute("toolsets", ArrayOf(AgentToolset), "Toolsets available to this sub-agent")
+	Attribute("toolsets", ArrayOf(WorkflowAgentToolset), "Toolsets available to this sub-agent")
 	Attribute("environment_slug", String, "The environment slug for auth")
 
 	Required("name", "description")
 })
 
-var AgentResponseRequest = Type("AgentResponseRequest", func() {
+var WorkflowAgentRequest = Type("WorkflowAgentRequest", func() {
 	Description("Request payload for creating an agent response")
 
 	Attribute("model", String, "The model to use for the agent (e.g., openai/gpt-4o)")
@@ -112,23 +109,23 @@ var AgentResponseRequest = Type("AgentResponseRequest", func() {
 	Attribute("input", Any, "The input to the agent - can be a string or array of messages")
 	Attribute("previous_response_id", String, "ID of a previous response to continue from")
 	Attribute("temperature", Float64, "Temperature for model responses")
-	Attribute("toolsets", ArrayOf(AgentToolset), "Toolsets available to the agent")
-	Attribute("sub_agents", ArrayOf(AgentSubAgent), "Sub-agents available for delegation")
+	Attribute("toolsets", ArrayOf(WorkflowAgentToolset), "Toolsets available to the agent")
+	Attribute("sub_agents", ArrayOf(WorkflowSubAgent), "Sub-agents available for delegation")
 	Attribute("async", Boolean, "If true, returns immediately with a response ID for polling")
 	Attribute("store", Boolean, "If true, stores the response defaults to true")
 
 	Required("model", "input")
 })
 
-var AgentResponseText = Type("AgentResponseText", func() {
+var WorkflowAgentResponseText = Type("WorkflowAgentResponseText", func() {
 	Description("Text format configuration for the response")
 
-	Attribute("format", AgentTextFormat, "The format of the text response")
+	Attribute("format", WorkflowAgentTextFormat, "The format of the text response")
 
 	Required("format")
 })
 
-var AgentTextFormat = Type("AgentTextFormat", func() {
+var WorkflowAgentTextFormat = Type("WorkflowAgentTextFormat", func() {
 	Description("Text format type")
 
 	Attribute("type", String, "The type of text format (e.g., 'text')")
@@ -136,7 +133,7 @@ var AgentTextFormat = Type("AgentTextFormat", func() {
 	Required("type")
 })
 
-var AgentResponseOutput = Type("AgentResponseOutput", func() {
+var WorkflowAgentResponseOutput = Type("WorkflowAgentResponseOutput", func() {
 	Description("Response output from an agent workflow")
 
 	Attribute("id", String, "Unique identifier for this response")
@@ -152,7 +149,7 @@ var AgentResponseOutput = Type("AgentResponseOutput", func() {
 	Attribute("output", ArrayOf(Any), "Array of output items (messages, tool calls)")
 	Attribute("previous_response_id", String, "ID of the previous response if continuing")
 	Attribute("temperature", Float64, "Temperature that was used")
-	Attribute("text", AgentResponseText, "Text format configuration")
+	Attribute("text", WorkflowAgentResponseText, "Text format configuration")
 	Attribute("result", String, "The final text result from the agent")
 
 	Required("id", "object", "created_at", "status", "model", "output", "temperature", "text", "result")

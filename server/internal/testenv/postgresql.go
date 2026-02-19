@@ -3,7 +3,6 @@ package testenv
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -36,7 +35,7 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		postgres.WithUsername("gotest"),
 		postgres.WithPassword("gotest"),
 		postgres.WithDatabase("gotestdb"),
-		postgres.WithInitScripts(filepath.Join("..", "..", "database", "schema.sql")),
+		postgres.WithInitScripts(rootPath("database", "schema.sql")),
 		postgres.BasicWaitStrategies(),
 		// Store the database in-memory for faster tests
 		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
