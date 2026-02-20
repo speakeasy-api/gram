@@ -512,12 +512,14 @@ function LogsInnerContent({
                           >
                             <div className="flex items-center justify-between w-full gap-3">
                               <span>Record tool I/O</span>
-                              <Switch
-                                checked={toolIoLogsEnabled}
-                                onCheckedChange={handleSetToolIoLogs}
-                                disabled={isMutatingLogs}
-                                aria-label="Record tool inputs & outputs"
-                              />
+                              <span onClick={(e) => e.stopPropagation()}>
+                                <Switch
+                                  checked={toolIoLogsEnabled}
+                                  onCheckedChange={handleSetToolIoLogs}
+                                  disabled={isMutatingLogs}
+                                  aria-label="Record tool inputs & outputs"
+                                />
+                              </span>
                             </div>
                           </DropdownMenuItem>
                         </SimpleTooltip>
