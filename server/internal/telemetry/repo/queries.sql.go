@@ -258,6 +258,9 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		sb = sb.Having("position(gram_urn, ?) > 0", arg.GramURN)
 	}
 
+	// Exclude chat completion logs (urn:uuid:...) which are not tool calls
+	sb = sb.Having("position(gram_urn, 'urn:uuid:') != 1")
+
 	sb = sb.GroupBy("trace_id")
 
 	sb = withHavingPagination(
