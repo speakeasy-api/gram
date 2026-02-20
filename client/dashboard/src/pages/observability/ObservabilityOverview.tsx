@@ -709,12 +709,7 @@ function InsightsPageHeader({
       )}
     >
       <div className="flex flex-col gap-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold">Insights</h1>
-          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500">
-            Beta
-          </span>
-        </div>
+        <h1 className="text-xl font-semibold">Insights</h1>
         <p className="text-sm text-muted-foreground">
           Monitor chat sessions, tool performance, and system health
         </p>
