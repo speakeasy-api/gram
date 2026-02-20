@@ -2,6 +2,8 @@
 #MISE dir="{{ config_root }}"
 #MISE description="Generate Posting collection from server OpenAPI spec"
 
+set -e
+
 if openapi spec upgrade --version 3.1.0 server/gen/http/openapi3.yaml gram.posting.yaml 2>openapi-upgrade.errors.log; then
     echo "OpenAPI spec upgraded successfully."
 else
