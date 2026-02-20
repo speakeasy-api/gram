@@ -460,8 +460,8 @@ func TestCreateLog_ToolIOBodyContentScrubbed(t *testing.T) {
 
 	require.NotContains(t, log.Attributes, "gen_ai.tool.call.arguments")
 	require.NotContains(t, log.Attributes, "gen_ai.tool.call.result")
-	// Other attributes should still be present
-	require.Contains(t, log.Attributes, "http.request.method")
+	// Other attributes should still be present (ClickHouse nests dotted keys)
+	require.Contains(t, log.Attributes, `"method":"POST"`)
 }
 
 func TestCreateLog_ToolIOBodyContentNotPresentWhenNotRecorded(t *testing.T) {

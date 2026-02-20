@@ -62,7 +62,7 @@ func TestTruncateBodyOverLimit(t *testing.T) {
 	}
 	result := truncateBody(body)
 
-	require.True(t, len(result) > maxBodyContentBytes, "truncated result should include the marker")
+	require.Greater(t, len(result), maxBodyContentBytes, "truncated result should include the marker")
 	require.True(t, strings.HasPrefix(result, strings.Repeat("b", maxBodyContentBytes)))
 	require.Contains(t, result, "...[truncated, original size:")
 	require.Contains(t, result, "66536 bytes]")
@@ -72,7 +72,7 @@ func TestTruncateBodyEmpty(t *testing.T) {
 	t.Parallel()
 
 	result := truncateBody([]byte{})
-	require.Equal(t, "", result)
+	require.Empty(t, result)
 }
 
 func TestRecordBodyContentDoesNotOverwrite(t *testing.T) {
