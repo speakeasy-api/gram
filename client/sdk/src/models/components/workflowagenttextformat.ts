@@ -10,7 +10,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Text format type
  */
-export type AgentTextFormat = {
+export type WorkflowAgentTextFormat = {
   /**
    * The type of text format (e.g., 'text')
    */
@@ -18,20 +18,20 @@ export type AgentTextFormat = {
 };
 
 /** @internal */
-export const AgentTextFormat$inboundSchema: z.ZodType<
-  AgentTextFormat,
+export const WorkflowAgentTextFormat$inboundSchema: z.ZodType<
+  WorkflowAgentTextFormat,
   z.ZodTypeDef,
   unknown
 > = z.object({
   type: z.string(),
 });
 
-export function agentTextFormatFromJSON(
+export function workflowAgentTextFormatFromJSON(
   jsonString: string,
-): SafeParseResult<AgentTextFormat, SDKValidationError> {
+): SafeParseResult<WorkflowAgentTextFormat, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AgentTextFormat$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AgentTextFormat' from JSON`,
+    (x) => WorkflowAgentTextFormat$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'WorkflowAgentTextFormat' from JSON`,
   );
 }

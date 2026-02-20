@@ -13874,6 +13874,9 @@ components:
                     description: End time in ISO 8601 format
                     example: "2025-12-19T11:00:00Z"
                     format: date-time
+                toolset_id:
+                    type: string
+                    description: Optional toolset/MCP server ID filter
             description: Payload for getting observability overview metrics
             required:
                 - from

@@ -116,6 +116,9 @@ async function seed() {
     sessionId,
   });
 
+  // Collect all tool URNs per project for seeding observability data
+  const projectToolUrns: Record<string, string[]> = {};
+
   for (const { name, slug, assets, mcpPublic } of SEED_PROJECTS) {
     const {
       created,
@@ -128,6 +131,7 @@ async function seed() {
       slug,
     });
     projects[projectSlug] = { id, slug: projectSlug };
+    projectToolUrns[projectSlug] = [];
     let verb = created ? "Created" : "Found existing";
     log.info(`${verb} project '${projectSlug}' (project_id = ${id})`);
 
@@ -153,8 +157,11 @@ async function seed() {
       });
       verb = toolset.created ? "Created" : "Updated";
       log.info(
-        `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL})`,
+        `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL}, tools: ${toolset.toolUrns.length})`,
       );
+
+      // Collect tool URNs for observability seeding
+      projectToolUrns[projectSlug].push(...toolset.toolUrns);
 
       if (asset.storybookDefault) {
         await $`mise set --file mise.local.toml \
@@ -164,12 +171,15 @@ async function seed() {
     }
   }
 
-  // Seed observability data for the first project
-  const firstProject = Object.values(projects)[0];
+  // Seed observability data for the first seeded project
+  const firstSeededProjectSlug = Object.keys(projectToolUrns)[0];
+  const firstProject = firstSeededProjectSlug ? projects[firstSeededProjectSlug] : undefined;
   if (firstProject) {
+    const toolUrns = projectToolUrns[firstProject.slug] ?? [];
     await seedObservabilityData({
       projectId: firstProject.id,
       organizationId: activeOrgID,
+      toolUrns,
     });
   }
 
@@ -358,7 +368,7 @@ async function deployAssets(init: {
   return deploymentId;
 }
 
-type Toolset = { created: boolean; slug: string; mcpURL: string };
+type Toolset = { created: boolean; slug: string; mcpURL: string; toolUrns: string[] };
 
 async function upsertToolset(init: {
   gram: GramCore;
@@ -445,6 +455,7 @@ async function upsertToolset(init: {
         created: false,
         slug: updateRes.value.slug,
         mcpURL: `${serverURL}/mcp/${updateRes.value.mcpSlug}`,
+        toolUrns,
       };
       break;
     case !createRes.ok:
@@ -457,6 +468,7 @@ async function upsertToolset(init: {
         created: true,
         slug: createRes.value.slug,
         mcpURL: `${serverURL}/mcp/${createRes.value.mcpSlug}`,
+        toolUrns,
       };
       break;
   }
@@ -517,24 +529,22 @@ function generateChatUUID(chatNumber: number): string {
 async function seedObservabilityData(init: {
   projectId: string;
   organizationId: string;
+  toolUrns: string[];
 }): Promise<void> {
-  const { projectId, organizationId } = init;
+  const { projectId, organizationId, toolUrns } = init;
 
-  log.info("Seeding observability data...");
+  log.info(`Seeding observability data with ${toolUrns.length} tool URNs...`);
+
+  if (toolUrns.length === 0) {
+    log.warn("No tool URNs available for seeding observability data. Skipping.");
+    return;
+  }
 
   const NUM_CHATS = 500; // Reduced for faster seeding
   const DAYS_BACK = 30;
 
-  // Tool names for generating realistic data
-  const TOOLS = [
-    "github:list-repos",
-    "slack:send-message",
-    "postgres:query",
-    "openai:chat",
-    "jira:get-ticket",
-    "stripe:create-payment",
-    "notion:create-page",
-  ];
+  // Use actual tool URNs from the deployment
+  const TOOLS = toolUrns;
 
   const RESOLUTIONS = ["success", "partial", "failure"] as const;
   const RESOLUTION_WEIGHTS = [65, 15, 20]; // success: 65%, partial: 15%, failure: 20%
@@ -951,25 +961,28 @@ async function seedObservabilityData(init: {
     const eventTime = new Date(now - daysAgo * msPerDay);
     const timeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
 
-    // Tool call event
-    const tool = TOOLS[Math.floor(Math.random() * TOOLS.length)];
+    // Generate a unique trace ID for each tool call (32 hex chars)
+    const traceId = crypto.randomBytes(16).toString("hex");
+
+    // Tool call event - TOOLS now contains full URNs like "tools:http:gram:operation"
+    const toolUrn = TOOLS[Math.floor(Math.random() * TOOLS.length)];
     const statusCode = Math.random() < 0.92 ? 200 : [400, 500, 502][Math.floor(Math.random() * 3)];
     const latency = (0.05 + Math.random() * 2).toFixed(3);
 
     chInserts.push(
-      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${tool}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "tools:${tool}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'tools:${tool}', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "${toolUrn}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`,
     );
 
-    // Chat completion event
+    // Chat completion event - same trace ID links it to the tool call
     const finishReason = Math.random() < 0.65 ? "stop" : Math.random() < 0.9 ? "length" : "error";
     const duration = 30 + Math.floor(Math.random() * 150);
     const completionStatus = Math.random() < 0.92 ? 200 : 500;
 
     chInserts.push(
-      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
     );
 
-    // Resolution event (70% of chats)
+    // Resolution event (70% of chats) - same trace ID
     if (Math.random() < 0.7) {
       const rand = Math.random() * 100;
       let resolution: string;
@@ -987,14 +1000,14 @@ async function seedObservabilityData(init: {
       }
 
       chInserts.push(
-        `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
+        `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '${traceId}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
       );
     }
   }
 
   const chSQL = `
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}';
-    INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
+    INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chInserts.join(",\n")};
   `;
 

@@ -8,23 +8,24 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { agentsGet } from "../funcs/agentsGet.js";
+import { agentworkflowsGetResponse } from "../funcs/agentworkflowsGetResponse.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AgentsGetQueryData = components.AgentResponseOutput;
+export type AgentworkflowsGetResponseQueryData =
+  components.WorkflowAgentResponseOutput;
 
-export function prefetchAgentsGet(
+export function prefetchAgentworkflowsGetResponse(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetAgentResponseRequest,
-  security?: operations.GetAgentResponseSecurity | undefined,
+  request: operations.GetResponseRequest,
+  security?: operations.GetResponseSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAgentsGetQuery(
+    ...buildAgentworkflowsGetResponseQuery(
       client$,
       request,
       security,
@@ -33,22 +34,26 @@ export function prefetchAgentsGet(
   });
 }
 
-export function buildAgentsGetQuery(
+export function buildAgentworkflowsGetResponseQuery(
   client$: GramCore,
-  request: operations.GetAgentResponseRequest,
-  security?: operations.GetAgentResponseSecurity | undefined,
+  request: operations.GetResponseRequest,
+  security?: operations.GetResponseSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<AgentsGetQueryData>;
+  queryFn: (
+    context: QueryFunctionContext,
+  ) => Promise<AgentworkflowsGetResponseQueryData>;
 } {
   return {
-    queryKey: queryKeyAgentsGet({
+    queryKey: queryKeyAgentworkflowsGetResponse({
       responseId: request.responseId,
       gramKey: request.gramKey,
       gramProject: request.gramProject,
     }),
-    queryFn: async function agentsGetQueryFn(ctx): Promise<AgentsGetQueryData> {
+    queryFn: async function agentworkflowsGetResponseQueryFn(
+      ctx,
+    ): Promise<AgentworkflowsGetResponseQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -60,7 +65,7 @@ export function buildAgentsGetQuery(
         signal: sig,
       };
 
-      return unwrapAsync(agentsGet(
+      return unwrapAsync(agentworkflowsGetResponse(
         client$,
         request,
         security,
@@ -70,12 +75,12 @@ export function buildAgentsGetQuery(
   };
 }
 
-export function queryKeyAgentsGet(
+export function queryKeyAgentworkflowsGetResponse(
   parameters: {
     responseId: string;
     gramKey?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "agents", "get", parameters];
+  return ["@gram/client", "agentworkflows", "getResponse", parameters];
 }

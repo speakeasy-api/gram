@@ -795,6 +795,7 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	})
 	Attribute("external_user_id", String, "Optional external user ID filter")
 	Attribute("api_key_id", String, "Optional API key ID filter")
+	Attribute("toolset_id", String, "Optional toolset/MCP server ID filter")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
 		Default(true)
 	})

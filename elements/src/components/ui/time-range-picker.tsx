@@ -178,6 +178,36 @@ const timeRangeSchema = z.object({
 
 const TIME_RANGE_MODEL = 'openai/gpt-4o-mini'
 
+/**
+ * Parse an ISO date string as a local date (ignoring timezone).
+ * This prevents timezone shifts when the AI returns dates like "2026-02-09T00:00:00Z"
+ * which would otherwise display as Feb 8 in US timezones.
+ */
+function parseAsLocalDate(isoString: string): Date {
+  // Try to extract just the date part and create a local date
+  const dateMatch = isoString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (dateMatch) {
+    const [, year, month, day] = dateMatch
+    // Check if there's a time component
+    const timeMatch = isoString.match(/T(\d{2}):(\d{2}):?(\d{2})?/)
+    if (timeMatch) {
+      const [, hours, minutes, seconds = '0'] = timeMatch
+      return new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hours),
+        parseInt(minutes),
+        parseInt(seconds)
+      )
+    }
+    // Date only - use start of day local time
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+  }
+  // Fallback to standard parsing
+  return new Date(isoString)
+}
+
 async function parseWithAI(
   input: string,
   apiUrl: string,
@@ -217,6 +247,7 @@ KEY RULES:
 - "X years ago" = THE WHOLE YEAR (from: Jan 1, to: Dec 31)
 - "past X days" = RANGE from X days ago to now
 - "last wednesday" etc = that specific day (whole day)
+- IMPORTANT: Return dates WITHOUT timezone suffix (no "Z"). Use format like "2026-02-09T00:00:00" not "2026-02-09T00:00:00Z"
 
 LABEL RULES - use semantic labels:
 - Duration presets: "15m", "1h", "4h", "1d", "2d", "3d", "7d", "15d", "30d"
@@ -237,8 +268,9 @@ User input: ${input}`,
     })
 
     const parsed = result.object
-    const from = new Date(parsed.from)
-    const to = new Date(parsed.to)
+    // Parse dates as local to avoid timezone shifts
+    const from = parseAsLocalDate(parsed.from)
+    const to = parseAsLocalDate(parsed.to)
 
     if (isNaN(from.getTime()) || isNaN(to.getTime())) {
       return null
