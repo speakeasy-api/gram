@@ -4,15 +4,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { AddServersDialog } from "@/pages/catalog/AddServerDialog";
+import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
 import { type Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { Button, Combobox, Input, Stack } from "@speakeasy-api/moonshine";
 import { Loader2, Search, SearchXIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Outlet, useNavigate } from "react-router";
+import { Outlet } from "react-router";
 import { CategoryTabs } from "./CategoryTabs";
 import { FilterChips } from "./FilterChips";
 import { defaultFilterValues, FilterSidebar } from "./FilterSidebar";
@@ -30,7 +30,6 @@ export default function Catalog() {
   const client = useSdkClient();
   const organization = useOrganization();
   const project = useProject();
-  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
 
   // Filter state from URL
@@ -103,10 +102,6 @@ export default function Catalog() {
 
   const handleAdd = () => {
     setAddingServers(getSelectedServerObjects());
-  };
-
-  const handleGoToMCPs = () => {
-    navigate(`/${organization.slug}/${targetProjectSlug}/mcp`);
   };
 
   const handleCreateProject = async (name: string) => {
@@ -270,13 +265,21 @@ export default function Catalog() {
         </Page.Section>
       </Page.Body>
 
-      <AddServersDialog
+      <AddServerDialog
         servers={addingServers}
-        projects={projectOptions}
         projectSlug={targetProjectSlug}
-        onProjectChange={setTargetProjectSlug}
-        onCreateProject={handleCreateProject}
-        onGoToMCPs={handleGoToMCPs}
+        projectSelector={
+          <Combobox
+            options={projectOptions}
+            value={targetProjectSlug}
+            onValueChange={(v) => v && setTargetProjectSlug(v)}
+            searchable
+            placeholder="Select project..."
+            createOptions={{
+              handleCreate: handleCreateProject,
+            }}
+          />
+        }
         open={addingServers.length > 0}
         onOpenChange={(open) => {
           if (!open) {

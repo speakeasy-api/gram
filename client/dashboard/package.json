@@ -9,6 +9,8 @@
     "lint": "prettier --check . && eslint . && tsc -b --noEmit",
     "preview": "vite preview",
     "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "analyze-bundle": "pnpm dlx vite-bundle-visualizer",
     "type-check": "tsc -b --noEmit"
   },
@@ -99,6 +101,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
     "@types/hast": "^3.0.4",
     "@types/node": "^24.10.1",
     "@types/react": "catalog:",
@@ -109,9 +113,11 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "happy-dom": "^20.5.5",
     "typescript": "catalog:",
     "typescript-eslint": "^8.47.0",
     "vite": "^7.2.4",
-    "vite-plugin-monaco-editor": "^1.1.0"
+    "vite-plugin-monaco-editor": "^1.1.0",
+    "vitest": "^4.0.13"
   }
 }
