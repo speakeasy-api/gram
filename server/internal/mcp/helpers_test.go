@@ -283,3 +283,155 @@ func TestIsBinaryMimeType(t *testing.T) {
 		require.False(t, isBinaryMimeType(ctx, logger, "application/hal+xml"))
 	})
 }
+
+func TestResult_MarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	t.Run("marshals_result_with_jsonrpc_version", func(t *testing.T) {
+		t.Parallel()
+		r := result[string]{
+			ID:     msgID{format: 1, Number: 1},
+			Result: "test-result",
+		}
+		data, err := json.Marshal(r)
+		require.NoError(t, err)
+
+		var parsed map[string]any
+		err = json.Unmarshal(data, &parsed)
+		require.NoError(t, err)
+		require.Equal(t, "2.0", parsed["jsonrpc"])
+		require.Equal(t, "test-result", parsed["result"])
+	})
+}
+
+func TestResult_UnmarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unmarshals_valid_result", func(t *testing.T) {
+		t.Parallel()
+		data := []byte(`{"jsonrpc": "2.0", "id": 1, "result": "test-value"}`)
+		var r result[string]
+		err := json.Unmarshal(data, &r)
+		require.NoError(t, err)
+		require.Equal(t, "test-value", r.Result)
+	})
+
+	t.Run("returns_error_for_wrong_jsonrpc_version", func(t *testing.T) {
+		t.Parallel()
+		data := []byte(`{"jsonrpc": "1.0", "id": 1, "result": "test-value"}`)
+		var r result[string]
+		err := json.Unmarshal(data, &r)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "1.0")
+	})
+
+	t.Run("returns_error_for_invalid_json", func(t *testing.T) {
+		t.Parallel()
+		data := []byte(`{invalid}`)
+		var r result[string]
+		err := json.Unmarshal(data, &r)
+		require.Error(t, err)
+	})
+}
+
+func TestBatchedRawRequest_UnmarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unmarshals_array_of_requests", func(t *testing.T) {
+		t.Parallel()
+		data := []byte(`[{"jsonrpc": "2.0", "id": 1, "method": "test1"}, {"jsonrpc": "2.0", "id": 2, "method": "test2"}]`)
+		var batch batchedRawRequest
+		err := json.Unmarshal(data, &batch)
+		require.NoError(t, err)
+		require.Len(t, batch, 2)
+		require.Equal(t, "test1", batch[0].Method)
+		require.Equal(t, "test2", batch[1].Method)
+	})
+
+	t.Run("unmarshals_single_request_as_batch_of_one", func(t *testing.T) {
+		t.Parallel()
+		data := []byte(`{"jsonrpc": "2.0", "id": 1, "method": "single"}`)
+		var batch batchedRawRequest
+		err := json.Unmarshal(data, &batch)
+		require.NoError(t, err)
+		require.Len(t, batch, 1)
+		require.Equal(t, "single", batch[0].Method)
+	})
+
+	t.Run("returns_error_for_invalid_json", func(t *testing.T) {
+		t.Parallel()
+		data := []byte(`{invalid}`)
+		var batch batchedRawRequest
+		err := json.Unmarshal(data, &batch)
+		require.Error(t, err)
+	})
+}
+
+func TestRpcError_MarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	t.Run("marshals_error_with_jsonrpc_version", func(t *testing.T) {
+		t.Parallel()
+		rpcErr := &rpcError{
+			ID:      msgID{format: 1, Number: 1},
+			Code:    methodNotFound,
+			Message: "test error message",
+		}
+		data, err := json.Marshal(rpcErr)
+		require.NoError(t, err)
+
+		var parsed map[string]any
+		err = json.Unmarshal(data, &parsed)
+		require.NoError(t, err)
+		require.Equal(t, "2.0", parsed["jsonrpc"])
+		require.NotNil(t, parsed["error"])
+	})
+
+	t.Run("includes_data_when_present", func(t *testing.T) {
+		t.Parallel()
+		rpcErr := &rpcError{
+			ID:      msgID{format: 1, Number: 1},
+			Code:    methodNotFound,
+			Message: "test error",
+			Data:    json.RawMessage(`{"detail": "extra info"}`),
+		}
+		data, err := json.Marshal(rpcErr)
+		require.NoError(t, err)
+		require.Contains(t, string(data), "extra info")
+	})
+}
+
+func TestMsgID_MarshalJSON_ZeroFormat(t *testing.T) {
+	t.Parallel()
+
+	t.Run("marshals_zero_format_as_empty_string", func(t *testing.T) {
+		t.Parallel()
+		// format 0 falls into default case which marshals the String field
+		id := msgID{format: 0, String: ""}
+		result, err := json.Marshal(id)
+		require.NoError(t, err)
+		require.Equal(t, `""`, string(result))
+	})
+
+	t.Run("marshals_zero_format_with_string_value", func(t *testing.T) {
+		t.Parallel()
+		id := msgID{format: 0, String: "custom-id"}
+		result, err := json.Marshal(id)
+		require.NoError(t, err)
+		require.Equal(t, `"custom-id"`, string(result))
+	})
+}
+
+func TestMsgID_UnmarshalJSON_Null(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unmarshals_null_as_zero_int", func(t *testing.T) {
+		t.Parallel()
+		var id msgID
+		err := json.Unmarshal([]byte("null"), &id)
+		require.NoError(t, err)
+		// null unmarshals as 0 for int64, so format becomes 1 (int format)
+		require.Equal(t, byte(1), id.format)
+		require.Equal(t, int64(0), id.Number)
+	})
+}
