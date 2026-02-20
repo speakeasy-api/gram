@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -66,7 +65,6 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	telemSvc *tm.Service,
-	featuresClient *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal temporal_client.Client,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
@@ -259,6 +257,9 @@ func handleToolsCall(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordRequestBodyContent(requestBodyBytes)
+		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
+		
 		if payload.chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
 		}

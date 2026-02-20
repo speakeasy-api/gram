@@ -445,7 +445,17 @@ func newWorkerCommand() *cli.Command {
 				}
 				return isEnabled, nil
 			}
-			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, posthogClient)
+
+			toolIOLogsEnabled := func(ctx context.Context, orgID string) (bool, error) {
+				isEnabled, err := productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureToolIOLogs)
+				if err != nil {
+					logger.ErrorContext(ctx, "error checking if tool IO logs are enabled", attr.SlogError(err))
+					return false, fmt.Errorf("error checking if tool IO logs are enabled: %w", err)
+				}
+				return isEnabled, nil
+			}
+			
+			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				DB:                   db,

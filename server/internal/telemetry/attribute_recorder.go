@@ -2,12 +2,16 @@ package telemetry
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// maxBodyContentBytes is the maximum size of tool call input/output content to store.
+const maxBodyContentBytes = 64 * 1024 // 64KB
 
 // HTTPLogAttributes is a utility to set attributes in a map.
 type HTTPLogAttributes map[attr.Key]any
@@ -101,4 +105,31 @@ func (h HTTPLogAttributes) RecordTraceContext(ctx context.Context) {
 
 func (h HTTPLogAttributes) RecordMessageBody(msg string) {
 	h[attr.LogBodyKey] = msg
+}
+
+// RecordRequestBodyContent stores the actual tool call input content as an attribute.
+// Content exceeding maxBodyContentBytes is truncated with a marker.
+// Empty bodies are ignored.
+func (h HTTPLogAttributes) RecordRequestBodyContent(body []byte) {
+	if len(body) == 0 {
+		return
+	}
+	h[attr.GenAIToolCallArgumentsKey] = truncateBody(body)
+}
+
+// RecordResponseBodyContent stores the actual tool call output content as an attribute.
+// Content exceeding maxBodyContentBytes is truncated with a marker.
+// Empty bodies are ignored.
+func (h HTTPLogAttributes) RecordResponseBodyContent(body []byte) {
+	if len(body) == 0 {
+		return
+	}
+	h[attr.GenAIToolCallResultKey] = truncateBody(body)
+}
+
+func truncateBody(body []byte) string {
+	if len(body) <= maxBodyContentBytes {
+		return string(body)
+	}
+	return string(body[:maxBodyContentBytes]) + fmt.Sprintf("...[truncated, original size: %d bytes]", len(body))
 }
