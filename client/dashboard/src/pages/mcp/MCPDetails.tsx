@@ -1058,7 +1058,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
             icon: "lock",
             label: "Private",
             description:
-              "Only users with a Gram API Key can read the tools hosted by this server.",
+              "Only users with a Gram API Key from this project can read the tools hosted by this server.",
           },
         ]}
         selectedValue={isPublic ? "public" : "private"}
