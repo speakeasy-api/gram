@@ -69,6 +69,7 @@ services:
     restart: unless-stopped
     ports:
       - "${CLICKHOUSE_NATIVE_PORT}:9440"
+      - "8123:8123"
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: gram

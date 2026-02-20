@@ -15,6 +15,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/environments"
 	_ "github.com/speakeasy-api/gram/server/design/externalmcp"
 	_ "github.com/speakeasy-api/gram/server/design/functions"
+	_ "github.com/speakeasy-api/gram/server/design/hooks"
 	_ "github.com/speakeasy-api/gram/server/design/instances"
 	_ "github.com/speakeasy-api/gram/server/design/integrations"
 	_ "github.com/speakeasy-api/gram/server/design/keys"

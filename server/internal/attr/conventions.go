@@ -127,7 +127,15 @@ const (
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	McpMethodKey                   = attribute.Key("gram.mcp.method")
 	McpURLKey                      = attribute.Key("gram.mcp.url")
+	McpServerNameKey               = attribute.Key("gram.mcp.server_name")
+	McpToolNameKey                 = attribute.Key("gram.mcp.tool_name")
 	MetricNameKey                  = attribute.Key("gram.metric.name")
+
+	// Hook event attributes
+	HookEventKey         = attribute.Key("gram.hook.event")
+	HookToolInputKey     = attribute.Key("gram.hook.tool.input")
+	HookToolResponseKey  = attribute.Key("gram.hook.tool.response")
+	HookToolErrorKey     = attribute.Key("gram.hook.tool.error")
 	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")

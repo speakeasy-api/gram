@@ -14138,6 +14138,14 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        HookResult:
+            type: object
+            properties:
+                ok:
+                    type: boolean
+                    description: Whether the hook was received successfully
+            required:
+                - ok
         InfoResponseBody:
             type: object
             properties:
@@ -15145,6 +15153,40 @@ components:
                 - credits
                 - included_credits
                 - has_active_subscription
+        PostToolUseFailurePayload:
+            type: object
+            properties:
+                tool_error:
+                    description: The error from the tool
+                tool_input:
+                    description: The input to the tool
+                tool_name:
+                    type: string
+                    description: The name of the tool that failed
+            required:
+                - tool_name
+        PostToolUsePayload:
+            type: object
+            properties:
+                tool_input:
+                    description: The input to the tool
+                tool_name:
+                    type: string
+                    description: The name of the tool that was invoked
+                tool_response:
+                    description: The response from the tool
+            required:
+                - tool_name
+        PreToolUsePayload:
+            type: object
+            properties:
+                tool_input:
+                    description: The input to the tool
+                tool_name:
+                    type: string
+                    description: The name of the tool being invoked
+            required:
+                - tool_name
         Project:
             type: object
             properties:
