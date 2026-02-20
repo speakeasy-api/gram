@@ -4,6 +4,7 @@ import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
+import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
 import { useCatalogIconMap } from "../sources/Sources";
 import {
@@ -16,6 +17,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
   const { url: _mcpUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
+  const { data: deploymentResult } = useLatestDeployment();
 
   // Check if this toolset uses an external MCP and get its info
   const externalMcpInfo = useMemo(() => {
@@ -29,18 +31,17 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
     const slug = parts[2];
     if (!slug) return null;
 
-    // Try to find the logo from the catalog
-    // The catalogIconMap uses the registryServerSpecifier as the key
-    // We need to find a matching entry - for now, try common patterns
-    let logoUrl: string | undefined;
-    catalogIconMap.forEach((url, key) => {
-      if (key.includes(slug) || slug.includes(key.split("/").pop() || "")) {
-        logoUrl = url;
-      }
-    });
+    // Find the matching external MCP from the deployment to get the exact registry specifier
+    const externalMcps = deploymentResult?.deployment?.externalMcps ?? [];
+    const matchingMcp = externalMcps.find((mcp) => mcp.slug === slug);
+
+    // Use exact registry specifier lookup instead of fuzzy substring matching
+    const logoUrl = matchingMcp?.registryServerSpecifier
+      ? catalogIconMap.get(matchingMcp.registryServerSpecifier)
+      : undefined;
 
     return { slug, logoUrl };
-  }, [toolset.toolUrns, catalogIconMap]);
+  }, [toolset.toolUrns, catalogIconMap, deploymentResult]);
 
   // Pulse indicator for status
   const getStatusConfig = () => {
