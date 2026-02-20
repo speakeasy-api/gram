@@ -486,19 +486,6 @@ function LogsInnerContent({
                       isInsightsOpen ? "justify-start" : "flex-shrink-0",
                     )}
                   >
-                    <SimpleTooltip tooltip="Enabling this may expose sensitive data in logs.">
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={toolIoLogsEnabled}
-                          onCheckedChange={handleSetToolIoLogs}
-                          disabled={isMutatingLogs}
-                          aria-label="Record tool inputs & outputs"
-                        />
-                        <label className="text-sm text-muted-foreground select-none">
-                          Record tool I/O
-                        </label>
-                      </div>
-                    </SimpleTooltip>
                     <TimeRangePicker
                       preset={customRange ? null : dateRange}
                       customRange={customRange}
@@ -515,6 +502,25 @@ function LogsInnerContent({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <SimpleTooltip tooltip="Enabling this may expose sensitive data in logs.">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleSetToolIoLogs(!toolIoLogsEnabled);
+                            }}
+                            disabled={isMutatingLogs}
+                          >
+                            <div className="flex items-center justify-between w-full gap-3">
+                              <span>Record tool I/O</span>
+                              <Switch
+                                checked={toolIoLogsEnabled}
+                                onCheckedChange={handleSetToolIoLogs}
+                                disabled={isMutatingLogs}
+                                aria-label="Record tool inputs & outputs"
+                              />
+                            </div>
+                          </DropdownMenuItem>
+                        </SimpleTooltip>
                         <DropdownMenuItem
                           onClick={() => handleSetLogs(false)}
                           disabled={isMutatingLogs}
