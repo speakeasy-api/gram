@@ -1,12 +1,10 @@
 import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
-import { useLocalStorageState } from "@/hooks/useLocalStorageState.ts";
-import { Modal, ModalProvider, useModal } from "@speakeasy-api/moonshine";
+import { Modal, ModalProvider } from "@speakeasy-api/moonshine";
 import { ShieldAlert } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
-import { FunctionsAnnouncementModal } from "./functions-announcement-modal/index.tsx";
 import { TopHeader } from "./top-header.tsx";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
 
@@ -87,30 +85,6 @@ const AppLayoutContent = ({
 }: {
   isImpersonating: boolean;
 }) => {
-  const [hasSeenFunctionsModal, setHasSeenFunctionsModal] =
-    useLocalStorageState(
-      "gram-dashboard-has-seen-functions-announcement-modal",
-      false,
-    );
-  const { openScreen } = useModal();
-  const handleModalClose = () => {
-    setHasSeenFunctionsModal(true);
-  };
-  // if they have not seen the feature request modal, show it
-  useEffect(() => {
-    if (!hasSeenFunctionsModal) {
-      openScreen({
-        title: "Gram Functions Announcement",
-        component: (
-          <FunctionsAnnouncementModal
-            onClose={() => setHasSeenFunctionsModal(true)}
-          />
-        ),
-        id: "new-feature",
-      });
-    }
-  }, [openScreen, hasSeenFunctionsModal, handleModalClose]);
-
   return (
     <div className="flex flex-col h-screen w-full">
       {isImpersonating && <ImpersonationBanner />}
@@ -123,7 +97,6 @@ const AppLayoutContent = ({
             closable
             className="rounded-sm min-w-auto p-0 h-full 2xl:w-2/3 w-9/12 max-w-[1100px] 2xl:max-w-[1000px] max-h-[450px] min-h-auto"
             layout="custom"
-            onClose={handleModalClose}
           />
         </SidebarInset>
       </div>
