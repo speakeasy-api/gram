@@ -9,7 +9,8 @@ else
     exit 1
 fi
 
-uvx posting import --type openapi --output posting gram.posting.yaml
+mkdir -p posting
+uvx posting import --type openapi --output posting/generated gram.posting.yaml
 rm -f localhost_80.env
 
 # Post-process all generated YAML files:
