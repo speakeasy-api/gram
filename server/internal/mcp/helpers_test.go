@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -162,6 +163,78 @@ func TestRpcError_Error(t *testing.T) {
 			Message: "test error",
 		}
 		require.Contains(t, err.Error(), "test error")
+	})
+}
+
+func TestParseMcpEnvVariables(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns_empty_map_for_no_mcp_headers", func(t *testing.T) {
+		t.Parallel()
+		req, _ := http.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer token")
+
+		result := parseMcpEnvVariables(req, nil)
+		require.Empty(t, result)
+	})
+
+	t.Run("parses_mcp_prefixed_headers", func(t *testing.T) {
+		t.Parallel()
+		req, _ := http.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("MCP-API-Key", "secret-key")
+		req.Header.Set("MCP-User-Id", "12345")
+
+		result := parseMcpEnvVariables(req, nil)
+		require.Equal(t, "secret-key", result["api_key"])
+		require.Equal(t, "12345", result["user_id"])
+	})
+
+	t.Run("ignores_mcp_session_id_header", func(t *testing.T) {
+		t.Parallel()
+		req, _ := http.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("MCP-Session-ID", "session-123")
+		req.Header.Set("MCP-Other-Key", "value")
+
+		result := parseMcpEnvVariables(req, nil)
+		require.NotContains(t, result, "session_id")
+		require.Equal(t, "value", result["other_key"])
+	})
+
+	t.Run("maps_display_names_to_actual_header_names", func(t *testing.T) {
+		t.Parallel()
+		req, _ := http.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("MCP-API-Key", "secret-key")
+
+		headerDisplayNames := map[string]string{
+			"X-RapidAPI-Key": "API Key",
+		}
+
+		result := parseMcpEnvVariables(req, headerDisplayNames)
+		// The "api_key" from header should be mapped to "x_rapidapi_key"
+		require.Equal(t, "secret-key", result["x_rapidapi_key"])
+	})
+
+	t.Run("handles_spaces_in_display_names", func(t *testing.T) {
+		t.Parallel()
+		req, _ := http.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("MCP-My-Secret-Token", "token-value")
+
+		headerDisplayNames := map[string]string{
+			"X-Custom-Header": "My Secret Token",
+		}
+
+		result := parseMcpEnvVariables(req, headerDisplayNames)
+		require.Equal(t, "token-value", result["x_custom_header"])
+	})
+
+	t.Run("handles_case_insensitive_header_matching", func(t *testing.T) {
+		t.Parallel()
+		req, _ := http.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("mcp-api-key", "lowercase-key")
+
+		result := parseMcpEnvVariables(req, nil)
+		require.Equal(t, "lowercase-key", result["api_key"])
 	})
 }
 
