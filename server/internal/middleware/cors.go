@@ -12,6 +12,7 @@ import (
 var mcpOpenAccessControlRoutes = []string{
 	"/.well-known/oauth-authorization-server/mcp",
 	"/.well-known/oauth-protected-resource/mcp",
+	"/openapi.yaml",
 }
 
 func CORSMiddleware(env string, serverURL string, chatSessionsManager *chatsessions.Manager) func(next http.Handler) http.Handler {

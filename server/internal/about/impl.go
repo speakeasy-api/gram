@@ -42,7 +42,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 // Openapi implements about.Service.
 func (s *Service) Openapi(context.Context) (res *gen.OpenapiResult, body io.ReadCloser, err error) {
 	return &gen.OpenapiResult{
-		ContentType:   "application/yaml",
+		ContentType:   "text/yaml",
 		ContentLength: int64(len(openapiDoc)),
 	}, io.NopCloser(bytes.NewReader(openapiDoc)), nil
 }
