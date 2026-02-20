@@ -15,6 +15,7 @@ const (
 	ToolKindHTTP        ToolKind = "http"
 	ToolKindPrompt      ToolKind = "prompt"
 	ToolKindExternalMCP ToolKind = "externalmcp"
+	ToolKindAgent       ToolKind = "agent"
 )
 
 var toolKinds = map[ToolKind]struct{}{
