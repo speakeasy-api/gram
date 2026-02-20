@@ -114,6 +114,15 @@ When the user asks about "current period", "selected period", "this timeframe", 
           {children}
         </div>
 
+        {/* Backdrop overlay - closes sidebar when clicked */}
+        {isExpanded && (
+          <div
+            className="fixed inset-0 z-20"
+            onClick={() => setIsExpanded(false)}
+            aria-hidden="true"
+          />
+        )}
+
         {/* Toggle button - shows when collapsed and not hidden */}
         {!hideTrigger && (
           <button
@@ -142,9 +151,6 @@ When the user asks about "current period", "selected period", "this timeframe", 
             <div className="flex items-center gap-2">
               <Sparkles className="size-5 text-primary" />
               <span className="font-semibold">AI Insights</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500">
-                Beta
-              </span>
             </div>
             <button
               onClick={() => setIsExpanded(false)}
