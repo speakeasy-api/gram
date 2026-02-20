@@ -5,7 +5,7 @@
 # file, you can specify more tools or different version of listed ones below as
 # well as overriding environment variables.
 [tools]
-"aqua:ariga/atlas" = "1.0.0"
+"aqua:ariga/atlas" = "1.1.0"
 "github:speakeasy-api/speakeasy" = "1.700.2"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.1.3"
