@@ -32,13 +32,13 @@ copy_from_main=(
 
 for item in "${copy_from_main[@]}"; do
   src="${main_worktree}/${item}"
-  [ -e "$src" ] && cp -r "$src" .
+  [ -e "$src" ] && rsync -a "$src" .
 done
 
 mise trust
 mise run install:pnpm
 
-suffix=$(head /dev/urandom | tr -dc 'a-z0-9' | head -c 4)
+suffix=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)
 compose_project="gram-infra-${suffix}"
 mise set --file mise.local.toml "COMPOSE_PROJECT_NAME=${compose_project}"
 

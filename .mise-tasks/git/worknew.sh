@@ -14,7 +14,7 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 
-suffix=$(head /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 4)
+suffix=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 4)
 new_branch="${usage_name:?}-${suffix}"
 dest="${usage_dir:?}/_gram_${usage_name:?}"
 git fetch
