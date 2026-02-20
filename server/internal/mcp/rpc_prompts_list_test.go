@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 
@@ -13,7 +12,7 @@ func TestParsePromptArgumentsFromJSONSchema(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("parses_valid_schema_with_required_properties", func(t *testing.T) {
 		t.Parallel()
@@ -38,9 +37,10 @@ func TestParsePromptArgumentsFromJSONSchema(t *testing.T) {
 		// Find name arg
 		var nameArg, ageArg *promptArgument
 		for i := range args {
-			if args[i].Name == "name" {
+			switch args[i].Name {
+			case "name":
 				nameArg = &args[i]
-			} else if args[i].Name == "age" {
+			case "age":
 				ageArg = &args[i]
 			}
 		}

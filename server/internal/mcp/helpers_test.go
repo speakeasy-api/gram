@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"testing"
@@ -242,7 +241,7 @@ func TestIsBinaryMimeType(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("returns_true_for_image_types", func(t *testing.T) {
 		t.Parallel()
