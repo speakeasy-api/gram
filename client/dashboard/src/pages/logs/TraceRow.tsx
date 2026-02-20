@@ -39,7 +39,7 @@ export function TraceRow({
         onClick={onToggle}
       >
         {/* Timestamp */}
-        <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono">
+        <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono whitespace-nowrap">
           {formatNanoTimestamp(trace.startTimeUnixNano)}
         </div>
 
@@ -80,6 +80,7 @@ export function TraceRow({
           toolName={toolName}
           isExpanded={isExpanded}
           onLogClick={onLogClick}
+          parentTimestamp={trace.startTimeUnixNano}
         />
       )}
     </div>
