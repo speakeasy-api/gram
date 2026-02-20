@@ -6,6 +6,8 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
+import { Switch } from "@/components/ui/switch";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { cn } from "@/lib/utils";
@@ -84,6 +86,7 @@ function LogsContent() {
 
   // Flatten all pages into a single array of traces
   const allTraces = data?.pages.flatMap((page) => page.toolCalls) ?? [];
+  const toolIoLogsEnabled = data?.pages[0]?.toolIoLogsEnabled ?? false;
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
@@ -99,6 +102,17 @@ function LogsContent() {
       request: {
         setProductFeatureRequestBody: {
           featureName: FeatureName.Logs,
+          enabled,
+        },
+      },
+    });
+  };
+
+  const handleSetToolIoLogs = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.ToolIoLogs,
           enabled,
         },
       },
@@ -183,6 +197,8 @@ function LogsContent() {
         isFetchingNextPage={isFetchingNextPage}
         isMutatingLogs={isMutatingLogs}
         handleSetLogs={handleSetLogs}
+        toolIoLogsEnabled={toolIoLogsEnabled}
+        handleSetToolIoLogs={handleSetToolIoLogs}
         refetch={refetch}
       />
     </InsightsSidebar>
@@ -209,6 +225,8 @@ function LogsInnerContent({
   isFetchingNextPage,
   isMutatingLogs,
   handleSetLogs,
+  toolIoLogsEnabled,
+  handleSetToolIoLogs,
   refetch,
 }: {
   isLogsDisabled: boolean;
@@ -230,6 +248,8 @@ function LogsInnerContent({
   isFetchingNextPage: boolean;
   isMutatingLogs: boolean;
   handleSetLogs: (enabled: boolean) => void;
+  toolIoLogsEnabled: boolean;
+  handleSetToolIoLogs: (enabled: boolean) => void;
   refetch: () => void;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
@@ -288,7 +308,20 @@ function LogsInnerContent({
                       Browse raw tool call traces and telemetry data
                     </p>
                   </div>
-                  <div className="shrink-0">
+                  <div className="flex items-center gap-3 shrink-0">
+                    <SimpleTooltip tooltip="Enabling this may expose sensitive data in logs.">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={toolIoLogsEnabled}
+                          onCheckedChange={handleSetToolIoLogs}
+                          disabled={isMutatingLogs}
+                          aria-label="Record tool inputs & outputs"
+                        />
+                        <label className="text-sm text-muted-foreground select-none">
+                          Record tool I/O
+                        </label>
+                      </div>
+                    </SimpleTooltip>
                     <Button
                       onClick={() => handleSetLogs(false)}
                       disabled={isMutatingLogs}
