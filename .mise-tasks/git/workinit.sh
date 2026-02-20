@@ -32,10 +32,7 @@ copy_from_main=(
 
 for item in "${copy_from_main[@]}"; do
   src="${main_worktree}/${item}"
-  if [ -e "$src" ]; then
-    rm -rf "./${item}"
-    cp -r "$src" .
-  fi
+  [ -e "$src" ] && rsync -a "$src" .
 done
 
 mise trust
