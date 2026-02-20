@@ -106,7 +106,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
       <div className="flex h-full w-full">
         {/* Main content area - shrinks when sidebar opens */}
         <div
-          className="flex-1 min-w-0 transition-all duration-300 ease-in-out overflow-y-auto overflow-x-hidden"
+          className="flex-1 min-w-0 transition-all duration-300 ease-in-out overflow-hidden"
           style={{
             marginRight: isExpanded ? sidebarWidth : 0,
           }}
