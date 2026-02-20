@@ -29,14 +29,14 @@ done
 
 
 touch posting.env
-if ! grep -q '^BASE_URL=' posting.env; then
-    echo 'BASE_URL=http://localhost:8080' >> posting.env
-fi
 if ! grep -q '^GRAM_KEY=' posting.env; then
     echo 'GRAM_KEY=' >> posting.env
 fi
 if ! grep -q '^GRAM_PROJECT=' posting.env; then
     echo 'GRAM_PROJECT=default' >> posting.env
+fi
+if ! grep -q '^BASE_URL=' posting.env; then
+    echo "BASE_URL=$GRAM_API_URL" >> posting.env
 fi
 if [ -n "$NODE_EXTRA_CA_CERTS" ] && ! grep -q '^POSTING_SSL__CA_BUNDLE=' posting.env; then
     echo "POSTING_SSL__CA_BUNDLE=$NODE_EXTRA_CA_CERTS" >> posting.env
