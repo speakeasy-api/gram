@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	temporal_client "go.temporal.io/sdk/client"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -17,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 const (
@@ -62,9 +62,9 @@ func buildDynamicSessionTools(
 	logger *slog.Logger,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporal temporal_client.Client,
+	temporalEnv *temporal.Environment,
 ) ([]*toolListEntry, error) {
-	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporal); err != nil {
+	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
 		return nil, fmt.Errorf("failed to index toolset: %w", err)
 	}
 
@@ -155,9 +155,9 @@ func handleSearchToolsCall(
 	argsRaw json.RawMessage,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporal temporal_client.Client,
+	temporalEnv *temporal.Environment,
 ) (json.RawMessage, error) {
-	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporal); err != nil {
+	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to index toolset").Log(ctx, logger)
 	}
 
@@ -262,7 +262,7 @@ func handleSearchToolsCall(
 	return response, nil
 }
 
-func waitForIndexing(ctx context.Context, logger *slog.Logger, toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore, temporal temporal_client.Client) error {
+func waitForIndexing(ctx context.Context, logger *slog.Logger, toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore, temporalEnv *temporal.Environment) error {
 	indexed, err := vectorToolStore.ToolsetToolsAreIndexed(ctx, *toolset)
 	if err != nil {
 		return fmt.Errorf("failed to check toolset indexing status: %w", err)
@@ -271,7 +271,7 @@ func waitForIndexing(ctx context.Context, logger *slog.Logger, toolset *types.To
 	if !indexed {
 		wr, indexErr := background.ExecuteIndexToolset(
 			ctx,
-			temporal,
+			temporalEnv,
 			background.IndexToolsetParams{
 				ProjectID:   uuid.MustParse(toolset.ProjectID),
 				ToolsetSlug: toolset.Slug,

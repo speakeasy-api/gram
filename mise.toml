@@ -58,6 +58,7 @@ GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLIC
 ############################
 TEMPORAL_PORT = "7233"
 TEMPORAL_NAMESPACE = "default"
+TEMPORAL_TASK_QUEUE = "main"
 ## When using Temporal Cloud, the following variable should like something like:
 ##     "<namespace>.<account>.tmprl.cloud:7233".
 TEMPORAL_ADDRESS = ":{{env.TEMPORAL_PORT}}"

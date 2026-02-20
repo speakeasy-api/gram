@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.27.1**](../README.md)
+[**@gram-ai/elements v1.27.3**](../README.md)
 
 ***
 
@@ -117,7 +117,7 @@ const config: ElementsConfig = {
 
 ### toolsRequiringApproval?
 
-> `optional` **toolsRequiringApproval**: `ToolsFilter`
+> `optional` **toolsRequiringApproval**: [`ToolsFilter`](../type-aliases/ToolsFilter.md)
 
 List of tool names that require confirmation from the end user before
 being executed. A function can also be provided to dynamically determine if a tool requires approval.
@@ -144,7 +144,7 @@ tools: {
 
 ### toolsToInclude?
 
-> `optional` **toolsToInclude**: `ToolsFilter`
+> `optional` **toolsToInclude**: [`ToolsFilter`](../type-aliases/ToolsFilter.md)
 
 List of MCP tool names to expose to the chat.
 Only tool names listed here that match a tool in the MCP will be exposed to the chat.

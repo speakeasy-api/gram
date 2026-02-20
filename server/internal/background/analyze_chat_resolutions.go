@@ -6,11 +6,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 type AnalyzeChatResolutionsParams struct {
@@ -25,13 +27,8 @@ type ChatResolutionAnalyzer interface {
 	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
 }
 
-// TemporalChatResolutionAnalyzer implements ChatResolutionAnalyzer using Temporal.
-type TemporalChatResolutionAnalyzer struct {
-	Temporal client.Client
-}
-
-func (t *TemporalChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
-	_, err := ExecuteAnalyzeChatResolutionsWorkflow(ctx, t.Temporal, AnalyzeChatResolutionsParams{
+func ScheduleChatResolutionAnalysis(ctx context.Context, env *tenv.Environment, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
+	_, err := ExecuteAnalyzeChatResolutionsWorkflow(ctx, env, AnalyzeChatResolutionsParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
 		OrgID:     orgID,
@@ -40,11 +37,11 @@ func (t *TemporalChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx cont
 	return err
 }
 
-func ExecuteAnalyzeChatResolutionsWorkflow(ctx context.Context, temporalClient client.Client, params AnalyzeChatResolutionsParams) (client.WorkflowRun, error) {
+func ExecuteAnalyzeChatResolutionsWorkflow(ctx context.Context, env *tenv.Environment, params AnalyzeChatResolutionsParams) (client.WorkflowRun, error) {
 	id := fmt.Sprintf("v1:analyze-chat-resolutions:%s", params.ChatID.String())
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
-		TaskQueue:             string(TaskQueueMain),
+		TaskQueue:             string(env.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, // Necessary for chats that are resumed after a while
 		WorkflowRunTimeout:    5 * time.Minute,
 	}, AnalyzeChatResolutionsWorkflow, params)

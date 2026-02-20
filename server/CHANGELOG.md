@@ -1,5 +1,17 @@
 # server
 
+## 0.23.5
+
+### Patch Changes
+
+- 3c3e2c2: Refactored the server codebase to make the Temporal task queue configurable to unblock staging and preview deploys.
+
+## 0.23.4
+
+### Patch Changes
+
+- 62c6784: Show Elements errors inside the actual chat
+
 ## 0.23.3
 
 ### Patch Changes

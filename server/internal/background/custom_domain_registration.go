@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
@@ -26,12 +27,12 @@ type CustomDomainDeletionParams struct {
 }
 
 type CustomDomainRegistrationClient struct {
-	Temporal client.Client
+	TemporalEnv *tenv.Environment
 }
 
 func (c *CustomDomainRegistrationClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 	id := c.GetID(orgID, domain)
-	info, err := c.Temporal.DescribeWorkflowExecution(ctx, id, "")
+	info, err := c.TemporalEnv.Client().DescribeWorkflowExecution(ctx, id, "")
 	if err != nil {
 		return nil, fmt.Errorf("describe workflow execution: %w", err)
 	}
@@ -49,9 +50,9 @@ func (c *CustomDomainRegistrationClient) GetDeletionID(orgID string, domain stri
 
 func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string) (client.WorkflowRun, error) {
 	id := c.GetDeletionID(orgID, domain)
-	return c.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
-		TaskQueue:             string(TaskQueueMain),
+		TaskQueue:             string(c.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:    5 * time.Minute,
 	}, CustomDomainDeletionWorkflow, CustomDomainDeletionParams{
@@ -64,9 +65,9 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context
 
 func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string) (client.WorkflowRun, error) {
 	id := c.GetID(orgID, domain)
-	return c.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
-		TaskQueue:             string(TaskQueueMain),
+		TaskQueue:             string(c.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:    5 * time.Minute,
 	}, CustomDomainRegistrationWorkflow, CustomDomainRegistrationParams{

@@ -1,5 +1,21 @@
 # dashboard
 
+## 0.28.5
+
+### Patch Changes
+
+- Updated dependencies [7063e97]
+  - @gram-ai/elements@1.27.3
+
+## 0.28.4
+
+### Patch Changes
+
+- 987ce35: Reorder insights dashboard to show tool metrics first
+- Updated dependencies [62c6784]
+- Updated dependencies [c26afea]
+  - @gram-ai/elements@1.27.2
+
 ## 0.28.3
 
 ### Patch Changes

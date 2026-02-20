@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 type FunctionsReaperWorkflowParams struct {
@@ -25,10 +26,10 @@ type FunctionsReaperWorkflowResult struct {
 	Errors     int
 }
 
-func ExecuteProjectFunctionsReaperWorkflow(ctx context.Context, temporalClient client.Client, projectID uuid.UUID) (client.WorkflowRun, error) {
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+func ExecuteProjectFunctionsReaperWorkflow(ctx context.Context, env *tenv.Environment, projectID uuid.UUID) (client.WorkflowRun, error) {
+	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                       "v1:functions-reaper:" + projectID.String(),
-		TaskQueue:                string(TaskQueueMain),
+		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:       time.Minute * 10,

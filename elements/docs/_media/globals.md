@@ -1,8 +1,8 @@
-[**@gram-ai/elements v1.27.1**](README.md)
+[**@gram-ai/elements v1.27.3**](README.md)
 
 ***
 
-# @gram-ai/elements v1.27.1
+# @gram-ai/elements v1.27.3
 
 ## Interfaces
 
@@ -50,6 +50,7 @@
 - [ColorScheme](type-aliases/ColorScheme.md)
 - [RADII](type-aliases/RADII.md)
 - [Radius](type-aliases/Radius.md)
+- [ToolsFilter](type-aliases/ToolsFilter.md)
 - [ModalTriggerPosition](type-aliases/ModalTriggerPosition.md)
 
 ## Variables

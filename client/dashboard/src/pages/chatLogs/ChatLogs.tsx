@@ -128,16 +128,16 @@ export default function ChatLogs() {
   const [offset, setOffset] = useState(0);
   const limit = 50;
 
-  // Copilot config - includes both chat and logs tools for comprehensive analysis
-  const observabilityToolFilter = useCallback(
-    ({ toolName }: { toolName: string }) => {
-      const name = toolName.toLowerCase();
-      return name.includes("chat") || name.includes("logs");
-    },
-    [],
-  );
+  // Copilot config - whitelist of tools for chat session analysis
   const mcpConfig = useObservabilityMcpConfig({
-    toolsToInclude: observabilityToolFilter,
+    toolsToInclude: [
+      "gram_search_logs",
+      "gram_search_chats",
+      "gram_get_deployment_logs",
+      "gram_load_chat",
+      "gram_list_chats_with_resolutions",
+      "gram_list_chats",
+    ],
   });
 
   // Parse URL params

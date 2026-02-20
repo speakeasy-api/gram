@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/client"
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
@@ -28,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -63,7 +63,7 @@ type testInstance struct {
 	assets         *assets.Service
 	packages       *packages.Service
 	conn           *pgxpool.Pool
-	temporal       client.Client
+	temporalEnv    *temporal.Environment
 	sessionManager *sessions.Manager
 	assetStorage   assets.BlobStore
 }
@@ -89,11 +89,11 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	f := &feature.InMemory{}
 
-	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
+	temporalEnv, devserver := infra.NewTemporalEnv(t)
+	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
-		temporal.Close()
+		temporalEnv.Client().Close()
 		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
@@ -113,7 +113,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	svc := toolsets.NewService(logger, conn, sessionManager, nil)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret")
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 
@@ -124,7 +124,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 		assets:         assetsSvc,
 		packages:       packagesSvc,
 		conn:           conn,
-		temporal:       temporal,
+		temporalEnv:    temporalEnv,
 		sessionManager: sessionManager,
 		assetStorage:   assetStorage,
 	}

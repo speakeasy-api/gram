@@ -885,6 +885,89 @@ function ObservabilityContent({
 
   return (
     <div className="space-y-8">
+      {/* ===== TOOL METRICS SECTION ===== */}
+      <section>
+        <h2 className="text-lg font-semibold mb-4">Tool Metrics</h2>
+        <div className="space-y-4">
+          <ToolCallsChart
+            data={timeSeries ?? []}
+            timeRangeMs={timeRangeMs}
+            title="Tool Calls & Errors"
+            onTimeRangeSelect={onTimeRangeSelect}
+            isLoading={isRefetching}
+            showNoData={showNoDataOverlay}
+          />
+          <div
+            className={cn(
+              "grid gap-4",
+              isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+            )}
+          >
+            <div className="rounded-lg border border-border bg-card p-6">
+              <h3 className="text-sm font-semibold mb-4">Top Tools by Usage</h3>
+              <ToolBarList
+                tools={topToolsByCount ?? []}
+                valueKey="callCount"
+                valueLabel="calls"
+              />
+            </div>
+            <div className="rounded-lg border border-border bg-card p-6">
+              <h3 className="text-sm font-semibold mb-4">
+                Tools by Failure Rate
+              </h3>
+              <ToolBarList
+                tools={topToolsByFailureRate ?? []}
+                valueKey="failureRate"
+                valueLabel="%"
+                isPercentage
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== SYSTEM METRICS SECTION ===== */}
+      <section>
+        <h2 className="text-lg font-semibold mb-4">System Metrics</h2>
+        <div
+          className={cn(
+            "grid gap-4",
+            isInsightsOpen
+              ? "grid-cols-1 md:grid-cols-2"
+              : "grid-cols-1 md:grid-cols-3",
+          )}
+        >
+          <MetricCard
+            title="Tool Calls"
+            value={summary?.totalToolCalls ?? 0}
+            previousValue={comparison?.totalToolCalls ?? 0}
+            icon="wrench"
+            thresholds={{ red: 10, amber: 50 }}
+            comparisonLabel={comparisonLabel}
+          />
+          <MetricCard
+            title="Avg Latency"
+            value={summary?.avgLatencyMs ?? 0}
+            previousValue={comparison?.avgLatencyMs ?? 0}
+            format="ms"
+            icon="clock"
+            invertDelta
+            thresholds={{ red: 500, amber: 250, inverted: true }}
+            comparisonLabel={comparisonLabel}
+          />
+          <MetricCard
+            title="Error Rate"
+            value={errorRate}
+            previousValue={previousErrorRate}
+            format="percent"
+            icon="triangle-alert"
+            invertDelta
+            thresholds={{ red: 10, amber: 5, inverted: true }}
+            comparisonLabel={comparisonLabel}
+          />
+        </div>
+      </section>
+
       {/* ===== CHAT RESOLUTION SECTION ===== */}
       <section>
         <h2 className="text-lg font-semibold mb-4">Chat Resolution</h2>
@@ -980,89 +1063,6 @@ function ObservabilityContent({
             from={from}
             to={to}
             showNoData={showNoDataOverlay}
-          />
-        </div>
-      </section>
-
-      {/* ===== TOOL METRICS SECTION ===== */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4">Tool Metrics</h2>
-        <div className="space-y-4">
-          <ToolCallsChart
-            data={timeSeries ?? []}
-            timeRangeMs={timeRangeMs}
-            title="Tool Calls & Errors"
-            onTimeRangeSelect={onTimeRangeSelect}
-            isLoading={isRefetching}
-            showNoData={showNoDataOverlay}
-          />
-          <div
-            className={cn(
-              "grid gap-4",
-              isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
-            )}
-          >
-            <div className="rounded-lg border border-border bg-card p-6">
-              <h3 className="text-sm font-semibold mb-4">Top Tools by Usage</h3>
-              <ToolBarList
-                tools={topToolsByCount ?? []}
-                valueKey="callCount"
-                valueLabel="calls"
-              />
-            </div>
-            <div className="rounded-lg border border-border bg-card p-6">
-              <h3 className="text-sm font-semibold mb-4">
-                Tools by Failure Rate
-              </h3>
-              <ToolBarList
-                tools={topToolsByFailureRate ?? []}
-                valueKey="failureRate"
-                valueLabel="%"
-                isPercentage
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ===== SYSTEM METRICS SECTION ===== */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4">System Metrics</h2>
-        <div
-          className={cn(
-            "grid gap-4",
-            isInsightsOpen
-              ? "grid-cols-1 md:grid-cols-2"
-              : "grid-cols-1 md:grid-cols-3",
-          )}
-        >
-          <MetricCard
-            title="Tool Calls"
-            value={summary?.totalToolCalls ?? 0}
-            previousValue={comparison?.totalToolCalls ?? 0}
-            icon="wrench"
-            thresholds={{ red: 10, amber: 50 }}
-            comparisonLabel={comparisonLabel}
-          />
-          <MetricCard
-            title="Avg Latency"
-            value={summary?.avgLatencyMs ?? 0}
-            previousValue={comparison?.avgLatencyMs ?? 0}
-            format="ms"
-            icon="clock"
-            invertDelta
-            thresholds={{ red: 500, amber: 250, inverted: true }}
-            comparisonLabel={comparisonLabel}
-          />
-          <MetricCard
-            title="Error Rate"
-            value={errorRate}
-            previousValue={previousErrorRate}
-            format="percent"
-            icon="triangle-alert"
-            invertDelta
-            thresholds={{ red: 10, amber: 5, inverted: true }}
-            comparisonLabel={comparisonLabel}
           />
         </div>
       </section>
