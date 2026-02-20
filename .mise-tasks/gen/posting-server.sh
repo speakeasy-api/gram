@@ -10,7 +10,7 @@ else
 fi
 
 uvx posting import --type openapi --output posting gram.posting.yaml
-rm localhost_80.env
+rm -f localhost_80.env
 
 # Post-process all generated YAML files:
 # 1. Set Gram-Key header value to ${GRAM_KEY}
