@@ -87,6 +87,7 @@ export default defineConfig(({ command }) => {
             "/rpc": serverUrl,
             "/chat": serverUrl,
             "/mcp": serverUrl,
+            "/mcp-proxy": serverUrl,
             "/oauth": serverUrl,
             "/oauth-external": serverUrl,
             "/.well-known": serverUrl,
