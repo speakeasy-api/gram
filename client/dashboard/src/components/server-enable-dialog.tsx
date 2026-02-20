@@ -7,7 +7,7 @@ import { FeatureName } from "@gram/client/models/components";
 import { useFeaturesSetMutation, useGetPeriodUsage } from "@gram/client/react-query";
 import { Button } from "@speakeasy-api/moonshine";
 import { BarChart3, CreditCard, Server } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ServerEnableDialogProps {
   isOpen: boolean;
@@ -29,6 +29,13 @@ export function ServerEnableDialog({
   const { data: periodUsage } = useGetPeriodUsage();
   const [enableInsights, setEnableInsights] = useState(true);
   const { mutate: setLogsFeature } = useFeaturesSetMutation();
+
+  // Reset toggle to default ON when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      setEnableInsights(true);
+    }
+  }, [isOpen]);
 
   const isFirstServerEnable =
     !currentlyEnabled && periodUsage?.actualEnabledServerCount === 0;
