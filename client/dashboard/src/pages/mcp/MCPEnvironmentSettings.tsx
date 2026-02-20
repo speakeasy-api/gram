@@ -274,14 +274,23 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   const handleAddVariables = (
     entries: Array<{ key: string; value: string; state: EnvVarState }>,
   ) => {
-    const systemEntries = entries.filter((e) => e.state === "system" && e.value);
+    // Deduplicate by key, keeping the last entry for each key
+    const deduped = Array.from(
+      new Map(entries.map((e) => [e.key, e])).values(),
+    );
+    const systemEntries = deduped.filter(
+      (e) => e.state === "system" && e.value,
+    );
 
     if (systemEntries.length > 0) {
       updateEnvironmentMutation.mutate({
         request: {
           slug: selectedEnvironmentView,
           updateEnvironmentRequestBody: {
-            entriesToUpdate: systemEntries.map((e) => ({ name: e.key, value: e.value })),
+            entriesToUpdate: systemEntries.map((e) => ({
+              name: e.key,
+              value: e.value,
+            })),
             entriesToRemove: [],
           },
         },
@@ -290,7 +299,12 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       // Create environment entries for custom variables
       const existingEntries = mcpMetadata?.environmentConfigs || [];
       const newConfigEntries = systemEntries
-        .filter((e) => !existingEntries.some((existing) => existing.variableName === e.key))
+        .filter(
+          (e) =>
+            !existingEntries.some(
+              (existing) => existing.variableName === e.key,
+            ),
+        )
         .map((e) => ({ variableName: e.key, providedBy: "system" }));
 
       if (newConfigEntries.length > 0) {

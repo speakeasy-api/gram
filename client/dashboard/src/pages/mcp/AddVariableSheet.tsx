@@ -82,7 +82,9 @@ export function AddVariableSheet({
   };
 
   const removeEntry = (index: number) => {
-    setEntries((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+    setEntries((prev) =>
+      prev.length <= 1 ? prev : prev.filter((_, i) => i !== index),
+    );
   };
 
   const hasValidEntry = entries.some((e) => e.key.trim());
