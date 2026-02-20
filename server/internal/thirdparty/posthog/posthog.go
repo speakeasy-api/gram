@@ -127,6 +127,9 @@ func (p *Posthog) CaptureEvent(ctx context.Context, eventName string, distinctID
 		if authCtx.Email != nil {
 			properties.Set("email", *authCtx.Email)
 		}
+		if authCtx.ExternalUserID != "" {
+			properties.Set("external_user_id", authCtx.ExternalUserID)
+		}
 	}
 
 	// Add custom event properties
