@@ -15,7 +15,7 @@ import {
  */
 export function formatNanoTimestamp(nanos: number): string {
   const ms = nanos / 1_000_000;
-  return dateTimeFormatters.logTimestamp.format(new Date(ms));
+  return dateTimeFormatters.logTimestamp.format(new Date(ms)).replace(",", "");
 }
 
 /**
