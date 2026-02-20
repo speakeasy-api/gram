@@ -554,11 +554,14 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if !projectInOrg {
+		if projectInOrg {
+			authenticated = true
+		} else if !toolset.McpIsPublic {
+			// Only return 401 for non-public MCPs when the user is not in the owning org
 			return oops.C(oops.CodeUnauthorized)
 		}
-
-		authenticated = true
+		// For public MCPs accessed from outside the owning org, authenticated stays false
+		// so they get public access without environment/secrets
 	}
 
 	if !toolset.McpIsPublic && !authenticated {
