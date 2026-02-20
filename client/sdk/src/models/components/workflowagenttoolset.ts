@@ -8,7 +8,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 /**
  * A toolset reference for agent execution
  */
-export type AgentToolset = {
+export type WorkflowAgentToolset = {
   /**
    * The slug of the environment for auth
    */
@@ -20,16 +20,16 @@ export type AgentToolset = {
 };
 
 /** @internal */
-export type AgentToolset$Outbound = {
+export type WorkflowAgentToolset$Outbound = {
   environment_slug: string;
   toolset_slug: string;
 };
 
 /** @internal */
-export const AgentToolset$outboundSchema: z.ZodType<
-  AgentToolset$Outbound,
+export const WorkflowAgentToolset$outboundSchema: z.ZodType<
+  WorkflowAgentToolset$Outbound,
   z.ZodTypeDef,
-  AgentToolset
+  WorkflowAgentToolset
 > = z.object({
   environmentSlug: z.string(),
   toolsetSlug: z.string(),
@@ -40,6 +40,10 @@ export const AgentToolset$outboundSchema: z.ZodType<
   });
 });
 
-export function agentToolsetToJSON(agentToolset: AgentToolset): string {
-  return JSON.stringify(AgentToolset$outboundSchema.parse(agentToolset));
+export function workflowAgentToolsetToJSON(
+  workflowAgentToolset: WorkflowAgentToolset,
+): string {
+  return JSON.stringify(
+    WorkflowAgentToolset$outboundSchema.parse(workflowAgentToolset),
+  );
 }

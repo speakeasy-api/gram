@@ -104,286 +104,6 @@ paths:
       x-speakeasy-name-override: slackLogin
       x-speakeasy-react-hook:
         disabled: true
-  /rpc/agents.response:
-    delete:
-      description: Deletes any response associated with a given agent run.
-      operationId: deleteAgentResponse
-      parameters:
-        - allowEmptyValue: true
-          description: The ID of the response to retrieve
-          in: query
-          name: response_id
-          required: true
-          schema:
-            description: The ID of the response to retrieve
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: deleteResponse agents
-      tags:
-        - agents
-      x-speakeasy-name-override: delete
-    get:
-      description: Get the status of an async agent response by its ID.
-      operationId: getAgentResponse
-      parameters:
-        - allowEmptyValue: true
-          description: The ID of the response to retrieve
-          in: query
-          name: response_id
-          required: true
-          schema:
-            description: The ID of the response to retrieve
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AgentResponseOutput'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: getResponse agents
-      tags:
-        - agents
-      x-speakeasy-name-override: get
-    post:
-      description: Create a new agent response. Executes an agent workflow with the provided input and tools.
-      operationId: createAgentResponse
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AgentResponseRequest'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AgentResponseOutput'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: createResponse agents
-      tags:
-        - agents
-      x-speakeasy-name-override: create
   /rpc/assets.createSignedChatAttachmentURL:
     post:
       description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -11725,6 +11445,285 @@ paths:
       x-speakeasy-name-override: upsertGlobal
       x-speakeasy-react-hook:
         name: UpsertGlobalVariation
+  /rpc/workflows.createResponse:
+    post:
+      tags:
+        - agentworkflows
+      summary: createResponse agentworkflows
+      description: Create a new agent response. Executes an agent workflow with the provided input and tools.
+      operationId: createResponse
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowAgentRequest'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowAgentResponseOutput'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+  /rpc/workflows.deleteResponse:
+    delete:
+      tags:
+        - agentworkflows
+      summary: deleteResponse agentworkflows
+      description: Deletes any response associated with a given agent run.
+      operationId: deleteResponse
+      parameters:
+        - name: response_id
+          in: query
+          description: The ID of the response to retrieve
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            description: The ID of the response to retrieve
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+  /rpc/workflows.getResponse:
+    get:
+      tags:
+        - agentworkflows
+      summary: getResponse agentworkflows
+      description: Get the status of an async agent response by its ID.
+      operationId: getResponse
+      parameters:
+        - name: response_id
+          in: query
+          description: The ID of the response to retrieve
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            description: The ID of the response to retrieve
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowAgentResponseOutput'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
 components:
   schemas:
     AddDeploymentPackageForm:
@@ -11881,159 +11880,6 @@ components:
           description: The version of the package to add. If omitted, the latest version will be used.
       required:
         - name
-    AgentResponseOutput:
-      type: object
-      properties:
-        created_at:
-          type: integer
-          description: Unix timestamp when the response was created
-          format: int64
-        error:
-          type: string
-          description: Error message if the response failed
-        id:
-          type: string
-          description: Unique identifier for this response
-        instructions:
-          type: string
-          description: The instructions that were used
-        model:
-          type: string
-          description: The model that was used
-        object:
-          type: string
-          description: Object type, always 'response'
-        output:
-          type: array
-          items: {}
-          description: Array of output items (messages, tool calls)
-        previous_response_id:
-          type: string
-          description: ID of the previous response if continuing
-        result:
-          type: string
-          description: The final text result from the agent
-        status:
-          type: string
-          description: Status of the response
-          enum:
-            - in_progress
-            - completed
-            - failed
-        temperature:
-          type: number
-          description: Temperature that was used
-          format: double
-        text:
-          $ref: '#/components/schemas/AgentResponseText'
-      description: Response output from an agent workflow
-      required:
-        - id
-        - object
-        - created_at
-        - status
-        - model
-        - output
-        - temperature
-        - text
-        - result
-    AgentResponseRequest:
-      type: object
-      properties:
-        async:
-          type: boolean
-          description: If true, returns immediately with a response ID for polling
-        input:
-          description: The input to the agent - can be a string or array of messages
-        instructions:
-          type: string
-          description: System instructions for the agent
-        model:
-          type: string
-          description: The model to use for the agent (e.g., openai/gpt-4o)
-        previous_response_id:
-          type: string
-          description: ID of a previous response to continue from
-        store:
-          type: boolean
-          description: If true, stores the response defaults to true
-        sub_agents:
-          type: array
-          items:
-            $ref: '#/components/schemas/AgentSubAgent'
-          description: Sub-agents available for delegation
-        temperature:
-          type: number
-          description: Temperature for model responses
-          format: double
-        toolsets:
-          type: array
-          items:
-            $ref: '#/components/schemas/AgentToolset'
-          description: Toolsets available to the agent
-      description: Request payload for creating an agent response
-      required:
-        - model
-        - input
-    AgentResponseText:
-      type: object
-      properties:
-        format:
-          $ref: '#/components/schemas/AgentTextFormat'
-      description: Text format configuration for the response
-      required:
-        - format
-    AgentSubAgent:
-      type: object
-      properties:
-        description:
-          type: string
-          description: Description of what this sub-agent does
-        environment_slug:
-          type: string
-          description: The environment slug for auth
-        instructions:
-          type: string
-          description: Instructions for this sub-agent
-        name:
-          type: string
-          description: The name of this sub-agent
-        tools:
-          type: array
-          items:
-            type: string
-          description: Tool URNs available to this sub-agent
-        toolsets:
-          type: array
-          items:
-            $ref: '#/components/schemas/AgentToolset'
-          description: Toolsets available to this sub-agent
-      description: A sub-agent definition for the agent workflow
-      required:
-        - name
-        - description
-    AgentTextFormat:
-      type: object
-      properties:
-        type:
-          type: string
-          description: The type of text format (e.g., 'text')
-      description: Text format type
-      required:
-        - type
-    AgentToolset:
-      type: object
-      properties:
-        environment_slug:
-          type: string
-          description: The slug of the environment for auth
-        toolset_slug:
-          type: string
-          description: The slug of the toolset to use
-      description: A toolset reference for agent execution
-      required:
-        - toolset_slug
-        - environment_slug
     AllowedOrigin:
       type: object
       properties:
@@ -16115,10 +15961,14 @@ components:
           items:
             $ref: '#/components/schemas/ToolCallSummary'
           description: List of tool call summaries
+        tool_io_logs_enabled:
+          type: boolean
+          description: Whether tool input/output logging is enabled for the organization
       description: Result of searching tool call summaries
       required:
         - tool_calls
         - enabled
+        - tool_io_logs_enabled
     SearchUsersFilter:
       type: object
       properties:
@@ -16446,6 +16296,7 @@ components:
           description: Name of the feature to update
           enum:
             - logs
+            - tool_io_logs
           maxLength: 60
       required:
         - feature_name
@@ -17765,6 +17616,159 @@ components:
         - organization
         - projects
         - scopes
+    WorkflowAgentRequest:
+      type: object
+      properties:
+        async:
+          type: boolean
+          description: If true, returns immediately with a response ID for polling
+        input:
+          description: The input to the agent - can be a string or array of messages
+        instructions:
+          type: string
+          description: System instructions for the agent
+        model:
+          type: string
+          description: The model to use for the agent (e.g., openai/gpt-4o)
+        previous_response_id:
+          type: string
+          description: ID of a previous response to continue from
+        store:
+          type: boolean
+          description: If true, stores the response defaults to true
+        sub_agents:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowSubAgent'
+          description: Sub-agents available for delegation
+        temperature:
+          type: number
+          description: Temperature for model responses
+          format: double
+        toolsets:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowAgentToolset'
+          description: Toolsets available to the agent
+      description: Request payload for creating an agent response
+      required:
+        - model
+        - input
+    WorkflowAgentResponseOutput:
+      type: object
+      properties:
+        created_at:
+          type: integer
+          description: Unix timestamp when the response was created
+          format: int64
+        error:
+          type: string
+          description: Error message if the response failed
+        id:
+          type: string
+          description: Unique identifier for this response
+        instructions:
+          type: string
+          description: The instructions that were used
+        model:
+          type: string
+          description: The model that was used
+        object:
+          type: string
+          description: Object type, always 'response'
+        output:
+          type: array
+          items: {}
+          description: Array of output items (messages, tool calls)
+        previous_response_id:
+          type: string
+          description: ID of the previous response if continuing
+        result:
+          type: string
+          description: The final text result from the agent
+        status:
+          type: string
+          description: Status of the response
+          enum:
+            - in_progress
+            - completed
+            - failed
+        temperature:
+          type: number
+          description: Temperature that was used
+          format: double
+        text:
+          $ref: '#/components/schemas/WorkflowAgentResponseText'
+      description: Response output from an agent workflow
+      required:
+        - id
+        - object
+        - created_at
+        - status
+        - model
+        - output
+        - temperature
+        - text
+        - result
+    WorkflowAgentResponseText:
+      type: object
+      properties:
+        format:
+          $ref: '#/components/schemas/WorkflowAgentTextFormat'
+      description: Text format configuration for the response
+      required:
+        - format
+    WorkflowAgentTextFormat:
+      type: object
+      properties:
+        type:
+          type: string
+          description: The type of text format (e.g., 'text')
+      description: Text format type
+      required:
+        - type
+    WorkflowAgentToolset:
+      type: object
+      properties:
+        environment_slug:
+          type: string
+          description: The slug of the environment for auth
+        toolset_slug:
+          type: string
+          description: The slug of the toolset to use
+      description: A toolset reference for agent execution
+      required:
+        - toolset_slug
+        - environment_slug
+    WorkflowSubAgent:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of what this sub-agent does
+        environment_slug:
+          type: string
+          description: The environment slug for auth
+        instructions:
+          type: string
+          description: Instructions for this sub-agent
+        name:
+          type: string
+          description: The name of this sub-agent
+        tools:
+          type: array
+          items:
+            type: string
+          description: Tool URNs available to this sub-agent
+        toolsets:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowAgentToolset'
+          description: Toolsets available to this sub-agent
+      description: A sub-agent definition for the agent workflow
+      required:
+        - name
+        - description
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey
@@ -17800,7 +17804,7 @@ components:
       name: Gram-Session
       in: header
 tags:
-  - name: agents
+  - name: agentworkflows
     description: OpenAI Responses API compatible endpoint for running agent workflows.
   - name: assets
     description: Manages assets used by Gram projects.

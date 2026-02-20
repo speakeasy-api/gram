@@ -9,14 +9,14 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  AgentResponseText,
-  AgentResponseText$inboundSchema,
-} from "./agentresponsetext.js";
+  WorkflowAgentResponseText,
+  WorkflowAgentResponseText$inboundSchema,
+} from "./workflowagentresponsetext.js";
 
 /**
  * Status of the response
  */
-export const Status = {
+export const WorkflowAgentResponseOutputStatus = {
   InProgress: "in_progress",
   Completed: "completed",
   Failed: "failed",
@@ -24,12 +24,14 @@ export const Status = {
 /**
  * Status of the response
  */
-export type Status = ClosedEnum<typeof Status>;
+export type WorkflowAgentResponseOutputStatus = ClosedEnum<
+  typeof WorkflowAgentResponseOutputStatus
+>;
 
 /**
  * Response output from an agent workflow
  */
-export type AgentResponseOutput = {
+export type WorkflowAgentResponseOutput = {
   /**
    * Unix timestamp when the response was created
    */
@@ -69,7 +71,7 @@ export type AgentResponseOutput = {
   /**
    * Status of the response
    */
-  status: Status;
+  status: WorkflowAgentResponseOutputStatus;
   /**
    * Temperature that was used
    */
@@ -77,16 +79,17 @@ export type AgentResponseOutput = {
   /**
    * Text format configuration for the response
    */
-  text: AgentResponseText;
+  text: WorkflowAgentResponseText;
 };
 
 /** @internal */
-export const Status$inboundSchema: z.ZodNativeEnum<typeof Status> = z
-  .nativeEnum(Status);
+export const WorkflowAgentResponseOutputStatus$inboundSchema: z.ZodNativeEnum<
+  typeof WorkflowAgentResponseOutputStatus
+> = z.nativeEnum(WorkflowAgentResponseOutputStatus);
 
 /** @internal */
-export const AgentResponseOutput$inboundSchema: z.ZodType<
-  AgentResponseOutput,
+export const WorkflowAgentResponseOutput$inboundSchema: z.ZodType<
+  WorkflowAgentResponseOutput,
   z.ZodTypeDef,
   unknown
 > = z.object({
@@ -99,9 +102,9 @@ export const AgentResponseOutput$inboundSchema: z.ZodType<
   output: z.array(z.any()),
   previous_response_id: z.string().optional(),
   result: z.string(),
-  status: Status$inboundSchema,
+  status: WorkflowAgentResponseOutputStatus$inboundSchema,
   temperature: z.number(),
-  text: AgentResponseText$inboundSchema,
+  text: WorkflowAgentResponseText$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
@@ -109,12 +112,12 @@ export const AgentResponseOutput$inboundSchema: z.ZodType<
   });
 });
 
-export function agentResponseOutputFromJSON(
+export function workflowAgentResponseOutputFromJSON(
   jsonString: string,
-): SafeParseResult<AgentResponseOutput, SDKValidationError> {
+): SafeParseResult<WorkflowAgentResponseOutput, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AgentResponseOutput$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AgentResponseOutput' from JSON`,
+    (x) => WorkflowAgentResponseOutput$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'WorkflowAgentResponseOutput' from JSON`,
   );
 }
