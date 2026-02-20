@@ -5,7 +5,7 @@
 if openapi spec upgrade --version 3.1.0 server/gen/http/openapi3.yaml gram.posting.yaml 2>openapi-upgrade.errors.log; then
     echo "OpenAPI spec upgraded successfully."
 else
-    echo "Failed to upgrade OpenAPI spec. Check server/openapi-upgrade.errors.log for details."
+    echo "Failed to upgrade OpenAPI spec. Check openapi-upgrade.errors.log for details."
     exit 1
 fi
 
