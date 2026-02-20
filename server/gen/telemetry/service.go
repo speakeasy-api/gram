@@ -454,6 +454,8 @@ type SearchToolCallsResult struct {
 	NextCursor *string
 	// Whether tool metrics are enabled for the organization
 	Enabled bool
+	// Whether tool input/output logging is enabled for the organization
+	ToolIoLogsEnabled bool
 }
 
 // Filter criteria for searching user usage summaries

@@ -148,6 +148,8 @@ type SearchToolCallsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// Whether tool metrics are enabled for the organization
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether tool input/output logging is enabled for the organization
+	ToolIoLogsEnabled bool `form:"tool_io_logs_enabled" json:"tool_io_logs_enabled" xml:"tool_io_logs_enabled"`
 }
 
 // SearchChatsResponseBody is the type of the "telemetry" service "searchChats"
@@ -2245,8 +2247,9 @@ func NewSearchLogsResponseBody(res *telemetry.SearchLogsResult) *SearchLogsRespo
 // of the "searchToolCalls" endpoint of the "telemetry" service.
 func NewSearchToolCallsResponseBody(res *telemetry.SearchToolCallsResult) *SearchToolCallsResponseBody {
 	body := &SearchToolCallsResponseBody{
-		NextCursor: res.NextCursor,
-		Enabled:    res.Enabled,
+		NextCursor:        res.NextCursor,
+		Enabled:           res.Enabled,
+		ToolIoLogsEnabled: res.ToolIoLogsEnabled,
 	}
 	if res.ToolCalls != nil {
 		body.ToolCalls = make([]*ToolCallSummaryResponseBody, len(res.ToolCalls))

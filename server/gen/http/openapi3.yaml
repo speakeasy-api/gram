@@ -15831,10 +15831,14 @@ components:
                     items:
                         $ref: '#/components/schemas/ToolCallSummary'
                     description: List of tool call summaries
+                tool_io_logs_enabled:
+                    type: boolean
+                    description: Whether tool input/output logging is enabled for the organization
             description: Result of searching tool call summaries
             required:
                 - tool_calls
                 - enabled
+                - tool_io_logs_enabled
         SearchUsersFilter:
             type: object
             properties:
@@ -16162,6 +16166,7 @@ components:
                     description: Name of the feature to update
                     enum:
                         - logs
+                        - tool_io_logs
                     maxLength: 60
             required:
                 - feature_name
