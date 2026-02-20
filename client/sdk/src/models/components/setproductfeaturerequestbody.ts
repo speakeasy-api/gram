@@ -11,6 +11,7 @@ import { ClosedEnum } from "../../types/enums.js";
  */
 export const FeatureName = {
   Logs: "logs",
+  ToolIoLogs: "tool_io_logs",
 } as const;
 /**
  * Name of the feature to update

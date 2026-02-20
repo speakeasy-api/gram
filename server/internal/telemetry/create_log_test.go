@@ -406,6 +406,87 @@ func TestCreateLog_TraceAndSpanIDColumns(t *testing.T) {
 	require.Equal(t, spanID, *log.SpanID)
 }
 
+func TestCreateLog_ToolIOBodyContent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	inputBody := `{"name":"listPets","arguments":{"limit":10}}`
+	outputBody := `{"pets":[{"id":1,"name":"Fido"}]}`
+
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("POST")
+	attrs.RecordStatusCode(200)
+	attrs.RecordRequestBodyContent([]byte(inputBody))
+	attrs.RecordResponseBodyContent([]byte(outputBody))
+
+	toolInfo := newTestToolInfo(ti.enabledToolIOOrgID)
+	timestamp := time.Now().UTC()
+
+	ti.service.CreateLog(telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.Contains(t, log.Attributes, "listPets")
+	require.Contains(t, log.Attributes, "Fido")
+}
+
+func TestCreateLog_ToolIOBodyContentScrubbed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	inputBody := `{"name":"listPets","arguments":{"limit":10}}`
+	outputBody := `{"pets":[{"id":1,"name":"Fido"}]}`
+
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("POST")
+	attrs.RecordStatusCode(200)
+	attrs.RecordRequestBodyContent([]byte(inputBody))
+	attrs.RecordResponseBodyContent([]byte(outputBody))
+
+	toolInfo := newTestToolInfo(ti.orgID) // default org has tool IO disabled
+	timestamp := time.Now().UTC()
+
+	ti.service.CreateLog(telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.NotContains(t, log.Attributes, "gen_ai.tool.call.arguments")
+	require.NotContains(t, log.Attributes, "gen_ai.tool.call.result")
+	// Other attributes should still be present (ClickHouse nests dotted keys)
+	require.Contains(t, log.Attributes, `"method":"POST"`)
+}
+
+func TestCreateLog_ToolIOBodyContentNotPresentWhenNotRecorded(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	attrs := telemetry.HTTPLogAttributes{}
+	attrs.RecordMethod("GET")
+	attrs.RecordStatusCode(200)
+
+	toolInfo := newTestToolInfo(ti.orgID)
+	timestamp := time.Now().UTC()
+
+	ti.service.CreateLog(telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.NotContains(t, log.Attributes, "gen_ai.tool.call.arguments")
+	require.NotContains(t, log.Attributes, "gen_ai.tool.call.result")
+}
+
 func newTestToolInfo(orgID string) telemetry.ToolInfo {
 	return telemetry.ToolInfo{
 		ID:             uuid.New().String(),

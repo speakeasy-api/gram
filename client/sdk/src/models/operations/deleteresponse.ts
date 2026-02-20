@@ -5,12 +5,12 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type DeleteAgentResponseSecurity = {
+export type DeleteResponseSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   projectSlugHeaderGramProject?: string | undefined;
 };
 
-export type DeleteAgentResponseRequest = {
+export type DeleteResponseRequest = {
   /**
    * The ID of the response to retrieve
    */
@@ -26,16 +26,16 @@ export type DeleteAgentResponseRequest = {
 };
 
 /** @internal */
-export type DeleteAgentResponseSecurity$Outbound = {
+export type DeleteResponseSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
   "project_slug_header_Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const DeleteAgentResponseSecurity$outboundSchema: z.ZodType<
-  DeleteAgentResponseSecurity$Outbound,
+export const DeleteResponseSecurity$outboundSchema: z.ZodType<
+  DeleteResponseSecurity$Outbound,
   z.ZodTypeDef,
-  DeleteAgentResponseSecurity
+  DeleteResponseSecurity
 > = z.object({
   apikeyHeaderGramKey: z.string().optional(),
   projectSlugHeaderGramProject: z.string().optional(),
@@ -46,28 +46,26 @@ export const DeleteAgentResponseSecurity$outboundSchema: z.ZodType<
   });
 });
 
-export function deleteAgentResponseSecurityToJSON(
-  deleteAgentResponseSecurity: DeleteAgentResponseSecurity,
+export function deleteResponseSecurityToJSON(
+  deleteResponseSecurity: DeleteResponseSecurity,
 ): string {
   return JSON.stringify(
-    DeleteAgentResponseSecurity$outboundSchema.parse(
-      deleteAgentResponseSecurity,
-    ),
+    DeleteResponseSecurity$outboundSchema.parse(deleteResponseSecurity),
   );
 }
 
 /** @internal */
-export type DeleteAgentResponseRequest$Outbound = {
+export type DeleteResponseRequest$Outbound = {
   response_id: string;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const DeleteAgentResponseRequest$outboundSchema: z.ZodType<
-  DeleteAgentResponseRequest$Outbound,
+export const DeleteResponseRequest$outboundSchema: z.ZodType<
+  DeleteResponseRequest$Outbound,
   z.ZodTypeDef,
-  DeleteAgentResponseRequest
+  DeleteResponseRequest
 > = z.object({
   responseId: z.string(),
   gramKey: z.string().optional(),
@@ -80,10 +78,10 @@ export const DeleteAgentResponseRequest$outboundSchema: z.ZodType<
   });
 });
 
-export function deleteAgentResponseRequestToJSON(
-  deleteAgentResponseRequest: DeleteAgentResponseRequest,
+export function deleteResponseRequestToJSON(
+  deleteResponseRequest: DeleteResponseRequest,
 ): string {
   return JSON.stringify(
-    DeleteAgentResponseRequest$outboundSchema.parse(deleteAgentResponseRequest),
+    DeleteResponseRequest$outboundSchema.parse(deleteResponseRequest),
   );
 }

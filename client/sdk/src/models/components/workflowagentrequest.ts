@@ -5,20 +5,20 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  AgentSubAgent,
-  AgentSubAgent$Outbound,
-  AgentSubAgent$outboundSchema,
-} from "./agentsubagent.js";
+  WorkflowAgentToolset,
+  WorkflowAgentToolset$Outbound,
+  WorkflowAgentToolset$outboundSchema,
+} from "./workflowagenttoolset.js";
 import {
-  AgentToolset,
-  AgentToolset$Outbound,
-  AgentToolset$outboundSchema,
-} from "./agenttoolset.js";
+  WorkflowSubAgent,
+  WorkflowSubAgent$Outbound,
+  WorkflowSubAgent$outboundSchema,
+} from "./workflowsubagent.js";
 
 /**
  * Request payload for creating an agent response
  */
-export type AgentResponseRequest = {
+export type WorkflowAgentRequest = {
   /**
    * If true, returns immediately with a response ID for polling
    */
@@ -46,7 +46,7 @@ export type AgentResponseRequest = {
   /**
    * Sub-agents available for delegation
    */
-  subAgents?: Array<AgentSubAgent> | undefined;
+  subAgents?: Array<WorkflowSubAgent> | undefined;
   /**
    * Temperature for model responses
    */
@@ -54,27 +54,27 @@ export type AgentResponseRequest = {
   /**
    * Toolsets available to the agent
    */
-  toolsets?: Array<AgentToolset> | undefined;
+  toolsets?: Array<WorkflowAgentToolset> | undefined;
 };
 
 /** @internal */
-export type AgentResponseRequest$Outbound = {
+export type WorkflowAgentRequest$Outbound = {
   async?: boolean | undefined;
   input?: any | undefined;
   instructions?: string | undefined;
   model: string;
   previous_response_id?: string | undefined;
   store?: boolean | undefined;
-  sub_agents?: Array<AgentSubAgent$Outbound> | undefined;
+  sub_agents?: Array<WorkflowSubAgent$Outbound> | undefined;
   temperature?: number | undefined;
-  toolsets?: Array<AgentToolset$Outbound> | undefined;
+  toolsets?: Array<WorkflowAgentToolset$Outbound> | undefined;
 };
 
 /** @internal */
-export const AgentResponseRequest$outboundSchema: z.ZodType<
-  AgentResponseRequest$Outbound,
+export const WorkflowAgentRequest$outboundSchema: z.ZodType<
+  WorkflowAgentRequest$Outbound,
   z.ZodTypeDef,
-  AgentResponseRequest
+  WorkflowAgentRequest
 > = z.object({
   async: z.boolean().optional(),
   input: z.any().optional(),
@@ -82,9 +82,9 @@ export const AgentResponseRequest$outboundSchema: z.ZodType<
   model: z.string(),
   previousResponseId: z.string().optional(),
   store: z.boolean().optional(),
-  subAgents: z.array(AgentSubAgent$outboundSchema).optional(),
+  subAgents: z.array(WorkflowSubAgent$outboundSchema).optional(),
   temperature: z.number().optional(),
-  toolsets: z.array(AgentToolset$outboundSchema).optional(),
+  toolsets: z.array(WorkflowAgentToolset$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     previousResponseId: "previous_response_id",
@@ -92,10 +92,10 @@ export const AgentResponseRequest$outboundSchema: z.ZodType<
   });
 });
 
-export function agentResponseRequestToJSON(
-  agentResponseRequest: AgentResponseRequest,
+export function workflowAgentRequestToJSON(
+  workflowAgentRequest: WorkflowAgentRequest,
 ): string {
   return JSON.stringify(
-    AgentResponseRequest$outboundSchema.parse(agentResponseRequest),
+    WorkflowAgentRequest$outboundSchema.parse(workflowAgentRequest),
   );
 }

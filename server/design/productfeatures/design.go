@@ -19,7 +19,7 @@ var _ = Service("features", func() {
 		Payload(func() {
 			Attribute("feature_name", String, "Name of the feature to update", func() {
 				MaxLength(60)
-				Enum("logs")
+				Enum("logs", "tool_io_logs")
 			})
 			Attribute("enabled", Boolean, "Whether the feature should be enabled")
 			Required("feature_name", "enabled")

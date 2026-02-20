@@ -1,7 +1,9 @@
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import { TelemetryLogRecord } from "@gram/client/models/components";
-import { Copy } from "lucide-react";
+import { ChevronDown, Copy } from "lucide-react";
+import { useState } from "react";
 import { formatNanoTimestamp, getSeverityColorClass } from "./utils";
 
 interface LogDetailSheetProps {
@@ -27,12 +29,79 @@ export function LogDetailSheet({
   );
 }
 
+/** Keys used to store tool I/O content in telemetry attributes (OTel GenAI semantic conventions). */
+const TOOL_IO_ATTR_KEYS = {
+  input: "gen_ai.tool.call.arguments",
+  output: "gen_ai.tool.call.result",
+} as const;
+
+/**
+ * Extract a deeply nested value from an object using a dot-separated path.
+ * e.g. getNestedValue(obj, "gram.tool_call.input.content")
+ */
+function getNestedValue(
+  obj: Record<string, unknown>,
+  path: string,
+): string | undefined {
+  const parts = path.split(".");
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (
+      current === null ||
+      current === undefined ||
+      typeof current !== "object"
+    )
+      return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return typeof current === "string" ? current : undefined;
+}
+
+/**
+ * Remove a deeply nested key from an object (mutates a cloned copy).
+ * Returns a shallow-cloned object with the leaf key removed.
+ */
+function removeNestedKey(
+  obj: Record<string, unknown>,
+  path: string,
+): Record<string, unknown> {
+  const clone = structuredClone(obj);
+  const parts = path.split(".");
+  let current: Record<string, unknown> = clone;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const next = current[parts[i]];
+    if (next === null || next === undefined || typeof next !== "object")
+      return clone;
+    current = next as Record<string, unknown>;
+  }
+  delete current[parts[parts.length - 1]];
+  return clone;
+}
+
 function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
   const severityClass = getSeverityColorClass(log.severityText);
   const resourceAttrs = log.resourceAttributes as
     | { gram?: { tool?: { urn?: string } } }
     | undefined;
   const gramUrn = resourceAttrs?.gram?.tool?.urn;
+
+  // Extract tool I/O content from attributes
+  const attrs = log.attributes as Record<string, unknown> | undefined;
+  const toolInput = attrs
+    ? getNestedValue(attrs, TOOL_IO_ATTR_KEYS.input)
+    : undefined;
+  const toolOutput = attrs
+    ? getNestedValue(attrs, TOOL_IO_ATTR_KEYS.output)
+    : undefined;
+
+  // Remove tool I/O keys from attributes to avoid duplication in the generic section
+  let filteredAttrs = attrs;
+  if (filteredAttrs && toolInput) {
+    filteredAttrs = removeNestedKey(filteredAttrs, TOOL_IO_ATTR_KEYS.input);
+  }
+  if (filteredAttrs && toolOutput) {
+    filteredAttrs = removeNestedKey(filteredAttrs, TOOL_IO_ATTR_KEYS.output);
+  }
 
   return (
     <div className="flex flex-col gap-6 pt-6 px-5 pb-6">
@@ -110,14 +179,20 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
             </div>
           </div>
 
-          {/* Attributes */}
-          {log.attributes &&
-            Object.keys(log.attributes as object).length > 0 && (
-              <AttributesSection
-                title="Attributes"
-                data={log.attributes as Record<string, unknown>}
-              />
-            )}
+          {/* Tool Input */}
+          {toolInput && (
+            <CollapsibleBodySection title="Tool Input" content={toolInput} />
+          )}
+
+          {/* Tool Output */}
+          {toolOutput && (
+            <CollapsibleBodySection title="Tool Output" content={toolOutput} />
+          )}
+
+          {/* Attributes (with tool I/O keys removed) */}
+          {filteredAttrs && Object.keys(filteredAttrs).length > 0 && (
+            <AttributesSection title="Attributes" data={filteredAttrs} />
+          )}
 
           {/* Resource */}
           {log.resourceAttributes &&
@@ -152,6 +227,62 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
           </div>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function CollapsibleBodySection({
+  title,
+  content,
+}: {
+  title: string;
+  content: string;
+}) {
+  const [isOpen, setIsOpen] = useState(true);
+
+  // Try to pretty-print JSON content
+  let displayContent = content;
+  try {
+    const parsed = JSON.parse(content);
+    displayContent = JSON.stringify(parsed, null, 2);
+  } catch {
+    // Not JSON, use as-is
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between group"
+      >
+        <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
+          {title}
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            className="p-1.5 rounded hover:bg-muted"
+            onClick={(e) => {
+              e.stopPropagation();
+              void navigator.clipboard.writeText(content);
+            }}
+          >
+            <Copy className="size-4" />
+          </button>
+          <ChevronDown
+            className={cn(
+              "size-4 text-muted-foreground transition-transform",
+              !isOpen && "-rotate-90",
+            )}
+          />
+        </div>
+      </button>
+      {isOpen && (
+        <div className="bg-muted border border-border rounded-lg p-4 max-h-96 overflow-y-auto">
+          <pre className="font-mono text-sm whitespace-pre-wrap break-words">
+            {displayContent}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

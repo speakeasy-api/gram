@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AgentsGetQueryData,
-  buildAgentsGetQuery,
-  prefetchAgentsGet,
-  queryKeyAgentsGet,
-} from "./agentsGet.core.js";
+  AgentworkflowsGetResponseQueryData,
+  buildAgentworkflowsGetResponseQuery,
+  prefetchAgentworkflowsGetResponse,
+  queryKeyAgentworkflowsGetResponse,
+} from "./agentworkflowsGetResponse.core.js";
 export {
-  type AgentsGetQueryData,
-  buildAgentsGetQuery,
-  prefetchAgentsGet,
-  queryKeyAgentsGet,
+  type AgentworkflowsGetResponseQueryData,
+  buildAgentworkflowsGetResponseQuery,
+  prefetchAgentworkflowsGetResponse,
+  queryKeyAgentworkflowsGetResponse,
 };
 
-export type AgentsGetQueryError =
+export type AgentworkflowsGetResponseQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,19 +53,25 @@ export type AgentsGetQueryError =
   | SDKValidationError;
 
 /**
- * getResponse agents
+ * getResponse agentworkflows
  *
  * @remarks
  * Get the status of an async agent response by its ID.
  */
-export function useAgentsGet(
-  request: operations.GetAgentResponseRequest,
-  security?: operations.GetAgentResponseSecurity | undefined,
-  options?: QueryHookOptions<AgentsGetQueryData, AgentsGetQueryError>,
-): UseQueryResult<AgentsGetQueryData, AgentsGetQueryError> {
+export function useAgentworkflowsGetResponse(
+  request: operations.GetResponseRequest,
+  security?: operations.GetResponseSecurity | undefined,
+  options?: QueryHookOptions<
+    AgentworkflowsGetResponseQueryData,
+    AgentworkflowsGetResponseQueryError
+  >,
+): UseQueryResult<
+  AgentworkflowsGetResponseQueryData,
+  AgentworkflowsGetResponseQueryError
+> {
   const client = useGramContext();
   return useQuery({
-    ...buildAgentsGetQuery(
+    ...buildAgentworkflowsGetResponseQuery(
       client,
       request,
       security,
@@ -76,19 +82,25 @@ export function useAgentsGet(
 }
 
 /**
- * getResponse agents
+ * getResponse agentworkflows
  *
  * @remarks
  * Get the status of an async agent response by its ID.
  */
-export function useAgentsGetSuspense(
-  request: operations.GetAgentResponseRequest,
-  security?: operations.GetAgentResponseSecurity | undefined,
-  options?: SuspenseQueryHookOptions<AgentsGetQueryData, AgentsGetQueryError>,
-): UseSuspenseQueryResult<AgentsGetQueryData, AgentsGetQueryError> {
+export function useAgentworkflowsGetResponseSuspense(
+  request: operations.GetResponseRequest,
+  security?: operations.GetResponseSecurity | undefined,
+  options?: SuspenseQueryHookOptions<
+    AgentworkflowsGetResponseQueryData,
+    AgentworkflowsGetResponseQueryError
+  >,
+): UseSuspenseQueryResult<
+  AgentworkflowsGetResponseQueryData,
+  AgentworkflowsGetResponseQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAgentsGetQuery(
+    ...buildAgentworkflowsGetResponseQuery(
       client,
       request,
       security,
@@ -98,7 +110,7 @@ export function useAgentsGetSuspense(
   });
 }
 
-export function setAgentsGetData(
+export function setAgentworkflowsGetResponseData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -107,14 +119,14 @@ export function setAgentsGetData(
       gramProject?: string | undefined;
     },
   ],
-  data: AgentsGetQueryData,
-): AgentsGetQueryData | undefined {
-  const key = queryKeyAgentsGet(...queryKeyBase);
+  data: AgentworkflowsGetResponseQueryData,
+): AgentworkflowsGetResponseQueryData | undefined {
+  const key = queryKeyAgentworkflowsGetResponse(...queryKeyBase);
 
-  return client.setQueryData<AgentsGetQueryData>(key, data);
+  return client.setQueryData<AgentworkflowsGetResponseQueryData>(key, data);
 }
 
-export function invalidateAgentsGet(
+export function invalidateAgentworkflowsGetResponse(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -127,16 +139,21 @@ export function invalidateAgentsGet(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "agents", "get", ...queryKeyBase],
+    queryKey: [
+      "@gram/client",
+      "agentworkflows",
+      "getResponse",
+      ...queryKeyBase,
+    ],
   });
 }
 
-export function invalidateAllAgentsGet(
+export function invalidateAllAgentworkflowsGetResponse(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "agents", "get"],
+    queryKey: ["@gram/client", "agentworkflows", "getResponse"],
   });
 }

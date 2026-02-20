@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { agentsCreate } from "../funcs/agentsCreate.js";
+import { agentworkflowsCreateResponse } from "../funcs/agentworkflowsCreateResponse.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -28,15 +28,16 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type AgentsCreateMutationVariables = {
-  request: operations.CreateAgentResponseRequest;
-  security?: operations.CreateAgentResponseSecurity | undefined;
+export type AgentworkflowsCreateResponseMutationVariables = {
+  request: operations.CreateResponseRequest;
+  security?: operations.CreateResponseSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type AgentsCreateMutationData = components.AgentResponseOutput;
+export type AgentworkflowsCreateResponseMutationData =
+  components.WorkflowAgentResponseOutput;
 
-export type AgentsCreateMutationError =
+export type AgentworkflowsCreateResponseMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -48,49 +49,49 @@ export type AgentsCreateMutationError =
   | SDKValidationError;
 
 /**
- * createResponse agents
+ * createResponse agentworkflows
  *
  * @remarks
  * Create a new agent response. Executes an agent workflow with the provided input and tools.
  */
-export function useAgentsCreateMutation(
+export function useAgentworkflowsCreateResponseMutation(
   options?: MutationHookOptions<
-    AgentsCreateMutationData,
-    AgentsCreateMutationError,
-    AgentsCreateMutationVariables
+    AgentworkflowsCreateResponseMutationData,
+    AgentworkflowsCreateResponseMutationError,
+    AgentworkflowsCreateResponseMutationVariables
   >,
 ): UseMutationResult<
-  AgentsCreateMutationData,
-  AgentsCreateMutationError,
-  AgentsCreateMutationVariables
+  AgentworkflowsCreateResponseMutationData,
+  AgentworkflowsCreateResponseMutationError,
+  AgentworkflowsCreateResponseMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildAgentsCreateMutation(client, options),
+    ...buildAgentworkflowsCreateResponseMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyAgentsCreate(): MutationKey {
-  return ["@gram/client", "agents", "create"];
+export function mutationKeyAgentworkflowsCreateResponse(): MutationKey {
+  return ["@gram/client", "agentworkflows", "createResponse"];
 }
 
-export function buildAgentsCreateMutation(
+export function buildAgentworkflowsCreateResponseMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: AgentsCreateMutationVariables,
-  ) => Promise<AgentsCreateMutationData>;
+    variables: AgentworkflowsCreateResponseMutationVariables,
+  ) => Promise<AgentworkflowsCreateResponseMutationData>;
 } {
   return {
-    mutationKey: mutationKeyAgentsCreate(),
-    mutationFn: function agentsCreateMutationFn({
+    mutationKey: mutationKeyAgentworkflowsCreateResponse(),
+    mutationFn: function agentworkflowsCreateResponseMutationFn({
       request,
       security,
       options,
-    }): Promise<AgentsCreateMutationData> {
+    }): Promise<AgentworkflowsCreateResponseMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -103,7 +104,7 @@ export function buildAgentsCreateMutation(
           ),
         },
       };
-      return unwrapAsync(agentsCreate(
+      return unwrapAsync(agentworkflowsCreateResponse(
         client$,
         request,
         security,
