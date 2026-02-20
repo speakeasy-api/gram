@@ -46,7 +46,11 @@ function getNestedValue(
   const parts = path.split(".");
   let current: unknown = obj;
   for (const part of parts) {
-    if (current === null || current === undefined || typeof current !== "object")
+    if (
+      current === null ||
+      current === undefined ||
+      typeof current !== "object"
+    )
       return undefined;
     current = (current as Record<string, unknown>)[part];
   }
@@ -186,13 +190,9 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
           )}
 
           {/* Attributes (with tool I/O keys removed) */}
-          {filteredAttrs &&
-            Object.keys(filteredAttrs).length > 0 && (
-              <AttributesSection
-                title="Attributes"
-                data={filteredAttrs}
-              />
-            )}
+          {filteredAttrs && Object.keys(filteredAttrs).length > 0 && (
+            <AttributesSection title="Attributes" data={filteredAttrs} />
+          )}
 
           {/* Resource */}
           {log.resourceAttributes &&
