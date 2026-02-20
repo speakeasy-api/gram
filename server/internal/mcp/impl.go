@@ -435,38 +435,37 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	//   & non-DCR OAuth Server
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
-		// External OAuth server flow - only accept Authorization header
-		if authToken == "" {
-			s.logger.WarnContext(ctx, "No authorization token provided")
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-		}
-
-		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{},
-			Token:        authToken,
-		})
-	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
-		// Custom OAuth provider flow - only accept Authorization header
-		oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
-		if err != nil {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
-		}
-		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
-
-		for _, externalSecret := range oauthToken.ExternalSecrets {
+		// External OAuth server flow - pass through auth token if provided
+		// For cross-org access to public MCPs, we allow access without OAuth token
+		if authToken != "" {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: externalSecret.SecurityKeys,
-				Token:        externalSecret.Token,
+				securityKeys: []string{},
+				Token:        authToken,
 			})
 		}
+		// If no auth token, allow public access - underlying server handles auth
+	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
+		// Custom OAuth provider flow - validate token if provided
+		// For cross-org access to public MCPs, we allow access without valid OAuth token
+		if authToken != "" {
+			oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
+			if err != nil {
+				// Token provided but invalid - log and allow public access anyway
+				s.logger.InfoContext(ctx, "OAuth token validation failed, allowing public access", attr.SlogError(err))
+			} else {
+				s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
+				for _, externalSecret := range oauthToken.ExternalSecrets {
+					tokenInputs = append(tokenInputs, oauthTokenInputs{
+						securityKeys: externalSecret.SecurityKeys,
+						Token:        externalSecret.Token,
+					})
+				}
+			}
+		}
+		// If no auth token or validation failed, allow public access
 	case toolset.McpIsPublic && hasExternalMCPOAuth:
-		wwwAuth := fmt.Sprintf(`Bearer resource_metadata=%s`,
-			baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug)
-
-		// Prioritize literal tokens sent by the client. Pass through directly
-		// to underlying server.
+		// External MCP OAuth flow - pass through tokens if provided
+		// For cross-org access to public MCPs, we allow access without OAuth token
 		if authToken != "" {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
 				securityKeys: []string{},
@@ -480,21 +479,21 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		// from a Gram app (eg: Dashboard/Playground)
 		if gramSession, _ := r.Cookie(constants.SessionCookie); gramSession != nil {
 			resolvedToken, err := s.resolveExternalMcpOAuthToken(ctx, fullToolset)
-			if err != nil {
-				w.Header().Set("WWW-Authenticate", wwwAuth)
-				return oops.E(oops.CodeUnauthorized, err, "unauthorized")
+			if err == nil {
+				tokenInputs = append(tokenInputs, oauthTokenInputs{
+					securityKeys: []string{},
+					Token:        resolvedToken,
+				})
+
+				break
 			}
-
-			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: []string{},
-				Token:        resolvedToken,
-			})
-
-			break
+			// If OAuth token lookup fails (e.g., cross-org user without credentials),
+			// fall through to allow public access without OAuth token
+			s.logger.InfoContext(ctx, "OAuth token lookup failed, allowing public access", attr.SlogError(err))
 		}
 
-		w.Header().Set("WWW-Authenticate", wwwAuth)
-		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		// For public MCPs with external OAuth, allow access without OAuth token
+		// The underlying MCP server will handle auth as needed
 	case !toolset.McpIsPublic:
 		// Private MCP - always allow chatSessionJwt fallback since private servers require user authentication
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
