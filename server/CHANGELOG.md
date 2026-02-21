@@ -1,5 +1,12 @@
 # server
 
+## 0.23.6
+
+### Patch Changes
+
+- 3f5e4e9: Open CORS policy on /openapi.yaml and serve as text/yaml to avoid browser download.
+- c4baf37: Redesign source detail page with two-panel deployments and invocation activity to give users a high level overview of a sources's utilisation in any MCP servers.
+
 ## 0.23.5
 
 ### Patch Changes

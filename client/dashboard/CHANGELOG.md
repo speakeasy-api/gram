@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.28.6
+
+### Patch Changes
+
+- 2c8987d: Wire up add another button in environment variables sheet
+- c4baf37: Redesign source detail page with two-panel deployments and invocation activity to give users a high level overview of a sources's utilisation in any MCP servers.
+
 ## 0.28.5
 
 ### Patch Changes
