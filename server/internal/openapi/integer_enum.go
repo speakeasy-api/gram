@@ -90,6 +90,17 @@ func transformEnumNode(node map[string]any) {
 		}
 	}
 
+	// Recurse into $defs / definitions
+	for _, keyword := range []string{"$defs", "definitions"} {
+		if defs, ok := node[keyword].(map[string]any); ok {
+			for _, v := range defs {
+				if sub, ok := v.(map[string]any); ok {
+					transformEnumNode(sub)
+				}
+			}
+		}
+	}
+
 	// Recurse into items
 	if items, ok := node["items"].(map[string]any); ok {
 		transformEnumNode(items)

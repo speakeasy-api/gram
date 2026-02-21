@@ -180,6 +180,33 @@ func TestTransformIntegerEnums_PreservesSiblingKeys(t *testing.T) {
 	require.Len(t, node["anyOf"], 3)
 }
 
+func TestTransformIntegerEnums_NestedInDefs(t *testing.T) {
+	t.Parallel()
+	schema := []byte(`{
+		"type":"object",
+		"properties":{
+			"freq":{"$ref":"#/$defs/Frequency"}
+		},
+		"$defs":{
+			"Frequency":{"type":"integer","enum":[1,5,15]}
+		}
+	}`)
+	result := TransformIntegerEnums(schema)
+
+	node := unmarshalMap(t, result)
+	defs, ok := node["$defs"].(map[string]any)
+	require.True(t, ok)
+	freq, ok := defs["Frequency"].(map[string]any)
+	require.True(t, ok)
+	require.Nil(t, freq["type"])
+	require.Nil(t, freq["enum"])
+	require.Equal(t, []any{
+		map[string]any{"type": "integer", "const": float64(1)},
+		map[string]any{"type": "integer", "const": float64(5)},
+		map[string]any{"type": "integer", "const": float64(15)},
+	}, freq["anyOf"])
+}
+
 func unmarshalMap(t *testing.T, data []byte) map[string]any {
 	t.Helper()
 	var m map[string]any
