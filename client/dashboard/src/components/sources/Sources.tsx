@@ -20,7 +20,14 @@ import {
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import { ChevronDown, Code, FileCode, Plus, Server } from "lucide-react";
+import {
+  ChevronDown,
+  CircleAlert,
+  Code,
+  FileCode,
+  Plus,
+  Server,
+} from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
@@ -28,6 +35,7 @@ import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard, SourceCardSkeleton } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
+import { useFailedDeploymentSources } from "./useFailedDeploymentSources";
 import { ViewAssetDialogContent } from "./ViewAssetDialogContent";
 
 type DialogState =
@@ -98,6 +106,7 @@ export default function Sources() {
   const deployment = deploymentResult?.deployment;
 
   const assetsCausingFailure = useUnusedAssetIds();
+  const failedDeployment = useFailedDeploymentSources();
   const {
     dialogState,
     openRemoveSource,
@@ -240,7 +249,20 @@ export default function Sources() {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title>Sources</Page.Section.Title>
+        <Page.Section.Title>
+          <span className="inline-flex items-center gap-2">
+            Sources
+            {failedDeployment.hasFailures && failedDeployment.deployment && (
+              <routes.deployments.deployment.Link
+                params={[failedDeployment.deployment.id]}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-sm font-medium text-destructive bg-destructive/10 hover:bg-destructive/20 transition-colors"
+              >
+                <CircleAlert className="size-4" />
+                <span>Deployment errors</span>
+              </routes.deployments.deployment.Link>
+            )}
+          </span>
+        </Page.Section.Title>
         <Page.Section.Description>
           {isFunctionsEnabled
             ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"

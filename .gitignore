@@ -9,6 +9,7 @@ junit-report.xml
 .mise-tasks/local
 .assets
 .vscode/*
+.zed/*
 !.vscode/extensions.json
 *.code-workspace
 .idea
@@ -50,3 +51,4 @@ poetry-installer-error-*.log
 package-lock.json
 /examples/*/pnpm-lock.yaml
 .worktrees
+.granary/

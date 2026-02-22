@@ -6,6 +6,7 @@ import {
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
+import { sourceTypeToUrnKind } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
@@ -64,12 +65,7 @@ export function SourceCard({
   const routes = useRoutes();
   const config = sourceTypeConfig[asset.type];
 
-  const sourceKind =
-    asset.type === "openapi"
-      ? "http"
-      : asset.type === "function"
-        ? "function"
-        : "externalmcp";
+  const sourceKind = sourceTypeToUrnKind(asset.type);
 
   const actions = [
     ...(asset.type === "openapi"
