@@ -1,15 +1,22 @@
 import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { Server } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query";
+import { FeatureName } from "@gram/client/models/components";
+import {
+  useFeaturesSetMutation,
+  useGetPeriodUsage,
+  useLatestDeployment,
+} from "@gram/client/react-query";
 import { Button, Combobox, Input, Stack } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import {
   ArrowRight,
+  BarChart3,
   Loader2,
   MessageCircle,
   Plug,
@@ -268,7 +275,25 @@ function AddServerForm({
   onCancel: () => void;
   onSuccess: (result: AddServerResult) => void;
 }) {
+  const { data: periodUsage } = useGetPeriodUsage();
+  const { mutate: setLogsFeature } = useFeaturesSetMutation();
+  const [enableInsights, setEnableInsights] = useState(true);
+
+  const isFirstServerEnable = periodUsage?.actualEnabledServerCount === 0;
+
   const handleSubmit = () => {
+    // Enable insights on first server add if toggle is on
+    if (isFirstServerEnable && enableInsights) {
+      setLogsFeature({
+        request: {
+          setProductFeatureRequestBody: {
+            featureName: FeatureName.Logs,
+            enabled: true,
+          },
+        },
+      });
+    }
+
     addServerMutation.mutate(
       {
         server,
@@ -299,6 +324,26 @@ function AddServerForm({
           disabled={addServerMutation.isPending}
         />
       </div>
+      {isFirstServerEnable && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
+              <BarChart3 className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <Type className="text-sm font-medium">Enable Insights</Type>
+              <Type className="text-xs text-muted-foreground">
+                Capture requests and analytics
+              </Type>
+            </div>
+          </div>
+          <Switch
+            checked={enableInsights}
+            onCheckedChange={setEnableInsights}
+            aria-label="Enable Insights"
+          />
+        </div>
+      )}
       <Dialog.Footer>
         <Button
           variant="tertiary"
@@ -436,6 +481,11 @@ export function AddServersDialog({
 }: AddServersDialogProps) {
   const { mutation, refetchDeployment } = useAddServersMutation();
   const [addedCount, setAddedCount] = useState(0);
+  const { data: periodUsage } = useGetPeriodUsage();
+  const { mutate: setLogsFeature } = useFeaturesSetMutation();
+  const [enableInsights, setEnableInsights] = useState(true);
+
+  const isFirstServerEnable = periodUsage?.actualEnabledServerCount === 0;
 
   const selectedLabel =
     projects.find((p) => p.value === projectSlug)?.label ?? projectSlug;
@@ -443,11 +493,24 @@ export function AddServersDialog({
   useEffect(() => {
     if (!open) {
       setAddedCount(0);
+      setEnableInsights(true);
       mutation.reset();
     }
   }, [open]);
 
   const handleAdd = () => {
+    // Enable insights on first server add if toggle is on
+    if (isFirstServerEnable && enableInsights) {
+      setLogsFeature({
+        request: {
+          setProductFeatureRequestBody: {
+            featureName: FeatureName.Logs,
+            enabled: true,
+          },
+        },
+      });
+    }
+
     mutation.mutate(
       { servers, projectSlug },
       {
@@ -517,6 +580,28 @@ export function AddServersDialog({
                   </div>
                 ))}
               </div>
+              {isFirstServerEnable && (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
+                      <BarChart3 className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <Type className="text-sm font-medium">
+                        Enable Insights
+                      </Type>
+                      <Type className="text-xs text-muted-foreground">
+                        Capture requests and analytics
+                      </Type>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={enableInsights}
+                    onCheckedChange={setEnableInsights}
+                    aria-label="Enable Insights"
+                  />
+                </div>
+              )}
             </Stack>
             <Dialog.Footer>
               <Button
