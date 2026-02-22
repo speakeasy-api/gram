@@ -119,10 +119,10 @@ export function FailedSourcesSection({
       for (const source of selectedSources) {
         switch (source.type) {
           case "openapi":
-            excludeOpenapiv3Assets.push(source.slug);
+            excludeOpenapiv3Assets.push(source.id);
             break;
           case "function":
-            excludeFunctions.push(source.slug);
+            excludeFunctions.push(source.id);
             break;
           case "externalmcp":
             excludeExternalMcps.push(source.slug);

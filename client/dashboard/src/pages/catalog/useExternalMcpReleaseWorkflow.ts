@@ -188,7 +188,7 @@ export function useExternalMcpReleaseWorkflow({
     async function createToolsets() {
       for (let i = 0; i < serverConfigs.length; i++) {
         const config = serverConfigs[i];
-        const slug = generateSlug(config.name);
+        const slug = generateSlug(config.server.registrySpecifier);
 
         setToolsetStatuses((prev) =>
           prev.map((s, idx) =>
@@ -304,7 +304,7 @@ export function useExternalMcpReleaseWorkflow({
             deploymentId: latestDeployment?.id,
             nonBlocking: true,
             upsertExternalMcps: serverConfigs.map((config) => {
-              const slug = generateSlug(config.name);
+              const slug = generateSlug(config.server.registrySpecifier);
               return {
                 registryId: config.server.registryId,
                 name: config.name,
