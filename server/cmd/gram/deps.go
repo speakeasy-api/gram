@@ -572,7 +572,7 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 			logger.ErrorContext(ctx, "error checking if feature is enabled",
 				attr.SlogError(err),
 				attr.SlogOrganizationSlug(orgID),
-				slog.String("feature", string(feat)),
+				attr.SlogProductFeatureName(string(feat)),
 			)
 			return false, fmt.Errorf("error checking if %s feature is enabled: %w", feat, err)
 		}
