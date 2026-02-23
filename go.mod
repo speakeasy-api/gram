@@ -49,7 +49,7 @@ require (
 	github.com/samber/slog-multi v1.7.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sourcegraph/conc v0.3.0
-	github.com/speakeasy-api/openapi v1.15.1
+	github.com/speakeasy-api/openapi v1.19.2
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c
 	github.com/stretchr/testify v1.11.1
 	github.com/superfly/fly-go v0.3.1
@@ -285,7 +285,7 @@ require (
 	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
-	golang.org/x/text v0.33.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.41.0 // indirect
 	google.golang.org/api v0.265.0 // indirect
