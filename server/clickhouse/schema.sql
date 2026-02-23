@@ -108,7 +108,7 @@ SELECT
         toString(attributes.http.response.status_code) != ''
     ) AS http_status_code
 FROM telemetry_logs
-WHERE trace_id IS NOT NULL AND trace_id != ''
+WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
 
 CREATE TABLE IF NOT EXISTS metrics_summaries (
