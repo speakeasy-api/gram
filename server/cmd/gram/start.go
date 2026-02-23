@@ -607,33 +607,8 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
 
-			logsEnabled := func(ctx context.Context, orgID string) (bool, error) {
-				isEnabled, err := productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureLogs)
-				if err != nil {
-					logger.ErrorContext(
-						ctx, "error checking if logs are enabled",
-						attr.SlogError(err),
-						attr.SlogOrganizationSlug(orgID),
-					)
-					return false, fmt.Errorf("error checking if logs are enabled: %w", err)
-				}
-
-				return isEnabled, nil
-			}
-
-			toolIOLogsEnabled := func(ctx context.Context, orgID string) (bool, error) {
-				isEnabled, err := productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureToolIOLogs)
-				if err != nil {
-					logger.ErrorContext(
-						ctx, "error checking if tool IO logs are enabled",
-						attr.SlogError(err),
-						attr.SlogOrganizationSlug(orgID),
-					)
-					return false, fmt.Errorf("error checking if tool IO logs are enabled: %w", err)
-				}
-
-				return isEnabled, nil
-			}
+			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
+			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 
 			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
 
