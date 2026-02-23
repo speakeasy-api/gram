@@ -17090,6 +17090,8 @@ components:
         Tool:
             type: object
             properties:
+                agent_definition:
+                    $ref: '#/components/schemas/AgentDefinition'
                 external_mcp_tool_definition:
                     $ref: '#/components/schemas/ExternalMCPToolDefinition'
                 function_tool_definition:
@@ -17098,7 +17100,7 @@ components:
                     $ref: '#/components/schemas/HTTPToolDefinition'
                 prompt_template:
                     $ref: '#/components/schemas/PromptTemplate'
-            description: A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy
+            description: A polymorphic tool - can be an HTTP tool, function tool, prompt template, external MCP proxy, or agent definition
         ToolAnnotations:
             type: object
             properties:
@@ -17165,6 +17167,7 @@ components:
                         - prompt
                         - function
                         - externalmcp
+                        - agent
             required:
                 - type
                 - id

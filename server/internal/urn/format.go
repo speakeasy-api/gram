@@ -23,6 +23,7 @@ var toolKinds = map[ToolKind]struct{}{
 	ToolKindHTTP:        {},
 	ToolKindPrompt:      {},
 	ToolKindExternalMCP: {},
+	ToolKindAgent:       {},
 }
 
 type ResourceKind string

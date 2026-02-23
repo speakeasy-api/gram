@@ -158,6 +158,28 @@ func TestBuildDescribeToolsTool(t *testing.T) {
 		require.NotContains(t, string(entry.InputSchema), "tool-4")
 		require.NotContains(t, string(entry.InputSchema), "tool-5")
 	})
+
+	t.Run("includes_agent_definition_tools", func(t *testing.T) {
+		t.Parallel()
+		tools := []*types.Tool{
+			{HTTPToolDefinition: &types.HTTPToolDefinition{Name: "http-tool", Description: "An HTTP tool"}},
+			{AgentDefinition: &types.AgentDefinition{
+				ID:           "agent-1",
+				Name:         "research-agent",
+				Description:  "A research agent",
+				Instructions: "Research things",
+				ToolUrn:      "tools:agent:agent:research-agent",
+				CreatedAt:    "2025-01-01T00:00:00Z",
+				UpdatedAt:    "2025-01-01T00:00:00Z",
+			}},
+		}
+
+		entry, err := buildDescribeToolsTool(tools)
+		require.NoError(t, err)
+		require.NotNil(t, entry)
+		require.Contains(t, string(entry.InputSchema), "research-agent")
+		require.Contains(t, string(entry.InputSchema), "http-tool")
+	})
 }
 
 func TestHandleDescribeToolsCall(t *testing.T) {
@@ -331,5 +353,34 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, response)
 		require.Contains(t, string(response), "my-tool")
+	})
+
+	t.Run("describes_agent_definition_tool", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		logger := testLogger()
+
+		toolset := &types.Toolset{
+			Tools: []*types.Tool{
+				{AgentDefinition: &types.AgentDefinition{
+					ID:           "agent-1",
+					Name:         "research-agent",
+					Description:  "A research agent",
+					Instructions: "Research things",
+					ToolUrn:      "tools:agent:agent:research-agent",
+					CreatedAt:    "2025-01-01T00:00:00Z",
+					UpdatedAt:    "2025-01-01T00:00:00Z",
+				}},
+			},
+		}
+
+		argsRaw := json.RawMessage(`{"tool_names": ["research-agent"]}`)
+		reqID := msgID{format: 1, Number: 1}
+
+		response, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
+		require.NoError(t, err)
+		require.NotNil(t, response)
+		require.Contains(t, string(response), "research-agent")
+		require.Contains(t, string(response), "A research agent")
 	})
 }

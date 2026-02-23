@@ -138,6 +138,7 @@ export default function SourceDetails() {
           }),
         ),
       enabled: relatedTools.length > 0,
+      throwOnError: false,
     });
 
   const sourceToolMetrics = useMemo(() => {

@@ -41,6 +41,13 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 		}
 		return &toolURN, nil
 	}
+	if tool.AgentDefinition != nil {
+		err := toolURN.UnmarshalText([]byte(tool.AgentDefinition.ToolUrn))
+		if err != nil {
+			return nil, urn.ErrInvalid
+		}
+		return &toolURN, nil
+	}
 
 	return nil, urn.ErrInvalid
 }
@@ -150,6 +157,27 @@ func ToBaseTool(tool *types.Tool) (types.BaseToolAttributes, error) {
 		}, nil
 	}
 
+	if tool.AgentDefinition != nil {
+		return types.BaseToolAttributes{
+			ID:            tool.AgentDefinition.ID,
+			ToolUrn:       tool.AgentDefinition.ToolUrn,
+			ProjectID:     tool.AgentDefinition.ProjectID,
+			Name:          tool.AgentDefinition.Name,
+			CanonicalName: tool.AgentDefinition.Name,
+			Description:   tool.AgentDefinition.Description,
+			SchemaVersion: nil,
+			Schema:        schema,
+			CreatedAt:     tool.AgentDefinition.CreatedAt,
+			UpdatedAt:     tool.AgentDefinition.UpdatedAt,
+			Confirm:       nil,
+			ConfirmPrompt: nil,
+			Summarizer:    nil,
+			Canonical:     nil,
+			Variation:     nil,
+			Annotations:   tool.AgentDefinition.Annotations,
+		}, nil
+	}
+
 	return types.BaseToolAttributes{}, urn.ErrInvalid
 }
 
@@ -229,6 +257,12 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 
 		tool.ExternalMcpToolDefinition.Canonical = &canonicalAttributes
 		tool.ExternalMcpToolDefinition.Variation = &variation
+	}
+
+	if tool.AgentDefinition != nil {
+		tool.AgentDefinition.Name = PtrValOrEmpty(variation.Name, tool.AgentDefinition.Name)
+		tool.AgentDefinition.Description = PtrValOrEmpty(variation.Description, tool.AgentDefinition.Description)
+		tool.AgentDefinition.Annotations = annotationOverrides
 	}
 }
 

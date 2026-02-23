@@ -14,6 +14,7 @@ import (
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	agentsR "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -231,6 +232,39 @@ func DescribeToolsetEntry(
 			}
 			externalMCPHeaderDefinitions = append(externalMCPHeaderDefinitions, headerDefs...)
 
+		}
+
+		// Fetch agent definition tool entries
+		agentRepo := agentsR.New(tx)
+		agentURNs := make([]string, 0)
+		for _, toolUrn := range toolUrns {
+			var parsedUrn urn.Tool
+			if err := parsedUrn.UnmarshalText([]byte(toolUrn)); err == nil {
+				if parsedUrn.Kind == urn.ToolKindAgent {
+					agentURNs = append(agentURNs, toolUrn)
+				}
+			}
+		}
+		if len(agentURNs) > 0 {
+			agentDefs, err := agentRepo.ListAgentDefinitions(ctx, pid)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to list agent definitions in toolset").Log(ctx, logger)
+			}
+			agentURNSet := make(map[string]struct{}, len(agentURNs))
+			for _, u := range agentURNs {
+				agentURNSet[u] = struct{}{}
+			}
+			for _, agent := range agentDefs {
+				if _, ok := agentURNSet[agent.ToolUrn.String()]; !ok {
+					continue
+				}
+				tools = append(tools, &types.ToolEntry{
+					Type:    string(urn.ToolKindAgent),
+					ID:      agent.ID.String(),
+					Name:    agent.Name,
+					ToolUrn: agent.ToolUrn.String(),
+				})
+			}
 		}
 
 		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, toolset.ID, envQueries)
@@ -834,6 +868,58 @@ func readToolsetTools(
 			}
 			externalMCPHeaderDefinitions = append(externalMCPHeaderDefinitions, headerDefs...)
 
+		}
+	}
+
+	// Fetch agent definitions
+	agentRepo := agentsR.New(tx)
+	agentURNs := make([]string, 0)
+	for _, toolUrn := range toolUrns {
+		var parsedUrn urn.Tool
+		if err := parsedUrn.UnmarshalText([]byte(toolUrn)); err == nil {
+			if parsedUrn.Kind == urn.ToolKindAgent {
+				agentURNs = append(agentURNs, toolUrn)
+			}
+		}
+	}
+	if len(agentURNs) > 0 {
+		agentDefs, err := agentRepo.ListAgentDefinitions(ctx, pid)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list agent definitions for toolset").Log(ctx, logger)
+		}
+		agentURNSet := make(map[string]struct{}, len(agentURNs))
+		for _, u := range agentURNs {
+			agentURNSet[u] = struct{}{}
+		}
+		for _, agent := range agentDefs {
+			if _, ok := agentURNSet[agent.ToolUrn.String()]; !ok {
+				continue
+			}
+			toolStrings := make([]string, len(agent.Tools))
+			for i, t := range agent.Tools {
+				toolStrings[i] = t.String()
+			}
+			tools = append(tools, &types.Tool{
+				AgentDefinition: &types.AgentDefinition{
+					ID:           agent.ID.String(),
+					ProjectID:    agent.ProjectID.String(),
+					ToolUrn:      agent.ToolUrn.String(),
+					Name:         agent.Name,
+					Description:  agent.Description,
+					Title:        conv.FromPGText[string](agent.Title),
+					Instructions: agent.Instructions,
+					Tools:        toolStrings,
+					Model:        conv.FromPGText[string](agent.Model),
+					Annotations: conv.AnnotationsFromColumns(
+						agent.ReadOnlyHint,
+						agent.DestructiveHint,
+						agent.IdempotentHint,
+						agent.OpenWorldHint,
+					),
+					CreatedAt: agent.CreatedAt.Time.Format(time.RFC3339),
+					UpdatedAt: agent.UpdatedAt.Time.Format(time.RFC3339),
+				},
+			})
 		}
 	}
 

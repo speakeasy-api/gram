@@ -2437,6 +2437,8 @@ type ToolResponseBody struct {
 	PromptTemplate *PromptTemplateResponseBody `form:"prompt_template,omitempty" json:"prompt_template,omitempty" xml:"prompt_template,omitempty"`
 	// The external MCP tool definition
 	ExternalMcpToolDefinition *ExternalMCPToolDefinitionResponseBody `form:"external_mcp_tool_definition,omitempty" json:"external_mcp_tool_definition,omitempty" xml:"external_mcp_tool_definition,omitempty"`
+	// The agent definition
+	AgentDefinition *AgentDefinitionResponseBody `form:"agent_definition,omitempty" json:"agent_definition,omitempty" xml:"agent_definition,omitempty"`
 }
 
 // HTTPToolDefinitionResponseBody is used to define fields on response body
@@ -2749,6 +2751,34 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 	// MCP tool annotations providing hints about tool behavior
 	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// AgentDefinitionResponseBody is used to define fields on response body types.
+type AgentDefinitionResponseBody struct {
+	// The unique identifier of the agent definition
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID this agent definition belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The tool URN of the agent definition
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+	// The name of the agent definition
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Description of the agent definition
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Human-readable display title for the agent definition
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Instructions for the agent
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// List of tool URNs available to the agent
+	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// The model to use for the agent
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// MCP tool annotations providing hints about agent behavior
+	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+	// When the agent definition was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the agent definition was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ResourceResponseBody is used to define fields on response body types.
@@ -8888,6 +8918,11 @@ func ValidateToolResponseBody(body *ToolResponseBody) (err error) {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.AgentDefinition != nil {
+		if err2 := ValidateAgentDefinitionResponseBody(body.AgentDefinition); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return
 }
 
@@ -9242,6 +9277,45 @@ func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefiniti
 	return
 }
 
+// ValidateAgentDefinitionResponseBody runs the validations defined on
+// AgentDefinitionResponseBody
+func ValidateAgentDefinitionResponseBody(body *AgentDefinitionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Instructions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateResourceResponseBody runs the validations defined on
 // ResourceResponseBody
 func ValidateResourceResponseBody(body *ResourceResponseBody) (err error) {
@@ -9572,8 +9646,8 @@ func ValidateToolEntryResponseBody(body *ToolEntryResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
 	}
 	if body.Type != nil {
-		if !(*body.Type == "http" || *body.Type == "prompt" || *body.Type == "function" || *body.Type == "externalmcp") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"http", "prompt", "function", "externalmcp"}))
+		if !(*body.Type == "http" || *body.Type == "prompt" || *body.Type == "function" || *body.Type == "externalmcp" || *body.Type == "agent") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"http", "prompt", "function", "externalmcp", "agent"}))
 		}
 	}
 	return

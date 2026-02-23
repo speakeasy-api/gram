@@ -26,6 +26,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/about"
+	agentdefs "github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -626,6 +627,7 @@ func newStartCommand() *cli.Command {
 			authAuth := auth.New(logger, db, sessionManager)
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
+			agentdefs.Attach(mux, agentdefs.NewService(logger, db, sessionManager))
 			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient, authAuth, temporalEnv))
 			auth.Attach(mux, auth.NewService(logger, db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
