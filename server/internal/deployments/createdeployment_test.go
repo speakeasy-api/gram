@@ -430,7 +430,7 @@ func TestDeploymentsService_CreateDeployment_InvalidDocument(t *testing.T) {
 	require.NoError(t, err, "create deployment")
 
 	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
-	require.Equal(t, "failed", dep.Deployment.Status, "deployment status is not failed")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment should still complete even if it contains invalid documents")
 
 	repo := testrepo.New(ti.conn)
 	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
