@@ -3,7 +3,7 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -27,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * createResponse agents
+ * getResponse agentworkflows
  *
  * @remarks
- * Create a new agent response. Executes an agent workflow with the provided input and tools.
+ * Get the status of an async agent response by its ID.
  */
-export function agentsCreate(
+export function agentworkflowsGetResponse(
   client: GramCore,
-  request: operations.CreateAgentResponseRequest,
-  security?: operations.CreateAgentResponseSecurity | undefined,
+  request: operations.GetResponseRequest,
+  security?: operations.GetResponseSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.AgentResponseOutput,
+    components.WorkflowAgentResponseOutput,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +61,13 @@ export function agentsCreate(
 
 async function $do(
   client: GramCore,
-  request: operations.CreateAgentResponseRequest,
-  security?: operations.CreateAgentResponseSecurity | undefined,
+  request: operations.GetResponseRequest,
+  security?: operations.GetResponseSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.AgentResponseOutput,
+      components.WorkflowAgentResponseOutput,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -83,22 +83,22 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.CreateAgentResponseRequest$outboundSchema.parse(value),
+    (value) => operations.GetResponseRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.AgentResponseRequest, {
-    explode: true,
+  const body = null;
+
+  const path = pathToFunc("/rpc/workflows.getResponse")();
+
+  const query = encodeFormQuery({
+    "response_id": payload.response_id,
   });
 
-  const path = pathToFunc("/rpc/agents.response")();
-
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
@@ -128,7 +128,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "createAgentResponse",
+    operationID: "getResponse",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -142,10 +142,11 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -183,7 +184,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.AgentResponseOutput,
+    components.WorkflowAgentResponseOutput,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -194,7 +195,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.AgentResponseOutput$inboundSchema),
+    M.json(200, components.WorkflowAgentResponseOutput$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

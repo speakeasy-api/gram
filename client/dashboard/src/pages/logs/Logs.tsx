@@ -6,6 +6,8 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { SearchBar } from "@/components/ui/search-bar";
+import { Switch } from "@/components/ui/switch";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -232,6 +234,7 @@ function LogsContent() {
 
   // Flatten all pages into a single array of traces
   const allTraces = data?.pages.flatMap((page) => page.toolCalls) ?? [];
+  const toolIoLogsEnabled = data?.pages[0]?.toolIoLogsEnabled ?? false;
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
@@ -247,6 +250,17 @@ function LogsContent() {
       request: {
         setProductFeatureRequestBody: {
           featureName: FeatureName.Logs,
+          enabled,
+        },
+      },
+    });
+  };
+
+  const handleSetToolIoLogs = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.ToolIoLogs,
           enabled,
         },
       },
@@ -331,6 +345,8 @@ function LogsContent() {
         isFetchingNextPage={isFetchingNextPage}
         isMutatingLogs={isMutatingLogs}
         handleSetLogs={handleSetLogs}
+        toolIoLogsEnabled={toolIoLogsEnabled}
+        handleSetToolIoLogs={handleSetToolIoLogs}
         refetch={refetch}
         // Time range props
         dateRange={dateRange}
@@ -365,6 +381,8 @@ function LogsInnerContent({
   isFetchingNextPage,
   isMutatingLogs,
   handleSetLogs,
+  toolIoLogsEnabled,
+  handleSetToolIoLogs,
   refetch,
   // Time range props
   dateRange,
@@ -394,6 +412,8 @@ function LogsInnerContent({
   isFetchingNextPage: boolean;
   isMutatingLogs: boolean;
   handleSetLogs: (enabled: boolean) => void;
+  toolIoLogsEnabled: boolean;
+  handleSetToolIoLogs: (enabled: boolean) => void;
   refetch: () => void;
   // Time range props
   dateRange: DateRangePreset;
@@ -482,6 +502,27 @@ function LogsInnerContent({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <SimpleTooltip tooltip="Enabling this may expose sensitive data in logs.">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleSetToolIoLogs(!toolIoLogsEnabled);
+                            }}
+                            disabled={isMutatingLogs}
+                          >
+                            <div className="flex items-center justify-between w-full gap-3">
+                              <span>Record tool I/O</span>
+                              <span onClick={(e) => e.stopPropagation()}>
+                                <Switch
+                                  checked={toolIoLogsEnabled}
+                                  onCheckedChange={handleSetToolIoLogs}
+                                  disabled={isMutatingLogs}
+                                  aria-label="Record tool inputs & outputs"
+                                />
+                              </span>
+                            </div>
+                          </DropdownMenuItem>
+                        </SimpleTooltip>
                         <DropdownMenuItem
                           onClick={() => handleSetLogs(false)}
                           disabled={isMutatingLogs}

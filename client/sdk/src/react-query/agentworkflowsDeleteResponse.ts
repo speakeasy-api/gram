@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { agentsDelete } from "../funcs/agentsDelete.js";
+import { agentworkflowsDeleteResponse } from "../funcs/agentworkflowsDeleteResponse.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -27,15 +27,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type AgentsDeleteMutationVariables = {
-  request: operations.DeleteAgentResponseRequest;
-  security?: operations.DeleteAgentResponseSecurity | undefined;
+export type AgentworkflowsDeleteResponseMutationVariables = {
+  request: operations.DeleteResponseRequest;
+  security?: operations.DeleteResponseSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type AgentsDeleteMutationData = void;
+export type AgentworkflowsDeleteResponseMutationData = void;
 
-export type AgentsDeleteMutationError =
+export type AgentworkflowsDeleteResponseMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -47,49 +47,49 @@ export type AgentsDeleteMutationError =
   | SDKValidationError;
 
 /**
- * deleteResponse agents
+ * deleteResponse agentworkflows
  *
  * @remarks
  * Deletes any response associated with a given agent run.
  */
-export function useAgentsDeleteMutation(
+export function useAgentworkflowsDeleteResponseMutation(
   options?: MutationHookOptions<
-    AgentsDeleteMutationData,
-    AgentsDeleteMutationError,
-    AgentsDeleteMutationVariables
+    AgentworkflowsDeleteResponseMutationData,
+    AgentworkflowsDeleteResponseMutationError,
+    AgentworkflowsDeleteResponseMutationVariables
   >,
 ): UseMutationResult<
-  AgentsDeleteMutationData,
-  AgentsDeleteMutationError,
-  AgentsDeleteMutationVariables
+  AgentworkflowsDeleteResponseMutationData,
+  AgentworkflowsDeleteResponseMutationError,
+  AgentworkflowsDeleteResponseMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildAgentsDeleteMutation(client, options),
+    ...buildAgentworkflowsDeleteResponseMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyAgentsDelete(): MutationKey {
-  return ["@gram/client", "agents", "delete"];
+export function mutationKeyAgentworkflowsDeleteResponse(): MutationKey {
+  return ["@gram/client", "agentworkflows", "deleteResponse"];
 }
 
-export function buildAgentsDeleteMutation(
+export function buildAgentworkflowsDeleteResponseMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: AgentsDeleteMutationVariables,
-  ) => Promise<AgentsDeleteMutationData>;
+    variables: AgentworkflowsDeleteResponseMutationVariables,
+  ) => Promise<AgentworkflowsDeleteResponseMutationData>;
 } {
   return {
-    mutationKey: mutationKeyAgentsDelete(),
-    mutationFn: function agentsDeleteMutationFn({
+    mutationKey: mutationKeyAgentworkflowsDeleteResponse(),
+    mutationFn: function agentworkflowsDeleteResponseMutationFn({
       request,
       security,
       options,
-    }): Promise<AgentsDeleteMutationData> {
+    }): Promise<AgentworkflowsDeleteResponseMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -102,7 +102,7 @@ export function buildAgentsDeleteMutation(
           ),
         },
       };
-      return unwrapAsync(agentsDelete(
+      return unwrapAsync(agentworkflowsDeleteResponse(
         client$,
         request,
         security,

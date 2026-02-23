@@ -47,6 +47,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -561,4 +563,19 @@ func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvid
 	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
 
 	return externalmcp.NewRegistryClient(logger, tracerProvider, backend, opts.cacheImpl), nil
+}
+
+func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat productfeatures.Feature) telemetry.FeatureChecker {
+	return func(ctx context.Context, orgID string) (bool, error) {
+		isEnabled, err := pf.IsFeatureEnabled(ctx, orgID, feat)
+		if err != nil {
+			logger.ErrorContext(ctx, "error checking if feature is enabled",
+				attr.SlogError(err),
+				attr.SlogOrganizationSlug(orgID),
+				attr.SlogProductFeatureName(string(feat)),
+			)
+			return false, fmt.Errorf("error checking if %s feature is enabled: %w", feat, err)
+		}
+		return isEnabled, nil
+	}
 }

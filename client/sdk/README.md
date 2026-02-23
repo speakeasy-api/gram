@@ -123,11 +123,11 @@ run();
 <details open>
 <summary>Available methods</summary>
 
-### [Agents](docs/sdks/agents/README.md)
+### [Agentworkflows](docs/sdks/agentworkflows/README.md)
 
-* [delete](docs/sdks/agents/README.md#delete) - deleteResponse agents
-* [get](docs/sdks/agents/README.md#get) - getResponse agents
-* [create](docs/sdks/agents/README.md#create) - createResponse agents
+* [createResponse](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
+* [deleteResponse](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
+* [getResponse](docs/sdks/agentworkflows/README.md#getresponse) - getResponse agentworkflows
 
 ### [Assets](docs/sdks/assets/README.md)
 
@@ -327,9 +327,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
-- [`agentsCreate`](docs/sdks/agents/README.md#create) - createResponse agents
-- [`agentsDelete`](docs/sdks/agents/README.md#delete) - deleteResponse agents
-- [`agentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
+- [`agentworkflowsCreateResponse`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
+- [`agentworkflowsDeleteResponse`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
+- [`agentworkflowsGetResponse`](docs/sdks/agentworkflows/README.md#getresponse) - getResponse agentworkflows
 - [`assetsCreateSignedChatAttachmentURL`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 - [`assetsFetchOpenAPIv3FromURL`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`assetsListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
@@ -470,9 +470,9 @@ To learn about this feature and how to get started, check
 - [`useActiveDeployment`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
-- [`useAgentsCreateMutation`](docs/sdks/agents/README.md#create) - createResponse agents
-- [`useAgentsDeleteMutation`](docs/sdks/agents/README.md#delete) - deleteResponse agents
-- [`useAgentsGet`](docs/sdks/agents/README.md#get) - getResponse agents
+- [`useAgentworkflowsCreateResponseMutation`](docs/sdks/agentworkflows/README.md#createresponse) - createResponse agentworkflows
+- [`useAgentworkflowsDeleteResponseMutation`](docs/sdks/agentworkflows/README.md#deleteresponse) - deleteResponse agentworkflows
+- [`useAgentworkflowsGetResponse`](docs/sdks/agentworkflows/README.md#getresponse) - getResponse agentworkflows
 - [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions

@@ -146,6 +146,8 @@ type SearchToolCallsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// Whether tool metrics are enabled for the organization
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Whether tool input/output logging is enabled for the organization
+	ToolIoLogsEnabled *bool `form:"tool_io_logs_enabled,omitempty" json:"tool_io_logs_enabled,omitempty" xml:"tool_io_logs_enabled,omitempty"`
 }
 
 // SearchChatsResponseBody is the type of the "telemetry" service "searchChats"
@@ -2567,8 +2569,9 @@ func NewSearchLogsGatewayError(body *SearchLogsGatewayErrorResponseBody) *goa.Se
 // endpoint result from a HTTP "OK" response.
 func NewSearchToolCallsResultOK(body *SearchToolCallsResponseBody) *telemetry.SearchToolCallsResult {
 	v := &telemetry.SearchToolCallsResult{
-		NextCursor: body.NextCursor,
-		Enabled:    *body.Enabled,
+		NextCursor:        body.NextCursor,
+		Enabled:           *body.Enabled,
+		ToolIoLogsEnabled: *body.ToolIoLogsEnabled,
 	}
 	v.ToolCalls = make([]*telemetry.ToolCallSummary, len(body.ToolCalls))
 	for i, val := range body.ToolCalls {
@@ -3934,6 +3937,9 @@ func ValidateSearchToolCallsResponseBody(body *SearchToolCallsResponseBody) (err
 	}
 	if body.Enabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.ToolIoLogsEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_io_logs_enabled", "body"))
 	}
 	for _, e := range body.ToolCalls {
 		if e != nil {

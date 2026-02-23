@@ -5,12 +5,12 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type GetAgentResponseSecurity = {
+export type GetResponseSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   projectSlugHeaderGramProject?: string | undefined;
 };
 
-export type GetAgentResponseRequest = {
+export type GetResponseRequest = {
   /**
    * The ID of the response to retrieve
    */
@@ -26,16 +26,16 @@ export type GetAgentResponseRequest = {
 };
 
 /** @internal */
-export type GetAgentResponseSecurity$Outbound = {
+export type GetResponseSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
   "project_slug_header_Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const GetAgentResponseSecurity$outboundSchema: z.ZodType<
-  GetAgentResponseSecurity$Outbound,
+export const GetResponseSecurity$outboundSchema: z.ZodType<
+  GetResponseSecurity$Outbound,
   z.ZodTypeDef,
-  GetAgentResponseSecurity
+  GetResponseSecurity
 > = z.object({
   apikeyHeaderGramKey: z.string().optional(),
   projectSlugHeaderGramProject: z.string().optional(),
@@ -46,26 +46,26 @@ export const GetAgentResponseSecurity$outboundSchema: z.ZodType<
   });
 });
 
-export function getAgentResponseSecurityToJSON(
-  getAgentResponseSecurity: GetAgentResponseSecurity,
+export function getResponseSecurityToJSON(
+  getResponseSecurity: GetResponseSecurity,
 ): string {
   return JSON.stringify(
-    GetAgentResponseSecurity$outboundSchema.parse(getAgentResponseSecurity),
+    GetResponseSecurity$outboundSchema.parse(getResponseSecurity),
   );
 }
 
 /** @internal */
-export type GetAgentResponseRequest$Outbound = {
+export type GetResponseRequest$Outbound = {
   response_id: string;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const GetAgentResponseRequest$outboundSchema: z.ZodType<
-  GetAgentResponseRequest$Outbound,
+export const GetResponseRequest$outboundSchema: z.ZodType<
+  GetResponseRequest$Outbound,
   z.ZodTypeDef,
-  GetAgentResponseRequest
+  GetResponseRequest
 > = z.object({
   responseId: z.string(),
   gramKey: z.string().optional(),
@@ -78,10 +78,10 @@ export const GetAgentResponseRequest$outboundSchema: z.ZodType<
   });
 });
 
-export function getAgentResponseRequestToJSON(
-  getAgentResponseRequest: GetAgentResponseRequest,
+export function getResponseRequestToJSON(
+  getResponseRequest: GetResponseRequest,
 ): string {
   return JSON.stringify(
-    GetAgentResponseRequest$outboundSchema.parse(getAgentResponseRequest),
+    GetResponseRequest$outboundSchema.parse(getResponseRequest),
   );
 }

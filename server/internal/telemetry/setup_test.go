@@ -47,13 +47,14 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *telemetry.Service
-	logger         *slog.Logger
-	conn           *pgxpool.Pool
-	chClient       *repo.Queries
-	sessionManager *sessions.Manager
-	orgID          string
-	disabledLogsOrgID string
+	service            *telemetry.Service
+	logger             *slog.Logger
+	conn               *pgxpool.Pool
+	chClient           *repo.Queries
+	sessionManager     *sessions.Manager
+	orgID              string
+	disabledLogsOrgID  string
+	enabledToolIOOrgID string
 }
 
 func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
@@ -95,18 +96,27 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 		return true, nil
 	}
 
+	enabledToolIOOrgID := uuid.New().String()
+	toolIOLogsEnabled := func(_ context.Context, orgID string) (bool, error) {
+		if orgID == enabledToolIOOrgID {
+			return true, nil
+		}
+		return false, nil
+	}
+
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	svc := telemetry.NewService(logger, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, posthogClient)
+	svc := telemetry.NewService(logger, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
 
 	return ctx, &testInstance{
-		service:        svc,
-		logger:         logger,
-		conn:           conn,
-		chClient:       chClient,
-		sessionManager: sessionManager,
-		orgID:          authCtx.ActiveOrganizationID,
-		disabledLogsOrgID: disabledLogsOrgID,
+		service:           svc,
+		logger:            logger,
+		conn:              conn,
+		chClient:          chClient,
+		sessionManager:    sessionManager,
+		orgID:              authCtx.ActiveOrganizationID,
+		disabledLogsOrgID:  disabledLogsOrgID,
+		enabledToolIOOrgID: enabledToolIOOrgID,
 	}
 }
 

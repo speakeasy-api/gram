@@ -607,20 +607,10 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
 
-			logsEnabled := func(ctx context.Context, orgID string) (bool, error) {
-				isEnabled, err := productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureLogs)
-				if err != nil {
-					logger.ErrorContext(
-						ctx, "error checking if logs are enabled",
-						attr.SlogError(err),
-						attr.SlogOrganizationSlug(orgID),
-					)
-					return false, fmt.Errorf("error checking if logs are enabled: %w", err)
-				}
+			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
+			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 
-				return isEnabled, nil
-			}
-			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, posthogClient)
+			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
 
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {

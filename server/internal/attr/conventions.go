@@ -214,10 +214,12 @@ const (
 	GenAIRequestTopPKey        = semconv.GenAIRequestTopPKey
 
 	// GenAI semconv keys for tool calling
-	GenAIToolCallIDKey      = semconv.GenAIToolCallIDKey
-	GenAIToolNameKey        = semconv.GenAIToolNameKey
-	GenAIToolTypeKey        = semconv.GenAIToolTypeKey
-	GenAIToolDescriptionKey = semconv.GenAIToolDescriptionKey
+	GenAIToolCallIDKey        = semconv.GenAIToolCallIDKey
+	GenAIToolCallArgumentsKey = semconv.GenAIToolCallArgumentsKey
+	GenAIToolCallResultKey    = semconv.GenAIToolCallResultKey
+	GenAIToolNameKey          = semconv.GenAIToolNameKey
+	GenAIToolTypeKey          = semconv.GenAIToolTypeKey
+	GenAIToolDescriptionKey   = semconv.GenAIToolDescriptionKey
 
 	// GenAI semconv keys for messages (opt-in due to PII concerns)
 	GenAIInputMessagesKey      = semconv.GenAIInputMessagesKey
@@ -225,8 +227,8 @@ const (
 	GenAISystemInstructionsKey = semconv.GenAISystemInstructionsKey
 
 	// Custom GenAI keys not in official semconv (yet)
-	GenAIToolCallsKey         = attribute.Key("gen_ai.tool.calls")         // Array of tool calls
-	GenAIUsageTotalTokensKey  = attribute.Key("gen_ai.usage.total_tokens") // Total tokens (input + output)
+	GenAIToolCallsKey         = attribute.Key("gen_ai.tool.calls")
+	GenAIUsageTotalTokensKey  = attribute.Key("gen_ai.usage.total_tokens")
 	GenAIConversationDuration = attribute.Key("gen_ai.conversation.duration")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
@@ -718,6 +720,16 @@ func SlogSlackEventType(v string) slog.Attr      { return slog.String(string(Sla
 
 func SlackTeamID(v string) attribute.KeyValue { return SlackTeamIDKey.String(v) }
 func SlogSlackTeamID(v string) slog.Attr      { return slog.String(string(SlackTeamIDKey), v) }
+
+func GenAIToolCallArguments(v string) attribute.KeyValue { return GenAIToolCallArgumentsKey.String(v) }
+func SlogGenAIToolCallArguments(v string) slog.Attr {
+	return slog.String(string(GenAIToolCallArgumentsKey), v)
+}
+
+func GenAIToolCallResult(v string) attribute.KeyValue { return GenAIToolCallResultKey.String(v) }
+func SlogGenAIToolCallResult(v string) slog.Attr {
+	return slog.String(string(GenAIToolCallResultKey), v)
+}
 
 func ToolCallKind[V string](v V) attribute.KeyValue { return ToolCallKindKey.String(string(v)) }
 func SlogToolCallKind[V string](v V) slog.Attr {
