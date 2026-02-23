@@ -67,9 +67,14 @@ const sessionHandler: ServerHandler<SessionHandlerOptions> = async (
     return
   }
 
+  const cookie = Array.isArray(req.headers.cookie)
+    ? req.headers.cookie[0]
+    : req.headers.cookie
+
   const result = await createChatSession({
     projectSlug,
     options,
+    cookie,
   })
 
   res.writeHead(result.status, result.headers)

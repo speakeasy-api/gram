@@ -29,6 +29,11 @@ export interface SessionHandlerOptions {
 export interface CreateSessionRequest {
   projectSlug: string
   options: SessionHandlerOptions
+  /**
+   * Optional cookie header to forward for session-based auth.
+   * Used when no API key is configured (e.g. local Storybook dev).
+   */
+  cookie?: string
 }
 
 export interface CreateSessionResponse {
@@ -57,7 +62,10 @@ export async function createChatSession(
       headers: {
         'Content-Type': 'application/json',
         'Gram-Project': request.projectSlug,
-        'Gram-Key': request.options.apiKey ?? process.env.GRAM_API_KEY ?? '',
+        ...(request.options.apiKey || process.env.GRAM_API_KEY
+          ? { 'Gram-Key': request.options.apiKey ?? process.env.GRAM_API_KEY ?? '' }
+          : {}),
+        ...(request.cookie ? { Cookie: request.cookie } : {}),
       },
     })
 
