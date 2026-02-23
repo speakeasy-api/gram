@@ -94,7 +94,7 @@ export function BuiltInMCPDetailPage() {
               <Stack gap={2}>
                 <div className="flex items-center gap-3 ml-1">
                   <Heading variant="h1" className="text-background">
-                    Gram Logs
+                    MCP Logs
                   </Heading>
                   <Badge variant="information">
                     <Badge.Text>Built-in</Badge.Text>
@@ -218,7 +218,7 @@ function BuiltInToolsTab() {
       <div className="border border-neutral-softest rounded-lg overflow-hidden w-full">
         {/* Group header */}
         <div className="bg-surface-secondary-default flex items-center pl-4 pr-3 py-4 border-b border-neutral-softest">
-          <p className="text-sm leading-6 text-foreground">Gram Telemetry</p>
+          <p className="text-sm leading-6 text-foreground">MCP Logs</p>
         </div>
 
         {/* Tool rows */}

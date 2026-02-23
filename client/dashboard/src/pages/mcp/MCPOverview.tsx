@@ -14,7 +14,7 @@ import { MCPEmptyState } from "./MCPEmptyState";
 
 const BUILT_IN_SERVERS = [
   {
-    name: "Gram Logs",
+    name: "MCP Logs",
     description:
       "Search and analyze your project's MCP server logs, tool calls, and chat sessions.",
     slug: "logs",
