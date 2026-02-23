@@ -63,7 +63,10 @@ export async function createChatSession(
         'Content-Type': 'application/json',
         'Gram-Project': request.projectSlug,
         ...(request.options.apiKey || process.env.GRAM_API_KEY
-          ? { 'Gram-Key': request.options.apiKey ?? process.env.GRAM_API_KEY ?? '' }
+          ? {
+              'Gram-Key':
+                request.options.apiKey ?? process.env.GRAM_API_KEY ?? '',
+            }
           : {}),
         ...(request.cookie ? { Cookie: request.cookie } : {}),
       },
