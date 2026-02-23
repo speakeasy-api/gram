@@ -1,5 +1,18 @@
 # dashboard
 
+## 0.29.0
+
+### Minor Changes
+
+- 0f4f5dd: Adds an opt-in toggle for recording tool call inputs/outputs in logs
+
+### Patch Changes
+
+- 2c8987d: Wire up add another button in environment variables sheet
+- c4baf37: Redesign source detail page with two-panel deployments and invocation activity to give users a high level overview of a sources's utilisation in any MCP servers.
+- Updated dependencies [0f4f5dd]
+  - @gram/client@0.28.0
+
 ## 0.28.5
 
 ### Patch Changes
