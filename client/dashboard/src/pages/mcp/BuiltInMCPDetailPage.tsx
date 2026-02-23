@@ -14,32 +14,50 @@ import { toast } from "sonner";
 
 const BUILT_IN_TOOLS = [
   {
+    name: "gram_list_tools",
+    description: "List all tools for a project",
+  },
+  {
     name: "gram_search_logs",
-    description:
-      "Search telemetry logs with filters like time range, status codes, and text queries.",
+    description: "Search and list telemetry logs that match a search filter",
+  },
+  {
+    name: "gram_list_global_variations",
+    description: "List globally defined tool variations.",
   },
   {
     name: "gram_search_tool_calls",
-    description: "Search tool call history across your MCP servers.",
+    description: "Search and list tool calls that match a search filter",
   },
   {
-    name: "gram_search_chats",
-    description: "Search chat sessions and conversation history.",
-  },
-  {
-    name: "gram_get_project_metrics_summary",
+    name: "gram_get_toolset",
     description:
-      "Get a summary of project metrics including request counts and error rates.",
+      "Get detailed information about a toolset including full HTTP tool definitions",
   },
   {
     name: "gram_get_observability_overview",
     description:
-      "Get observability dashboard data with aggregated telemetry insights.",
+      "Get observability overview metrics including time series, tool breakdowns, and summary stats",
   },
   {
-    name: "gram_list_filter_options",
-    description:
-      "List available filter values for narrowing down log searches.",
+    name: "gram_list_toolsets",
+    description: "List all toolsets for a project",
+  },
+  {
+    name: "gram_get_mcp_metadata",
+    description: "Fetch the metadata that powers the MCP install page.",
+  },
+  {
+    name: "gram_list_chats_with_resolutions",
+    description: "List all chats for a project with their resolutions",
+  },
+  {
+    name: "gram_get_deployment_logs",
+    description: "Get logs for a deployment.",
+  },
+  {
+    name: "gram_list_chats",
+    description: "List all chats for a project",
   },
 ];
 
@@ -54,11 +72,11 @@ export function BuiltInMCPDetailPage() {
   const { projectSlug } = useSlugs();
   const [activeTab, setActiveTab] = useState("overview");
 
-  const mcpUrl = `${getServerURL()}/mcp/speakeasy-team-gram`;
+  const mcpUrl = `${getServerURL()}/mcp/speakeasy-team-mcp-logs`;
 
   const configJson = `{
   "mcpServers": {
-    "GramLogs": {
+    "MCPLogs": {
       "command": "npx",
       "args": [
         "mcp-remote@0.1.25",
