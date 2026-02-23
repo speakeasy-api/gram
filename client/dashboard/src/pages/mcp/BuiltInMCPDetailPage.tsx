@@ -6,7 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
-import { Badge, Stack } from "@speakeasy-api/moonshine";
+import { Link } from "@/components/ui/link";
+import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
@@ -184,6 +185,29 @@ function BuiltInOverviewTab({
         description="The URL to connect to this MCP server from Claude Desktop, Cursor, or any MCP-compatible client."
       >
         <CodeBlock className="mb-2">{mcpUrl}</CodeBlock>
+      </PageSection>
+
+      <PageSection
+        heading="Install Page"
+        description="Share this page to give simple instructions for getting started with this MCP server in Cursor or Claude Desktop."
+      >
+        <Stack direction="horizontal" align="center" gap={2}>
+          <CodeBlock
+            className="flex-grow overflow-hidden pr-10"
+            preClassName="whitespace-nowrap overflow-auto"
+            copyable={true}
+          >
+            {`${mcpUrl}/install`}
+          </CodeBlock>
+          <Link external to={`${mcpUrl}/install`} noIcon>
+            <Button variant="secondary" className="px-4">
+              <Button.Text>View</Button.Text>
+              <Button.RightIcon>
+                <Icon name="external-link" className="w-4 h-4" />
+              </Button.RightIcon>
+            </Button>
+          </Link>
+        </Stack>
       </PageSection>
 
       <PageSection
