@@ -46,7 +46,7 @@ require (
 	github.com/redis/go-redis/extra/redisotel/v9 v9.18.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/samber/lo v1.52.0
-	github.com/samber/slog-multi v1.7.0
+	github.com/samber/slog-multi v1.7.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sourcegraph/conc v0.3.0
 	github.com/speakeasy-api/openapi v1.15.1
@@ -240,7 +240,7 @@ require (
 	github.com/riza-io/grpc-go v0.2.0 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/samber/slog-common v0.19.0 // indirect
+	github.com/samber/slog-common v0.20.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.6 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
