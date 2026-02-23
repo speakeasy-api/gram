@@ -6,6 +6,7 @@
 # well as overriding environment variables.
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
+"github:speakeasy-api/openapi" = "1.19.2"
 "github:speakeasy-api/speakeasy" = "1.700.2"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.1.3"
@@ -20,6 +21,8 @@ nodejs = "24.10.0"
 pnpm = "10.28.2"
 watchexec = "2.3.3"
 mprocs = "0.8.3"
+uv = "0.10.4"
+yq = "4.52.4"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
@@ -58,6 +61,7 @@ GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLIC
 ############################
 TEMPORAL_PORT = "7233"
 TEMPORAL_NAMESPACE = "default"
+TEMPORAL_TASK_QUEUE = "main"
 ## When using Temporal Cloud, the following variable should like something like:
 ##     "<namespace>.<account>.tmprl.cloud:7233".
 TEMPORAL_ADDRESS = ":{{env.TEMPORAL_PORT}}"

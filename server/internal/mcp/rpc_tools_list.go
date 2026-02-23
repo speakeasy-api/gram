@@ -17,11 +17,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	temporal_client "go.temporal.io/sdk/client"
 )
 
 type toolsListResult struct {
@@ -46,7 +46,7 @@ func handleToolsList(
 	productMetrics *posthog.Posthog,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporal temporal_client.Client,
+	temporalEnv *temporal.Environment,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -76,7 +76,7 @@ func handleToolsList(
 	var tools []*toolListEntry
 	switch payload.mode {
 	case ToolModeDynamic:
-		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporal)
+		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporalEnv)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build dynamic session tools").Log(ctx, logger)
 		}

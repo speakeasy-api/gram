@@ -12,8 +12,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@speakeasy-api/moonshine";
-import { ChevronDown, Plus } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, Plus, X } from "lucide-react";
+import { useCallback, useState } from "react";
 import { EnvVarState } from "./environmentVariableUtils";
 
 interface Environment {
@@ -22,12 +22,18 @@ interface Environment {
   name: string;
 }
 
+export interface VariableEntry {
+  key: string;
+  value: string;
+  state: EnvVarState;
+}
+
 interface AddVariableSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   attachedEnvironment: Environment | null;
   availableEnvVarsFromAttached: string[];
-  onAddVariable: (key: string, value: string, state: EnvVarState) => void;
+  onAddVariables: (entries: VariableEntry[]) => void;
   onLoadFromEnvironment: (varKey: string) => void;
 }
 
@@ -36,28 +42,61 @@ export function AddVariableSheet({
   onOpenChange,
   attachedEnvironment,
   availableEnvVarsFromAttached,
-  onAddVariable,
+  onAddVariables,
   onLoadFromEnvironment,
 }: AddVariableSheetProps) {
-  const [newKey, setNewKey] = useState("");
-  const [newValue, setNewValue] = useState("");
-  const [newState] = useState<EnvVarState>("system");
-  const [newValueVisible] = useState(false);
+  const emptyEntry = { key: "", value: "" };
+  const [entries, setEntries] = useState([{ ...emptyEntry }]);
 
-  const handleAddVariable = () => {
-    if (!newKey.trim()) return;
+  const resetForm = useCallback(() => {
+    setEntries([{ ...emptyEntry }]);
+  }, []);
 
-    const varKey = newKey.toUpperCase().replace(/\s+/g, "_");
-    onAddVariable(varKey, newValue, newState);
+  const handleSave = () => {
+    const validEntries = entries
+      .filter((e) => e.key.trim())
+      .map((e) => ({
+        key: e.key.toUpperCase().replace(/\s+/g, "_"),
+        value: e.value,
+        state: "system" as EnvVarState,
+      }));
+    if (validEntries.length === 0) return;
 
-    // Reset form
-    setNewKey("");
-    setNewValue("");
+    onAddVariables(validEntries);
+    resetForm();
     onOpenChange(false);
   };
 
+  const updateEntry = (index: number, field: "key" | "value", val: string) => {
+    setEntries((prev) =>
+      prev.map((e, i) =>
+        i === index
+          ? { ...e, [field]: field === "key" ? val.toUpperCase() : val }
+          : e,
+      ),
+    );
+  };
+
+  const addEntry = () => {
+    setEntries((prev) => [...prev, { ...emptyEntry }]);
+  };
+
+  const removeEntry = (index: number) => {
+    setEntries((prev) =>
+      prev.length <= 1 ? prev : prev.filter((_, i) => i !== index),
+    );
+  };
+
+  const hasValidEntry = entries.some((e) => e.key.trim());
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) resetForm();
+        onOpenChange(isOpen);
+      }}
+    >
       <SheetContent
         side="right"
         className="w-[500px] sm:max-w-[500px] flex flex-col"
@@ -122,37 +161,54 @@ export function AddVariableSheet({
             </Label>
           </div>
 
-          {/* Key and Value inputs side by side */}
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <Label className="text-xs text-muted-foreground mb-1.5 block">
-                Key
-              </Label>
-              <input
-                type="text"
-                value={newKey}
-                onChange={(e) => setNewKey(e.target.value.toUpperCase())}
-                placeholder="CLIENT_KEY..."
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+          {entries.map((entry, index) => (
+            <div key={index} className="flex gap-4 items-end">
+              <div className="flex-1">
+                {index === 0 && (
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">
+                    Key
+                  </Label>
+                )}
+                <input
+                  type="text"
+                  value={entry.key}
+                  onChange={(e) => updateEntry(index, "key", e.target.value)}
+                  placeholder="CLIENT_KEY..."
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="flex-1">
+                {index === 0 && (
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">
+                    Value
+                  </Label>
+                )}
+                <input
+                  type="password"
+                  value={entry.value}
+                  onChange={(e) => updateEntry(index, "value", e.target.value)}
+                  placeholder=""
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              {entries.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeEntry(index)}
+                  className="h-10 px-1 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
-            <div className="flex-1">
-              <Label className="text-xs text-muted-foreground mb-1.5 block">
-                Value
-              </Label>
-              <input
-                type={newValueVisible ? "text" : "password"}
-                value={newValue}
-                onChange={(e) => setNewValue(e.target.value)}
-                placeholder=""
-                disabled={newState !== "system"}
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:bg-muted disabled:cursor-not-allowed"
-              />
-            </div>
-          </div>
+          ))}
 
           {/* Add Another button */}
-          <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            type="button"
+            onClick={addEntry}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
             <Plus className="h-4 w-4" />
             Add Another
           </button>
@@ -174,7 +230,7 @@ export function AddVariableSheet({
           <span className="text-xs text-muted-foreground">
             or paste .env contents in Key input
           </span>
-          <Button onClick={handleAddVariable} disabled={!newKey.trim()}>
+          <Button onClick={handleSave} disabled={!hasValidEntry}>
             Save
           </Button>
         </SheetFooter>

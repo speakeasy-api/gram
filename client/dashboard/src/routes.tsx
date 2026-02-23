@@ -337,9 +337,14 @@ type TransformRouteToGoTo<T> = {
 
 type RoutesWithGoTo = TransformRouteToGoTo<RouteStructure>;
 
-export const useRoutes = (): RoutesWithGoTo => {
+export const useRoutes = (overrides?: {
+  orgSlug?: string;
+  projectSlug?: string;
+}): RoutesWithGoTo => {
   const location = useLocation();
-  const { orgSlug, projectSlug } = useSlugs();
+  const slugs = useSlugs();
+  const orgSlug = overrides?.orgSlug ?? slugs.orgSlug;
+  const projectSlug = overrides?.projectSlug ?? slugs.projectSlug;
   const navigate = useNavigate();
 
   // Check if the current url matches the route url, including dynamic segments

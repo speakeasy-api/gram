@@ -47,6 +47,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
@@ -257,9 +260,10 @@ type temporalClientOptions struct {
 	namespace    string
 	certPEMBlock []byte
 	keyPEMBlock  []byte
+	taskQueue    string
 }
 
-func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.Client, func(context.Context) error, error) {
+func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
 	var nilShutdownFunc = func(context.Context) error { return nil }
 	if opts.address == "" || opts.namespace == "" {
 		return nil, nilShutdownFunc, nil
@@ -301,7 +305,7 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.
 		return nil, nilShutdownFunc, fmt.Errorf("failed to create temporal client: %w", err)
 	}
 
-	return temporalClient, func(context.Context) error {
+	return temporal.NewEnvironment(temporalClient, temporal.NamespaceName(opts.namespace), temporal.TaskQueueName(opts.taskQueue)), func(context.Context) error {
 		temporalClient.Close()
 		return nil
 	}, nil
@@ -559,4 +563,19 @@ func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvid
 	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
 
 	return externalmcp.NewRegistryClient(logger, tracerProvider, backend, opts.cacheImpl), nil
+}
+
+func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat productfeatures.Feature) telemetry.FeatureChecker {
+	return func(ctx context.Context, orgID string) (bool, error) {
+		isEnabled, err := pf.IsFeatureEnabled(ctx, orgID, feat)
+		if err != nil {
+			logger.ErrorContext(ctx, "error checking if feature is enabled",
+				attr.SlogError(err),
+				attr.SlogOrganizationSlug(orgID),
+				attr.SlogProductFeatureName(string(feat)),
+			)
+			return false, fmt.Errorf("error checking if %s feature is enabled: %w", feat, err)
+		}
+		return isEnabled, nil
+	}
 }

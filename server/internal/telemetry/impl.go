@@ -30,15 +30,16 @@ import (
 const logsDisabledMsg = "logs are not enabled for this organization"
 
 type Service struct {
-	auth         *auth.Auth
-	db           *pgxpool.Pool
-	chConn       clickhouse.Conn
-	chRepo       *repo.Queries
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	posthog      PosthogClient
-	chatSessions *chatsessions.Manager
-	logsEnabled  LogsEnabled
+	auth              *auth.Auth
+	db                *pgxpool.Pool
+	chConn            clickhouse.Conn
+	chRepo            *repo.Queries
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	posthog           PosthogClient
+	chatSessions      *chatsessions.Manager
+	logsEnabled       FeatureChecker
+	toolIOLogsEnabled FeatureChecker
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -51,7 +52,8 @@ func NewService(
 	chConn clickhouse.Conn,
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
-	logsEnabled LogsEnabled,
+	logsEnabled FeatureChecker,
+	toolIOLogsEnabled FeatureChecker,
 	posthogClient PosthogClient) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
 	chRepo := repo.New(chConn)
@@ -65,15 +67,16 @@ func NewService(
 	}
 
 	return &Service{
-		auth:         a,
-		db:           db,
-		chConn:       chConn,
-		chRepo:       chRepo,
-		logger:       logger,
-		logsEnabled:  logsEnabled,
-		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
-		posthog:      posthogClient,
-		chatSessions: chatSessions,
+		auth:              a,
+		db:                db,
+		chConn:            chConn,
+		chRepo:            chRepo,
+		logger:            logger,
+		logsEnabled:       logsEnabled,
+		toolIOLogsEnabled: toolIOLogsEnabled,
+		tracer:            otel.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
+		posthog:           posthogClient,
+		chatSessions:      chatSessions,
 	}
 }
 
@@ -201,6 +204,18 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}, nil
 }
 
+// CheckToolIOLogsEnabled returns whether tool I/O logs are enabled for the given organization.
+func (s *Service) CheckToolIOLogsEnabled(ctx context.Context, organizationID string) bool {
+	if s.toolIOLogsEnabled == nil {
+		return false
+	}
+	enabled, err := s.toolIOLogsEnabled(ctx, organizationID)
+	if err != nil {
+		return false
+	}
+	return enabled
+}
+
 // SearchToolCalls retrieves tool call summaries with pagination.
 func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.SearchToolCallsPayload) (res *telem_gen.SearchToolCallsResult, err error) {
 	var from, to *string
@@ -261,9 +276,10 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	return &telem_gen.SearchToolCallsResult{
-		ToolCalls:  toolCalls,
-		Enabled:    true,
-		NextCursor: nextCursor,
+		ToolCalls:         toolCalls,
+		Enabled:           true,
+		ToolIoLogsEnabled: s.CheckToolIOLogsEnabled(ctx, params.organizationID),
+		NextCursor:        nextCursor,
 	}, nil
 }
 
@@ -554,13 +570,14 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 
 // searchParams contains common validated parameters for telemetry search endpoints.
 type searchParams struct {
-	projectID string
-	enabled   bool
-	limit     int
-	sortOrder string
-	cursor    string
-	timeStart int64
-	timeEnd   int64
+	projectID      string
+	organizationID string
+	enabled        bool
+	limit          int
+	sortOrder      string
+	cursor         string
+	timeStart      int64
+	timeEnd        int64
 }
 
 // prepareTelemetrySearch validates and prepares common search parameters.
@@ -598,13 +615,14 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 	}
 
 	return &searchParams{
-		projectID: authCtx.ProjectID.String(),
-		enabled:   logsEnabled,
-		limit:     limit,
-		sortOrder: sortOrder,
-		cursor:    cursorVal,
-		timeStart: timeStart,
-		timeEnd:   timeEnd,
+		projectID:      authCtx.ProjectID.String(),
+		organizationID: authCtx.ActiveOrganizationID,
+		enabled:        logsEnabled,
+		limit:          limit,
+		sortOrder:      sortOrder,
+		cursor:         cursorVal,
+		timeStart:      timeStart,
+		timeEnd:        timeEnd,
 	}, nil
 }
 

@@ -412,8 +412,9 @@ var SearchToolCallsResult = Type("SearchToolCallsResult", func() {
 	Attribute("tool_calls", ArrayOf(ToolCallSummary), "List of tool call summaries")
 	Attribute("next_cursor", String, "Cursor for next page")
 	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
+	Attribute("tool_io_logs_enabled", Boolean, "Whether tool input/output logging is enabled for the organization")
 
-	Required("tool_calls", "enabled")
+	Required("tool_calls", "enabled", "tool_io_logs_enabled")
 })
 
 var ToolCallSummary = Type("ToolCallSummary", func() {

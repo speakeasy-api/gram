@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/client"
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
@@ -27,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -61,7 +61,7 @@ type testInstance struct {
 	deployments    *deployments.Service
 	assets         *assets.Service
 	conn           *pgxpool.Pool
-	temporal       client.Client
+	temporal       *temporal.Environment
 	sessionManager *sessions.Manager
 	assetStorage   assets.BlobStore
 	cacheImpl      cache.Cache
@@ -88,11 +88,11 @@ func newTestAgentsService(t *testing.T) (context.Context, *testInstance) {
 
 	f := &feature.InMemory{}
 
-	temporal, devserver := infra.NewTemporalClient(t)
+	temporal, devserver := infra.NewTemporalEnv(t)
 	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
-		temporal.Close()
+		temporal.Client().Close()
 		_ = devserver.Stop() // Temporal devserver may exit with status 1 during shutdown
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")

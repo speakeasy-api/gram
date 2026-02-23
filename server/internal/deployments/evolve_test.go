@@ -292,7 +292,7 @@ func TestDeploymentsService_Evolve_UpsertBadAssets(t *testing.T) {
 	require.NoError(t, err, "evolve deployment")
 
 	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
-	require.Equal(t, "failed", evolved.Deployment.Status, "evolved deployment status is not completed")
+	require.Equal(t, "completed", evolved.Deployment.Status, "evolved deployment status should be completed even if it contains invalid assets")
 	require.Equal(t, expectedToolCount, evolved.Deployment.Openapiv3ToolCount, "evolved deployment has incorrect openapi tool count")
 	require.Len(t, evolved.Deployment.Openapiv3Assets, 2, "expected 2 openapi assets")
 

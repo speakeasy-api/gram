@@ -691,6 +691,9 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		if err := jsonschema.IsValidJSONSchema(schemaBytes.Bytes()); err != nil {
 			return empty, deploymentEvents, fmt.Errorf("invalid tool input schema for operation %s: %w", opID, err)
 		}
+
+		// Hack: rewrite integer enums to anyOf/const for Anti-Gravity compat. See integer_enum.go.
+		schemaBytes = *bytes.NewBuffer(TransformIntegerEnums(schemaBytes.Bytes()))
 	}
 
 	security, err := serializeSecuritySpeakeasy(op.GetSecurity())

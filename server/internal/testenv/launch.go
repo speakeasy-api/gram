@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 	"golang.org/x/sync/errgroup"
 )
@@ -17,7 +17,7 @@ type Environment struct {
 	CloneTestDatabase   PostgresDBCloneFunc
 	NewRedisClient      RedisClientFunc
 	NewClickhouseClient ClickhouseClientFunc
-	NewTemporalClient   func(t *testing.T) (client client.Client, server *testsuite.DevServer)
+	NewTemporalEnv      func(t *testing.T) (env *temporal.Environment, server *testsuite.DevServer)
 }
 
 func Launch(ctx context.Context) (*Environment, func() error, error) {
@@ -40,14 +40,14 @@ func Launch(ctx context.Context) (*Environment, func() error, error) {
 		CloneTestDatabase:   cloner,
 		NewRedisClient:      rcFactory,
 		NewClickhouseClient: chFactory,
-		NewTemporalClient: func(t *testing.T) (client.Client, *testsuite.DevServer) {
+		NewTemporalEnv: func(t *testing.T) (*temporal.Environment, *testsuite.DevServer) {
 			t.Helper()
 
-			temporal, err := NewTemporalDevServer(t, ctx)
+			devserver, err := NewTemporalDevServer(t, ctx)
 			require.NoError(t, err, "start temporal dev server")
 
-			client := temporal.Client()
-			return client, temporal
+			client := devserver.Client()
+			return temporal.NewEnvironment(client, temporal.NamespaceName("default"), temporal.TaskQueueName("main")), devserver
 		},
 	}
 

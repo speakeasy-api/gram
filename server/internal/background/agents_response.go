@@ -16,6 +16,7 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -70,12 +71,12 @@ type AgentsResponseWorkflowParams struct {
 	ShouldStore bool
 }
 
-func ExecuteAgentsResponseWorkflow(ctx context.Context, temporalClient client.Client, params AgentsResponseWorkflowParams) (client.WorkflowRun, error) {
+func ExecuteAgentsResponseWorkflow(ctx context.Context, env *tenv.Environment, params AgentsResponseWorkflowParams) (client.WorkflowRun, error) {
 	// Generate UUIDv7 for workflow ID, which will also be used as the response ID
 	workflowID := uuid.Must(uuid.NewV7()).String()
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                       workflowID,
-		TaskQueue:                string(TaskQueueMain),
+		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		WorkflowRunTimeout:       time.Minute * 15,
@@ -343,7 +344,6 @@ func AgentsResponseWorkflow(ctx workflow.Context, params AgentsResponseWorkflowP
 
 				childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 					WorkflowID:         uuid.Must(uuid.NewV7()).String(),
-					TaskQueue:          string(TaskQueueMain),
 					WorkflowRunTimeout: 5 * time.Minute,
 				})
 

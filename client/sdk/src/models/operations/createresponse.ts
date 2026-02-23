@@ -6,12 +6,12 @@ import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
-export type CreateAgentResponseSecurity = {
+export type CreateResponseSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   projectSlugHeaderGramProject?: string | undefined;
 };
 
-export type CreateAgentResponseRequest = {
+export type CreateResponseRequest = {
   /**
    * API Key header
    */
@@ -20,20 +20,20 @@ export type CreateAgentResponseRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  agentResponseRequest: components.AgentResponseRequest;
+  workflowAgentRequest: components.WorkflowAgentRequest;
 };
 
 /** @internal */
-export type CreateAgentResponseSecurity$Outbound = {
+export type CreateResponseSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
   "project_slug_header_Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const CreateAgentResponseSecurity$outboundSchema: z.ZodType<
-  CreateAgentResponseSecurity$Outbound,
+export const CreateResponseSecurity$outboundSchema: z.ZodType<
+  CreateResponseSecurity$Outbound,
   z.ZodTypeDef,
-  CreateAgentResponseSecurity
+  CreateResponseSecurity
 > = z.object({
   apikeyHeaderGramKey: z.string().optional(),
   projectSlugHeaderGramProject: z.string().optional(),
@@ -44,44 +44,42 @@ export const CreateAgentResponseSecurity$outboundSchema: z.ZodType<
   });
 });
 
-export function createAgentResponseSecurityToJSON(
-  createAgentResponseSecurity: CreateAgentResponseSecurity,
+export function createResponseSecurityToJSON(
+  createResponseSecurity: CreateResponseSecurity,
 ): string {
   return JSON.stringify(
-    CreateAgentResponseSecurity$outboundSchema.parse(
-      createAgentResponseSecurity,
-    ),
+    CreateResponseSecurity$outboundSchema.parse(createResponseSecurity),
   );
 }
 
 /** @internal */
-export type CreateAgentResponseRequest$Outbound = {
+export type CreateResponseRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  AgentResponseRequest: components.AgentResponseRequest$Outbound;
+  WorkflowAgentRequest: components.WorkflowAgentRequest$Outbound;
 };
 
 /** @internal */
-export const CreateAgentResponseRequest$outboundSchema: z.ZodType<
-  CreateAgentResponseRequest$Outbound,
+export const CreateResponseRequest$outboundSchema: z.ZodType<
+  CreateResponseRequest$Outbound,
   z.ZodTypeDef,
-  CreateAgentResponseRequest
+  CreateResponseRequest
 > = z.object({
   gramKey: z.string().optional(),
   gramProject: z.string().optional(),
-  agentResponseRequest: components.AgentResponseRequest$outboundSchema,
+  workflowAgentRequest: components.WorkflowAgentRequest$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
     gramKey: "Gram-Key",
     gramProject: "Gram-Project",
-    agentResponseRequest: "AgentResponseRequest",
+    workflowAgentRequest: "WorkflowAgentRequest",
   });
 });
 
-export function createAgentResponseRequestToJSON(
-  createAgentResponseRequest: CreateAgentResponseRequest,
+export function createResponseRequestToJSON(
+  createResponseRequest: CreateResponseRequest,
 ): string {
   return JSON.stringify(
-    CreateAgentResponseRequest$outboundSchema.parse(createAgentResponseRequest),
+    CreateResponseRequest$outboundSchema.parse(createResponseRequest),
   );
 }

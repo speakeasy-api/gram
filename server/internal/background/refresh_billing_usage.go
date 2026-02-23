@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -18,14 +19,14 @@ const (
 )
 
 type RefreshBillingUsageClient struct {
-	Temporal client.Client
+	TemporalEnv *tenv.Environment
 }
 
 func (c *RefreshBillingUsageClient) StartRefreshBillingUsage(ctx context.Context) (client.WorkflowRun, error) {
 	id := "v1:refresh-billing-usage"
-	return c.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        id,
-		TaskQueue: string(TaskQueueMain),
+		TaskQueue: string(c.TemporalEnv.Queue()),
 		// Allow restarting if needed
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 	}, RefreshBillingUsageWorkflow)
@@ -77,11 +78,11 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context) error {
 	return nil
 }
 
-func AddRefreshBillingUsageSchedule(ctx context.Context, temporalClient client.Client) error {
+func AddRefreshBillingUsageSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
 	scheduleID := "v1:refresh-billing-usage-schedule"
 	workflowID := "v1:refresh-billing-usage-schedule/scheduled"
 
-	_, err := temporalClient.ScheduleClient().Create(ctx, client.ScheduleOptions{
+	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
 		ID: scheduleID,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{
@@ -93,7 +94,7 @@ func AddRefreshBillingUsageSchedule(ctx context.Context, temporalClient client.C
 		Action: &client.ScheduleWorkflowAction{
 			ID:                 workflowID,
 			Workflow:           RefreshBillingUsageWorkflow,
-			TaskQueue:          string(TaskQueueMain),
+			TaskQueue:          string(temporalEnv.Queue()),
 			WorkflowRunTimeout: 15 * time.Minute,
 		},
 	})

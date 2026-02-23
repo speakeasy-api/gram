@@ -124,8 +124,8 @@ export const ProjectProvider = ({
 
   // Update project state when current project changes
   useEffect(() => {
-    if (!project || project.slug !== currentProject.slug) {
-      setProject(currentProject);
+    if (!project || project.slug !== currentProject?.slug) {
+      setProject(currentProject ?? null);
     }
   }, [currentProject, project]);
 

@@ -33,13 +33,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	temporal_client "go.temporal.io/sdk/client"
 )
 
 type toolsCallParams struct {
@@ -66,9 +65,8 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	telemSvc *tm.Service,
-	featuresClient *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporal temporal_client.Client,
+	temporalEnv *temporal.Environment,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
@@ -90,7 +88,7 @@ func handleToolsCall(
 	if payload.mode != ToolModeStatic {
 		switch params.Name {
 		case searchToolsToolName:
-			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporal)
+			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporalEnv)
 		case describeToolsToolName:
 			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
 		case executeToolToolName:
@@ -259,6 +257,9 @@ func handleToolsCall(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordRequestBodyContent(requestBodyBytes)
+		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
+		
 		if payload.chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
 		}
@@ -289,7 +290,7 @@ func handleToolsCall(
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute tool call").Log(ctx, logger)
 	}
 
 	outputBytes = int64(rw.body.Len())

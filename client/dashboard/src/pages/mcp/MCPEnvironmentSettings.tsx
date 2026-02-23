@@ -271,44 +271,54 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     }
   };
 
-  const handleAddVariable = (
-    varKey: string,
-    newValue: string,
-    newState: EnvVarState,
+  const handleAddVariables = (
+    entries: Array<{ key: string; value: string; state: EnvVarState }>,
   ) => {
-    if (newState === "system" && newValue) {
+    // Deduplicate by key, keeping the last entry for each key
+    const deduped = Array.from(
+      new Map(entries.map((e) => [e.key, e])).values(),
+    );
+    const systemEntries = deduped.filter(
+      (e) => e.state === "system" && e.value,
+    );
+
+    if (systemEntries.length > 0) {
       updateEnvironmentMutation.mutate({
         request: {
           slug: selectedEnvironmentView,
           updateEnvironmentRequestBody: {
-            entriesToUpdate: [{ name: varKey, value: newValue }],
+            entriesToUpdate: systemEntries.map((e) => ({
+              name: e.key,
+              value: e.value,
+            })),
             entriesToRemove: [],
           },
         },
       });
 
-      // Create environment entry for custom variables
+      // Create environment entries for custom variables
       const existingEntries = mcpMetadata?.environmentConfigs || [];
-      if (!existingEntries.some((e) => e.variableName === varKey)) {
+      const newConfigEntries = systemEntries
+        .filter(
+          (e) =>
+            !existingEntries.some(
+              (existing) => existing.variableName === e.key,
+            ),
+        )
+        .map((e) => ({ variableName: e.key, providedBy: "system" }));
+
+      if (newConfigEntries.length > 0) {
         const targetEnv = environments.find(
           (e) => e.slug === selectedEnvironmentView,
         );
         if (targetEnv) {
-          const newEntries = [
-            ...existingEntries,
-            {
-              variableName: varKey,
-              providedBy: "system",
-            },
-          ];
-
           setMcpMetadataMutation.mutate({
             request: {
               setMcpMetadataRequestBody: {
                 toolsetSlug: toolset.slug,
                 defaultEnvironmentId:
                   mcpMetadata?.defaultEnvironmentId || targetEnv.id,
-                environmentConfigs: newEntries,
+                environmentConfigs: [...existingEntries, ...newConfigEntries],
                 externalDocumentationUrl: mcpMetadata?.externalDocumentationUrl,
                 instructions: mcpMetadata?.instructions,
                 logoAssetId: mcpMetadata?.logoAssetId,
@@ -319,11 +329,13 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       }
     }
 
-    telemetry.capture("environment_event", {
-      action: "environment_variable_added",
-      toolset_slug: toolset.slug,
-      state: newState,
-    });
+    for (const entry of entries) {
+      telemetry.capture("environment_event", {
+        action: "environment_variable_added",
+        toolset_slug: toolset.slug,
+        state: entry.state,
+      });
+    }
   };
 
   // Separate required and custom variables, sort omitted to the bottom
@@ -758,7 +770,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         onOpenChange={setIsAddingNew}
         attachedEnvironment={attachedEnvironment || null}
         availableEnvVarsFromAttached={availableEnvVarsFromAttached}
-        onAddVariable={handleAddVariable}
+        onAddVariables={handleAddVariables}
         onLoadFromEnvironment={handleLoadFromEnvironment}
       />
 

@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.28.0
+
+### Minor Changes
+
+- 0f4f5dd: Adds an opt-in toggle for recording tool call inputs/outputs in logs
+
 ## 0.27.0
 
 ### Minor Changes

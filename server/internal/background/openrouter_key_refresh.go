@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -18,11 +19,11 @@ type OpenRouterKeyRefreshParams struct {
 }
 
 type OpenRouterKeyRefresher struct {
-	Temporal client.Client
+	TemporalEnv *tenv.Environment
 }
 
 func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string) error {
-	_, err := ExecuteOpenrouterKeyRefreshWorkflow(ctx, w.Temporal, OpenRouterKeyRefreshParams{
+	_, err := ExecuteOpenrouterKeyRefreshWorkflow(ctx, w.TemporalEnv, OpenRouterKeyRefreshParams{
 		OrgID: orgID,
 		Limit: nil,
 	})
@@ -31,12 +32,12 @@ func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Contex
 
 // CancelOpenRouterKeyRefreshWorkflow cancels an existing openrouter key refresh workflow for the given orgID
 func (w *OpenRouterKeyRefresher) CancelOpenRouterKeyRefreshWorkflow(ctx context.Context, orgID string) error {
-	if w.Temporal == nil {
+	if w.TemporalEnv == nil {
 		return nil // No-op if Temporal client is not available
 	}
 
 	id := fmt.Sprintf("v1:openrouter-key-refresh:%s", orgID)
-	err := w.Temporal.CancelWorkflow(ctx, id, "")
+	err := w.TemporalEnv.Client().CancelWorkflow(ctx, id, "")
 	if err != nil {
 		// If workflow doesn't exist, that's fine - it may have already completed or never started
 		return nil
@@ -46,11 +47,11 @@ func (w *OpenRouterKeyRefresher) CancelOpenRouterKeyRefreshWorkflow(ctx context.
 }
 
 // Called by your service to start (or restart) the workflow
-func ExecuteOpenrouterKeyRefreshWorkflow(ctx context.Context, temporalClient client.Client, params OpenRouterKeyRefreshParams) (client.WorkflowRun, error) {
+func ExecuteOpenrouterKeyRefreshWorkflow(ctx context.Context, temporalEnv *tenv.Environment, params OpenRouterKeyRefreshParams) (client.WorkflowRun, error) {
 	id := fmt.Sprintf("v1:openrouter-key-refresh:%s", params.OrgID)
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return temporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
-		TaskQueue:             string(TaskQueueMain),
+		TaskQueue:             string(temporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
 		WorkflowRunTimeout:    3 * time.Minute, // slightly longer workflow timeout
 	}, OpenrouterKeyRefreshWorkflow, params)

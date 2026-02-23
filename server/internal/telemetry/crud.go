@@ -45,6 +45,12 @@ func (s *Service) CreateLog(params LogParams) {
 		return
 	}
 
+	// Scrub tool IO content if the feature is disabled for this organization.
+	if !s.CheckToolIOLogsEnabled(ctx, params.ToolInfo.OrganizationID) {
+		delete(params.Attributes, attr.GenAIToolCallArgumentsKey)
+		delete(params.Attributes, attr.GenAIToolCallResultKey)
+	}
+
 	logParams, err := buildTelemetryLogParams(params)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to build telemetry log params", attr.SlogError(err))

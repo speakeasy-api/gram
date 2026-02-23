@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
@@ -25,11 +26,11 @@ type ProcessSlackEventResult struct {
 	Status string
 }
 
-func ExecuteProcessSlackEventWorkflow(ctx context.Context, temporalClient client.Client, params ProcessSlackWorkflowParams) (client.WorkflowRun, error) {
+func ExecuteProcessSlackEventWorkflow(ctx context.Context, env *tenv.Environment, params ProcessSlackWorkflowParams) (client.WorkflowRun, error) {
 	id := params.Event.EventID
-	return temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                       fmt.Sprintf("v1:slack-event:%s", id),
-		TaskQueue:                string(TaskQueueMain),
+		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		WorkflowRunTimeout:       time.Minute * 3,

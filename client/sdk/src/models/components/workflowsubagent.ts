@@ -5,15 +5,15 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  AgentToolset,
-  AgentToolset$Outbound,
-  AgentToolset$outboundSchema,
-} from "./agenttoolset.js";
+  WorkflowAgentToolset,
+  WorkflowAgentToolset$Outbound,
+  WorkflowAgentToolset$outboundSchema,
+} from "./workflowagenttoolset.js";
 
 /**
  * A sub-agent definition for the agent workflow
  */
-export type AgentSubAgent = {
+export type WorkflowSubAgent = {
   /**
    * Description of what this sub-agent does
    */
@@ -37,37 +37,41 @@ export type AgentSubAgent = {
   /**
    * Toolsets available to this sub-agent
    */
-  toolsets?: Array<AgentToolset> | undefined;
+  toolsets?: Array<WorkflowAgentToolset> | undefined;
 };
 
 /** @internal */
-export type AgentSubAgent$Outbound = {
+export type WorkflowSubAgent$Outbound = {
   description: string;
   environment_slug?: string | undefined;
   instructions?: string | undefined;
   name: string;
   tools?: Array<string> | undefined;
-  toolsets?: Array<AgentToolset$Outbound> | undefined;
+  toolsets?: Array<WorkflowAgentToolset$Outbound> | undefined;
 };
 
 /** @internal */
-export const AgentSubAgent$outboundSchema: z.ZodType<
-  AgentSubAgent$Outbound,
+export const WorkflowSubAgent$outboundSchema: z.ZodType<
+  WorkflowSubAgent$Outbound,
   z.ZodTypeDef,
-  AgentSubAgent
+  WorkflowSubAgent
 > = z.object({
   description: z.string(),
   environmentSlug: z.string().optional(),
   instructions: z.string().optional(),
   name: z.string(),
   tools: z.array(z.string()).optional(),
-  toolsets: z.array(AgentToolset$outboundSchema).optional(),
+  toolsets: z.array(WorkflowAgentToolset$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     environmentSlug: "environment_slug",
   });
 });
 
-export function agentSubAgentToJSON(agentSubAgent: AgentSubAgent): string {
-  return JSON.stringify(AgentSubAgent$outboundSchema.parse(agentSubAgent));
+export function workflowSubAgentToJSON(
+  workflowSubAgent: WorkflowSubAgent,
+): string {
+  return JSON.stringify(
+    WorkflowSubAgent$outboundSchema.parse(workflowSubAgent),
+  );
 }
