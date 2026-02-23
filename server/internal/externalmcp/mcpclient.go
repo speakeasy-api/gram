@@ -81,9 +81,10 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 	switch transportType {
 	case types.TransportTypeStreamableHTTP:
 		transport = &mcp.StreamableClientTransport{
-			Endpoint:   remoteURL,
-			HTTPClient: httpClient,
-			MaxRetries: 3,
+			Endpoint:             remoteURL,
+			HTTPClient:           httpClient,
+			MaxRetries:           3,
+			DisableStandaloneSSE: true,
 		}
 	case types.TransportTypeSSE:
 		transport = &mcp.SSEClientTransport{
