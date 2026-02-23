@@ -97,6 +97,8 @@ Activate a skill when your task falls within its scope.
 | `gram-functions`              | Understanding or modifying the Gram Functions serverless execution feature |
 | `mise-tasks`                  | Creating or editing mise task scripts in `.mise-tasks/`                    |
 
+> **User-facing skills**: The `skills/` directory contains a Claude Code plugin with guided workflows for Gram end-users (deploying APIs, functions, installing MCP servers). See `skills/README.md`.
+
 # Plan Mode
 
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
