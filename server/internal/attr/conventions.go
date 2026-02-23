@@ -109,6 +109,7 @@ const (
 	EnvironmentIDKey               = attribute.Key("gram.environment.id")
 	EnvironmentSlugKey             = attribute.Key("gram.environment.slug")
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
+	EventSourceKey                 = attribute.Key("gram.event.source")
 	ErrorIDKey                     = attribute.Key("gram.error.id")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
 	FlyAppInternalIDKey            = attribute.Key("gram.fly.app_id")
@@ -516,6 +517,9 @@ func SlogEnvironmentSlug(v string) slog.Attr      { return slog.String(string(En
 
 func EnvVarName(v string) attribute.KeyValue { return EnvVarNameKey.String(v) }
 func SlogEnvVarName(v string) slog.Attr      { return slog.String(string(EnvVarNameKey), v) }
+
+func EventSource(v string) attribute.KeyValue { return EventSourceKey.String(v) }
+func SlogEventSource(v string) slog.Attr      { return slog.String(string(EventSourceKey), v) }
 
 func ErrorID(v string) attribute.KeyValue { return ErrorIDKey.String(v) }
 func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey), v) }

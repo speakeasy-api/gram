@@ -1256,6 +1256,7 @@ func (r *responseCaptor) emitGenAITelemetry(toolCallsJSON []byte) {
 	// but remain in the attributes JSON. Resource attributes are auto-partitioned
 	// based on telemetry.ResourceAttributeKeys.
 	attrs := map[attr.Key]any{
+		attr.EventSourceKey: string(telemetry.EventSourceChatCompletion),
 		attr.ResourceURNKey: "agents:chat:completion",
 		attr.LogBodyKey: fmt.Sprintf("LLM chat completion: model=%s, input_tokens=%d, output_tokens=%d",
 			r.model, r.usage.PromptTokens, r.usage.CompletionTokens),

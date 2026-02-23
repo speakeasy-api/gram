@@ -175,6 +175,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	}
 
 	attrs := map[attr.Key]any{
+		attr.EventSourceKey:                string(telemetry.EventSourceEvaluation),
 		attr.GenAIEvaluationNameKey:        "chat_resolution",
 		attr.GenAIEvaluationScoreLabelKey:  result.Resolution,
 		attr.GenAIEvaluationScoreValueKey:  score,
