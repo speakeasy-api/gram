@@ -1,4 +1,5 @@
 import { InputDialog } from "@/components/input-dialog";
+import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { MCPCard } from "@/components/mcp/MCPCard";
 import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -10,6 +11,15 @@ import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useToolsets } from "../toolsets/Toolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
+
+const BUILT_IN_SERVERS = [
+  {
+    name: "Gram Logs",
+    description:
+      "Search and analyze your project's MCP server logs, tool calls, and chat sessions.",
+    slug: "logs",
+  },
+];
 
 export function MCPRoot() {
   return <Outlet />;
@@ -71,12 +81,35 @@ export function MCPOverview() {
     />
   );
 
+  const builtInSection = (
+    <Page.Section>
+      <Page.Section.Title>Built-in MCP Servers</Page.Section.Title>
+      <Page.Section.Description>
+        Pre-configured MCP servers provided by Gram for your project. Connect
+        from Claude Desktop, Cursor, or any MCP client.
+      </Page.Section.Description>
+      <Page.Section.Body>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {BUILT_IN_SERVERS.map((server) => (
+            <BuiltInMCPCard key={server.slug} {...server} />
+          ))}
+        </div>
+      </Page.Section.Body>
+    </Page.Section>
+  );
+
   if (!toolsets.isLoading && toolsets.length === 0) {
     return (
-      <>
-        <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
-        {newMcpServerDialog}
-      </>
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body>
+          {builtInSection}
+          <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
+          {newMcpServerDialog}
+        </Page.Body>
+      </Page>
     );
   }
 
@@ -86,6 +119,7 @@ export function MCPOverview() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
+        {builtInSection}
         <Page.Section>
           <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
           <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
