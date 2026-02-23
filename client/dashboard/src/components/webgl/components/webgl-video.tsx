@@ -62,11 +62,10 @@ const TextureLoader = memo(
 );
 TextureLoader.displayName = "TextureLoader";
 
-interface WebGLVideoProps
-  extends Omit<
-    HTMLAttributes<HTMLDivElement>,
-    "onMouseEnter" | "onMouseLeave"
-  > {
+interface WebGLVideoProps extends Omit<
+  HTMLAttributes<HTMLDivElement>,
+  "onMouseEnter" | "onMouseLeave"
+> {
   textureUrl: string;
   flipX?: boolean;
   flipY?: boolean;
