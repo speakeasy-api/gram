@@ -23,14 +23,13 @@ echo ""
 # Create hooks directory if it doesn't exist
 mkdir -p "$CLAUDE_HOOKS_DIR"
 
-# Install each hook script
-for hook_name in pre_tool_use post_tool_use post_tool_use_failure; do
-  hook_file="${hook_name}.sh"
+# Install common library and hook scripts
+for hook_file in common.sh pre_tool_use.sh post_tool_use.sh post_tool_use_failure.sh; do
   echo "  Installing $hook_file"
 
   if [ -n "$LOCAL_HOOKS_DIR" ]; then
-    # Local installation - copy from repo
-    cp "$LOCAL_HOOKS_DIR/$hook_file" "$CLAUDE_HOOKS_DIR/$hook_file"
+    # Local installation - symlink from repo
+    ln -sf "$LOCAL_HOOKS_DIR/$hook_file" "$CLAUDE_HOOKS_DIR/$hook_file"
   else
     # Remote installation - download from GitHub
     if command -v curl &> /dev/null; then

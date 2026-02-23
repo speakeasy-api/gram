@@ -32,9 +32,10 @@ var ResourceAttributeKeys = map[attribute.Key]struct{}{
 }
 
 type LogParams struct {
-	Timestamp  time.Time
-	ToolInfo   ToolInfo
-	Attributes map[attr.Key]any
+	Timestamp   time.Time
+	ToolInfo    ToolInfo
+	Attributes  map[attr.Key]any
+	ServiceName *string // Optional override for service name (defaults to "gram-server")
 }
 
 func (s *Service) CreateLog(params LogParams) {
@@ -79,8 +80,12 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	allAttrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
 	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
 
-	// Manually add service name, as it's always going to be gram server
-	allAttrs[attr.ServiceNameKey] = serviceName
+	// Use provided service name or default to gram-server
+	svcName := serviceName
+	if params.ServiceName != nil {
+		svcName = *params.ServiceName
+	}
+	allAttrs[attr.ServiceNameKey] = svcName
 
 	spanAttrs, resourceAttrs, err := parseAttributes(allAttrs)
 	if err != nil {
@@ -106,9 +111,9 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 		GramDeploymentID:     deploymentID,
 		GramFunctionID:       params.ToolInfo.FunctionID,
 		GramURN:              params.ToolInfo.URN,
-		ServiceName:    serviceName,
-		ServiceVersion: getStringPtr(allAttrs, attr.ServiceVersionKey),
-		GramChatID:     getStringPtr(allAttrs, attr.GenAIConversationIDKey),
+		ServiceName:          svcName,
+		ServiceVersion:       getStringPtr(allAttrs, attr.ServiceVersionKey),
+		GramChatID:           getStringPtr(allAttrs, attr.GenAIConversationIDKey),
 	}, nil
 }
 

@@ -2,6 +2,8 @@ package hooks
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -71,10 +73,16 @@ func (s *Service) PreToolUse(ctx context.Context, payload *gen.PreToolUsePayload
 		attr.SlogValueAny(payload.ToolInput),
 	)
 
+	// Generate unique trace and span IDs for this hook event
+	traceID := generateTraceID()
+	spanID := generateSpanID()
+
 	// Write to ClickHouse
 	attrs := s.buildBaseAttributes(payload.ToolName, payload.ToolInput)
 	attrs[attr.HookEventKey] = "pre_tool_use"
 	attrs[attr.LogBodyKey] = fmt.Sprintf("Pre-tool use hook: %s", payload.ToolName)
+	attrs[attr.TraceIDKey] = traceID
+	attrs[attr.SpanIDKey] = spanID
 
 	s.writeToClickHouse(ctx, payload.ToolName, attrs)
 
@@ -94,6 +102,10 @@ func (s *Service) PostToolUse(ctx context.Context, payload *gen.PostToolUsePaylo
 		attr.SlogValueAny(payload.ToolInput),
 	)
 
+	// Generate unique trace and span IDs for this hook event
+	traceID := generateTraceID()
+	spanID := generateSpanID()
+
 	// Write to ClickHouse
 	attrs := s.buildBaseAttributes(payload.ToolName, payload.ToolInput)
 	attrs[attr.HookEventKey] = "post_tool_use"
@@ -101,6 +113,8 @@ func (s *Service) PostToolUse(ctx context.Context, payload *gen.PostToolUsePaylo
 	if payload.ToolResponse != nil {
 		attrs[attr.HookToolResponseKey] = payload.ToolResponse
 	}
+	attrs[attr.TraceIDKey] = traceID
+	attrs[attr.SpanIDKey] = spanID
 
 	s.writeToClickHouse(ctx, payload.ToolName, attrs)
 
@@ -120,6 +134,10 @@ func (s *Service) PostToolUseFailure(ctx context.Context, payload *gen.PostToolU
 		attr.SlogValueAny(payload.ToolInput),
 	)
 
+	// Generate unique trace and span IDs for this hook event
+	traceID := generateTraceID()
+	spanID := generateSpanID()
+
 	// Write to ClickHouse
 	attrs := s.buildBaseAttributes(payload.ToolName, payload.ToolInput)
 	attrs[attr.HookEventKey] = "post_tool_use_failure"
@@ -127,10 +145,26 @@ func (s *Service) PostToolUseFailure(ctx context.Context, payload *gen.PostToolU
 	if payload.ToolError != nil {
 		attrs[attr.HookToolErrorKey] = payload.ToolError
 	}
+	attrs[attr.TraceIDKey] = traceID
+	attrs[attr.SpanIDKey] = spanID
 
 	s.writeToClickHouse(ctx, payload.ToolName, attrs)
 
 	return &gen.HookResult{OK: true}, nil
+}
+
+// generateTraceID generates a W3C-compliant trace ID (32 hex characters)
+func generateTraceID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// generateSpanID generates a W3C-compliant span ID (16 hex characters)
+func generateSpanID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // buildBaseAttributes creates the base set of attributes for a hook event
@@ -181,9 +215,11 @@ func (s *Service) writeToClickHouse(ctx context.Context, toolName string, attrs 
 		FunctionID:     nil,
 	}
 
+	gramHooks := "gram-hooks"
 	s.telemetryService.CreateLog(telemetry.LogParams{
-		Timestamp:  time.Now(),
-		ToolInfo:   toolInfo,
-		Attributes: attrs,
+		Timestamp:   time.Now(),
+		ToolInfo:    toolInfo,
+		Attributes:  attrs,
+		ServiceName: &gramHooks,
 	})
 }
