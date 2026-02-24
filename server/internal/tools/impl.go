@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/tools/server"
 	gen "github.com/speakeasy-api/gram/server/gen/tools"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -37,6 +39,7 @@ type Service struct {
 	db             *pgxpool.Pool
 	repo           *repo.Queries
 	variationsRepo *vr.Queries
+	agentsRepo     *agentsRepo.Queries
 	auth           *auth.Auth
 }
 
@@ -51,6 +54,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		db:             db,
 		repo:           repo.New(db),
 		variationsRepo: vr.New(db),
+		agentsRepo:     agentsRepo.New(db),
 		auth:           auth.New(logger, db, sessions),
 	}
 }
@@ -270,6 +274,49 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				Canonical:     nil,
 				Variation:     nil,
 				Annotations:   nil,
+			},
+		})
+	}
+
+	agentDefs, err := s.agentsRepo.ListAgentDefinitions(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list agent definitions").Log(ctx, s.logger)
+	}
+
+	result.Tools = slices.Grow(result.Tools, len(agentDefs))
+	for _, agent := range agentDefs {
+		toolStrings := make([]string, len(agent.Tools))
+		for i, t := range agent.Tools {
+			toolStrings[i] = t.String()
+		}
+
+		annotations := conv.AnnotationsFromColumns(
+			agent.ReadOnlyHint,
+			agent.DestructiveHint,
+			agent.IdempotentHint,
+			agent.OpenWorldHint,
+		)
+		title := conv.PtrValOrEmpty(conv.FromPGText[string](agent.Title), "")
+		if title != "" {
+			var def types.ToolAnnotations
+			annotations = conv.Default(annotations, &def)
+			annotations.Title = &title
+		}
+
+		result.Tools = append(result.Tools, &types.Tool{
+			AgentDefinition: &types.AgentDefinition{
+				ID:           agent.ID.String(),
+				ProjectID:    agent.ProjectID.String(),
+				ToolUrn:      agent.ToolUrn.String(),
+				Name:         agent.Name,
+				Description:  agent.Description,
+				Title:        conv.FromPGText[string](agent.Title),
+				Instructions: agent.Instructions,
+				Tools:        toolStrings,
+				Model:        conv.FromPGText[string](agent.Model),
+				Annotations:  annotations,
+				CreatedAt:    agent.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:    agent.UpdatedAt.Time.Format(time.RFC3339),
 			},
 		})
 	}

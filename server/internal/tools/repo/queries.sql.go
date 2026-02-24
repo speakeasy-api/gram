@@ -328,6 +328,58 @@ func (q *Queries) FindHttpToolsByUrn(ctx context.Context, arg FindHttpToolsByUrn
 	return items, nil
 }
 
+const getAgentToolByURN = `-- name: GetAgentToolByURN :one
+SELECT 
+    id
+  , project_id
+  , tool_urn
+  , name
+  , description
+  , title
+  , instructions
+  , tools
+  , model
+FROM agent_definitions
+WHERE tool_urn = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+LIMIT 1
+`
+
+type GetAgentToolByURNParams struct {
+	Urn       urn.Tool
+	ProjectID uuid.UUID
+}
+
+type GetAgentToolByURNRow struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	ToolUrn      urn.Tool
+	Name         string
+	Description  string
+	Title        pgtype.Text
+	Instructions string
+	Tools        []urn.Tool
+	Model        pgtype.Text
+}
+
+func (q *Queries) GetAgentToolByURN(ctx context.Context, arg GetAgentToolByURNParams) (GetAgentToolByURNRow, error) {
+	row := q.db.QueryRow(ctx, getAgentToolByURN, arg.Urn, arg.ProjectID)
+	var i GetAgentToolByURNRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ToolUrn,
+		&i.Name,
+		&i.Description,
+		&i.Title,
+		&i.Instructions,
+		&i.Tools,
+		&i.Model,
+	)
+	return i, err
+}
+
 const getFunctionToolByURN = `-- name: GetFunctionToolByURN :one
 WITH deployment AS (
   SELECT d.id

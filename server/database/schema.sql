@@ -1392,3 +1392,33 @@ WHERE deleted IS FALSE AND status = 'pending';
 -- Index for looking up invites by token (unconditional to prevent token reuse)
 CREATE UNIQUE INDEX IF NOT EXISTS team_invites_token_key
 ON team_invites (token);
+
+CREATE TABLE agent_definitions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  tool_urn text NOT NULL,
+  name text NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  description text NOT NULL,
+  title text NULL,
+  instructions text NOT NULL,
+  tools text[] NOT NULL DEFAULT ARRAY[]::text[],
+  model text NULL,
+
+  read_only_hint boolean NULL,
+  destructive_hint boolean NULL,
+  idempotent_hint boolean NULL,
+  open_world_hint boolean NULL,
+  
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz NULL,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+  
+  CONSTRAINT agent_definitions_pkey PRIMARY KEY (id),
+  CONSTRAINT agent_definitions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX agent_definitions_project_id_name_key
+ON agent_definitions (project_id, name)
+WHERE deleted IS FALSE;

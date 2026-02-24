@@ -66,6 +66,15 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
+      - column: agent_definitions.tool_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Tool
+      - column: agent_definitions.tools
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Tool
+          slice: true
 
 sql:
   - schema: schema.sql

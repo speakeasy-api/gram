@@ -159,17 +159,18 @@ var ExternalMCPToolDefinition = Type("ExternalMCPToolDefinition", func() {
 // Custom JSON marshaling provided in goaext.
 var Tool = Type("Tool", func() {
 	Meta("struct:pkg:path", "types")
-	Description("A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy")
+	Description("A polymorphic tool - can be an HTTP tool, function tool, prompt template, external MCP proxy, or agent definition")
 
 	Attribute("http_tool_definition", HTTPToolDefinition, "The HTTP tool definition")
 	Attribute("function_tool_definition", FunctionToolDefinition, "The function tool definition")
 	Attribute("prompt_template", PromptTemplate, "The prompt template")
 	Attribute("external_mcp_tool_definition", ExternalMCPToolDefinition, "The external MCP tool definition")
+	Attribute("agent_definition", AgentDefinition, "The agent definition")
 })
 
 var ToolEntry = Type("ToolEntry", func() {
 	Attribute("type", String, func() {
-		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt), string(urn.ToolKindFunction), string(urn.ToolKindExternalMCP))
+		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt), string(urn.ToolKindFunction), string(urn.ToolKindExternalMCP), string(urn.ToolKindAgent))
 	})
 
 	Attribute("id", String, "The ID of the tool")

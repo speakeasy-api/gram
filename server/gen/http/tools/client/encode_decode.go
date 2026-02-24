@@ -284,6 +284,9 @@ func unmarshalToolResponseBodyToTypesTool(v *ToolResponseBody) *types.Tool {
 	if v.ExternalMcpToolDefinition != nil {
 		res.ExternalMcpToolDefinition = unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinition(v.ExternalMcpToolDefinition)
 	}
+	if v.AgentDefinition != nil {
+		res.AgentDefinition = unmarshalAgentDefinitionResponseBodyToTypesAgentDefinition(v.AgentDefinition)
+	}
 
 	return res
 }
@@ -570,6 +573,36 @@ func unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinit
 	}
 	if v.Variation != nil {
 		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
+	}
+	if v.Annotations != nil {
+		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
+	}
+
+	return res
+}
+
+// unmarshalAgentDefinitionResponseBodyToTypesAgentDefinition builds a value of
+// type *types.AgentDefinition from a value of type
+// *AgentDefinitionResponseBody.
+func unmarshalAgentDefinitionResponseBodyToTypesAgentDefinition(v *AgentDefinitionResponseBody) *types.AgentDefinition {
+	if v == nil {
+		return nil
+	}
+	res := &types.AgentDefinition{
+		ID:           *v.ID,
+		ProjectID:    *v.ProjectID,
+		ToolUrn:      *v.ToolUrn,
+		Name:         *v.Name,
+		Description:  *v.Description,
+		Title:        v.Title,
+		Instructions: *v.Instructions,
+		Model:        v.Model,
+		CreatedAt:    *v.CreatedAt,
+		UpdatedAt:    *v.UpdatedAt,
+	}
+	res.Tools = make([]string, len(v.Tools))
+	for i, val := range v.Tools {
+		res.Tools[i] = val
 	}
 	if v.Annotations != nil {
 		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)

@@ -14,6 +14,7 @@ import (
 	"os"
 
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
+	agentsc "github.com/speakeasy-api/gram/server/gen/http/agents/client"
 	agentworkflowsc "github.com/speakeasy-api/gram/server/gen/http/agentworkflows/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
@@ -49,6 +50,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"about openapi",
+		"agents (create-agent-definition|get-agent-definition|list-agent-definitions|update-agent-definition|delete-agent-definition)",
 		"agentworkflows (create-response|get-response|delete-response)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
@@ -80,10 +82,10 @@ func UsageCommands() []string {
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
+		os.Args[0] + " " + "agents create-agent-definition --body '{\n      \"description\": \"abc123\",\n      \"destructive_hint\": false,\n      \"idempotent_hint\": false,\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"name\": \"aaa\",\n      \"open_world_hint\": false,\n      \"read_only_hint\": false,\n      \"title\": \"abc123\",\n      \"tools\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		os.Args[0] + " " + "agentworkflows create-response --body '{\n      \"async\": false,\n      \"input\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"previous_response_id\": \"abc123\",\n      \"store\": false,\n      \"sub_agents\": [\n         {\n            \"description\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"instructions\": \"abc123\",\n            \"name\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ],\n            \"toolsets\": [\n               {\n                  \"environment_slug\": \"abc123\",\n                  \"toolset_slug\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"temperature\": 1,\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
 		os.Args[0] + " " + "auth callback --code \"abc123\" --state \"abc123\"" + "\n" +
-		os.Args[0] + " " + "chat list-chats --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"" + "\n" +
 		""
 }
 
@@ -100,6 +102,37 @@ func ParseEndpoint(
 		aboutFlags = flag.NewFlagSet("about", flag.ContinueOnError)
 
 		aboutOpenapiFlags = flag.NewFlagSet("openapi", flag.ExitOnError)
+
+		agentsFlags = flag.NewFlagSet("agents", flag.ContinueOnError)
+
+		agentsCreateAgentDefinitionFlags                = flag.NewFlagSet("create-agent-definition", flag.ExitOnError)
+		agentsCreateAgentDefinitionBodyFlag             = agentsCreateAgentDefinitionFlags.String("body", "REQUIRED", "")
+		agentsCreateAgentDefinitionSessionTokenFlag     = agentsCreateAgentDefinitionFlags.String("session-token", "", "")
+		agentsCreateAgentDefinitionApikeyTokenFlag      = agentsCreateAgentDefinitionFlags.String("apikey-token", "", "")
+		agentsCreateAgentDefinitionProjectSlugInputFlag = agentsCreateAgentDefinitionFlags.String("project-slug-input", "", "")
+
+		agentsGetAgentDefinitionFlags                = flag.NewFlagSet("get-agent-definition", flag.ExitOnError)
+		agentsGetAgentDefinitionIDFlag               = agentsGetAgentDefinitionFlags.String("id", "REQUIRED", "")
+		agentsGetAgentDefinitionSessionTokenFlag     = agentsGetAgentDefinitionFlags.String("session-token", "", "")
+		agentsGetAgentDefinitionApikeyTokenFlag      = agentsGetAgentDefinitionFlags.String("apikey-token", "", "")
+		agentsGetAgentDefinitionProjectSlugInputFlag = agentsGetAgentDefinitionFlags.String("project-slug-input", "", "")
+
+		agentsListAgentDefinitionsFlags                = flag.NewFlagSet("list-agent-definitions", flag.ExitOnError)
+		agentsListAgentDefinitionsSessionTokenFlag     = agentsListAgentDefinitionsFlags.String("session-token", "", "")
+		agentsListAgentDefinitionsApikeyTokenFlag      = agentsListAgentDefinitionsFlags.String("apikey-token", "", "")
+		agentsListAgentDefinitionsProjectSlugInputFlag = agentsListAgentDefinitionsFlags.String("project-slug-input", "", "")
+
+		agentsUpdateAgentDefinitionFlags                = flag.NewFlagSet("update-agent-definition", flag.ExitOnError)
+		agentsUpdateAgentDefinitionBodyFlag             = agentsUpdateAgentDefinitionFlags.String("body", "REQUIRED", "")
+		agentsUpdateAgentDefinitionSessionTokenFlag     = agentsUpdateAgentDefinitionFlags.String("session-token", "", "")
+		agentsUpdateAgentDefinitionApikeyTokenFlag      = agentsUpdateAgentDefinitionFlags.String("apikey-token", "", "")
+		agentsUpdateAgentDefinitionProjectSlugInputFlag = agentsUpdateAgentDefinitionFlags.String("project-slug-input", "", "")
+
+		agentsDeleteAgentDefinitionFlags                = flag.NewFlagSet("delete-agent-definition", flag.ExitOnError)
+		agentsDeleteAgentDefinitionIDFlag               = agentsDeleteAgentDefinitionFlags.String("id", "REQUIRED", "")
+		agentsDeleteAgentDefinitionSessionTokenFlag     = agentsDeleteAgentDefinitionFlags.String("session-token", "", "")
+		agentsDeleteAgentDefinitionApikeyTokenFlag      = agentsDeleteAgentDefinitionFlags.String("apikey-token", "", "")
+		agentsDeleteAgentDefinitionProjectSlugInputFlag = agentsDeleteAgentDefinitionFlags.String("project-slug-input", "", "")
 
 		agentworkflowsFlags = flag.NewFlagSet("agentworkflows", flag.ContinueOnError)
 
@@ -796,6 +829,13 @@ func ParseEndpoint(
 	aboutFlags.Usage = aboutUsage
 	aboutOpenapiFlags.Usage = aboutOpenapiUsage
 
+	agentsFlags.Usage = agentsUsage
+	agentsCreateAgentDefinitionFlags.Usage = agentsCreateAgentDefinitionUsage
+	agentsGetAgentDefinitionFlags.Usage = agentsGetAgentDefinitionUsage
+	agentsListAgentDefinitionsFlags.Usage = agentsListAgentDefinitionsUsage
+	agentsUpdateAgentDefinitionFlags.Usage = agentsUpdateAgentDefinitionUsage
+	agentsDeleteAgentDefinitionFlags.Usage = agentsDeleteAgentDefinitionUsage
+
 	agentworkflowsFlags.Usage = agentworkflowsUsage
 	agentworkflowsCreateResponseFlags.Usage = agentworkflowsCreateResponseUsage
 	agentworkflowsGetResponseFlags.Usage = agentworkflowsGetResponseUsage
@@ -978,6 +1018,8 @@ func ParseEndpoint(
 		switch svcn {
 		case "about":
 			svcf = aboutFlags
+		case "agents":
+			svcf = agentsFlags
 		case "agentworkflows":
 			svcf = agentworkflowsFlags
 		case "assets":
@@ -1047,6 +1089,25 @@ func ParseEndpoint(
 			switch epn {
 			case "openapi":
 				epf = aboutOpenapiFlags
+
+			}
+
+		case "agents":
+			switch epn {
+			case "create-agent-definition":
+				epf = agentsCreateAgentDefinitionFlags
+
+			case "get-agent-definition":
+				epf = agentsGetAgentDefinitionFlags
+
+			case "list-agent-definitions":
+				epf = agentsListAgentDefinitionsFlags
+
+			case "update-agent-definition":
+				epf = agentsUpdateAgentDefinitionFlags
+
+			case "delete-agent-definition":
+				epf = agentsDeleteAgentDefinitionFlags
 
 			}
 
@@ -1520,6 +1581,25 @@ func ParseEndpoint(
 			switch epn {
 			case "openapi":
 				endpoint = c.Openapi()
+			}
+		case "agents":
+			c := agentsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-agent-definition":
+				endpoint = c.CreateAgentDefinition()
+				data, err = agentsc.BuildCreateAgentDefinitionPayload(*agentsCreateAgentDefinitionBodyFlag, *agentsCreateAgentDefinitionSessionTokenFlag, *agentsCreateAgentDefinitionApikeyTokenFlag, *agentsCreateAgentDefinitionProjectSlugInputFlag)
+			case "get-agent-definition":
+				endpoint = c.GetAgentDefinition()
+				data, err = agentsc.BuildGetAgentDefinitionPayload(*agentsGetAgentDefinitionIDFlag, *agentsGetAgentDefinitionSessionTokenFlag, *agentsGetAgentDefinitionApikeyTokenFlag, *agentsGetAgentDefinitionProjectSlugInputFlag)
+			case "list-agent-definitions":
+				endpoint = c.ListAgentDefinitions()
+				data, err = agentsc.BuildListAgentDefinitionsPayload(*agentsListAgentDefinitionsSessionTokenFlag, *agentsListAgentDefinitionsApikeyTokenFlag, *agentsListAgentDefinitionsProjectSlugInputFlag)
+			case "update-agent-definition":
+				endpoint = c.UpdateAgentDefinition()
+				data, err = agentsc.BuildUpdateAgentDefinitionPayload(*agentsUpdateAgentDefinitionBodyFlag, *agentsUpdateAgentDefinitionSessionTokenFlag, *agentsUpdateAgentDefinitionApikeyTokenFlag, *agentsUpdateAgentDefinitionProjectSlugInputFlag)
+			case "delete-agent-definition":
+				endpoint = c.DeleteAgentDefinition()
+				data, err = agentsc.BuildDeleteAgentDefinitionPayload(*agentsDeleteAgentDefinitionIDFlag, *agentsDeleteAgentDefinitionSessionTokenFlag, *agentsDeleteAgentDefinitionApikeyTokenFlag, *agentsDeleteAgentDefinitionProjectSlugInputFlag)
 			}
 		case "agentworkflows":
 			c := agentworkflowsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2010,6 +2090,138 @@ func aboutOpenapiUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "about openapi")
+}
+
+// agentsUsage displays the usage of the agents command and its subcommands.
+func agentsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage agent definitions for a project.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] agents COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-agent-definition: Create a new agent definition`)
+	fmt.Fprintln(os.Stderr, `    get-agent-definition: Get an agent definition by ID`)
+	fmt.Fprintln(os.Stderr, `    list-agent-definitions: List all agent definitions for a project`)
+	fmt.Fprintln(os.Stderr, `    update-agent-definition: Update an existing agent definition`)
+	fmt.Fprintln(os.Stderr, `    delete-agent-definition: Delete an agent definition by ID`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s agents COMMAND --help\n", os.Args[0])
+}
+func agentsCreateAgentDefinitionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents create-agent-definition", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new agent definition`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create-agent-definition --body '{\n      \"description\": \"abc123\",\n      \"destructive_hint\": false,\n      \"idempotent_hint\": false,\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"name\": \"aaa\",\n      \"open_world_hint\": false,\n      \"read_only_hint\": false,\n      \"title\": \"abc123\",\n      \"tools\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func agentsGetAgentDefinitionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents get-agent-definition", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an agent definition by ID`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents get-agent-definition --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func agentsListAgentDefinitionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents list-agent-definitions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all agent definitions for a project`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-agent-definitions --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func agentsUpdateAgentDefinitionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents update-agent-definition", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update an existing agent definition`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents update-agent-definition --body '{\n      \"description\": \"abc123\",\n      \"destructive_hint\": false,\n      \"id\": \"abc123\",\n      \"idempotent_hint\": false,\n      \"instructions\": \"abc123\",\n      \"model\": \"abc123\",\n      \"open_world_hint\": false,\n      \"read_only_hint\": false,\n      \"title\": \"abc123\",\n      \"tools\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func agentsDeleteAgentDefinitionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents delete-agent-definition", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an agent definition by ID`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents delete-agent-definition --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // agentworkflowsUsage displays the usage of the agentworkflows command and its

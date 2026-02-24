@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	agentgen "github.com/speakeasy-api/gram/server/gen/agents"
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
 	tgen "github.com/speakeasy-api/gram/server/gen/templates"
@@ -128,6 +129,8 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 			require.NotEmpty(t, tool.PromptTemplate.Prompt, "template prompt should not be empty")
 			require.NotEmpty(t, tool.PromptTemplate.CreatedAt, "template created at should not be empty")
 			require.NotEmpty(t, tool.PromptTemplate.UpdatedAt, "template updated at should not be empty")
+		} else if tool.AgentDefinition != nil {
+			// Agent definitions are valid tool types; skip counting here
 		} else {
 			t.Fatal("tool has neither HTTPToolDefinition nor PromptTemplate set")
 		}
@@ -843,6 +846,8 @@ func TestToolsService_ListTools_WithMixedToolTypes(t *testing.T) {
 		} else if tool.PromptTemplate != nil {
 			templateCount++
 			require.Equal(t, template.Template.ID, tool.PromptTemplate.ID, "template ID should match")
+		} else if tool.AgentDefinition != nil {
+			// Agent definitions are valid tool types; skip counting here
 		} else {
 			t.Fatal("tool has no type set")
 		}
@@ -1131,4 +1136,68 @@ func TestToolsService_ListTools_FunctionToolsWithMetaTags(t *testing.T) {
 
 	require.True(t, foundCreateTodo, "should find create_todo tool")
 	require.True(t, foundListAllTodos, "should find list_all_todos tool")
+}
+
+func TestToolsService_ListTools_WithAgentDefinitions(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	// Create agent definitions via the agents service
+	agent1, err := ti.agents.CreateAgentDefinition(ctx, &agentgen.CreateAgentDefinitionPayload{
+		Name:         "research-agent",
+		Description:  "An agent that researches topics",
+		Instructions: "Research the given topic thoroughly",
+		Tools:        nil,
+	})
+	require.NoError(t, err, "create first agent definition")
+
+	agent2, err := ti.agents.CreateAgentDefinition(ctx, &agentgen.CreateAgentDefinitionPayload{
+		Name:         "summarizer-agent",
+		Description:  "An agent that summarizes content",
+		Instructions: "Summarize the provided content concisely",
+		Tools:        nil,
+	})
+	require.NoError(t, err, "create second agent definition")
+
+	// List tools and verify agents appear
+	result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Limit:            nil,
+	})
+	require.NoError(t, err, "list tools")
+	require.NotNil(t, result.Tools, "tools should not be nil")
+
+	agentIDs := map[string]bool{
+		agent1.ID: false,
+		agent2.ID: false,
+	}
+
+	for _, tool := range result.Tools {
+		if tool.AgentDefinition == nil {
+			continue
+		}
+		ad := tool.AgentDefinition
+
+		if _, expected := agentIDs[ad.ID]; expected {
+			agentIDs[ad.ID] = true
+		}
+
+		require.NotEmpty(t, ad.ID, "agent ID should not be empty")
+		require.NotEmpty(t, ad.Name, "agent name should not be empty")
+		require.NotEmpty(t, ad.Description, "agent description should not be empty")
+		require.NotEmpty(t, ad.Instructions, "agent instructions should not be empty")
+		require.NotEmpty(t, ad.ToolUrn, "agent tool URN should not be empty")
+		require.Contains(t, ad.ToolUrn, "agent", "agent tool URN should contain 'agent'")
+		require.NotEmpty(t, ad.CreatedAt, "agent created at should not be empty")
+		require.NotEmpty(t, ad.UpdatedAt, "agent updated at should not be empty")
+	}
+
+	for id, found := range agentIDs {
+		require.True(t, found, "agent %s should appear in ListTools results", id)
+	}
 }

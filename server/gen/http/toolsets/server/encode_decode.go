@@ -2487,6 +2487,9 @@ func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
 	if v.ExternalMcpToolDefinition != nil {
 		res.ExternalMcpToolDefinition = marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody(v.ExternalMcpToolDefinition)
 	}
+	if v.AgentDefinition != nil {
+		res.AgentDefinition = marshalTypesAgentDefinitionToAgentDefinitionResponseBody(v.AgentDefinition)
+	}
 
 	return res
 }
@@ -2789,6 +2792,40 @@ func marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBod
 	}
 	if v.Variation != nil {
 		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
+	}
+	if v.Annotations != nil {
+		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
+	}
+
+	return res
+}
+
+// marshalTypesAgentDefinitionToAgentDefinitionResponseBody builds a value of
+// type *AgentDefinitionResponseBody from a value of type
+// *types.AgentDefinition.
+func marshalTypesAgentDefinitionToAgentDefinitionResponseBody(v *types.AgentDefinition) *AgentDefinitionResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentDefinitionResponseBody{
+		ID:           v.ID,
+		ProjectID:    v.ProjectID,
+		ToolUrn:      v.ToolUrn,
+		Name:         v.Name,
+		Description:  v.Description,
+		Title:        v.Title,
+		Instructions: v.Instructions,
+		Model:        v.Model,
+		CreatedAt:    v.CreatedAt,
+		UpdatedAt:    v.UpdatedAt,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	} else {
+		res.Tools = []string{}
 	}
 	if v.Annotations != nil {
 		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)

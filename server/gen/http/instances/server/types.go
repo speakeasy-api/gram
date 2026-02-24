@@ -228,6 +228,8 @@ type ToolResponseBody struct {
 	PromptTemplate *PromptTemplateResponseBody `form:"prompt_template,omitempty" json:"prompt_template,omitempty" xml:"prompt_template,omitempty"`
 	// The external MCP tool definition
 	ExternalMcpToolDefinition *ExternalMCPToolDefinitionResponseBody `form:"external_mcp_tool_definition,omitempty" json:"external_mcp_tool_definition,omitempty" xml:"external_mcp_tool_definition,omitempty"`
+	// The agent definition
+	AgentDefinition *AgentDefinitionResponseBody `form:"agent_definition,omitempty" json:"agent_definition,omitempty" xml:"agent_definition,omitempty"`
 }
 
 // HTTPToolDefinitionResponseBody is used to define fields on response body
@@ -540,6 +542,34 @@ type ExternalMCPToolDefinitionResponseBody struct {
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 	// MCP tool annotations providing hints about tool behavior
 	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// AgentDefinitionResponseBody is used to define fields on response body types.
+type AgentDefinitionResponseBody struct {
+	// The unique identifier of the agent definition
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this agent definition belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The tool URN of the agent definition
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
+	// The name of the agent definition
+	Name string `form:"name" json:"name" xml:"name"`
+	// Description of the agent definition
+	Description string `form:"description" json:"description" xml:"description"`
+	// Human-readable display title for the agent definition
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Instructions for the agent
+	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
+	// List of tool URNs available to the agent
+	Tools []string `form:"tools" json:"tools" xml:"tools"`
+	// The model to use for the agent
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// MCP tool annotations providing hints about agent behavior
+	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+	// When the agent definition was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the agent definition was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // SecurityVariableResponseBody is used to define fields on response body types.

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -62,6 +63,7 @@ type testInstance struct {
 	assets         *assets.Service
 	packages       *packages.Service
 	templates      *templates.Service
+	agents         *agents.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 }
@@ -112,6 +114,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
 	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient))
 	templatesSvc := templates.NewService(logger, conn, sessionManager, toolsetsSvc)
+	agentsSvc := agents.NewService(logger, conn, sessionManager)
 
 	return ctx, &testInstance{
 		service:        toolsSvc,
@@ -120,6 +123,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 		assets:         assetsSvc,
 		packages:       packagesSvc,
 		templates:      templatesSvc,
+		agents:         agentsSvc,
 		conn:           conn,
 		sessionManager: sessionManager,
 	}
