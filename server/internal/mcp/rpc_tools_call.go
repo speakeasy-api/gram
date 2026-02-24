@@ -253,13 +253,14 @@ func handleToolsCall(
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
+		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
-		
+
 		if payload.chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
 		}

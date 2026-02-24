@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -59,8 +58,7 @@ func handleResourcesRead(
 	env toolconfig.EnvironmentLoader,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
-	telemSvc *tm.Service,
-	featuresClient *productfeatures.Client) (json.RawMessage, error) {
+	telemSvc *tm.Service) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get resource request").Log(ctx, logger)
@@ -162,6 +160,7 @@ func handleResourcesRead(
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
+		logAttrs[attr.EventSourceKey] = string(tm.EventSourceResourceRead)
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
