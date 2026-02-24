@@ -129,6 +129,13 @@ type PromptToolCallPlan struct {
 	Kind       string `json:"kind" yaml:"kind"`
 }
 
+type AgentToolCallPlan struct {
+	AgentID      string     `json:"agent_id" yaml:"agent_id"`
+	Model        string     `json:"model" yaml:"model"`
+	Instructions string     `json:"instruction" yaml:"instruction"`
+	Tools        []urn.Tool `json:"tools" yaml:"tools"`
+}
+
 // ExternalMCPToolCallPlan is an alias for externalmcp.ToolCallPlan.
 // Kept for backwards compatibility with existing code.
 type ExternalMCPToolCallPlan = externalmcp.ToolCallPlan
@@ -153,6 +160,7 @@ const (
 	ToolKindFunction    ToolKind = "function"
 	ToolKindPrompt      ToolKind = "prompt"
 	ToolKindExternalMCP ToolKind = "external_mcp"
+	ToolKindAgent       ToolKind = "agent"
 )
 
 type ResourceKind string
@@ -172,6 +180,7 @@ type ToolCallPlan struct {
 	Function    *FunctionToolCallPlan
 	Prompt      *PromptToolCallPlan
 	ExternalMCP *ExternalMCPToolCallPlan
+	Agent       *AgentToolCallPlan
 }
 
 // NewHTTPToolCallPlan creates a new Tool wrapping an HTTPTool.
@@ -223,6 +232,19 @@ func NewExternalMCPToolCallPlan(tool *ToolDescriptor, plan *ExternalMCPToolCallP
 		Function:    nil,
 		Prompt:      nil,
 		ExternalMCP: plan,
+	}
+}
+
+func NewAgentToolCallPlan(tool *ToolDescriptor, plan *AgentToolCallPlan) *ToolCallPlan {
+	return &ToolCallPlan{
+		Kind:        ToolKindAgent,
+		BillingType: billing.ToolCallTypeAgent,
+		Descriptor:  tool,
+		HTTP:        nil,
+		Function:    nil,
+		Prompt:      nil,
+		ExternalMCP: nil,
+		Agent:       plan,
 	}
 }
 

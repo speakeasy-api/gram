@@ -266,6 +266,23 @@ LEFT JOIN functions_access access
 ORDER BY access.seq DESC NULLS LAST
 LIMIT 1;
 
+-- name: GetAgentToolByURN :one
+SELECT 
+    id
+  , project_id
+  , tool_urn
+  , name
+  , description
+  , title
+  , instructions
+  , tools
+  , model
+FROM agent_definitions
+WHERE tool_urn = @urn
+  AND project_id = @project_id
+  AND deleted IS FALSE
+LIMIT 1;
+
 -- name: PokeToolDefinitionByUrn :one
 WITH first_party AS (
   SELECT id

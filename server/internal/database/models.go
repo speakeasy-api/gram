@@ -14,6 +14,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type AgentDefinition struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	ToolUrn         urn.Tool
+	Name            string
+	Description     string
+	Title           pgtype.Text
+	Instructions    string
+	Tools           []urn.Tool
+	Model           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type AgentExecution struct {
 	ID           string
 	ProjectID    uuid.UUID

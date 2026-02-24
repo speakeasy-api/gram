@@ -11,6 +11,7 @@ const (
 	ToolCallTypeFunction    ToolCallType = "function"
 	ToolCallTypeHigherOrder ToolCallType = "higher-order"
 	ToolCallTypeExternalMCP ToolCallType = "external-mcp"
+	ToolCallTypeAgent       ToolCallType = "agent"
 )
 
 type ModelUsageSource string

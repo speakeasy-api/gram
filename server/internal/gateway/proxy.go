@@ -165,6 +165,8 @@ func (tp *ToolProxy) Do(
 		return tp.doPrompt(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Prompt)
 	case ToolKindExternalMCP:
 		return tp.doExternalMCP(ctx, logger, w, requestBody, env, plan.ExternalMCP)
+	case ToolKindAgent:
+		return tp.doAgent(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Agent)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}
@@ -645,6 +647,10 @@ func (tp *ToolProxy) doExternalMCP(
 	}
 
 	return nil
+}
+
+func (tp *ToolProxy) doAgent(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, env toolconfig.ToolCallEnv, descriptor *ToolDescriptor, plan *AgentToolCallPlan) error {
+	return oops.C(oops.CodeNotImplemented)
 }
 
 type retryConfig struct {

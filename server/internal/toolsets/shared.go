@@ -10,6 +10,7 @@ import (
 
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -88,7 +89,15 @@ func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, p
 			return nil, fmt.Errorf("get external mcp tool definition by urn: %w", err)
 		}
 		return t.extractExternalMCPToolCallPlan(ctx, tool, toolUrn, projectID)
-
+	case urn.ToolKindAgent:
+		tool, err := t.toolsRepo.GetAgentToolByURN(ctx, toolsRepo.GetAgentToolByURNParams{
+			ProjectID: projectID,
+			Urn:       toolUrn,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get agent tool definition by urn: %w", err)
+		}
+		return t.extractAgentToolCallPlan(ctx, tool)
 	default:
 		return nil, fmt.Errorf("unsupported tool kind: %s", toolUrn.Kind)
 	}
@@ -275,6 +284,34 @@ func (t *Toolsets) extractPromptToolCallPlan(ctx context.Context, tool templates
 		Kind:       tool.Kind.String,
 	}
 	return gateway.NewPromptToolCallPlan(descriptor, plan), nil
+}
+
+func (t *Toolsets) extractAgentToolCallPlan(ctx context.Context, tool toolsRepo.GetAgentToolByURNRow) (*gateway.ToolCallPlan, error) {
+	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+
+	descriptor := &gateway.ToolDescriptor{
+		ID:               tool.ID.String(),
+		Name:             tool.Name,
+		Description:      &tool.Description,
+		ProjectID:        tool.ProjectID.String(),
+		DeploymentID:     "",
+		ProjectSlug:      orgData.ProjectSlug,
+		OrganizationID:   orgData.ID,
+		OrganizationSlug: orgData.Slug,
+		URN:              tool.ToolUrn,
+	}
+
+	plan := &gateway.AgentToolCallPlan{
+		AgentID:      tool.ID.String(),
+		Model:        conv.PtrValOrEmpty(conv.FromPGText[string](tool.Model), ""),
+		Instructions: tool.Instructions,
+		Tools:        tool.Tools,
+	}
+
+	return gateway.NewAgentToolCallPlan(descriptor, plan), nil
 }
 
 func (t *Toolsets) extractExternalMCPToolCallPlan(ctx context.Context, tool externalmcpRepo.GetExternalMCPToolDefinitionByURNRow, toolUrn urn.Tool, projectID uuid.UUID) (*gateway.ToolCallPlan, error) {
