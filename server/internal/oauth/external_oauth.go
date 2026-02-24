@@ -1037,6 +1037,127 @@ func (s *ExternalOAuthService) exchangeCodeForTokens(
 	return &tokenResp, nil
 }
 
+// exchangeRefreshToken exchanges a refresh token for new tokens with the external provider.
+func (s *ExternalOAuthService) exchangeRefreshToken(
+	ctx context.Context,
+	config *ExternalOAuthConfig,
+	refreshToken string,
+) (*ExternalTokenResponse, error) {
+	data := url.Values{}
+	data.Set("grant_type", "refresh_token")
+	data.Set("refresh_token", refreshToken)
+	data.Set("client_id", config.ClientID)
+	if config.ClientSecret != "" {
+		data.Set("client_secret", config.ClientSecret)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, config.TokenEndpoint, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("create refresh token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("refresh token request: %w", err)
+	}
+
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read refresh token response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("refresh token exchange failed: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResp ExternalTokenResponse
+	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		return nil, fmt.Errorf("decode refresh token response: %w", err)
+	}
+
+	if tokenResp.TokenType == "" {
+		tokenResp.TokenType = "Bearer"
+	}
+
+	return &tokenResp, nil
+}
+
+// RefreshUpstreamToken refreshes an expired upstream OAuth token using the stored refresh token.
+// On success it encrypts and upserts the new tokens and returns the new plaintext access token.
+// On failure from an upstream 4xx (invalid/revoked refresh token), it soft-deletes the stale token row
+// so the user is prompted to re-authorize cleanly.
+func (s *ExternalOAuthService) RefreshUpstreamToken(
+	ctx context.Context,
+	token repo.UserOauthToken,
+	config *ExternalOAuthConfig,
+) (string, error) {
+	if !token.RefreshTokenEncrypted.Valid || token.RefreshTokenEncrypted.String == "" {
+		return "", fmt.Errorf("no refresh token available")
+	}
+
+	refreshToken, err := s.enc.Decrypt(token.RefreshTokenEncrypted.String)
+	if err != nil {
+		return "", fmt.Errorf("decrypt refresh token: %w", err)
+	}
+
+	tokenResp, err := s.exchangeRefreshToken(ctx, config, refreshToken)
+	if err != nil {
+		// On upstream rejection, soft-delete the stale token so the user re-auths cleanly.
+		if delErr := s.oauthRepo.DeleteUserOAuthToken(ctx, token.ID); delErr != nil {
+			s.logger.WarnContext(ctx, "failed to delete stale OAuth token after refresh failure",
+				attr.SlogError(delErr))
+		}
+		return "", fmt.Errorf("exchange refresh token: %w", err)
+	}
+
+	// Encrypt new tokens
+	accessTokenEncrypted, err := s.enc.Encrypt([]byte(tokenResp.AccessToken))
+	if err != nil {
+		return "", fmt.Errorf("encrypt refreshed access token: %w", err)
+	}
+
+	refreshTokenEncrypted := token.RefreshTokenEncrypted // keep old if not rotated
+	if tokenResp.RefreshToken != "" {
+		encrypted, encErr := s.enc.Encrypt([]byte(tokenResp.RefreshToken))
+		if encErr != nil {
+			return "", fmt.Errorf("encrypt rotated refresh token: %w", encErr)
+		}
+		refreshTokenEncrypted = conv.ToPGText(encrypted)
+	}
+
+	var expiresAt pgtype.Timestamptz
+	if tokenResp.ExpiresIn > 0 {
+		expiresAt = pgtype.Timestamptz{
+			Time:             time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second),
+			Valid:            true,
+			InfinityModifier: pgtype.Finite,
+		}
+	}
+
+	if _, err := s.oauthRepo.UpsertUserOAuthToken(ctx, repo.UpsertUserOAuthTokenParams{
+		UserID:                token.UserID,
+		OrganizationID:        token.OrganizationID,
+		ProjectID:             token.ProjectID,
+		ClientRegistrationID:  token.ClientRegistrationID,
+		ToolsetID:             token.ToolsetID,
+		OauthServerIssuer:     token.OauthServerIssuer,
+		AccessTokenEncrypted:  accessTokenEncrypted,
+		RefreshTokenEncrypted: refreshTokenEncrypted,
+		TokenType:             token.TokenType,
+		ExpiresAt:             expiresAt,
+		Scopes:                token.Scopes,
+		ProviderName:          token.ProviderName,
+	}); err != nil {
+		return "", fmt.Errorf("upsert refreshed OAuth token: %w", err)
+	}
+
+	return tokenResp.AccessToken, nil
+}
+
 // redirectWithError redirects to the redirect_uri with error parameters
 func (s *ExternalOAuthService) redirectWithError(w http.ResponseWriter, r *http.Request, redirectURI, errorCode, errorDesc string) error {
 	if redirectURI == "" {

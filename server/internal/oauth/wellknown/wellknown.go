@@ -88,7 +88,7 @@ func ResolveOAuthServerMetadataFromToolset(
 				TokenEndpoint:                 baseURL + "/oauth/" + mcpSlug + "/token",
 				RegistrationEndpoint:          baseURL + "/oauth/" + mcpSlug + "/register",
 				ResponseTypesSupported:        []string{"code"},
-				GrantTypesSupported:           []string{"authorization_code"},
+				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
 				CodeChallengeMethodsSupported: []string{"plain", "S256"},
 			},
 			Raw:      nil,

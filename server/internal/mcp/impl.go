@@ -89,7 +89,8 @@ type Service struct {
 	chatSessionsManager *chatsessions.Manager
 	externalmcpRepo     *externalmcp_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
-	enc                 *encryption.Client
+	enc                  *encryption.Client
+	externalOAuthService *oauth.ExternalOAuthService
 }
 
 type oauthTokenInputs struct {
@@ -140,6 +141,7 @@ func NewService(
 	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal *temporal.Environment,
+	externalOAuthService *oauth.ExternalOAuthService,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -179,9 +181,10 @@ func NewService(
 		features:            features,
 		vectorToolStore:     vectorToolStore,
 		temporal:            temporal,
-		sessions:            sessions,
-		chatSessionsManager: chatSessionsManager,
-		enc:                 enc,
+		sessions:             sessions,
+		chatSessionsManager:  chatSessionsManager,
+		enc:                  enc,
+		externalOAuthService: externalOAuthService,
 	}
 }
 
@@ -1021,8 +1024,23 @@ func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *typ
 		return "", oops.E(oops.CodeUnauthorized, err, "failed to get user OAuth token")
 	}
 
-	if token.ExpiresAt.Valid && token.ExpiresAt.Time.Before(time.Now()) {
-		return "", oops.E(oops.CodeUnauthorized, err, "OAuth token has expired")
+	// Check if token is expired or about to expire (30s grace window)
+	tokenExpired := token.ExpiresAt.Valid && token.ExpiresAt.Time.Before(time.Now().Add(30*time.Second))
+
+	if tokenExpired {
+		// Attempt refresh if we have a refresh token and the external OAuth service is available
+		if s.externalOAuthService != nil && token.RefreshTokenEncrypted.Valid && token.RefreshTokenEncrypted.String != "" {
+			refreshedToken, refreshErr := s.attemptTokenRefresh(ctx, token, oauthConfig)
+			if refreshErr != nil {
+				s.logger.WarnContext(ctx, "OAuth token refresh failed",
+					attr.SlogOAuthIssuer(token.OauthServerIssuer),
+					attr.SlogError(refreshErr))
+				return "", oops.E(oops.CodeUnauthorized, refreshErr, "OAuth token has expired and refresh failed")
+			}
+			return refreshedToken, nil
+		}
+
+		return "", oops.E(oops.CodeUnauthorized, nil, "OAuth token has expired")
 	}
 
 	accessToken, err := s.enc.Decrypt(token.AccessTokenEncrypted)
@@ -1031,4 +1049,49 @@ func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *typ
 	}
 
 	return accessToken, nil
+}
+
+// attemptTokenRefresh tries to refresh an expired OAuth token using the stored refresh token.
+func (s *Service) attemptTokenRefresh(
+	ctx context.Context,
+	token oauth_repo.UserOauthToken,
+	mcpOAuthConfig *externalmcp.ExternalMCPOAuthConfig,
+) (string, error) {
+	// Fetch client registration to get client credentials
+	clientReg, err := s.oauthRepo.GetExternalOAuthClientRegistration(ctx, oauth_repo.GetExternalOAuthClientRegistrationParams{
+		OrganizationID:    token.OrganizationID,
+		OauthServerIssuer: token.OauthServerIssuer,
+	})
+	if err != nil {
+		return "", fmt.Errorf("get client registration for refresh: %w", err)
+	}
+
+	// Decrypt client secret if present
+	clientSecret := ""
+	if clientReg.ClientSecretEncrypted.Valid && clientReg.ClientSecretEncrypted.String != "" {
+		decrypted, decryptErr := s.enc.Decrypt(clientReg.ClientSecretEncrypted.String)
+		if decryptErr != nil {
+			return "", fmt.Errorf("decrypt client secret: %w", decryptErr)
+		}
+		clientSecret = decrypted
+	}
+
+	// Build the config for the refresh call
+	refreshConfig := &oauth.ExternalOAuthConfig{
+		Issuer:                token.OauthServerIssuer,
+		AuthorizationEndpoint: mcpOAuthConfig.AuthorizationEndpoint,
+		TokenEndpoint:         mcpOAuthConfig.TokenEndpoint,
+		RegistrationEndpoint:  mcpOAuthConfig.RegistrationEndpoint,
+		ScopesSupported:       mcpOAuthConfig.ScopesSupported,
+		ClientID:              clientReg.ClientID,
+		ClientSecret:          clientSecret,
+		ProviderName:          mcpOAuthConfig.Name,
+	}
+
+	newAccessToken, err := s.externalOAuthService.RefreshUpstreamToken(ctx, token, refreshConfig)
+	if err != nil {
+		return "", fmt.Errorf("refresh upstream token: %w", err)
+	}
+
+	return newAccessToken, nil
 }
