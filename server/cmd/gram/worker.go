@@ -412,7 +412,6 @@ func newWorkerCommand() *cli.Command {
 
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
@@ -421,6 +420,36 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
+
+			// Create ClickHouse client and telemetry service for resolution events
+			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, chShutdown)
+
+			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
+			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
+
+			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
+
+			chatClient := chat.NewChatClient(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				openRouter,
+				baseChatClient,
+				env,
+				encryptionClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				guardianPolicy,
+				functionsOrchestrator,
+				assetStorage,
+				telemetryService,
+				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
+				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
+			)
 
 			// Create agents service for the worker
 			agentsService := agents.NewService(
@@ -436,18 +465,6 @@ func newWorkerCommand() *cli.Command {
 				openRouter,
 				baseChatClient,
 			)
-
-			// Create ClickHouse client and telemetry service for resolution events
-			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
-			if err != nil {
-				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, chShutdown)
-
-			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
-			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
-
-			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				DB:                   db,

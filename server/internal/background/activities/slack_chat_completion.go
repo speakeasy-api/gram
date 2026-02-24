@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 
@@ -107,6 +108,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 		AgentTimeout: &slackChatCompletionTimeout,
 		Temperature:  nil,
 		Model:        "",
+		Source:       billing.ModelUsageSourceSlack,
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))
@@ -129,6 +131,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 			AddedEnvironmentEntries: map[string]string{},
 			Temperature:             nil,
 			Model:                   "",
+			Source:                  billing.ModelUsageSourceSlack,
 		})
 		if err != nil {
 			s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))

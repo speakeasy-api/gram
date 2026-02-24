@@ -596,7 +596,6 @@ func newStartCommand() *cli.Command {
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
@@ -611,6 +610,24 @@ func newStartCommand() *cli.Command {
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 
 			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
+
+			chatClient := chat.NewChatClient(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				openRouter,
+				baseChatClient,
+				env,
+				encryptionClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				guardianPolicy,
+				functionsOrchestrator,
+				assetStorage,
+				telemSvc,
+				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
+				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
+			)
 
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
@@ -656,6 +673,12 @@ func newStartCommand() *cli.Command {
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, telemSvc, productFeatures, ragService, temporalEnv), mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, &background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv}, posthogClient, telemSvc, assetStorage))
+			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
+			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}))
+			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
+			tm.Attach(mux, telemSvc)
+			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
+
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
 					GramServerURL:      c.String("server-url"),
@@ -663,12 +686,9 @@ func newStartCommand() *cli.Command {
 					SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
 					SlackSigningSecret: c.String("slack-signing-secret"),
 				}))
+			} else {
+				logger.WarnContext(ctx, "slack client is not enabled")
 			}
-			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
-			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}))
-			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
-			tm.Attach(mux, telemSvc)
-			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
