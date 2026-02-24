@@ -53,6 +53,7 @@ var _ cache.CacheableObject[Token] = (*Token)(nil)
 type Token struct {
 	ToolsetID       uuid.UUID        `json:"-"`
 	AccessToken     string           `json:"access_token"`
+	RefreshToken    string           `json:"-"`
 	TokenType       string           `json:"token_type"`
 	Scope           string           `json:"scope,omitempty"`
 	CreatedAt       time.Time        `json:"created_at"`
@@ -64,11 +65,18 @@ func TokenCacheKey(toolsetID uuid.UUID, token string) string {
 	return "oauthToken:" + toolsetID.String() + ":" + token
 }
 
+func RefreshTokenCacheKey(toolsetID uuid.UUID, refreshTokenHash string) string {
+	return "oauthRefreshToken:" + toolsetID.String() + ":" + refreshTokenHash
+}
+
 func (t Token) CacheKey() string {
 	return TokenCacheKey(t.ToolsetID, t.AccessToken)
 }
 
 func (t Token) AdditionalCacheKeys() []string {
+	if t.RefreshToken != "" {
+		return []string{RefreshTokenCacheKey(t.ToolsetID, t.RefreshToken)}
+	}
 	return []string{}
 }
 

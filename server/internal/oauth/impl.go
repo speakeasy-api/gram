@@ -421,6 +421,7 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		CodeVerifier: r.FormValue("code_verifier"),
+		RefreshToken: r.FormValue("refresh_token"),
 	}
 
 	var token *Token
@@ -428,6 +429,8 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 	switch req.GrantType {
 	case "authorization_code":
 		token, err = s.tokenService.ExchangeAuthorizationCode(ctx, req, fullMCPURL, toolset.ID)
+	case "refresh_token":
+		token, err = s.tokenService.ExchangeRefreshToken(ctx, req, fullMCPURL, toolset.ID)
 	default:
 		return oops.E(oops.CodeBadRequest, nil, "unsupported grant type: %s", req.GrantType).Log(ctx, s.logger)
 	}
