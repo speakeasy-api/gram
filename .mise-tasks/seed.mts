@@ -164,6 +164,24 @@ async function seed() {
     }
   }
 
+  // Create the MCP Logs toolset — a curated subset of Gram's own API tools
+  // exposed as a built-in MCP server on the project MCP page.
+  // In production this lives in speakeasy-team/kitchen-sink; locally we
+  // reuse ecommerce-api since the gram asset is already deployed there.
+  {
+    const projectSlug = SEED_PROJECTS[0].slug;
+    const mcpLogsToolset = await upsertMcpLogsToolset({
+      gram,
+      serverURL,
+      sessionId,
+      projectSlug,
+    });
+    const verb = mcpLogsToolset.created ? "Created" : "Updated";
+    log.info(
+      `${verb} MCP Logs toolset '${mcpLogsToolset.slug}' for project '${projectSlug}' (mcp_url = ${mcpLogsToolset.mcpURL})`,
+    );
+  }
+
   // Seed observability data for the first project
   const firstProject = Object.values(projects)[0];
   if (firstProject) {
@@ -491,6 +509,155 @@ async function upsertToolset(init: {
   toolset.mcpURL = `${serverURL}/mcp/${updateRes.value.mcpSlug}`;
 
   log.info(`${toolset.mcpURL} visibility was changed to public`);
+
+  return toolset;
+}
+
+// The 11 Gram API tools that compose the built-in MCP Logs server.
+// These match the production `speakeasy-team-mcp-logs` toolset.
+const MCP_LOGS_TOOL_URNS = new Set([
+  "tools:http:gram:gram_list_tools",
+  "tools:http:gram:gram_search_logs",
+  "tools:http:gram:gram_list_global_variations",
+  "tools:http:gram:gram_search_tool_calls",
+  "tools:http:gram:gram_get_toolset",
+  "tools:http:gram:gram_get_observability_overview",
+  "tools:http:gram:gram_list_toolsets",
+  "tools:http:gram:gram_get_mcp_metadata",
+  "tools:http:gram:gram_list_chats_with_resolutions",
+  "tools:http:gram:gram_get_deployment_logs",
+  "tools:http:gram:gram_list_chats",
+]);
+
+async function upsertMcpLogsToolset(init: {
+  gram: GramCore;
+  serverURL: string;
+  sessionId: string;
+  projectSlug: string;
+}): Promise<Toolset> {
+  const { gram, serverURL, sessionId, projectSlug } = init;
+
+  // List all tools from the `gram` asset, then filter to the MCP Logs subset
+  const toolRes = await toolsList(
+    gram,
+    { urnPrefix: "tools:http:gram" },
+    {
+      projectSlugHeaderGramProject: projectSlug,
+      sessionHeaderGramSession: sessionId,
+    },
+  );
+  if (!toolRes.ok) {
+    abort(
+      `Failed to list tools for MCP Logs toolset in project '${projectSlug}'`,
+      toolRes.error,
+    );
+  }
+
+  const toolUrns = toolRes.value.tools
+    .map((t) => {
+      switch (true) {
+        case !!t.httpToolDefinition:
+          return t.httpToolDefinition.toolUrn;
+        case !!t.functionToolDefinition:
+          return t.functionToolDefinition.toolUrn;
+        case !!t.externalMcpToolDefinition:
+          return t.externalMcpToolDefinition.toolUrn;
+        case !!t.promptTemplate:
+          return t.promptTemplate.toolUrn;
+        default:
+          assert(false, "Unknown tool type: " + JSON.stringify(t));
+      }
+    })
+    .filter((urn) => MCP_LOGS_TOOL_URNS.has(urn));
+
+  const name = "mcp-logs";
+
+  const createRes = await toolsetsCreate(
+    gram,
+    {
+      createToolsetRequestBody: {
+        name,
+        toolUrns,
+      },
+    },
+    {
+      option1: {
+        projectSlugHeaderGramProject: projectSlug,
+        sessionHeaderGramSession: sessionId,
+      },
+    },
+  );
+
+  let toolset: Toolset;
+  switch (true) {
+    case !createRes.ok &&
+      createRes.error instanceof ServiceError &&
+      createRes.error.data$.name === "conflict":
+      const updateRes = await toolsetsUpdateBySlug(
+        gram,
+        {
+          slug: name,
+          updateToolsetRequestBody: {
+            toolUrns,
+            mcpIsPublic: true,
+            mcpEnabled: true,
+          },
+        },
+        {
+          option1: {
+            projectSlugHeaderGramProject: projectSlug,
+            sessionHeaderGramSession: sessionId,
+          },
+        },
+      );
+      if (!updateRes.ok) {
+        abort(
+          `Failed to update MCP Logs toolset for project '${projectSlug}'`,
+          updateRes.error,
+        );
+      }
+      toolset = {
+        created: false,
+        slug: updateRes.value.slug,
+        mcpURL: `${serverURL}/mcp/${updateRes.value.mcpSlug}`,
+      };
+      break;
+    case !createRes.ok:
+      abort(
+        `Failed to create MCP Logs toolset for project '${projectSlug}'`,
+        createRes.error,
+      );
+    default:
+      // Make it public + MCP enabled right after creation
+      const publicRes = await toolsetsUpdateBySlug(
+        gram,
+        {
+          slug: createRes.value.slug,
+          updateToolsetRequestBody: {
+            mcpIsPublic: true,
+            mcpEnabled: true,
+          },
+        },
+        {
+          option1: {
+            projectSlugHeaderGramProject: projectSlug,
+            sessionHeaderGramSession: sessionId,
+          },
+        },
+      );
+      if (!publicRes.ok) {
+        abort(
+          `Failed to make MCP Logs toolset public for project '${projectSlug}'`,
+          publicRes.error,
+        );
+      }
+      toolset = {
+        created: true,
+        slug: publicRes.value.slug,
+        mcpURL: `${serverURL}/mcp/${publicRes.value.mcpSlug}`,
+      };
+      break;
+  }
 
   return toolset;
 }

@@ -82,12 +82,13 @@ export function BuiltInMCPDetailPage() {
         "mcp-remote@0.1.25",
         "${mcpUrl}",
         "--header",
-        "MCP-Gram-Key:\${GRAM_KEY}",
+        "Mcp-Gram-Apikey-Header-Gram-Key:\${GRAM_LOGS_API_KEY}",
         "--header",
-        "MCP-Gram-Project:${projectSlug}"
+        "Mcp-Gram-Project-Slug-Header-Gram-Project:\${GRAM_PROJECT_SLUG}"
       ],
       "env": {
-        "GRAM_KEY": "<your-gram-api-key>"
+        "GRAM_LOGS_API_KEY": "<your-value-here>",
+        "GRAM_PROJECT_SLUG": "${projectSlug}"
       }
     }
   }
@@ -237,7 +238,8 @@ function BuiltInOverviewTab({
         </Type>
         <Type muted small className="max-w-3xl mb-2!">
           Uses <code>mcp-remote</code> to connect via stdio. The project slug{" "}
-          <code>{projectSlug}</code> is pre-filled.
+          <code>{projectSlug}</code> is pre-filled. Replace{" "}
+          <code>GRAM_LOGS_API_KEY</code> with your Gram API key from Settings.
         </Type>
         <CodeBlock>{configJson}</CodeBlock>
       </PageSection>
