@@ -16509,6 +16509,9 @@ components:
         ToolCallSummary:
             type: object
             properties:
+                event_source:
+                    type: string
+                    description: Event source (from attributes.gram.event.source)
                 gram_urn:
                     type: string
                     description: Gram URN associated with this tool call
@@ -16524,6 +16527,12 @@ components:
                     type: integer
                     description: Earliest log timestamp in Unix nanoseconds
                     format: int64
+                tool_name:
+                    type: string
+                    description: Tool name (from attributes.gram.tool.name)
+                tool_source:
+                    type: string
+                    description: Tool call source (from attributes.gram.tool_call.source)
                 trace_id:
                     type: string
                     description: Trace ID (32 hex characters)

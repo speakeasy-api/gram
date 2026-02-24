@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // EventSource identifies the type of event that generated a telemetry log.
@@ -40,8 +41,14 @@ func (t ToolInfo) AsAttributes() map[attr.Key]any {
 	attrs := map[attr.Key]any{
 		attr.ToolURNKey:        t.URN,
 		attr.NameKey:           t.Name,
+		attr.ToolNameKey:       t.Name,
 		attr.ProjectIDKey:      t.ProjectID,
 		attr.OrganizationIDKey: t.OrganizationID,
+	}
+
+	parsedURN, err := urn.ParseTool(t.URN)
+	if err == nil {
+		attrs[attr.ToolCallSourceKey] = parsedURN.Source
 	}
 
 	if t.DeploymentID != "" {

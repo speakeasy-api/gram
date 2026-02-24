@@ -69,11 +69,14 @@ type TelemetryLog struct {
 // TraceSummary represents an aggregated view of a trace (one row per trace).
 // Used for displaying a list of logs grouped by trace in the UI.
 type TraceSummary struct {
-	TraceID           string `ch:"trace_id"`             // FixedString(32)
-	StartTimeUnixNano int64  `ch:"start_time_unix_nano"` // Int64 - earliest log timestamp
-	LogCount          uint64 `ch:"log_count"`            // UInt64 - total logs in trace
-	HTTPStatusCode    *int32 `ch:"http_status_code"`     // Nullable(Int32) - any HTTP status code
-	GramURN           string `ch:"gram_urn"`             // String - any gram_urn from the trace
+	TraceID           string  `ch:"trace_id"`             // FixedString(32)
+	StartTimeUnixNano int64   `ch:"start_time_unix_nano"` // Int64 - earliest log timestamp
+	LogCount          uint64  `ch:"log_count"`            // UInt64 - total logs in trace
+	HTTPStatusCode    *int32  `ch:"http_status_code"`     // Nullable(Int32) - any HTTP status code
+	GramURN           string  `ch:"gram_urn"`             // String - any gram_urn from the trace
+	ToolName          *string `ch:"tool_name"`            // String - tool name from attributes
+	ToolSource        *string `ch:"tool_source"`          // String - tool call source
+	EventSource       *string `ch:"event_source"`         // String - event source
 }
 
 // ChatSummary represents an aggregated view of a chat session (one row per gram_chat_id).

@@ -427,6 +427,9 @@ var ToolCallSummary = Type("ToolCallSummary", func() {
 	Attribute("log_count", UInt64, "Total number of logs in this tool call")
 	Attribute("http_status_code", Int32, "HTTP status code (if applicable)")
 	Attribute("gram_urn", String, "Gram URN associated with this tool call")
+	Attribute("tool_name", String, "Tool name (from attributes.gram.tool.name)")
+	Attribute("tool_source", String, "Tool call source (from attributes.gram.tool_call.source)")
+	Attribute("event_source", String, "Event source (from attributes.gram.event.source)")
 
 	Required(
 		"trace_id",

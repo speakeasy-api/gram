@@ -1,13 +1,15 @@
-import {
-  ToolCallSummary,
-  TelemetryLogRecord,
-} from "@gram/client/models/components";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
+  TelemetryLogRecord,
+  ToolCallSummary,
+} from "@gram/client/models/components";
+import {
   FileCode,
+  SquareTerminal as HookIcon,
+  LucideIcon,
   PencilRuler,
   SquareFunction,
-  LucideIcon,
+  Hammer as ToolIcon
 } from "lucide-react";
 
 /**
@@ -98,8 +100,9 @@ export function getToolNameFromUrn(urn: string): string {
 /**
  * Get the appropriate icon for a tool based on its URN
  */
-export function getToolIcon(urn: string): LucideIcon {
-  const { kind } = parseGramUrn(urn);
+export function getToolIcon(trace: ToolCallSummary): LucideIcon {
+  if (trace.gramUrn) {
+  const { kind } = parseGramUrn(trace.gramUrn);
   if (kind === "http") {
     return FileCode;
   }
@@ -108,6 +111,13 @@ export function getToolIcon(urn: string): LucideIcon {
   }
   // Otherwise it's a function tool
   return SquareFunction;
+  }
+ 
+  if (trace.eventSource === "hook") {
+    return HookIcon;
+  }
+
+  return ToolIcon;
 }
 
 /**

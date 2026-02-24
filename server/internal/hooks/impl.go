@@ -111,7 +111,7 @@ func (s *Service) PostToolUse(ctx context.Context, payload *gen.PostToolUsePaylo
 	attrs[attr.HookEventKey] = "post_tool_use"
 	attrs[attr.LogBodyKey] = fmt.Sprintf("Post-tool use hook: %s", payload.ToolName)
 	if payload.ToolResponse != nil {
-		attrs[attr.HookToolResponseKey] = payload.ToolResponse
+		attrs[attr.GenAIToolCallResultKey] = payload.ToolResponse
 	}
 	attrs[attr.TraceIDKey] = traceID
 	attrs[attr.SpanIDKey] = spanID
@@ -143,7 +143,7 @@ func (s *Service) PostToolUseFailure(ctx context.Context, payload *gen.PostToolU
 	attrs[attr.HookEventKey] = "post_tool_use_failure"
 	attrs[attr.LogBodyKey] = fmt.Sprintf("Post-tool use failure hook: %s", payload.ToolName)
 	if payload.ToolError != nil {
-		attrs[attr.HookToolErrorKey] = payload.ToolError
+		attrs[attr.HookErrorKey] = payload.ToolError
 	}
 	attrs[attr.TraceIDKey] = traceID
 	attrs[attr.SpanIDKey] = spanID
@@ -170,19 +170,20 @@ func generateSpanID() string {
 // buildBaseAttributes creates the base set of attributes for a hook event
 func (s *Service) buildBaseAttributes(toolName string, toolInput any) map[attr.Key]any {
 	attrs := map[attr.Key]any{
-		attr.ToolNameKey: toolName,
+		attr.EventSourceKey: string(telemetry.EventSourceHook),
+		attr.ToolNameKey:    toolName,
 	}
 
 	if toolInput != nil {
-		attrs[attr.HookToolInputKey] = toolInput
+		attrs[attr.GenAIToolCallArgumentsKey] = toolInput
 	}
 
 	// Parse MCP tool names (format: mcp__<server>__<tool>)
 	if strings.HasPrefix(toolName, "mcp__") {
 		parts := strings.SplitN(toolName, "__", 3)
 		if len(parts) == 3 {
-			attrs[attr.McpServerNameKey] = parts[1]
-			attrs[attr.McpToolNameKey] = parts[2]
+			attrs[attr.ToolCallSourceKey] = parts[1]
+			attrs[attr.ToolNameKey] = parts[2]
 		}
 	}
 
@@ -215,11 +216,9 @@ func (s *Service) writeToClickHouse(ctx context.Context, toolName string, attrs 
 		FunctionID:     nil,
 	}
 
-	gramHooks := "gram-hooks"
 	s.telemetryService.CreateLog(telemetry.LogParams{
-		Timestamp:   time.Now(),
-		ToolInfo:    toolInfo,
-		Attributes:  attrs,
-		ServiceName: &gramHooks,
+		Timestamp:  time.Now(),
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
 	})
 }

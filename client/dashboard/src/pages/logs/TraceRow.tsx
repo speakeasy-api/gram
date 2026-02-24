@@ -1,17 +1,17 @@
 import {
-  ToolCallSummary,
   TelemetryLogRecord,
+  ToolCallSummary,
 } from "@gram/client/models/components";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { StatusBadge } from "./StatusBadge";
+import { TraceLogsList } from "./TraceLogsList";
 import {
   formatNanoTimestamp,
-  getStatusInfo,
   getSourceFromUrn,
-  getToolNameFromUrn,
+  getStatusInfo,
   getToolIcon,
+  getToolNameFromUrn,
 } from "./utils";
-import { TraceLogsList } from "./TraceLogsList";
-import { StatusBadge } from "./StatusBadge";
 
 interface TraceRowProps {
   trace: ToolCallSummary;
@@ -27,9 +27,9 @@ export function TraceRow({
   onLogClick,
 }: TraceRowProps) {
   const { isSuccess } = getStatusInfo(trace);
-  const sourceName = getSourceFromUrn(trace.gramUrn);
-  const toolName = getToolNameFromUrn(trace.gramUrn);
-  const ToolIcon = getToolIcon(trace.gramUrn);
+  const sourceName = trace.toolSource || getSourceFromUrn(trace.gramUrn);
+  const toolName = trace.toolName || getToolNameFromUrn(trace.gramUrn);
+  const ToolIcon = getToolIcon(trace);
 
   return (
     <div className="border-b border-border/50 last:border-b-0">
@@ -55,9 +55,11 @@ export function TraceRow({
         {/* Icon + Source badge + Tool name */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <ToolIcon className="size-4 shrink-0" strokeWidth={1.5} />
-          <span className="shrink-0 px-1.5 py-0.5 text-xs font-medium rounded bg-muted text-muted-foreground">
-            {sourceName}
-          </span>
+          {sourceName && (
+            <span className="shrink-0 px-1.5 py-0.5 text-xs font-medium rounded bg-muted text-muted-foreground">
+              {sourceName}
+            </span>
+          )}
           <span className="text-sm font-mono truncate">{toolName}</span>
         </div>
 

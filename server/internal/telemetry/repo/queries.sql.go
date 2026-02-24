@@ -210,8 +210,8 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 	return items, nil
 }
 
-// ListTracesParams contains the parameters for listing traces.
-type ListTracesParams struct {
+// ListToolTracesParams contains the parameters for listing tool call traces.
+type ListToolTracesParams struct {
 	GramProjectID    string
 	TimeStart        int64
 	TimeEnd          int64
@@ -223,7 +223,7 @@ type ListTracesParams struct {
 	Limit            int
 }
 
-// ListTraces retrieves aggregated trace summaries grouped by trace_id.
+// ListToolTraces retrieves aggregated trace summaries for tool calls (filtered to only include traces with tool_name set).
 //
 // Original SQL reference:
 // SELECT trace_id, min(time_unix_nano), count(*), ... FROM telemetry_logs
@@ -231,13 +231,16 @@ type ListTracesParams struct {
 // [+ optional filters] GROUP BY trace_id ORDER BY start_time_unix_nano LIMIT ?
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]TraceSummary, error) {
+func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) ([]TraceSummary, error) {
 	sb := sq.Select(
 		"trace_id",
 		"min(start_time_unix_nano) as start_time_unix_nano",
 		"sum(log_count) as log_count",
 		"anyIfMerge(http_status_code) as http_status_code",
 		"any(gram_urn) as gram_urn",
+		"any(tool_name) as tool_name",
+		"any(tool_source) as tool_source",
+		"any(event_source) as event_source",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -252,11 +255,14 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
 	}
 
-	// URN filter must use HAVING because gram_urn in SELECT is aliased to any(gram_urn),
+	// URN and tool_name filters must use HAVING because they are aggregate functions in SELECT,
 	// and ClickHouse resolves aliases in WHERE, which would create an invalid aggregate-in-WHERE.
 	if arg.GramURN != "" {
 		sb = sb.Having("position(gram_urn, ?) > 0", arg.GramURN)
 	}
+	// Only include traces with tool_name set OR gram_urn starting with "tools:"
+	// The urn check is mainly for backwards compatibility with old data.
+	sb = sb.Having("(tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:')")
 
 	sb = sb.GroupBy("trace_id")
 
@@ -277,7 +283,7 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 
 	query, args, err := sb.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("building list traces query: %w", err)
+		return nil, fmt.Errorf("building list tool traces query: %w", err)
 	}
 
 	rows, err := q.conn.Query(ctx, query, args...)
