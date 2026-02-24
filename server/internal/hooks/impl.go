@@ -205,6 +205,11 @@ func (s *Service) writeToClickHouse(ctx context.Context, toolName string, attrs 
 		organizationID = authCtx.ActiveOrganizationID
 	}
 
+	// Make sure we don't discard any tool name information
+	if actualToolName, ok := attrs[attr.ToolNameKey]; ok {
+		toolName = actualToolName.(string)
+	}
+
 	// Build ToolInfo with project/org context from auth
 	toolInfo := telemetry.ToolInfo{
 		Name:           toolName,
