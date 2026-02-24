@@ -79,6 +79,9 @@ type ExternalOAuthState struct {
 	ProviderName      string `json:"provider_name"`
 	Scope             string `json:"scope"`
 
+	// Challenge tracking
+	ChallengeID uuid.UUID `json:"challenge_id"` // ID of the oauth_challenges record for billing
+
 	// Timing
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -329,6 +332,19 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 		return oops.E(oops.CodeUnexpected, err, "failed to generate state ID").Log(ctx, s.logger)
 	}
 
+	// Create challenge record for billing/analytics
+	challenge, err := s.oauthRepo.CreateOAuthChallenge(ctx, repo.CreateOAuthChallengeParams{
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+		UserID:            authCtx.UserID,
+		ToolsetID:         toolsetID,
+		OauthServerIssuer: oauthConfig.Issuer,
+		ProviderName:      conv.ToPGText(oauthConfig.ProviderName),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create OAuth challenge record").Log(ctx, s.logger)
+	}
+
 	// Build authorization URL
 	authURL, err := url.Parse(oauthConfig.AuthorizationEndpoint)
 	if err != nil {
@@ -349,6 +365,7 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 		TokenEndpoint:     oauthConfig.TokenEndpoint,
 		ProviderName:      oauthConfig.ProviderName,
 		Scope:             strings.Join(oauthConfig.ScopesSupported, " "),
+		ChallengeID:       challenge.ID, // Track challenge for billing
 		CreatedAt:         time.Now(),
 		ExpiresAt:         time.Now().Add(10 * time.Minute),
 	}
@@ -396,6 +413,20 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 		s.logger.ErrorContext(ctx, "external OAuth error",
 			attr.SlogErrorMessage(errorParam),
 			attr.SlogReason(errorDesc))
+
+		// Try to fail the challenge if we can retrieve the state
+		if stateID != "" {
+			if state, stateErr := s.stateStorage.Get(ctx, ExternalOAuthStateCacheKey(stateID)); stateErr == nil {
+				if failErr := s.oauthRepo.FailOAuthChallenge(ctx, repo.FailOAuthChallengeParams{
+					ID:               state.ChallengeID,
+					ErrorCode:        conv.ToPGText(errorParam),
+					ErrorDescription: conv.ToPGText(errorDesc),
+				}); failErr != nil {
+					s.logger.WarnContext(ctx, "failed to mark OAuth challenge as failed", attr.SlogError(failErr))
+				}
+			}
+		}
+
 		// Redirect back with error
 		return s.redirectWithError(w, r, "", "oauth_error", errorDesc)
 	}
@@ -415,6 +446,10 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 
 	// Check if state has expired
 	if time.Now().After(state.ExpiresAt) {
+		// Mark challenge as expired
+		if expireErr := s.oauthRepo.ExpireOAuthChallenge(ctx, state.ChallengeID); expireErr != nil {
+			s.logger.WarnContext(ctx, "failed to mark OAuth challenge as expired", attr.SlogError(expireErr))
+		}
 		return oops.E(oops.CodeBadRequest, nil, "state has expired").Log(ctx, s.logger)
 	}
 
@@ -447,6 +482,14 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 	tokenResp, err := s.exchangeCodeForTokens(ctx, oauthConfig, code, callbackURL, state.CodeVerifier)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to exchange code for tokens", attr.SlogError(err))
+		// Mark challenge as failed
+		if failErr := s.oauthRepo.FailOAuthChallenge(ctx, repo.FailOAuthChallengeParams{
+			ID:               state.ChallengeID,
+			ErrorCode:        conv.ToPGText("token_exchange_failed"),
+			ErrorDescription: conv.ToPGText(err.Error()),
+		}); failErr != nil {
+			s.logger.WarnContext(ctx, "failed to mark OAuth challenge as failed", attr.SlogError(failErr))
+		}
 		return s.redirectWithError(w, r, state.RedirectURI, "token_exchange_failed", err.Error())
 	}
 
@@ -491,7 +534,20 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 		ProviderName:          conv.ToPGText(state.ProviderName),
 	})
 	if err != nil {
+		// Mark challenge as failed
+		if failErr := s.oauthRepo.FailOAuthChallenge(ctx, repo.FailOAuthChallengeParams{
+			ID:               state.ChallengeID,
+			ErrorCode:        conv.ToPGText("token_storage_failed"),
+			ErrorDescription: conv.ToPGText(err.Error()),
+		}); failErr != nil {
+			s.logger.WarnContext(ctx, "failed to mark OAuth challenge as failed", attr.SlogError(failErr))
+		}
 		return oops.E(oops.CodeUnexpected, err, "failed to store OAuth token").Log(ctx, s.logger)
+	}
+
+	// Mark challenge as completed
+	if completeErr := s.oauthRepo.CompleteOAuthChallenge(ctx, state.ChallengeID); completeErr != nil {
+		s.logger.WarnContext(ctx, "failed to mark OAuth challenge as completed", attr.SlogError(completeErr))
 	}
 
 	s.logger.InfoContext(ctx, "external OAuth token stored successfully",

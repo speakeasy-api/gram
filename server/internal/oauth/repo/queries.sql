@@ -221,3 +221,71 @@ UPDATE external_oauth_client_registrations SET
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND oauth_server_issuer = @oauth_server_issuer;
+
+-- OAuth Challenges Tracking Queries
+-- Tracks OAuth authorization flows for billing and analytics
+
+-- name: CreateOAuthChallenge :one
+INSERT INTO oauth_challenges (
+    organization_id,
+    project_id,
+    user_id,
+    toolset_id,
+    oauth_server_issuer,
+    provider_name,
+    status,
+    initiated_at
+) VALUES (
+    @organization_id,
+    @project_id,
+    @user_id,
+    @toolset_id,
+    @oauth_server_issuer,
+    @provider_name,
+    'initiated',
+    clock_timestamp()
+) RETURNING *;
+
+-- name: CompleteOAuthChallenge :exec
+UPDATE oauth_challenges SET
+    status = 'completed',
+    completed_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: FailOAuthChallenge :exec
+UPDATE oauth_challenges SET
+    status = 'failed',
+    error_code = @error_code,
+    error_description = @error_description,
+    completed_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: ExpireOAuthChallenge :exec
+UPDATE oauth_challenges SET
+    status = 'expired',
+    completed_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: GetOAuthChallenge :one
+SELECT * FROM oauth_challenges
+WHERE id = @id;
+
+-- name: CountOAuthChallengesByOrganization :one
+SELECT COUNT(*) as total_challenges,
+       COUNT(*) FILTER (WHERE status = 'completed') as completed_challenges,
+       COUNT(*) FILTER (WHERE status = 'failed') as failed_challenges
+FROM oauth_challenges
+WHERE organization_id = @organization_id
+  AND initiated_at >= @since
+  AND initiated_at < @until;
+
+-- name: ListOAuthChallengesByOrganization :many
+SELECT * FROM oauth_challenges
+WHERE organization_id = @organization_id
+  AND initiated_at >= @since
+  AND initiated_at < @until
+ORDER BY initiated_at DESC
+LIMIT @row_limit;

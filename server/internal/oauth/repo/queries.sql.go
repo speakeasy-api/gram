@@ -714,3 +714,219 @@ func (q *Queries) UpsertUserOAuthToken(ctx context.Context, arg UpsertUserOAuthT
 	)
 	return i, err
 }
+
+const createOAuthChallenge = `-- name: CreateOAuthChallenge :one
+INSERT INTO oauth_challenges (
+    organization_id,
+    project_id,
+    user_id,
+    toolset_id,
+    oauth_server_issuer,
+    provider_name,
+    status,
+    initiated_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    'initiated',
+    clock_timestamp()
+) RETURNING id, organization_id, project_id, user_id, toolset_id, oauth_server_issuer, provider_name, status, error_code, error_description, initiated_at, completed_at, created_at, updated_at
+`
+
+type CreateOAuthChallengeParams struct {
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	UserID            string
+	ToolsetID         uuid.UUID
+	OauthServerIssuer string
+	ProviderName      pgtype.Text
+}
+
+// OAuth Challenges Tracking Queries
+// Tracks OAuth authorization flows for billing and analytics
+func (q *Queries) CreateOAuthChallenge(ctx context.Context, arg CreateOAuthChallengeParams) (OauthChallenge, error) {
+	row := q.db.QueryRow(ctx, createOAuthChallenge,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserID,
+		arg.ToolsetID,
+		arg.OauthServerIssuer,
+		arg.ProviderName,
+	)
+	var i OauthChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.UserID,
+		&i.ToolsetID,
+		&i.OauthServerIssuer,
+		&i.ProviderName,
+		&i.Status,
+		&i.ErrorCode,
+		&i.ErrorDescription,
+		&i.InitiatedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const completeOAuthChallenge = `-- name: CompleteOAuthChallenge :exec
+UPDATE oauth_challenges SET
+    status = 'completed',
+    completed_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) CompleteOAuthChallenge(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, completeOAuthChallenge, id)
+	return err
+}
+
+const failOAuthChallenge = `-- name: FailOAuthChallenge :exec
+UPDATE oauth_challenges SET
+    status = 'failed',
+    error_code = $2,
+    error_description = $3,
+    completed_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+`
+
+type FailOAuthChallengeParams struct {
+	ID               uuid.UUID
+	ErrorCode        pgtype.Text
+	ErrorDescription pgtype.Text
+}
+
+func (q *Queries) FailOAuthChallenge(ctx context.Context, arg FailOAuthChallengeParams) error {
+	_, err := q.db.Exec(ctx, failOAuthChallenge, arg.ID, arg.ErrorCode, arg.ErrorDescription)
+	return err
+}
+
+const expireOAuthChallenge = `-- name: ExpireOAuthChallenge :exec
+UPDATE oauth_challenges SET
+    status = 'expired',
+    completed_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) ExpireOAuthChallenge(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expireOAuthChallenge, id)
+	return err
+}
+
+const getOAuthChallenge = `-- name: GetOAuthChallenge :one
+SELECT id, organization_id, project_id, user_id, toolset_id, oauth_server_issuer, provider_name, status, error_code, error_description, initiated_at, completed_at, created_at, updated_at FROM oauth_challenges
+WHERE id = $1
+`
+
+func (q *Queries) GetOAuthChallenge(ctx context.Context, id uuid.UUID) (OauthChallenge, error) {
+	row := q.db.QueryRow(ctx, getOAuthChallenge, id)
+	var i OauthChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.UserID,
+		&i.ToolsetID,
+		&i.OauthServerIssuer,
+		&i.ProviderName,
+		&i.Status,
+		&i.ErrorCode,
+		&i.ErrorDescription,
+		&i.InitiatedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const countOAuthChallengesByOrganization = `-- name: CountOAuthChallengesByOrganization :one
+SELECT COUNT(*) as total_challenges,
+       COUNT(*) FILTER (WHERE status = 'completed') as completed_challenges,
+       COUNT(*) FILTER (WHERE status = 'failed') as failed_challenges
+FROM oauth_challenges
+WHERE organization_id = $1
+  AND initiated_at >= $2
+  AND initiated_at < $3
+`
+
+type CountOAuthChallengesByOrganizationParams struct {
+	OrganizationID string
+	Since          pgtype.Timestamptz
+	Until          pgtype.Timestamptz
+}
+
+type CountOAuthChallengesByOrganizationRow struct {
+	TotalChallenges     int64
+	CompletedChallenges int64
+	FailedChallenges    int64
+}
+
+func (q *Queries) CountOAuthChallengesByOrganization(ctx context.Context, arg CountOAuthChallengesByOrganizationParams) (CountOAuthChallengesByOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, countOAuthChallengesByOrganization, arg.OrganizationID, arg.Since, arg.Until)
+	var i CountOAuthChallengesByOrganizationRow
+	err := row.Scan(&i.TotalChallenges, &i.CompletedChallenges, &i.FailedChallenges)
+	return i, err
+}
+
+const listOAuthChallengesByOrganization = `-- name: ListOAuthChallengesByOrganization :many
+SELECT id, organization_id, project_id, user_id, toolset_id, oauth_server_issuer, provider_name, status, error_code, error_description, initiated_at, completed_at, created_at, updated_at FROM oauth_challenges
+WHERE organization_id = $1
+  AND initiated_at >= $2
+  AND initiated_at < $3
+ORDER BY initiated_at DESC
+LIMIT $4
+`
+
+type ListOAuthChallengesByOrganizationParams struct {
+	OrganizationID string
+	Since          pgtype.Timestamptz
+	Until          pgtype.Timestamptz
+	RowLimit       int32
+}
+
+func (q *Queries) ListOAuthChallengesByOrganization(ctx context.Context, arg ListOAuthChallengesByOrganizationParams) ([]OauthChallenge, error) {
+	rows, err := q.db.Query(ctx, listOAuthChallengesByOrganization, arg.OrganizationID, arg.Since, arg.Until, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OauthChallenge
+	for rows.Next() {
+		var i OauthChallenge
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.UserID,
+			&i.ToolsetID,
+			&i.OauthServerIssuer,
+			&i.ProviderName,
+			&i.Status,
+			&i.ErrorCode,
+			&i.ErrorDescription,
+			&i.InitiatedAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

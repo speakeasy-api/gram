@@ -87,3 +87,20 @@ type UserOauthToken struct {
 	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
 }
+
+type OauthChallenge struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	UserID            string
+	ToolsetID         uuid.UUID
+	OauthServerIssuer string
+	ProviderName      pgtype.Text
+	Status            string
+	ErrorCode         pgtype.Text
+	ErrorDescription  pgtype.Text
+	InitiatedAt       pgtype.Timestamptz
+	CompletedAt       pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
