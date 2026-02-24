@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Seed the local MCP registry with toolsets from a Gram project"
 
@@ -17,15 +17,21 @@ async function fetchRegistryToken(registryUrl: string): Promise<string> {
   });
   if (!res.ok) {
     const text = await res.text();
-    console.error(`Failed to get registry token: ${res.status} ${res.statusText}`);
+    console.error(
+      `Failed to get registry token: ${res.status} ${res.statusText}`,
+    );
     console.error(text);
     process.exit(1);
   }
-  const body = await res.json() as { registry_token: string; expires_at: number };
-  console.log(`Got registry token (expires ${new Date(body.expires_at * 1000).toISOString()})`);
+  const body = (await res.json()) as {
+    registry_token: string;
+    expires_at: number;
+  };
+  console.log(
+    `Got registry token (expires ${new Date(body.expires_at * 1000).toISOString()})`,
+  );
   return body.registry_token;
 }
-
 
 async function run() {
   const projectSlug = process.env["usage_project"];
@@ -63,7 +69,7 @@ async function run() {
     gramKey: gramApiKey,
   });
 
-  const toolsets = result.toolsets.filter(t => t.mcpEnabled);
+  const toolsets = result.toolsets.filter((t) => t.mcpEnabled);
 
   if (toolsets.length === 0) {
     console.log("No MCP-enabled toolsets found in this project.");
@@ -81,7 +87,8 @@ async function run() {
     const mcpUrl = `${gramApiUrl}/mcp/${projectSlug}/${mcpSlug}`;
 
     const serverDef = {
-      $schema: "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+      $schema:
+        "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
       name: serverName,
       description: toolset.description || `${toolset.name} MCP Server`,
       version: "1.0.0",
@@ -101,7 +108,7 @@ async function run() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${registryToken}`,
+          Authorization: `Bearer ${registryToken}`,
         },
         body: JSON.stringify(serverDef),
       });
