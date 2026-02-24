@@ -9,7 +9,7 @@ import {
   LucideIcon,
   PencilRuler,
   SquareFunction,
-  Hammer as ToolIcon
+  Hammer as ToolIcon,
 } from "lucide-react";
 
 /**
@@ -102,17 +102,17 @@ export function getToolNameFromUrn(urn: string): string {
  */
 export function getToolIcon(trace: ToolCallSummary): LucideIcon {
   if (trace.gramUrn) {
-  const { kind } = parseGramUrn(trace.gramUrn);
-  if (kind === "http") {
-    return FileCode;
+    const { kind } = parseGramUrn(trace.gramUrn);
+    if (kind === "http") {
+      return FileCode;
+    }
+    if (kind === "prompt") {
+      return PencilRuler;
+    }
+    // Otherwise it's a function tool
+    return SquareFunction;
   }
-  if (kind === "prompt") {
-    return PencilRuler;
-  }
-  // Otherwise it's a function tool
-  return SquareFunction;
-  }
- 
+
   if (trace.eventSource === "hook") {
     return HookIcon;
   }
