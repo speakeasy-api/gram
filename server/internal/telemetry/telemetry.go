@@ -6,6 +6,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
+// EventSource identifies the type of event that generated a telemetry log.
+type EventSource string
+
+const (
+	EventSourceToolCall       EventSource = "tool_call"
+	EventSourceChatCompletion EventSource = "chat_completion"
+	EventSourceEvaluation     EventSource = "evaluation"
+	EventSourceResourceRead   EventSource = "resource_read"
+	EventSourceHook           EventSource = "hook"
+)
+
 // PosthogClient defines the interface for capturing events in PostHog.
 type PosthogClient interface {
 	CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]any) error

@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.29.1
+
+### Patch Changes
+
+- 6a585c5: Expose customer's mcp logs as built-in logs mcp server that comes pre deployed for a project. This enables customers to interact with their logs through their favorite LLM client just as they would with
+  any MCP server created on the platform
+
 ## 0.29.0
 
 ### Minor Changes

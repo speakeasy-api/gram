@@ -109,6 +109,7 @@ const (
 	EnvironmentIDKey               = attribute.Key("gram.environment.id")
 	EnvironmentSlugKey             = attribute.Key("gram.environment.slug")
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
+	EventSourceKey                 = attribute.Key("gram.event.source")
 	ErrorIDKey                     = attribute.Key("gram.error.id")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
 	FlyAppInternalIDKey            = attribute.Key("gram.fly.app_id")
@@ -127,15 +128,7 @@ const (
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	McpMethodKey                   = attribute.Key("gram.mcp.method")
 	McpURLKey                      = attribute.Key("gram.mcp.url")
-	McpServerNameKey               = attribute.Key("gram.mcp.server_name")
-	McpToolNameKey                 = attribute.Key("gram.mcp.tool_name")
 	MetricNameKey                  = attribute.Key("gram.metric.name")
-
-	// Hook event attributes
-	HookEventKey         = attribute.Key("gram.hook.event")
-	HookToolInputKey     = attribute.Key("gram.hook.tool.input")
-	HookToolResponseKey  = attribute.Key("gram.hook.tool.response")
-	HookToolErrorKey     = attribute.Key("gram.hook.tool.error")
 	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
@@ -524,6 +517,9 @@ func SlogEnvironmentSlug(v string) slog.Attr      { return slog.String(string(En
 
 func EnvVarName(v string) attribute.KeyValue { return EnvVarNameKey.String(v) }
 func SlogEnvVarName(v string) slog.Attr      { return slog.String(string(EnvVarNameKey), v) }
+
+func EventSource(v string) attribute.KeyValue { return EventSourceKey.String(v) }
+func SlogEventSource(v string) slog.Attr      { return slog.String(string(EventSourceKey), v) }
 
 func ErrorID(v string) attribute.KeyValue { return ErrorIDKey.String(v) }
 func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey), v) }

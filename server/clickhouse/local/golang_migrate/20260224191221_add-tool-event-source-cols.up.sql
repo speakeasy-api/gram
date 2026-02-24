@@ -1,8 +1,8 @@
 -- drop "trace_summaries_mv" view
 DROP VIEW `trace_summaries_mv`;
-ALTER TABLE `telemetry_logs` ADD COLUMN `tool_name` String MATERIALIZED toString(attributes.tool.name) COMMENT 'Tool name (materialized from attributes.tool.name).';
-ALTER TABLE `telemetry_logs` ADD COLUMN `tool_source` String MATERIALIZED toString(attributes.tool.source) COMMENT 'Tool source (materialized from attributes.tool.source).';
-ALTER TABLE `telemetry_logs` ADD COLUMN `event_source` String MATERIALIZED toString(attributes.event_source) COMMENT 'Event source (materialized from attributes.event_source).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `tool_name` String MATERIALIZED toString(attributes.gram.tool.name) COMMENT 'Tool name (materialized from attributes.gram.tool.name).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `tool_source` String MATERIALIZED toString(attributes.gram.tool_call.source) COMMENT 'Tool call source (materialized from attributes.gram.tool_call.source).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `event_source` String MATERIALIZED toString(attributes.gram.event.source) COMMENT 'Event source (materialized from attributes.gram.event.source).';
 ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_event_source` ((event_source)) TYPE bloom_filter(0.01) GRANULARITY 1;
 ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_tool_name` ((tool_name)) TYPE bloom_filter(0.01) GRANULARITY 1;
 ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_tool_source` ((tool_source)) TYPE bloom_filter(0.01) GRANULARITY 1;

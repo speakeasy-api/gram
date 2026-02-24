@@ -416,6 +416,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
+		attrRecorder[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		attrRecorder.RecordStatusCode(interceptor.statusCode)
 		attrRecorder.RecordRequestBody(requestNumBytes)
 		attrRecorder.RecordResponseBody(outputNumBytes)

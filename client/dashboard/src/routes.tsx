@@ -22,6 +22,7 @@ import Register from "./pages/login/Register";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
 import Logs from "./pages/logs/Logs";
 import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
+import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
@@ -231,6 +232,11 @@ const ROUTE_STRUCTURE = {
     component: MCPRoot,
     indexComponent: MCPOverview,
     subPages: {
+      builtIn: {
+        title: "Built-in MCP",
+        url: "built-in/:builtInSlug",
+        component: BuiltInMCPDetailPage,
+      },
       details: {
         title: "MCP Details",
         url: ":toolsetSlug",
