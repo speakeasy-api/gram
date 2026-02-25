@@ -12,6 +12,7 @@ var _ cache.CacheableObject[Grant] = (*Grant)(nil)
 type ExternalSecret struct {
 	SecurityKeys []string   `json:"-"`
 	Token        string     `json:"-"`
+	RefreshToken string     `json:"-"`
 	ExpiresAt    *time.Time `json:"-"`
 }
 

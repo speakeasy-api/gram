@@ -87,9 +87,20 @@ func (p *GramProvider) ExchangeToken(
 
 	// Use idToken as access token for gram providers
 	return &TokenExchangeResult{
-		AccessToken: idToken,
-		ExpiresAt:   new(time.Now().Add(session.TTL())),
+		AccessToken:  idToken,
+		RefreshToken: "",
+		ExpiresAt:    new(time.Now().Add(session.TTL())),
 	}, nil
+}
+
+// RefreshToken is not supported for Gram providers
+func (p *GramProvider) RefreshToken(
+	_ context.Context,
+	_ string,
+	_ repo.OauthProxyProvider,
+	_ *toolsets_repo.Toolset,
+) (*TokenExchangeResult, error) {
+	return nil, fmt.Errorf("refresh token not supported for gram provider")
 }
 
 // IsAccessDeniedError checks if the error is an access denied error

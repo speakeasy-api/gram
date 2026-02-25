@@ -539,6 +539,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	// Provider-specific token exchange
 	var accessToken string
+	var refreshToken string
 	var expiresAt *time.Time
 
 	var oauthProvider providers.Provider
@@ -600,6 +601,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	accessToken = result.AccessToken
+	refreshToken = result.RefreshToken
 	expiresAt = result.ExpiresAt
 
 	// Reconstruct the original authorization request from decoded state
@@ -614,7 +616,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		Nonce:               oauthReqInfo["nonce"],
 	}
 
-	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMCPURL, toolset.ID, accessToken, expiresAt, provider.SecurityKeyNames)
+	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMCPURL, toolset.ID, accessToken, refreshToken, expiresAt, provider.SecurityKeyNames)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create authorization grant", attr.SlogError(err))
 
@@ -725,4 +727,38 @@ func (s *Service) parseBasicAuth(authHeader string) (string, string, bool) {
 // ValidateAccessToken validates an OAuth access token
 func (s *Service) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {
 	return s.tokenService.ValidateAccessToken(ctx, toolsetId, accessToken)
+}
+
+// RefreshProxyToken refreshes upstream credentials for an OAuth proxy token
+func (s *Service) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, token *Token, proxyProvider *repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*Token, error) {
+	var provider providers.Provider
+	switch proxyProvider.ProviderType {
+	case string(OAuthProxyProviderTypeCustom):
+		provider = s.customProvider
+	default:
+		return nil, fmt.Errorf("refresh not supported for provider type: %s", proxyProvider.ProviderType)
+	}
+
+	newSecrets := make([]ExternalSecret, len(token.ExternalSecrets))
+	for i, es := range token.ExternalSecrets {
+		if es.RefreshToken == "" {
+			return nil, ErrNoUpstreamRefreshToken
+		}
+		result, err := provider.RefreshToken(ctx, es.RefreshToken, *proxyProvider, toolset)
+		if err != nil {
+			return nil, fmt.Errorf("upstream token refresh failed: %w", err)
+		}
+		newSecrets[i] = ExternalSecret{
+			SecurityKeys: es.SecurityKeys,
+			Token:        result.AccessToken,
+			RefreshToken: result.RefreshToken,
+			ExpiresAt:    result.ExpiresAt,
+		}
+	}
+
+	if err := s.tokenService.RefreshExternalSecrets(ctx, token, newSecrets); err != nil {
+		return nil, fmt.Errorf("failed to update token after refresh: %w", err)
+	}
+
+	return token, nil
 }

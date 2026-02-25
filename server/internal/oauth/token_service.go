@@ -127,6 +127,13 @@ func (ts *TokenService) ExchangeRefreshToken(ctx context.Context, req *TokenRequ
 			return nil, fmt.Errorf("failed to decrypt token secret: %w", err)
 		}
 		oldToken.ExternalSecrets[i].Token = decrypted
+		if externalSecret.RefreshToken != "" {
+			decryptedRefresh, err := ts.enc.Decrypt(externalSecret.RefreshToken)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt refresh token secret: %w", err)
+			}
+			oldToken.ExternalSecrets[i].RefreshToken = decryptedRefresh
+		}
 		if externalSecret.ExpiresAt != nil && externalSecret.ExpiresAt.Before(time.Now()) {
 			return nil, fmt.Errorf("underlying credentials have expired")
 		}
@@ -168,8 +175,10 @@ func (ts *TokenService) ExchangeRefreshToken(ctx context.Context, req *TokenRequ
 }
 
 var (
-	ErrInvalidAccessToken = fmt.Errorf("invalid access token")
-	ErrExpiredAccessToken = fmt.Errorf("access token has expired")
+	ErrInvalidAccessToken     = fmt.Errorf("invalid access token")
+	ErrExpiredAccessToken     = fmt.Errorf("access token has expired")
+	ErrExpiredExternalSecrets = fmt.Errorf("underlying credentials have expired")
+	ErrNoUpstreamRefreshToken = fmt.Errorf("no upstream refresh token available")
 )
 
 // ValidateAccessToken validates an access token
@@ -188,12 +197,9 @@ func (ts *TokenService) ValidateAccessToken(ctx context.Context, toolsetId uuid.
 	}
 
 	for _, externalSecret := range token.ExternalSecrets {
-		if externalSecret.ExpiresAt.Before(time.Now()) {
-			// TODO: Eventually we will want to 403 but not actually delete the credentials as we may have multiple credentials under the hood
-			if err := ts.deleteToken(ctx, *token); err != nil {
-				ts.logger.ErrorContext(ctx, "failed to delete expired token", attr.SlogError(err))
-			}
-			return nil, ErrExpiredAccessToken
+		if externalSecret.ExpiresAt != nil && externalSecret.ExpiresAt.Before(time.Now()) {
+			// Return the token alongside the error so the caller can attempt an upstream refresh
+			return token, ErrExpiredExternalSecrets
 		}
 	}
 
@@ -262,6 +268,41 @@ func (ts *TokenService) SetTokenExpiration(accessTokenExpiration time.Duration) 
 	ts.accessTokenExpiration = accessTokenExpiration
 }
 
+// RefreshExternalSecrets updates the external secrets on an existing token in the cache.
+func (ts *TokenService) RefreshExternalSecrets(ctx context.Context, token *Token, newSecrets []ExternalSecret) error {
+	token.ExternalSecrets = newSecrets
+	storeCopy := *token
+
+	// Encrypt external secrets
+	encryptedExternalSecrets := make([]ExternalSecret, len(storeCopy.ExternalSecrets))
+	for i, es := range storeCopy.ExternalSecrets {
+		encryptedToken, err := ts.enc.Encrypt([]byte(es.Token))
+		if err != nil {
+			return fmt.Errorf("failed to encrypt token secret: %w", err)
+		}
+		var encryptedRefreshToken string
+		if es.RefreshToken != "" {
+			encryptedRefreshToken, err = ts.enc.Encrypt([]byte(es.RefreshToken))
+			if err != nil {
+				return fmt.Errorf("failed to encrypt refresh token secret: %w", err)
+			}
+		}
+		encryptedExternalSecrets[i] = ExternalSecret{
+			Token:        encryptedToken,
+			RefreshToken: encryptedRefreshToken,
+			SecurityKeys: es.SecurityKeys,
+			ExpiresAt:    es.ExpiresAt,
+		}
+	}
+	storeCopy.ExternalSecrets = encryptedExternalSecrets
+
+	// The token's AccessToken is already hashed from getToken, so we can store directly
+	if err := ts.tokenStorage.Store(ctx, storeCopy); err != nil {
+		return fmt.Errorf("failed to store updated token: %w", err)
+	}
+	return nil
+}
+
 func (ts *TokenService) storeToken(ctx context.Context, token Token) error {
 	encryptedExternalSecrets := make([]ExternalSecret, len(token.ExternalSecrets))
 	for i, externalSecret := range token.ExternalSecrets {
@@ -269,8 +310,16 @@ func (ts *TokenService) storeToken(ctx context.Context, token Token) error {
 		if err != nil {
 			return fmt.Errorf("failed to encrypt token secret: %w", err)
 		}
+		var encryptedRefreshToken string
+		if externalSecret.RefreshToken != "" {
+			encryptedRefreshToken, err = ts.enc.Encrypt([]byte(externalSecret.RefreshToken))
+			if err != nil {
+				return fmt.Errorf("failed to encrypt refresh token secret: %w", err)
+			}
+		}
 		encryptedExternalSecrets[i] = ExternalSecret{
 			Token:        encryptedTokenSecret,
+			RefreshToken: encryptedRefreshToken,
 			SecurityKeys: externalSecret.SecurityKeys,
 			ExpiresAt:    externalSecret.ExpiresAt,
 		}
@@ -313,6 +362,13 @@ func (ts *TokenService) getToken(ctx context.Context, toolsetId uuid.UUID, acces
 			return nil, fmt.Errorf("failed to decrypt token secret: %w", err)
 		}
 		token.ExternalSecrets[i].Token = decryptedTokenSecret
+		if externalSecret.RefreshToken != "" {
+			decryptedRefreshToken, err := ts.enc.Decrypt(externalSecret.RefreshToken)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt refresh token secret: %w", err)
+			}
+			token.ExternalSecrets[i].RefreshToken = decryptedRefreshToken
+		}
 	}
 
 	return &token, nil

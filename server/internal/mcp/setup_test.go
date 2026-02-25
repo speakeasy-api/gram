@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/url"
@@ -29,8 +30,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var (
@@ -156,6 +159,10 @@ func (m *mockOAuthService) ValidateAccessToken(ctx context.Context, toolsetId uu
 		return m.validateFunc(ctx, toolsetId, accessToken)
 	}
 	return nil, oauth.ErrInvalidAccessToken
+}
+
+func (m *mockOAuthService) RefreshProxyToken(_ context.Context, _ uuid.UUID, _ *oauth.Token, _ *oauth_repo.OauthProxyProvider, _ *toolsets_repo.Toolset) (*oauth.Token, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
 // newTestMCPServiceWithOAuth creates a test MCP service with a custom OAuth service
