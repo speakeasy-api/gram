@@ -610,14 +610,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	eventProperties["chat_id"] = chatIDHeader
 
 	respCaptor := w
-	isFirstMessage := true
 
 	if chatIDHeader != "" {
-		chatResult, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata)
-		if err != nil {
+		if _, err := s.startOrResumeChat(ctx, orgID, *authCtx.ProjectID, userID, authCtx.ExternalUserID, chatIDHeader, chatRequest, metadata); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start or resume chat").Log(ctx, s.logger)
 		}
-		isFirstMessage = chatResult.IsFirstMessage
 	}
 
 	chatID := uuid.Nil
@@ -656,7 +653,6 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			TotalTokens:      0,
 		},
 		usageSet:               false,
-		isFirstMessage:         isFirstMessage,
 		chatTitleGenerator:     s.chatTitleGenerator,
 		chatResolutionAnalyzer: s.chatResolutionAnalyzer,
 		// GenAI telemetry fields
@@ -930,8 +926,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 
 // startOrResumeChatResult contains the result of starting or resuming a chat.
 type startOrResumeChatResult struct {
-	ChatID         uuid.UUID
-	IsFirstMessage bool // True if this is the first assistant response for this chat
+	ChatID uuid.UUID
 }
 
 func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID uuid.UUID, userID string, externalUserID string, chatIDHeader string, request openrouter.OpenAIChatRequest, metadata httpMetadata) (*startOrResumeChatResult, error) {
@@ -999,12 +994,8 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 		}
 	}
 
-	// This is the first message if there are no existing messages in the chat
-	isFirstMessage := chatCount == 0
-
 	return &startOrResumeChatResult{
-		ChatID:         chatID,
-		IsFirstMessage: isFirstMessage,
+		ChatID: chatID,
 	}, nil
 }
 
@@ -1030,8 +1021,6 @@ type responseCaptor struct {
 	toolCallID           string
 	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
 	usage                openrouter.Usage
-	// Title generation
-	isFirstMessage         bool
 	chatTitleGenerator     ChatTitleGenerator
 	chatResolutionAnalyzer ChatResolutionAnalyzer
 	// GenAI telemetry
@@ -1137,7 +1126,7 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 		r.messageWritten = true
 
 		// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
-		if r.isFirstMessage && r.chatTitleGenerator != nil {
+		if r.chatTitleGenerator != nil {
 			if err := r.chatTitleGenerator.ScheduleChatTitleGeneration(
 				context.WithoutCancel(r.ctx),
 				r.chatID.String(),
