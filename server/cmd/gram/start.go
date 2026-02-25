@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -594,6 +595,23 @@ func newStartCommand() *cli.Command {
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
+
+			// Create message capture strategy for chat messages
+			messageCaptureStrategy := chat.NewChatMessageCaptureStrategy(
+				logger,
+				db,
+				chatrepo.New(db),
+				assetStorage,
+			)
+
+			// Create usage tracking strategy with fallback support
+			usageTrackingStrategy := openrouter.NewDefaultUsageTrackingStrategy(
+				logger,
+				openRouter,
+				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
+			)
+
+			// Keep old ChatClient for backwards compatibility (e.g., RAG service)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
@@ -611,22 +629,29 @@ func newStartCommand() *cli.Command {
 
 			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
 
+			// Create UnifiedClient with strategies (after telemSvc is available)
+			unifiedClient := openrouter.NewUnifiedClient(
+				logger,
+				openRouter,
+				messageCaptureStrategy,
+				usageTrackingStrategy,
+				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
+				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
+				telemSvc,
+			)
+
 			chatClient := chat.NewChatClient(
 				logger,
 				tracerProvider,
 				meterProvider,
 				db,
 				openRouter,
-				baseChatClient,
+				unifiedClient,
 				env,
 				encryptionClient,
 				cache.NewRedisCacheAdapter(redisClient),
 				guardianPolicy,
 				functionsOrchestrator,
-				assetStorage,
-				telemSvc,
-				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
-				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 			)
 
 			mux := goahttp.NewMuxer()
@@ -672,7 +697,7 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, telemSvc, productFeatures, ragService, temporalEnv), mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, &background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv}, posthogClient, telemSvc, assetStorage))
+			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, unifiedClient, posthogClient, telemSvc, assetStorage))
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}))
 			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))

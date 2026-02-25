@@ -99,6 +99,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 	}
 
 	chatResponse, err := s.chatClient.AgentChat(ctx, authInfo.OrganizationID, authInfo.ProjectID, input.Prompt, chat.AgentChatOptions{
+		UsageSource:     billing.ModelUsageSourceSlack,
 		SystemPrompt:    &systemPrompt,
 		ToolsetSlug:     &input.ToolsetSlug,
 		AdditionalTools: []chat.AgentTool{currentDatetimeTool},
@@ -108,7 +109,6 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 		AgentTimeout: &slackChatCompletionTimeout,
 		Temperature:  nil,
 		Model:        "",
-		Source:       billing.ModelUsageSourceSlack,
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))
@@ -131,7 +131,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 			AddedEnvironmentEntries: map[string]string{},
 			Temperature:             nil,
 			Model:                   "",
-			Source:                  billing.ModelUsageSourceSlack,
+			UsageSource:             "",
 		})
 		if err != nil {
 			s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))

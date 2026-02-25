@@ -38,14 +38,14 @@ import (
 )
 
 type ChatClient struct {
-	logger       *slog.Logger
-	openRouter   openrouter.Provisioner
-	chatClient   *openrouter.ChatClient
-	db           *pgxpool.Pool
-	env          *environments.EnvironmentEntries
-	cache        cache.Cache
-	toolProxy    *gateway.ToolProxy
-	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
+	logger           *slog.Logger
+	openRouter       openrouter.Provisioner
+	completionClient openrouter.CompletionClient
+	db               *pgxpool.Pool
+	env              *environments.EnvironmentEntries
+	cache            cache.Cache
+	toolProxy        *gateway.ToolProxy
+	toolsetCache     cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
 func NewChatClient(logger *slog.Logger,
@@ -53,7 +53,7 @@ func NewChatClient(logger *slog.Logger,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	openRouter openrouter.Provisioner,
-	chatClient *openrouter.ChatClient,
+	completionClient openrouter.CompletionClient,
 	env *environments.EnvironmentEntries,
 	enc *encryption.Client,
 	cacheImpl cache.Cache,
@@ -61,12 +61,12 @@ func NewChatClient(logger *slog.Logger,
 	funcCaller functions.ToolCaller,
 ) *ChatClient {
 	return &ChatClient{
-		logger:     logger,
-		openRouter: openRouter,
-		chatClient: chatClient,
-		db:         db,
-		env:        env,
-		cache:      cacheImpl,
+		logger:           logger,
+		openRouter:       openRouter,
+		completionClient: completionClient,
+		db:               db,
+		env:              env,
+		cache:            cacheImpl,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -94,6 +94,7 @@ type AgentChatOptions struct {
 	AgentTimeout            *time.Duration
 	Temperature             *float64
 	Model                   string
+	UsageSource             billing.ModelUsageSource
 }
 
 // AgentChat loops over tool calls until completion and returns the final message.
@@ -144,21 +145,48 @@ func (c *ChatClient) AgentChat(
 		}
 	}
 
+	// Generate a chat ID so that the messages get stored
+	// TODO: slack -- support "resuming" a conversation
+	chatID := uuid.New()
+
 	for {
-		msg, err := c.chatClient.GetCompletionFromMessages(ctx, orgID, projectID.String(), messages, toolDefs, opts.Temperature, opts.Model, billing.ModelUsageSourceAgents)
+		// Build completion request
+		completionReq := openrouter.CompletionRequest{
+			OrgID:          orgID,
+			ProjectID:      projectID.String(),
+			Messages:       messages,
+			Tools:          toolDefs,
+			Temperature:    opts.Temperature,
+			Model:          opts.Model,
+			Stream:         false,
+			UsageSource:    billing.ModelUsageSourceAgents,
+			ChatID:         chatID,
+			UserID:         "",
+			ExternalUserID: "",
+			HTTPMetadata:   nil,
+			APIKeyID:       "",
+			JSONSchema:     nil,
+		}
+
+		if opts.UsageSource != "" {
+			completionReq.UsageSource = opts.UsageSource
+		}
+
+		// Get completion via UnifiedClient
+		response, err := c.completionClient.GetCompletion(ctx, completionReq)
 		if err != nil {
 			return "", fmt.Errorf("failed to get completion: %w", err)
 		}
 
-		messages = append(messages, *msg)
+		messages = append(messages, *response.Message)
 
 		// No tool calls = final assistant message
-		if msg.Type != or.MessageTypeAssistant {
-			return openrouter.GetText(*msg), nil
+		if response.Message.Type == or.MessageTypeAssistant {
+			return openrouter.GetText(*response.Message), nil
 		}
 
 		// Tool call loop
-		for _, tc := range msg.AssistantMessage.ToolCalls {
+		for _, tc := range response.Message.AssistantMessage.ToolCalls {
 			c.logger.InfoContext(ctx, "Tool called", attr.SlogToolName(tc.Function.Name))
 
 			var output string

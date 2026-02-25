@@ -144,7 +144,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		returnURL = s.cfg.SignInRedirectURL
 	}
 
-	initialRedirectURI := fmt.Sprintf("%s/rpc/slack.callback", "https://recent-patrica-unmonastically.ngrok-free.dev") //s.cfg.GramServerURL)
+	initialRedirectURI := fmt.Sprintf("%s/rpc/slack.callback", "https://recent-patrica-unmonastically.ngrok-free.dev") // s.cfg.GramServerURL)
 
 	response, err := s.client.OAuthV2Access(ctx, payload.Code, initialRedirectURI)
 	if err != nil {
@@ -184,7 +184,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
-	redirectURI := fmt.Sprintf("%s/rpc/slack.callback", "https://recent-patrica-unmonastically.ngrok-free.dev") //s.cfg.GramServerURL)
+	redirectURI := fmt.Sprintf("%s/rpc/slack.callback", "https://recent-patrica-unmonastically.ngrok-free.dev") // s.cfg.GramServerURL)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -211,7 +211,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	query.Set("state", state.Encode())
 	installURL.RawQuery = query.Encode()
 
-	s.logger.InfoContext(ctx, "generated slack oauth url", slog.String("url", installURL.String()), slog.String("state", state.Encode()))
+	s.logger.InfoContext(ctx, "generated slack oauth url", attr.SlogURL(installURL.String()), slog.String("state", state.Encode()))
 
 	return &gen.LoginResult{
 		Location: installURL.String(),
@@ -293,7 +293,7 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 
 	if err := validateSlackEvent(r, s.cfg.SlackSigningSecret); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "request payload failed validation: "+err.Error()).Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, err, "request payload failed validation").Log(ctx, s.logger)
 	}
 
 	var event types.SlackEvent

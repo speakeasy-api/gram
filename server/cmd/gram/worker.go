@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -410,7 +411,24 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 
+			// Create message capture strategy for chat messages
+			messageCaptureStrategy := chat.NewChatMessageCaptureStrategy(
+				logger,
+				db,
+				chatrepo.New(db),
+				assetStorage,
+			)
+
+			// Create usage tracking strategy with fallback support
+			usageTrackingStrategy := openrouter.NewDefaultUsageTrackingStrategy(
+				logger,
+				openRouter,
+				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
+			)
+
+			// Keep old ChatClient for backwards compatibility (e.g., RAG service)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
+
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
@@ -433,22 +451,29 @@ func newWorkerCommand() *cli.Command {
 
 			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
 
+			// Create UnifiedClient with strategies (after telemetryService is available)
+			unifiedClient := openrouter.NewUnifiedClient(
+				logger,
+				openRouter,
+				messageCaptureStrategy,
+				usageTrackingStrategy,
+				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
+				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
+				telemetryService,
+			)
+
 			chatClient := chat.NewChatClient(
 				logger,
 				tracerProvider,
 				meterProvider,
 				db,
 				openRouter,
-				baseChatClient,
+				unifiedClient,
 				env,
 				encryptionClient,
 				cache.NewRedisCacheAdapter(redisClient),
 				guardianPolicy,
 				functionsOrchestrator,
-				assetStorage,
-				telemetryService,
-				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
-				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 			)
 
 			// Create agents service for the worker
