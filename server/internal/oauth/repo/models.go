@@ -35,6 +35,23 @@ type ExternalOauthServerMetadatum struct {
 	Deleted   bool
 }
 
+type OauthChallenge struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	UserID            string
+	ToolsetID         uuid.UUID
+	OauthServerIssuer string
+	ProviderName      pgtype.Text
+	Status            string
+	ErrorCode         pgtype.Text
+	ErrorDescription  pgtype.Text
+	InitiatedAt       pgtype.Timestamptz
+	CompletedAt       pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
 type OauthProxyProvider struct {
 	ID                                uuid.UUID
 	ProjectID                         uuid.UUID
@@ -86,21 +103,4 @@ type UserOauthToken struct {
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
-}
-
-type OauthChallenge struct {
-	ID                uuid.UUID
-	OrganizationID    string
-	ProjectID         uuid.UUID
-	UserID            string
-	ToolsetID         uuid.UUID
-	OauthServerIssuer string
-	ProviderName      pgtype.Text
-	Status            string
-	ErrorCode         pgtype.Text
-	ErrorDescription  pgtype.Text
-	InitiatedAt       pgtype.Timestamptz
-	CompletedAt       pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
 }
