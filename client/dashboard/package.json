@@ -8,7 +8,6 @@
     "build": "vite build",
     "lint": "prettier --check . && eslint . && tsc -b --noEmit",
     "preview": "vite preview",
-    "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
     "analyze-bundle": "pnpm dlx vite-bundle-visualizer",
