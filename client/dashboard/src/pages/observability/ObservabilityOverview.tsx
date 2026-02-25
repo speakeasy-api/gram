@@ -1288,7 +1288,7 @@ function ObservabilityContent({
                 </div>
                 <div className="rounded-lg border border-border bg-card p-6">
                   <h3 className="text-sm font-semibold mb-4">
-                    Tools by Failure Rate
+                    Failure Distribution by Tool
                   </h3>
                   <ToolBarList
                     tools={topToolsByFailureRate ?? []}
