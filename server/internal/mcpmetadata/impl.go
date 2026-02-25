@@ -3,8 +3,10 @@ package mcpmetadata
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,6 +62,10 @@ type Service struct {
 	serverURL    *url.URL
 	siteURL      *url.URL
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
+
+	// Hosted install page script (embedded and served with cache-busting hash)
+	installPageScriptHash string
+	installPageScriptData []byte
 }
 
 //go:embed config_snippet.json.tmpl
@@ -67,6 +73,9 @@ var configSnippetTmplData string
 
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
+
+//go:embed hosted_page.js
+var hostedPageScriptData []byte
 
 type securityMode string
 
@@ -109,6 +118,7 @@ type hostedPageData struct {
 	VSCodeInstallLink template.URL
 	OrganizationName  string
 	SiteURL           string
+	ScriptURL         string
 	LogoAssetURL      string
 	DocsURL           string
 	DocsText          string
@@ -122,6 +132,10 @@ var _ gen.Auther = (*Service)(nil)
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache) *Service {
 	logger = logger.With(attr.SlogComponent("mcp_install_page"))
 
+	// Calculate content hash for install page script (for cache busting)
+	scriptHash := sha256.Sum256(hostedPageScriptData)
+	scriptHashStr := hex.EncodeToString(scriptHash[:])[:8]
+
 	return &Service{
 		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/mcpinstallpage"),
 		logger:       logger,
@@ -134,6 +148,9 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		serverURL:    serverURL,
 		siteURL:      siteURL,
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+
+		installPageScriptHash: scriptHashStr,
+		installPageScriptData: hostedPageScriptData,
 	}
 }
 
@@ -766,6 +783,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		VSCodeInstallLink: safeVsCodeURL,
 		OrganizationName:  organization.Name,
 		SiteURL:           s.siteURL.String(),
+		ScriptURL:         s.serverURL.String() + "/mcp/install-page-" + s.installPageScriptHash + ".js",
 		LogoAssetURL:      logoAssetURL,
 		DocsURL:           docsURL,
 		DocsText:          docsText,
@@ -789,6 +807,35 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	_, writeErr := w.Write(buf.Bytes())
 	if writeErr != nil {
 		s.logger.ErrorContext(ctx, "failed to write response body", attr.SlogError(writeErr))
+	}
+
+	return nil
+}
+
+// InstallPageScriptHash returns the cache-busting hash for the install page script.
+func (s *Service) InstallPageScriptHash() string {
+	return s.installPageScriptHash
+}
+
+// ServeInstallPageScript serves the hosted install page JavaScript with immutable cache headers.
+func (s *Service) ServeInstallPageScript(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return r.Body.Close()
+	})
+
+	hash := chi.URLParam(r, "hash")
+	if hash != s.installPageScriptHash {
+		w.WriteHeader(http.StatusNotFound)
+		return nil
+	}
+
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := w.Write(s.installPageScriptData); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write script response").Log(ctx, s.logger)
 	}
 
 	return nil
