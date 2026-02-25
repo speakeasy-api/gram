@@ -259,8 +259,10 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 	}
 
 	// Exclude chat completion logs (urn:uuid:...) which are not tool calls.
-	// The MV now filters these at insert time, but this is kept as a safety net
-	// for historical data inserted before the MV was updated.
+	// The trace_summaries_mv filters these at insert time via a WHERE clause,
+	// so for new data any(gram_urn) will never pick a urn:uuid: value.
+	// This HAVING clause is kept as a safety net for historical data that may
+	// have been inserted before the MV was updated to exclude these URNs.
 	sb = sb.Having("position(gram_urn, 'urn:uuid:') != 1")
 
 	sb = sb.GroupBy("trace_id")
