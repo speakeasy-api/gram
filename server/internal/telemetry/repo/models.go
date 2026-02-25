@@ -222,3 +222,26 @@ type FilterOption struct {
 	Label string `ch:"label"` // Display label (may be same as ID or a friendly name)
 	Count uint64 `ch:"count"` // Number of events for this option
 }
+
+// OAuthChallenge represents an OAuth authorization challenge for billing/analytics.
+type OAuthChallenge struct {
+	ID                string  `ch:"id"`
+	OrganizationID    string  `ch:"organization_id"`
+	ProjectID         string  `ch:"project_id"`
+	UserID            string  `ch:"user_id"`
+	ToolsetID         string  `ch:"toolset_id"`
+	OAuthServerIssuer string  `ch:"oauth_server_issuer"`
+	ProviderName      string  `ch:"provider_name"`
+	Status            string  `ch:"status"`
+	ErrorCode         *string `ch:"error_code"`
+	ErrorDescription  *string `ch:"error_description"`
+	InitiatedAt       int64   `ch:"initiated_at"` // Unix timestamp
+	CompletedAt       *int64  `ch:"completed_at"` // Unix timestamp, nullable
+}
+
+// OAuthChallengeCount represents aggregated challenge counts for an organization.
+type OAuthChallengeCount struct {
+	TotalChallenges     uint64 `ch:"total_challenges"`
+	CompletedChallenges uint64 `ch:"completed_challenges"`
+	FailedChallenges    uint64 `ch:"failed_challenges"`
+}
