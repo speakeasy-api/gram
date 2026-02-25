@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
-	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -423,33 +422,19 @@ func newWorkerCommand() *cli.Command {
 
 			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
 
-			// Create message capture strategy for chat messages
-			messageCaptureStrategy := chat.NewChatMessageCaptureStrategy(
+			chatClient := chat.NewChatClient(
 				logger,
 				db,
-				chatrepo.New(db),
+				openRouter,
+				temporalEnv,
+				telemetryService,
 				assetStorage,
-			)
-
-			// Create usage tracking strategy with fallback support
-			usageTrackingStrategy := openrouter.NewDefaultUsageTrackingStrategy(
-				logger,
-				openRouter,
 				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
-			)
-
-			// Create UnifiedClient with strategies (after telemetryService is available)
-			unifiedClient := openrouter.NewUnifiedClient(
-				logger,
-				openRouter,
-				messageCaptureStrategy,
-				usageTrackingStrategy,
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
-				telemetryService,
 			)
 
-			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, unifiedClient)
+			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, chatClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
@@ -458,20 +443,6 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
-
-			chatClient := chat.NewChatClient(
-				logger,
-				tracerProvider,
-				meterProvider,
-				db,
-				openRouter,
-				unifiedClient,
-				env,
-				encryptionClient,
-				cache.NewRedisCacheAdapter(redisClient),
-				guardianPolicy,
-				functionsOrchestrator,
-			)
 
 			// Create agents service for the worker
 			agentsService := agents.NewService(
@@ -485,30 +456,30 @@ func newWorkerCommand() *cli.Command {
 				guardianPolicy,
 				functionsOrchestrator,
 				openRouter,
-				unifiedClient,
+				chatClient,
 			)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				DB:                   db,
-				EncryptionClient:     encryptionClient,
-				FeatureProvider:      featureFlags,
-				AssetStorage:         assetStorage,
-				SlackClient:          slackClient,
-				ChatClient:           chatClient,
-				OpenRouterChatClient: unifiedClient,
-				OpenRouter:           openRouter,
-				K8sClient:            k8sClient,
-				ExpectedTargetCNAME:  c.String("custom-domain-cname"),
-				BillingTracker:       billingTracker,
-				BillingRepository:    billingRepo,
-				RedisClient:          redisClient,
-				PosthogClient:        posthogClient,
-				FunctionsDeployer:    functionsOrchestrator,
-				FunctionsVersion:     runnerVersion,
-				RagService:           ragService,
-				AgentsService:        agentsService,
-				MCPRegistryClient:    mcpRegistryClient,
-				TelemetryService:     telemetryService,
+				DB:                  db,
+				EncryptionClient:    encryptionClient,
+				FeatureProvider:     featureFlags,
+				AssetStorage:        assetStorage,
+				SlackClient:         slackClient,
+				AgenticChatClient:   chatClient,
+				ChatClient:          chatClient,
+				OpenRouter:          openRouter,
+				K8sClient:           k8sClient,
+				ExpectedTargetCNAME: c.String("custom-domain-cname"),
+				BillingTracker:      billingTracker,
+				BillingRepository:   billingRepo,
+				RedisClient:         redisClient,
+				PosthogClient:       posthogClient,
+				FunctionsDeployer:   functionsOrchestrator,
+				FunctionsVersion:    runnerVersion,
+				RagService:          ragService,
+				AgentsService:       agentsService,
+				MCPRegistryClient:   mcpRegistryClient,
+				TelemetryService:    telemetryService,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

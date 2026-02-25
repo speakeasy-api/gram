@@ -71,7 +71,7 @@ func NewActivities(
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
-	chatClient *chat.ChatClient,
+	chatClient *chat.AgenticChatClient,
 	openrouterProvisioner openrouter.Provisioner,
 	openrouterChatClient *openrouter.ChatClient,
 	k8sClient *k8s.KubernetesClients,

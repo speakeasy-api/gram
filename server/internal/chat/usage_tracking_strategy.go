@@ -1,4 +1,4 @@
-package openrouter
+package chat
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 // FallbackModelUsageTracker schedules fallback model usage tracking when inline tracking fails.
@@ -19,14 +20,14 @@ type FallbackModelUsageTracker interface {
 // It tries to track usage immediately, and schedules a fallback if the initial attempt fails.
 type DefaultUsageTrackingStrategy struct {
 	logger          *slog.Logger
-	provisioner     Provisioner
+	provisioner     openrouter.Provisioner
 	fallbackTracker FallbackModelUsageTracker
 }
 
 // NewDefaultUsageTrackingStrategy creates a new DefaultUsageTrackingStrategy.
 func NewDefaultUsageTrackingStrategy(
 	logger *slog.Logger,
-	provisioner Provisioner,
+	provisioner openrouter.Provisioner,
 	fallbackTracker FallbackModelUsageTracker,
 ) *DefaultUsageTrackingStrategy {
 	return &DefaultUsageTrackingStrategy{
@@ -47,7 +48,7 @@ func (s *DefaultUsageTrackingStrategy) TrackUsage(
 	err := s.provisioner.TriggerModelUsageTracking(ctx, generationID, orgID, projectID, source, chatID)
 	if err != nil {
 		// Check if generation not found (404)
-		if errors.Is(err, ErrGenerationNotFound) {
+		if errors.Is(err, openrouter.ErrGenerationNotFound) {
 			s.logger.WarnContext(ctx, "generation not found, scheduling fallback tracking",
 				attr.SlogError(err),
 				attr.SlogOrganizationID(orgID),
