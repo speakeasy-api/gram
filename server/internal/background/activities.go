@@ -86,10 +86,12 @@ func NewActivities(
 	temporalClient client.Client,
 	telemetryService *telemetry.Service,
 ) *Activities {
+	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
+
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
 		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
-		fallbackModelUsageTracking:    activities.NewFallbackModelUsageTracking(logger, openrouterProvisioner),
+		fallbackModelUsageTracking:    activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		firePlatformUsageMetrics:      activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		freeTierReportingUsageMetrics: activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
 		generateChatTitle:             activities.NewGenerateChatTitle(logger, db, chatClient),

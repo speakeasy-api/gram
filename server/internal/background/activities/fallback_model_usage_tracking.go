@@ -2,22 +2,18 @@ package activities
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 type FallbackModelUsageTracking struct {
-	openRouter openrouter.Provisioner
-	logger     *slog.Logger
+	usageTracker openrouter.UsageTrackingStrategy
 }
 
-func NewFallbackModelUsageTracking(logger *slog.Logger, openrouter openrouter.Provisioner) *FallbackModelUsageTracking {
+func NewFallbackModelUsageTracking(usageTracker openrouter.UsageTrackingStrategy) *FallbackModelUsageTracking {
 	return &FallbackModelUsageTracking{
-		openRouter: openrouter,
-		logger:     logger,
+		usageTracker: usageTracker,
 	}
 }
 
@@ -30,8 +26,5 @@ type FallbackModelUsageTrackingArgs struct {
 }
 
 func (f *FallbackModelUsageTracking) Do(ctx context.Context, args FallbackModelUsageTrackingArgs) error {
-	if err := f.openRouter.TriggerModelUsageTracking(ctx, args.GenerationID, args.OrgID, args.ProjectID, args.Source, args.ChatID); err != nil {
-		return fmt.Errorf("model usage tracking failed: %w", err)
-	}
-	return nil
+	return f.usageTracker.TrackUsage(ctx, args.GenerationID, args.OrgID, args.ProjectID, args.Source, args.ChatID)
 }

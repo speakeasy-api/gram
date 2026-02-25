@@ -614,6 +614,7 @@ func newStartCommand() *cli.Command {
 				temporalEnv,
 				telemSvc,
 				assetStorage,
+				billingTracker,
 				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},

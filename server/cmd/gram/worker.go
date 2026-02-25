@@ -436,6 +436,7 @@ func newWorkerCommand() *cli.Command {
 				temporalEnv,
 				telemetryService,
 				assetStorage,
+				billingTracker,
 				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},

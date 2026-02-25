@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -21,19 +23,29 @@ type FallbackModelUsageTracker interface {
 type DefaultUsageTrackingStrategy struct {
 	logger          *slog.Logger
 	provisioner     openrouter.Provisioner
+	tracking        billing.Tracker
 	fallbackTracker FallbackModelUsageTracker
+	orgRepo         *orgRepo.Queries
 }
+
+var _ openrouter.UsageTrackingStrategy = (*DefaultUsageTrackingStrategy)(nil)
 
 // NewDefaultUsageTrackingStrategy creates a new DefaultUsageTrackingStrategy.
 func NewDefaultUsageTrackingStrategy(
+	db *pgxpool.Pool,
 	logger *slog.Logger,
 	provisioner openrouter.Provisioner,
+	tracking billing.Tracker,
 	fallbackTracker FallbackModelUsageTracker,
 ) *DefaultUsageTrackingStrategy {
+	orgRepo := orgRepo.New(db)
+
 	return &DefaultUsageTrackingStrategy{
 		logger:          logger,
 		provisioner:     provisioner,
+		tracking:        tracking,
 		fallbackTracker: fallbackTracker,
+		orgRepo:         orgRepo,
 	}
 }
 
@@ -44,8 +56,7 @@ func (s *DefaultUsageTrackingStrategy) TrackUsage(
 	source billing.ModelUsageSource,
 	chatID string,
 ) error {
-	// Try to track usage via TriggerModelUsageTracking
-	err := s.provisioner.TriggerModelUsageTracking(ctx, generationID, orgID, projectID, source, chatID)
+	usage, err := s.provisioner.GetModelUsage(ctx, generationID, orgID)
 	if err != nil {
 		// Check if generation not found (404)
 		if errors.Is(err, openrouter.ErrGenerationNotFound) {
@@ -80,6 +91,30 @@ func (s *DefaultUsageTrackingStrategy) TrackUsage(
 			return fmt.Errorf("track model usage: %w", err)
 		}
 	}
+
+	org, err := s.orgRepo.GetOrganizationMetadata(ctx, orgID)
+	if err != nil {
+		return fmt.Errorf("get organization: %w", err)
+	}
+
+	event := billing.ModelUsageEvent{
+		OrganizationSlug:      org.Slug,
+		OrganizationID:        orgID,
+		ProjectID:             projectID,
+		Source:                source,
+		ChatID:                chatID,
+		Model:                 usage.Model,
+		InputTokens:           int64(usage.TokensPrompt),
+		OutputTokens:          int64(usage.TokensCompletion),
+		TotalTokens:           int64(usage.TokensPrompt + usage.TokensCompletion),
+		Cost:                  usage.TotalCost,
+		NativeTokensCached:    int64(usage.NativeTokensCached),
+		NativeTokensReasoning: int64(usage.NativeTokensReasoning),
+		CacheDiscount:         usage.CacheDiscount,
+		UpstreamInferenceCost: usage.UpstreamInferenceCost,
+	}
+
+	s.tracking.TrackModelUsage(ctx, event)
 
 	return nil
 }
