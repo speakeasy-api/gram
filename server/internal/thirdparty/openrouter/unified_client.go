@@ -78,12 +78,16 @@ func NewUnifiedClient(
 }
 
 type initializeRequestResult struct {
-	apiKey         string
-	requestBody    OpenAIChatRequest
+	apiKey      string
+	requestBody OpenAIChatRequest
 }
 
 // initializeRequest creates the OpenAI-compatible request body with defaults applied.
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
+	if err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req); err != nil {
+		return nil, fmt.Errorf("failed to start or resume chat: %w", err)
+	}
+
 	// Provision API key
 	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID)
 	if err != nil {
@@ -125,8 +129,8 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	}
 
 	return &initializeRequestResult{
-		apiKey:         apiKey,
-		requestBody:    reqBody,
+		apiKey:      apiKey,
+		requestBody: reqBody,
 	}, nil
 }
 
@@ -197,7 +201,7 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, req CompletionReques
 		return
 	}
 
-	// Schedule chat title generation	
+	// Schedule chat title generation
 	// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
 	if c.chatTitleGenerator != nil {
 		if err := c.chatTitleGenerator.ScheduleChatTitleGeneration(
@@ -222,10 +226,25 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, req CompletionReques
 			c.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
 		}
 	}
+
+	// Emit telemetry
+	c.emitGenAITelemetry(
+		ctx,
+		response.ToolCalls,
+		req.OrgID,
+		req.ProjectID,
+		req.ChatID.String(),
+		req.UserID,
+		req.ExternalUserID,
+		req.APIKeyID,
+		response,
+	)
 }
 
 // GetCompletion makes a non-streaming completion request to OpenRouter and applies capture/tracking strategies.
 func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
+	start := time.Now()
+
 	// Provision API key
 	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID)
 	if err != nil {
@@ -303,6 +322,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	content := GetText(message)
 
 	response := &CompletionResponse{
+		StartTime:    start,
 		Message:      &message,
 		MessageID:    chatResp.ID,
 		Model:        chatResp.Model,
@@ -347,25 +367,22 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 
 	// Wrap the response body with SSE parser that accumulates metadata
 	streamReader := &streamingResponseReader{
-		ctx:                    ctx,
-		body:                   httpResp.Body,
-		request:                req,
-		logger:                 c.logger,
-		messageCaptureStrategy: c.messageCaptureStrategy,
-		usageTrackingStrategy:  c.usageTrackingStrategy,
-		chatTitleGenerator:     c.chatTitleGenerator,
-		chatResolutionAnalyzer: c.chatResolutionAnalyzer,
-		telemetryService:       c.telemetryService,
-		lineBuf:                &strings.Builder{},
-		messageContent:         &strings.Builder{},
-		accumulatedToolCalls:   make(map[int]ToolCall),
-		messageID:              "",
-		model:                  "",
-		finishReason:           nil,
-		usage:                  Usage{},
-		usageSet:               false,
-		isDone:                 false,
-		startTime:              time.Now(),
+		ctx:                  ctx,
+		body:                 httpResp.Body,
+		request:              req,
+		logger:               c.logger,
+		client:               c,
+		telemetryService:     c.telemetryService,
+		lineBuf:              &strings.Builder{},
+		messageContent:       &strings.Builder{},
+		accumulatedToolCalls: make(map[int]ToolCall),
+		startTime:            time.Now(),
+		messageID:            "",
+		model:                "",
+		finishReason:         nil,
+		usage:                Usage{},
+		usageSet:             false,
+		isDone:               false,
 	}
 
 	return streamReader, nil
@@ -411,27 +428,25 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 // streamingResponseReader wraps an HTTP response body and parses SSE chunks as they stream through.
 // It implements io.ReadCloser and automatically triggers capture/tracking when closed.
 type streamingResponseReader struct {
-	ctx                    context.Context //nolint:containedctx // Context needed for telemetry and async operations
-	body                   io.ReadCloser
-	request                CompletionRequest
-	logger                 *slog.Logger
-	messageCaptureStrategy MessageCaptureStrategy
-	usageTrackingStrategy  UsageTrackingStrategy
-	chatTitleGenerator     ChatTitleGenerator
-	chatResolutionAnalyzer ChatResolutionAnalyzer
-	telemetryService       TelemetryService
+	ctx              context.Context //nolint:containedctx // Context needed for telemetry and async operations
+	body             io.ReadCloser
+	request          CompletionRequest
+	logger           *slog.Logger
+	client           *ChatClient
+	telemetryService TelemetryService
 
 	// SSE parsing state
 	lineBuf              *strings.Builder
 	messageContent       *strings.Builder
 	accumulatedToolCalls map[int]ToolCall
-	messageID            string
-	model                string
-	finishReason         *string
-	usage                Usage
-	usageSet             bool
 	isDone               bool
-	startTime            time.Time
+
+	messageID    string
+	model        string
+	finishReason *string
+	usage        Usage
+	usageSet     bool
+	startTime    time.Time
 }
 
 // Read implements io.Reader, passing data through while parsing SSE chunks.
@@ -462,6 +477,7 @@ func (r *streamingResponseReader) Close() error {
 	// If we have accumulated message data, trigger strategies
 	if r.messageID != "" {
 		response := CompletionResponse{
+			StartTime:    r.startTime,
 			Message:      nil, // Not available in streaming mode
 			MessageID:    r.messageID,
 			Model:        r.model,
@@ -476,22 +492,7 @@ func (r *streamingResponseReader) Close() error {
 			response.ToolCalls = append(response.ToolCalls, tc)
 		}
 
-		// Apply capture/tracking strategies
-		client := &ChatClient{
-			logger:                 r.logger,
-			httpClient:             nil, // Not needed for applyStrategies
-			provisioner:            nil, // Not needed for applyStrategies
-			messageCaptureStrategy: r.messageCaptureStrategy,
-			usageTrackingStrategy:  r.usageTrackingStrategy,
-			chatTitleGenerator:     nil, // Not needed for applyStrategies
-			chatResolutionAnalyzer: nil, // Not needed for applyStrategies
-			telemetryService:       nil, // Not needed for applyStrategies
-		}
-
-		client.onMessageComplete(r.ctx, r.request, response)
-
-		// Emit GenAI telemetry for observability
-		r.emitGenAITelemetry(response.ToolCalls)
+		r.client.onMessageComplete(r.ctx, r.request, response)
 	}
 
 	return err
@@ -591,13 +592,18 @@ func (r *streamingResponseReader) processSSELine(line string) {
 }
 
 // emitGenAITelemetry emits GenAI telemetry to ClickHouse for observability.
-func (r *streamingResponseReader) emitGenAITelemetry(toolCalls []ToolCall) {
+func (c *ChatClient) emitGenAITelemetry(
+	ctx context.Context,
+	toolCalls []ToolCall,
+	orgID, projectID, chatID, userID, externalUserID, apiKeyID string,
+	result CompletionResponse,
+) {
 	// Skip telemetry if no telemetry service configured
-	if r.telemetryService == nil {
+	if c.telemetryService == nil {
 		return
 	}
 
-	duration := float64(time.Since(r.startTime).Seconds())
+	duration := float64(time.Since(result.StartTime).Seconds())
 
 	// Build attributes map. Column-mapped keys are extracted to dedicated columns
 	// but remain in the attributes JSON. Resource attributes are auto-partitioned
@@ -606,39 +612,39 @@ func (r *streamingResponseReader) emitGenAITelemetry(toolCalls []ToolCall) {
 		attr.EventSourceKey: string(telemetry.EventSourceChatCompletion),
 		attr.ResourceURNKey: "agents:chat:completion",
 		attr.LogBodyKey: fmt.Sprintf("LLM chat completion: model=%s, input_tokens=%d, output_tokens=%d",
-			r.model, r.usage.PromptTokens, r.usage.CompletionTokens),
+			result.Model, result.Usage.PromptTokens, result.Usage.CompletionTokens),
 
 		// GenAI semantic convention attributes
 		attr.GenAIOperationNameKey:     telemetry.GenAIOperationChat,
-		attr.GenAIRequestModelKey:      r.model,
-		attr.GenAIResponseModelKey:     r.model,
-		attr.GenAIUsageInputTokensKey:  r.usage.PromptTokens,
-		attr.GenAIUsageOutputTokensKey: r.usage.CompletionTokens,
-		attr.GenAIUsageTotalTokensKey:  r.usage.TotalTokens,
-		attr.GenAIConversationIDKey:    r.request.ChatID.String(),
+		attr.GenAIRequestModelKey:      result.Model,
+		attr.GenAIResponseModelKey:     result.Model,
+		attr.GenAIUsageInputTokensKey:  result.Usage.PromptTokens,
+		attr.GenAIUsageOutputTokensKey: result.Usage.CompletionTokens,
+		attr.GenAIUsageTotalTokensKey:  result.Usage.TotalTokens,
+		attr.GenAIConversationIDKey:    chatID,
 		attr.GenAIConversationDuration: duration,
-		attr.APIKeyIDKey:               r.request.APIKeyID,
+		attr.APIKeyIDKey:               apiKeyID,
 	}
 
-	if r.messageID != "" {
-		attrs[attr.GenAIResponseIDKey] = r.messageID
+	if result.MessageID != "" {
+		attrs[attr.GenAIResponseIDKey] = result.MessageID
 	}
-	if r.finishReason != nil {
-		attrs[attr.GenAIResponseFinishReasonsKey] = []string{*r.finishReason}
+	if result.FinishReason != nil {
+		attrs[attr.GenAIResponseFinishReasonsKey] = []string{*result.FinishReason}
 	}
 	if len(toolCalls) > 0 {
 		toolCallsJSON, _ := json.Marshal(toolCalls)
 		attrs[attr.GenAIToolCallsKey] = string(toolCallsJSON)
 	}
-	if r.request.UserID != "" {
-		attrs[attr.UserIDKey] = r.request.UserID
+	if userID != "" {
+		attrs[attr.UserIDKey] = userID
 	}
-	if r.request.ExternalUserID != "" {
-		attrs[attr.ExternalUserIDKey] = r.request.ExternalUserID
+	if externalUserID != "" {
+		attrs[attr.ExternalUserIDKey] = externalUserID
 	}
 
 	// Extract trace context from the request context
-	spanCtx := trace.SpanContextFromContext(r.ctx)
+	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.HasTraceID() {
 		attrs[attr.TraceIDKey] = spanCtx.TraceID().String()
 	}
@@ -647,16 +653,16 @@ func (r *streamingResponseReader) emitGenAITelemetry(toolCalls []ToolCall) {
 	}
 
 	toolInfo := telemetry.ToolInfo{
-		ID:             r.request.ChatID.String(),
-		URN:            r.request.ChatID.URN(),
+		ID:             chatID,
+		URN:            chatID,
 		Name:           "",
-		ProjectID:      r.request.ProjectID,
+		ProjectID:      projectID,
 		DeploymentID:   "",
 		FunctionID:     nil,
-		OrganizationID: r.request.OrgID,
+		OrganizationID: orgID,
 	}
 
-	r.telemetryService.CreateLog(telemetry.LogParams{
+	c.telemetryService.CreateLog(telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
 		Attributes: attrs,

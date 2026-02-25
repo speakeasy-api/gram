@@ -121,6 +121,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 	response, err := g.chatClient.GetCompletion(titleCtx, openrouter.CompletionRequest{
 		OrgID:     orgID,
 		ProjectID: projectID,
+		ChatID:    uuid.Nil,
 		Messages: []or.Message{
 			openrouter.CreateMessageSystem(systemPrompt),
 			openrouter.CreateMessageUser(conversationContext),

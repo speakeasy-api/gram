@@ -42,17 +42,15 @@ func NewChatMessageCaptureStrategy(
 	}
 }
 
-// startOrResumeChatResult contains the result of starting or resuming a chat.
-type startOrResumeChatResult struct {
-	ChatID         uuid.UUID
-	IsFirstMessage bool // True if this is the first assistant response for this chat
-}
-
-func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.StartOrResumeChatResult, error) {
+func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request openrouter.CompletionRequest) error {
 	chatID := request.ChatID
+	if chatID == uuid.Nil {
+		return nil // No chat ID, so no need to start or resume a chat
+	}
+
 	projectID, err := uuid.Parse(request.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse project ID").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to parse project ID").Log(ctx, s.logger)
 	}
 	orgID := request.OrgID
 	userID := request.UserID
@@ -69,19 +67,19 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create chat")
+		return oops.E(oops.CodeUnexpected, err, "failed to create chat")
 	}
 
 	// Get the number of already-stored messages so we can insert any new ones
 	chatCount, err := s.repo.CountChatMessages(ctx, chatID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get chat history", attr.SlogError(err))
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get chat history")
+		return oops.E(oops.CodeUnexpected, err, "failed to get chat history")
 	}
 
 	// This shouldn't happen, and also it doesn't really matter if it does, but we error anyway so we can fix it
 	if int(chatCount) > len(request.Messages) {
-		return nil, oops.E(oops.CodeInvalid, nil, "chat history mismatch")
+		return oops.E(oops.CodeInvalid, nil, "chat history mismatch")
 	}
 
 	// If the stored chat history is shorter than the request, insert the missing messages
@@ -131,13 +129,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		}
 	}
 
-	// This is the first message if there are no existing messages in the chat
-	isFirstMessage := chatCount == 0
-
-	return &openrouter.StartOrResumeChatResult{
-		ChatID:         chatID,
-		IsFirstMessage: isFirstMessage,
-	}, nil
+	return nil
 }
 
 // CaptureMessage stores a completion message in the database.

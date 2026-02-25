@@ -2,6 +2,7 @@ package openrouter
 
 import (
 	"context"
+	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
@@ -69,6 +70,7 @@ type ObjectCompletionRequest struct {
 
 // CompletionResponse encapsulates the result of a completion call.
 type CompletionResponse struct {
+	StartTime    time.Time
 	Message      *or.Message
 	MessageID    string
 	Model        string
@@ -78,15 +80,10 @@ type CompletionResponse struct {
 	Content      string // Text content extracted from message
 }
 
-type StartOrResumeChatResult struct {
-	IsFirstMessage bool
-	ChatID         uuid.UUID
-}
-
 // MessageCaptureStrategy defines how to capture and persist messages.
 // Different implementations can store messages in different ways (database, logs, no-op, etc.).
 type MessageCaptureStrategy interface {
-	StartOrResumeChat(ctx context.Context, request CompletionRequest) (*StartOrResumeChatResult, error)
+	StartOrResumeChat(ctx context.Context, request CompletionRequest) error
 	CaptureMessage(ctx context.Context, request CompletionRequest, response CompletionResponse) error
 }
 

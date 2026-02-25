@@ -92,6 +92,11 @@ func (s *DefaultUsageTrackingStrategy) TrackUsage(
 		}
 	}
 
+	// This (hopefully) means we scheduled fallback tracking above
+	if usage == nil {
+		return nil
+	}
+
 	org, err := s.orgRepo.GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
 		return fmt.Errorf("get organization: %w", err)
