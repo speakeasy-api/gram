@@ -29,6 +29,10 @@ export type GetObservabilityOverviewPayload = {
    * End time in ISO 8601 format
    */
   to: Date;
+  /**
+   * Optional toolset/MCP server ID filter
+   */
+  toolsetId?: string | undefined;
 };
 
 /** @internal */
@@ -38,6 +42,7 @@ export type GetObservabilityOverviewPayload$Outbound = {
   from: string;
   include_time_series: boolean;
   to: string;
+  toolset_id?: string | undefined;
 };
 
 /** @internal */
@@ -51,11 +56,13 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodType<
   from: z.date().transform(v => v.toISOString()),
   includeTimeSeries: z.boolean().default(true),
   to: z.date().transform(v => v.toISOString()),
+  toolsetId: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     apiKeyId: "api_key_id",
     externalUserId: "external_user_id",
     includeTimeSeries: "include_time_series",
+    toolsetId: "toolset_id",
   });
 });
 

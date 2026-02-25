@@ -48,6 +48,7 @@ function PageBody({
         className={cn(
           "@container/main flex flex-col gap-4 w-full",
           noPadding ? "p-0" : "p-8",
+          !noPadding && "pb-24",
           !fullWidth && "max-w-7xl mx-auto",
           fullHeight && "h-full",
           overflowHidden && "flex-1 min-h-0",

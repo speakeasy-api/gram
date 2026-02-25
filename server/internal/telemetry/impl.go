@@ -778,6 +778,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	projectID := authCtx.ProjectID.String()
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
+	toolsetID := conv.PtrValOr(payload.ToolsetID, "")
 
 	// Auto-calculate interval based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
@@ -794,6 +795,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
+		ToolsetID:      toolsetID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
@@ -805,6 +807,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        comparisonEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
+		ToolsetID:      toolsetID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -819,6 +822,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			IntervalSeconds: intervalSeconds,
 			ExternalUserID:  externalUserID,
 			APIKeyID:        apiKeyID,
+			ToolsetID:       toolsetID,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -831,6 +835,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
+		ToolsetID:      toolsetID,
 		Limit:          10,
 		SortBy:         "count",
 	})
@@ -844,6 +849,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
+		ToolsetID:      toolsetID,
 		Limit:          10,
 		SortBy:         "failure_rate",
 	})

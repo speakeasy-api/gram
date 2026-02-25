@@ -258,6 +258,13 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		sb = sb.Having("position(gram_urn, ?) > 0", arg.GramURN)
 	}
 
+	// Exclude chat completion logs (urn:uuid:...) which are not tool calls.
+	// The trace_summaries_mv filters these at insert time via a WHERE clause,
+	// so for new data any(gram_urn) will never pick a urn:uuid: value.
+	// This HAVING clause is kept as a safety net for historical data that may
+	// have been inserted before the MV was updated to exclude these URNs.
+	sb = sb.Having("position(gram_urn, 'urn:uuid:') != 1")
+
 	sb = sb.GroupBy("trace_id")
 
 	sb = withHavingPagination(
@@ -430,6 +437,7 @@ type GetTimeSeriesMetricsParams struct {
 	IntervalSeconds int64  // Bucket interval in seconds
 	ExternalUserID  string // Optional filter
 	APIKeyID        string // Optional filter
+	ToolsetID       string // Optional filter - filters by toolset/MCP server
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -491,7 +499,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 		arg.TimeEnd, alignedStart, intervalNanos, // For calculating number of buckets
 		alignedStart, intervalNanos, arg.TimeEnd, // WHERE clause for bucket generation
 		arg.IntervalSeconds, // INTERVAL for data aggregation
-		buildOptionalFiltersSQL(arg.ExternalUserID, arg.APIKeyID), // Optional filters - parameterized
+		buildOptionalFiltersSQL(arg.ExternalUserID, arg.APIKeyID, arg.ToolsetID), // Optional filters - parameterized
 	)
 
 	queryArgs := []any{arg.GramProjectID, arg.TimeStart, arg.TimeEnd}
@@ -501,6 +509,11 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	}
 	if arg.APIKeyID != "" {
 		queryArgs = append(queryArgs, arg.APIKeyID)
+	}
+	if arg.ToolsetID != "" {
+		// ToolsetID is expected to be a URN prefix like "tools:http:gram"
+		// We append ":" to ensure we match the full prefix segment
+		queryArgs = append(queryArgs, arg.ToolsetID+":")
 	}
 
 	rows, err := q.conn.Query(ctx, query, queryArgs...)
@@ -527,13 +540,16 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 
 // buildOptionalFiltersSQL creates the WHERE clause additions for optional filters using parameterized placeholders.
 // The caller must append the corresponding values to queryArgs in the same order.
-func buildOptionalFiltersSQL(externalUserID, apiKeyID string) string {
+func buildOptionalFiltersSQL(externalUserID, apiKeyID, toolsetID string) string {
 	var filters string
 	if externalUserID != "" {
 		filters += " AND external_user_id = ?"
 	}
 	if apiKeyID != "" {
 		filters += " AND api_key_id = ?"
+	}
+	if toolsetID != "" {
+		filters += " AND startsWith(gram_urn, ?)"
 	}
 	return filters
 }
@@ -545,6 +561,7 @@ type GetToolMetricsBreakdownParams struct {
 	TimeEnd        int64
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
+	ToolsetID      string // Optional filter - filters by toolset/MCP server
 	Limit          int
 	SortBy         string // "count" or "failure_rate"
 }
@@ -573,6 +590,10 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+	}
+	if arg.ToolsetID != "" {
+		// Filter by toolset - ToolsetID is expected to be a URN prefix like "tools:http:gram"
+		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
 	}
 
 	sb = sb.GroupBy("gram_urn")
@@ -620,6 +641,7 @@ type GetOverviewSummaryParams struct {
 	TimeEnd        int64
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
+	ToolsetID      string // Optional filter - filters by toolset/MCP server
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -628,7 +650,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.ExternalUserID != "" || arg.APIKeyID != ""
+	hasFilters := arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetID != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -713,6 +735,10 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+	}
+	if arg.ToolsetID != "" {
+		// Filter by toolset - ToolsetID is expected to be a URN prefix like "tools:http:gram"
+		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
 	}
 
 	return sb
