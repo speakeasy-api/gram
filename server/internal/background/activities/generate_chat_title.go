@@ -90,14 +90,10 @@ func buildTitleContext(messages []repo.ChatMessage) string {
 	var b strings.Builder
 	count := 0
 	for _, msg := range messages {
-		if msg.Role != "user" && msg.Role != "assistant" {
+		if (msg.Role != "user" && msg.Role != "assistant") || strings.TrimSpace(msg.Content) == "" {
 			continue
 		}
-		content := strings.TrimSpace(msg.Content)
-		if content == "" {
-			continue
-		}
-		fmt.Fprintf(&b, "%s: %s\n", msg.Role, content)
+		fmt.Fprintf(&b, "%s: %s\n", msg.Role, strings.TrimSpace(msg.Content))
 		count++
 		if count >= 6 {
 			break
