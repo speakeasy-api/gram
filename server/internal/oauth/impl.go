@@ -748,10 +748,14 @@ func (s *Service) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, to
 		if err != nil {
 			return nil, fmt.Errorf("upstream token refresh failed: %w", err)
 		}
+		refreshToken := result.RefreshToken
+		if refreshToken == "" {
+			refreshToken = es.RefreshToken // preserve the original refresh token
+		}
 		newSecrets[i] = ExternalSecret{
 			SecurityKeys: es.SecurityKeys,
 			Token:        result.AccessToken,
-			RefreshToken: result.RefreshToken,
+			RefreshToken: refreshToken,
 			ExpiresAt:    result.ExpiresAt,
 		}
 	}
