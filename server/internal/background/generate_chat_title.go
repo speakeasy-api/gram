@@ -43,7 +43,7 @@ func ExecuteGenerateChatTitleWorkflow(ctx context.Context, env *tenv.Environment
 	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
 		TaskQueue:             string(env.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:    1 * time.Minute,
 	}, GenerateChatTitleWorkflow, params)
 }

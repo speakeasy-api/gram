@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Setup a Gram encryption key for local development."
 //MISE hide=true
@@ -16,7 +16,7 @@ async function run() {
   }
 
   console.log(
-    "💬 Melange signing keys will be create to build Gram Functions image locally."
+    "💬 Melange signing keys will be create to build Gram Functions image locally.",
   );
 
   const key_file = "./local/keys/melange-signing-key.rsa";
@@ -29,7 +29,7 @@ async function run() {
   await $`mise set --file mise.local.toml MELANGE_PUBLIC_KEY='{{config_root}}/${mise_key_file_path}.pub'`;
 
   console.log(
-    "🔑 MELANGE_PRIVATE_KEY and MELANGE_PUBLIC_KEY have been set in mise.local.toml"
+    "🔑 MELANGE_PRIVATE_KEY and MELANGE_PUBLIC_KEY have been set in mise.local.toml",
   );
 }
 

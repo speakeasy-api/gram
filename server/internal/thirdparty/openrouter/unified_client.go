@@ -79,7 +79,6 @@ func NewUnifiedClient(
 
 type initializeRequestResult struct {
 	apiKey         string
-	isFirstMessage bool
 	requestBody    OpenAIChatRequest
 }
 
@@ -89,15 +88,6 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID)
 	if err != nil {
 		return nil, fmt.Errorf("provision OpenRouter key: %w", err)
-	}
-
-	isFirstMessage := true
-	if req.ChatID != uuid.Nil {
-		chatResult, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to start or resume chat: %w", err)
-		}
-		isFirstMessage = chatResult.IsFirstMessage
 	}
 
 	if _, err := uuid.Parse(req.ProjectID); err != nil {
@@ -136,7 +126,6 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 
 	return &initializeRequestResult{
 		apiKey:         apiKey,
-		isFirstMessage: isFirstMessage,
 		requestBody:    reqBody,
 	}, nil
 }
@@ -177,7 +166,7 @@ func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody
 }
 
 // onMessageComplete applies message capture and usage tracking strategies.
-func (c *ChatClient) onMessageComplete(ctx context.Context, isFirstMessage bool, req CompletionRequest, response CompletionResponse) {
+func (c *ChatClient) onMessageComplete(ctx context.Context, req CompletionRequest, response CompletionResponse) {
 	// Apply message capture strategy
 	if c.messageCaptureStrategy != nil {
 		if err := c.messageCaptureStrategy.CaptureMessage(ctx, req, response); err != nil {
@@ -208,9 +197,9 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, isFirstMessage bool,
 		return
 	}
 
-	// Schedule chat title generation for first messages
+	// Schedule chat title generation	
 	// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
-	if isFirstMessage && c.chatTitleGenerator != nil {
+	if c.chatTitleGenerator != nil {
 		if err := c.chatTitleGenerator.ScheduleChatTitleGeneration(
 			context.WithoutCancel(ctx),
 			req.ChatID.String(),
@@ -324,7 +313,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	}
 
 	// Apply message capture and usage tracking strategies
-	c.onMessageComplete(ctx, initResult.isFirstMessage, req, *response)
+	c.onMessageComplete(ctx, req, *response)
 
 	return response, nil
 }
@@ -376,7 +365,6 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		usage:                  Usage{},
 		usageSet:               false,
 		isDone:                 false,
-		isFirstMessage:         initResult.isFirstMessage,
 		startTime:              time.Now(),
 	}
 
@@ -443,7 +431,6 @@ type streamingResponseReader struct {
 	usage                Usage
 	usageSet             bool
 	isDone               bool
-	isFirstMessage       bool
 	startTime            time.Time
 }
 
@@ -501,7 +488,7 @@ func (r *streamingResponseReader) Close() error {
 			telemetryService:       nil, // Not needed for applyStrategies
 		}
 
-		client.onMessageComplete(r.ctx, r.isFirstMessage, r.request, response)
+		client.onMessageComplete(r.ctx, r.request, response)
 
 		// Emit GenAI telemetry for observability
 		r.emitGenAITelemetry(response.ToolCalls)
