@@ -785,7 +785,8 @@ export default function ObservabilityOverview() {
     }
 
     // Add MCP server filter - derive URN prefix from toolset's tool URNs
-    if (selectedMcpServer) {
+    // Only apply MCP filter when on the "tools" tab to avoid filtering out chat data
+    if (selectedMcpServer && activeTab === "tools") {
       const selectedToolset = toolsets.find(
         (t) => t.slug === selectedMcpServer,
       );
@@ -802,7 +803,13 @@ export default function ObservabilityOverview() {
     }
 
     return params;
-  }, [filterDimension, selectedFilterValue, selectedMcpServer, toolsets]);
+  }, [
+    filterDimension,
+    selectedFilterValue,
+    selectedMcpServer,
+    toolsets,
+    activeTab,
+  ]);
 
   const { data, isPending, isFetching, error, refetch, isLogsDisabled } =
     useLogsEnabledErrorCheck(
