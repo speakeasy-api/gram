@@ -21,10 +21,10 @@ import (
 type SegmentChat struct {
 	logger     *slog.Logger
 	repo       *repo.Queries
-	chatClient *openrouter.ChatClient
+	chatClient openrouter.CompletionClient
 }
 
-func NewSegmentChat(logger *slog.Logger, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *SegmentChat {
+func NewSegmentChat(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient) *SegmentChat {
 	return &SegmentChat{
 		logger:     logger,
 		repo:       repo.New(db),

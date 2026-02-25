@@ -23,12 +23,12 @@ import (
 type AnalyzeSegment struct {
 	logger           *slog.Logger
 	repo             *repo.Queries
-	chatClient       *openrouter.ChatClient
+	chatClient       openrouter.CompletionClient
 	db               *pgxpool.Pool
 	telemetryService *telemetry.Service
 }
 
-func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient *openrouter.ChatClient, telemetryService *telemetry.Service) *AnalyzeSegment {
+func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryService *telemetry.Service) *AnalyzeSegment {
 	return &AnalyzeSegment{
 		logger:           logger,
 		repo:             repo.New(db),

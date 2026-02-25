@@ -29,7 +29,7 @@ You are a helpful assistant named "gram". Your responses will be later be posted
 type SlackChatCompletion struct {
 	slackClient *client.SlackClient
 	logger      *slog.Logger
-	chatClient  *chat.AgenticChatClient
+	chatClient  *chat.Client
 }
 
 type SlackChatCompletionInput struct {
@@ -38,7 +38,7 @@ type SlackChatCompletionInput struct {
 	ToolsetSlug string
 }
 
-func NewSlackChatCompletionActivity(logger *slog.Logger, client *client.SlackClient, chatClient *chat.AgenticChatClient) *SlackChatCompletion {
+func NewSlackChatCompletionActivity(logger *slog.Logger, client *client.SlackClient, chatClient *chat.Client) *SlackChatCompletion {
 	return &SlackChatCompletion{
 		slackClient: client,
 		logger:      logger,

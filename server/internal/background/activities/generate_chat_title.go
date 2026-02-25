@@ -23,10 +23,10 @@ import (
 type GenerateChatTitle struct {
 	logger     *slog.Logger
 	repo       *repo.Queries
-	chatClient *openrouter.ChatClient
+	chatClient openrouter.CompletionClient
 }
 
-func NewGenerateChatTitle(logger *slog.Logger, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *GenerateChatTitle {
+func NewGenerateChatTitle(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient) *GenerateChatTitle {
 	return &GenerateChatTitle{
 		logger:     logger,
 		repo:       repo.New(db),

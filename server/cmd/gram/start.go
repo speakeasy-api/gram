@@ -600,9 +600,16 @@ func newStartCommand() *cli.Command {
 
 			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
 
-			chatClient := chat.NewChatClient(
+			chatClient := chat.NewAgenticChatClient(
 				logger,
+				tracerProvider,
+				meterProvider,
 				db,
+				env,
+				encryptionClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				guardianPolicy,
+				functionsOrchestrator,
 				openRouter,
 				temporalEnv,
 				telemSvc,
@@ -713,7 +720,6 @@ func newStartCommand() *cli.Command {
 						FeatureProvider:     featureFlags,
 						AssetStorage:        assetStorage,
 						SlackClient:         slackClient,
-						AgenticChatClient:   chatClient,
 						ChatClient:          chatClient,
 						OpenRouter:          openRouter,
 						K8sClient:           k8sClient,

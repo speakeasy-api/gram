@@ -18,9 +18,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/rag/repo"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -41,11 +41,16 @@ type ToolsetVectorStore struct {
 	tracer         trace.Tracer
 	db             repo.DBTX
 	queries        *repo.Queries
-	chatClient     *openrouter.ChatClient
+	chatClient     *chat.Client
 	embeddingModel string
 }
 
-func NewToolsetVectorStore(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, unifiedClient *openrouter.ChatClient) *ToolsetVectorStore {
+func NewToolsetVectorStore(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	chatClient *chat.Client,
+) *ToolsetVectorStore {
 	if db == nil {
 		return nil
 	}
@@ -55,7 +60,7 @@ func NewToolsetVectorStore(logger *slog.Logger, tracerProvider trace.TracerProvi
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/rag"),
 		db:             db,
 		queries:        repo.New(db),
-		chatClient:     unifiedClient,
+		chatClient:     chatClient,
 		embeddingModel: defaultEmbeddingModel,
 	}
 }

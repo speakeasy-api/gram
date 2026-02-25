@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -31,15 +32,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
-type AgenticChatClient struct {
+type Client struct {
 	logger           *slog.Logger
-	openRouter       openrouter.Provisioner
 	completionClient openrouter.CompletionClient
 	db               *pgxpool.Pool
 	env              *environments.EnvironmentEntries
@@ -48,21 +50,56 @@ type AgenticChatClient struct {
 	toolsetCache     cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
-func NewAgenticChatClient(logger *slog.Logger,
+var _ openrouter.CompletionClient = &Client{}
+
+func (c *Client) GetCompletion(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+	return c.completionClient.GetCompletion(ctx, request)
+}
+
+func (c *Client) GetCompletionStream(ctx context.Context, request openrouter.CompletionRequest) (openrouter.StreamReader, error) {
+	return c.completionClient.GetCompletionStream(ctx, request)
+}
+
+func (c *Client) GetObjectCompletion(ctx context.Context, request openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
+	return c.completionClient.GetObjectCompletion(ctx, request)
+}
+
+func (c *Client) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string) ([][]float32, error) {
+	return c.completionClient.CreateEmbeddings(ctx, orgID, model, inputs)
+}
+
+func NewAgenticChatClient(
+	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
-	openRouter openrouter.Provisioner,
-	completionClient openrouter.CompletionClient,
 	env *environments.EnvironmentEntries,
 	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
-) *AgenticChatClient {
-	return &AgenticChatClient{
+	openRouter openrouter.Provisioner,
+	temporalEnv *temporal.Environment,
+	telemSvc *telemetry.Service,
+	assetStorage assets.BlobStore,
+	fallbackTracker FallbackModelUsageTracker,
+	titleGenerator openrouter.ChatTitleGenerator,
+	resolutionAnalyzer openrouter.ChatResolutionAnalyzer,
+) *Client {
+	completionClient := NewBaseChatClient(
+		logger,
+		db,
+		openRouter,
+		temporalEnv,
+		telemSvc,
+		assetStorage,
+		fallbackTracker,
+		titleGenerator,
+		resolutionAnalyzer,
+	)
+
+	return &Client{
 		logger:           logger,
-		openRouter:       openRouter,
 		completionClient: completionClient,
 		db:               db,
 		env:              env,
@@ -98,7 +135,7 @@ type AgentChatOptions struct {
 }
 
 // AgentChat loops over tool calls until completion and returns the final message.
-func (c *AgenticChatClient) AgentChat(
+func (c *Client) AgentChat(
 	ctx context.Context,
 	orgID string,
 	projectID uuid.UUID,
@@ -212,7 +249,7 @@ func (c *AgenticChatClient) AgentChat(
 	}
 }
 
-func (c *AgenticChatClient) LoadToolsetTools(
+func (c *Client) LoadToolsetTools(
 	ctx context.Context,
 	projectID uuid.UUID,
 	toolsetSlug string,

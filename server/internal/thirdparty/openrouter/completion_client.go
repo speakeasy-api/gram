@@ -14,6 +14,7 @@ type CompletionClient interface {
 	GetCompletion(ctx context.Context, request CompletionRequest) (*CompletionResponse, error)
 	GetCompletionStream(ctx context.Context, request CompletionRequest) (StreamReader, error)
 	GetObjectCompletion(ctx context.Context, request ObjectCompletionRequest) (*CompletionResponse, error)
+	CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string) ([][]float32, error)
 }
 
 // StreamReader is an interface for reading streaming completion responses.

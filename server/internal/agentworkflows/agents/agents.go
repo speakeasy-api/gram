@@ -251,7 +251,7 @@ type Service struct {
 	toolProxy    *gateway.ToolProxy
 	cache        cache.Cache
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
-	chatClient   *openrouter.ChatClient
+	chatClient   openrouter.CompletionClient
 }
 
 // NewService creates a new agents service
@@ -266,7 +266,7 @@ func NewService(
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	openRouter openrouter.Provisioner,
-	baseChatClient *openrouter.ChatClient,
+	baseChatClient openrouter.CompletionClient,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agents"))
 

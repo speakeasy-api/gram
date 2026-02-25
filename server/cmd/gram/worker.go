@@ -422,9 +422,16 @@ func newWorkerCommand() *cli.Command {
 
 			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
 
-			chatClient := chat.NewChatClient(
+			chatClient := chat.NewAgenticChatClient(
 				logger,
+				tracerProvider,
+				meterProvider,
 				db,
+				env,
+				encryptionClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				guardianPolicy,
+				functionsOrchestrator,
 				openRouter,
 				temporalEnv,
 				telemetryService,
@@ -465,7 +472,6 @@ func newWorkerCommand() *cli.Command {
 				FeatureProvider:     featureFlags,
 				AssetStorage:        assetStorage,
 				SlackClient:         slackClient,
-				AgenticChatClient:   chatClient,
 				ChatClient:          chatClient,
 				OpenRouter:          openRouter,
 				K8sClient:           k8sClient,

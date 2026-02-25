@@ -39,8 +39,7 @@ type WorkerOptions struct {
 	FeatureProvider     feature.Provider
 	AssetStorage        assets.BlobStore
 	SlackClient         *slack_client.SlackClient
-	AgenticChatClient   *chat.AgenticChatClient
-	ChatClient          *openrouter.ChatClient
+	ChatClient          *chat.Client
 	OpenRouter          openrouter.Provisioner
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
@@ -73,7 +72,6 @@ func ForDeploymentProcessing(
 		FunctionsVersion:    "local", // Test deployers don't use baked versions
 		MCPRegistryClient:   mcpRegistryClient,
 		SlackClient:         nil,
-		AgenticChatClient:   nil,
 		ChatClient:          nil,
 		OpenRouter:          nil,
 		K8sClient:           nil,
@@ -101,7 +99,6 @@ func NewTemporalWorker(
 		FeatureProvider:     nil,
 		AssetStorage:        nil,
 		SlackClient:         nil,
-		AgenticChatClient:   nil,
 		ChatClient:          nil,
 		OpenRouter:          nil,
 		K8sClient:           nil,
@@ -125,7 +122,6 @@ func NewTemporalWorker(
 			FeatureProvider:     conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:        conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:         conv.Default(o.SlackClient, opts.SlackClient),
-			AgenticChatClient:   conv.Default(o.AgenticChatClient, opts.AgenticChatClient),
 			OpenRouter:          conv.Default(o.OpenRouter, opts.OpenRouter),
 			ChatClient:          conv.Default(o.ChatClient, opts.ChatClient),
 			K8sClient:           conv.Default(o.K8sClient, opts.K8sClient),
@@ -160,7 +156,6 @@ func NewTemporalWorker(
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
-		opts.AgenticChatClient,
 		opts.OpenRouter,
 		opts.ChatClient,
 		opts.K8sClient,

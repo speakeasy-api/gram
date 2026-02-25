@@ -11,7 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
-func NewChatClient(logger *slog.Logger,
+func NewBaseChatClient(logger *slog.Logger,
 	db *pgxpool.Pool,
 	openRouter openrouter.Provisioner,
 	temporalEnv *temporal.Environment,
