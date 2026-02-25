@@ -1,12 +1,12 @@
-version: '3.8'
+version: "3.8"
 
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     container_name: clickhouse-dev
     ports:
-      - "8124:8123"  # HTTP interface
-      - "9001:9000"  # Native protocol
+      - "8124:8123" # HTTP interface
+      - "9001:9000" # Native protocol
     environment:
       CLICKHOUSE_DB: gram_example
       CLICKHOUSE_USER: gram_user

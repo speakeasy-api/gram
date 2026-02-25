@@ -16,7 +16,7 @@ export interface PDFContent {
 }
 
 export async function extractTextFromPDF(
-  filePath: string
+  filePath: string,
 ): Promise<PDFContent> {
   // Download the PDF file from GCS
   const buffer = await gcs.downloadFile(filePath);
@@ -25,7 +25,7 @@ export async function extractTextFromPDF(
     const pdfParser = new (PDFParser as any)(null, true);
 
     pdfParser.on("pdfParser_dataError", (errData: any) =>
-      reject(new Error(errData.parserError))
+      reject(new Error(errData.parserError)),
     );
 
     pdfParser.on("pdfParser_dataReady", (pdfData: any) => {
@@ -35,7 +35,7 @@ export async function extractTextFromPDF(
           return (page.Texts || [])
             .map((text: any) => {
               return decodeURIComponent(
-                (text.R || []).map((r: any) => r.T).join("")
+                (text.R || []).map((r: any) => r.T).join(""),
               );
             })
             .join(" ");

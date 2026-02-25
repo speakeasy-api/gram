@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import {
   createContext,
@@ -8,119 +8,119 @@ import {
   useRef,
   useEffect,
   type ReactNode,
-} from 'react'
+} from "react";
 
-export type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
+export type ConnectionState = "connected" | "reconnecting" | "disconnected";
 
 interface ConnectionStatusContextValue {
   /** Current connection state */
-  state: ConnectionState
+  state: ConnectionState;
   /** Number of reconnection attempts */
-  retryCount: number
+  retryCount: number;
   /** Whether the browser reports being online */
-  isOnline: boolean
+  isOnline: boolean;
   /** Mark connection as failed - will trigger reconnecting state */
-  markDisconnected: () => void
+  markDisconnected: () => void;
   /** Mark connection as restored */
-  markConnected: () => void
+  markConnected: () => void;
   /** Reset the connection state */
-  reset: () => void
+  reset: () => void;
 }
 
 const ConnectionStatusContext =
-  createContext<ConnectionStatusContextValue | null>(null)
+  createContext<ConnectionStatusContextValue | null>(null);
 
 interface ConnectionStatusProviderProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 export const ConnectionStatusProvider = ({
   children,
 }: ConnectionStatusProviderProps) => {
-  const [state, setState] = useState<ConnectionState>('connected')
-  const [retryCount, setRetryCount] = useState(0)
+  const [state, setState] = useState<ConnectionState>("connected");
+  const [retryCount, setRetryCount] = useState(0);
   const [isOnline, setIsOnline] = useState(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  )
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Monitor browser online/offline status
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === "undefined") return;
 
     const handleOnline = () => {
-      setIsOnline(true)
+      setIsOnline(true);
 
       // Clear any existing timeout
       if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
 
       // Show "Reconnecting..." briefly, then mark as connected
-      setState('reconnecting')
+      setState("reconnecting");
       reconnectTimeoutRef.current = setTimeout(() => {
-        setState('connected')
-        setRetryCount(0)
-      }, 1500) // Show reconnecting for 1.5s before clearing
-    }
+        setState("connected");
+        setRetryCount(0);
+      }, 1500); // Show reconnecting for 1.5s before clearing
+    };
 
     const handleOffline = () => {
-      setIsOnline(false)
+      setIsOnline(false);
       // Immediately mark as disconnected when browser goes offline
-      setState('disconnected')
+      setState("disconnected");
       if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
-    }
+    };
 
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
       // Clear any pending timeout to prevent memory leak
       if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
-    }
-  }, [])
+    };
+  }, []);
 
   const markDisconnected = useCallback(() => {
-    setState('reconnecting')
-    setRetryCount((prev) => prev + 1)
+    setState("reconnecting");
+    setRetryCount((prev) => prev + 1);
 
     // After 10 seconds of reconnecting, mark as fully disconnected
     if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
+      clearTimeout(reconnectTimeoutRef.current);
     }
     reconnectTimeoutRef.current = setTimeout(() => {
       setState((current) =>
-        current === 'reconnecting' ? 'disconnected' : current
-      )
-    }, 10000)
-  }, [])
+        current === "reconnecting" ? "disconnected" : current,
+      );
+    }, 10000);
+  }, []);
 
   const markConnected = useCallback(() => {
     if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
     }
-    setState('connected')
-    setRetryCount(0)
-  }, [])
+    setState("connected");
+    setRetryCount(0);
+  }, []);
 
   const reset = useCallback(() => {
     if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
     }
-    setState('connected')
-    setRetryCount(0)
-  }, [])
+    setState("connected");
+    setRetryCount(0);
+  }, []);
 
   return (
     <ConnectionStatusContext.Provider
@@ -135,18 +135,18 @@ export const ConnectionStatusProvider = ({
     >
       {children}
     </ConnectionStatusContext.Provider>
-  )
-}
+  );
+};
 
 export const useConnectionStatus = () => {
-  const context = useContext(ConnectionStatusContext)
+  const context = useContext(ConnectionStatusContext);
   if (!context) {
     throw new Error(
-      'useConnectionStatus must be used within a ConnectionStatusProvider'
-    )
+      "useConnectionStatus must be used within a ConnectionStatusProvider",
+    );
   }
-  return context
-}
+  return context;
+};
 
 /**
  * Hook that returns connection status helpers for use in sendMessages.
@@ -154,5 +154,5 @@ export const useConnectionStatus = () => {
  */
 
 export const useConnectionStatusOptional = () => {
-  return useContext(ConnectionStatusContext)
-}
+  return useContext(ConnectionStatusContext);
+};

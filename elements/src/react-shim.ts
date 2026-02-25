@@ -5,15 +5,15 @@
  */
 
 // @ts-expect-error — resolved by the Vite plugin to the real react package
-import * as ReactOriginal from 'react-original'
-import { createShims } from './compat-shims'
+import * as ReactOriginal from "react-original";
+import { createShims } from "./compat-shims";
 
-const Shimmed = { ...ReactOriginal, ...createShims(ReactOriginal) }
+const Shimmed = { ...ReactOriginal, ...createShims(ReactOriginal) };
 
 // React internals required by react-dom
 export const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (ReactOriginal as any).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
+  (ReactOriginal as any).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
 
 export const {
   Children,
@@ -49,6 +49,6 @@ export const {
   useSyncExternalStore,
   useTransition,
   version,
-} = Shimmed
+} = Shimmed;
 
-export default Shimmed
+export default Shimmed;

@@ -29,31 +29,32 @@ export async function handleResources({ uri, input }) {
       );
     case "file:///data/users.csv":
       const limit = input?.limit || 10;
-      const csvData = Array.from({ length: limit }, (_, i) =>
-        `user${i + 1},user${i + 1}@example.com`
+      const csvData = Array.from(
+        { length: limit },
+        (_, i) => `user${i + 1},user${i + 1}@example.com`,
       ).join("\n");
       return new Response(`name,email\n${csvData}`, {
         status: 200,
         headers: { "Content-Type": "text/csv" },
       });
     case "https://api.example.com/status":
-      return new Response(
-        JSON.stringify({ status: "ok", uptime: 12345 }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ status: "ok", uptime: 12345 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     case "file:///templates/email.html":
-      return new Response(
-        `<html><body>Hello, ${input.name}!</body></html>`,
-        { status: 200, headers: { "Content-Type": "text/html" } },
-      );
+      return new Response(`<html><body>Hello, ${input.name}!</body></html>`, {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
     case "error://fail":
       throw new Error("Resource access failed");
     case "null://resource":
       return null;
     default:
-      return new Response(
-        JSON.stringify({ error: "Resource not found" }),
-        { status: 404, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Resource not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
   }
 }

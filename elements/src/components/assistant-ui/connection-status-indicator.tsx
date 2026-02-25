@@ -1,17 +1,17 @@
-'use client'
+"use client";
 
 import {
   useConnectionStatus,
   useConnectionStatusOptional,
   type ConnectionState,
-} from '@/contexts/ConnectionStatusContext'
-import { cn } from '@/lib/utils'
-import { Loader2Icon, WifiOffIcon } from 'lucide-react'
-import { AnimatePresence, motion } from 'motion/react'
-import { FC } from 'react'
+} from "@/contexts/ConnectionStatusContext";
+import { cn } from "@/lib/utils";
+import { Loader2Icon, WifiOffIcon } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { FC } from "react";
 
 interface ConnectionStatusIndicatorProps {
-  className?: string
+  className?: string;
 }
 
 /**
@@ -21,9 +21,9 @@ interface ConnectionStatusIndicatorProps {
 export const ConnectionStatusIndicator: FC<ConnectionStatusIndicatorProps> = ({
   className,
 }) => {
-  const { state, isOnline } = useConnectionStatus()
+  const { state, isOnline } = useConnectionStatus();
 
-  const shouldShow = state === 'reconnecting' || state === 'disconnected'
+  const shouldShow = state === "reconnecting" || state === "disconnected";
 
   return (
     <AnimatePresence>
@@ -33,42 +33,42 @@ export const ConnectionStatusIndicator: FC<ConnectionStatusIndicatorProps> = ({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -20, scale: 0.95 }}
           transition={{
-            type: 'spring',
+            type: "spring",
             stiffness: 500,
             damping: 30,
           }}
           className={cn(
-            'pointer-events-none absolute top-4 right-0 left-0 z-50 flex justify-center',
-            className
+            "pointer-events-none absolute top-4 right-0 left-0 z-50 flex justify-center",
+            className,
           )}
         >
           <StatusPill state={state} isOnline={isOnline} />
         </motion.div>
       )}
     </AnimatePresence>
-  )
-}
+  );
+};
 
 const StatusPill: FC<{ state: ConnectionState; isOnline: boolean }> = ({
   state,
   isOnline,
 }) => {
-  const isReconnecting = state === 'reconnecting'
-  const isOffline = !isOnline
+  const isReconnecting = state === "reconnecting";
+  const isOffline = !isOnline;
 
   // Show "Offline" when browser is offline, otherwise show connection state
-  const showOffline = isOffline && state === 'disconnected'
+  const showOffline = isOffline && state === "disconnected";
   const showReconnecting =
-    isReconnecting || (isOffline && state !== 'connected')
+    isReconnecting || (isOffline && state !== "connected");
 
   return (
     <div
       className={cn(
-        'pointer-events-auto flex items-center gap-2 rounded-full px-4 py-2 shadow-lg backdrop-blur-md',
-        'border',
+        "pointer-events-auto flex items-center gap-2 rounded-full px-4 py-2 shadow-lg backdrop-blur-md",
+        "border",
         showOffline || showReconnecting
-          ? 'border-zinc-200 bg-white text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white'
-          : 'border-red-200 bg-red-500/90 text-white dark:border-red-800 dark:bg-red-600/90'
+          ? "border-zinc-200 bg-white text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+          : "border-red-200 bg-red-500/90 text-white dark:border-red-800 dark:bg-red-600/90",
       )}
     >
       {showOffline ? (
@@ -88,8 +88,8 @@ const StatusPill: FC<{ state: ConnectionState; isOnline: boolean }> = ({
         </>
       )}
     </div>
-  )
-}
+  );
+};
 
 /**
  * Wrapper version that handles the case when ConnectionStatusProvider is not available.
@@ -99,15 +99,15 @@ const StatusPill: FC<{ state: ConnectionState; isOnline: boolean }> = ({
 export const ConnectionStatusIndicatorSafe: FC<
   ConnectionStatusIndicatorProps
 > = ({ className }) => {
-  const connectionStatus = useConnectionStatusOptional()
+  const connectionStatus = useConnectionStatusOptional();
 
   // Provider not available, render nothing
   if (!connectionStatus) {
-    return null
+    return null;
   }
 
-  const { state, isOnline } = connectionStatus
-  const shouldShow = state === 'reconnecting' || state === 'disconnected'
+  const { state, isOnline } = connectionStatus;
+  const shouldShow = state === "reconnecting" || state === "disconnected";
 
   return (
     <AnimatePresence>
@@ -117,18 +117,18 @@ export const ConnectionStatusIndicatorSafe: FC<
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -20, scale: 0.95 }}
           transition={{
-            type: 'spring',
+            type: "spring",
             stiffness: 500,
             damping: 30,
           }}
           className={cn(
-            'pointer-events-none absolute top-4 right-0 left-0 z-50 flex justify-center',
-            className
+            "pointer-events-none absolute top-4 right-0 left-0 z-50 flex justify-center",
+            className,
           )}
         >
           <StatusPill state={state} isOnline={isOnline} />
         </motion.div>
       )}
     </AnimatePresence>
-  )
-}
+  );
+};

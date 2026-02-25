@@ -1,7 +1,7 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext } from "react";
 
-export const ReplayContext = createContext<{ isReplay: boolean } | null>(null)
+export const ReplayContext = createContext<{ isReplay: boolean } | null>(null);
 
 export function useReplayContext() {
-  return useContext(ReplayContext)
+  return useContext(ReplayContext);
 }

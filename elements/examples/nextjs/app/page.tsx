@@ -1,40 +1,40 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const router = useRouter()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const router = useRouter();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
+    e.preventDefault();
+    setError("");
+    setLoading(true);
 
     try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
-      })
+      });
 
-      const data = await res.json()
+      const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Login failed')
-        return
+        setError(data.error || "Login failed");
+        return;
       }
 
-      localStorage.setItem('token', data.token)
-      router.push('/chat')
+      localStorage.setItem("token", data.token);
+      router.push("/chat");
     } catch {
-      setError('Something went wrong. Please try again.')
+      setError("Something went wrong. Please try again.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -64,9 +64,9 @@ export default function LoginPage() {
           disabled={loading}
           className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
         >
-          {loading ? 'Signing in...' : 'Sign in'}
+          {loading ? "Signing in..." : "Sign in"}
         </button>
       </form>
     </div>
-  )
+  );
 }

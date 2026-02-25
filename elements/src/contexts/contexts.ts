@@ -1,12 +1,12 @@
-import { createContext } from 'react'
-import type { ElementsContextType } from '@/types'
-import { ToolApprovalContextType } from './ToolApprovalContext'
+import { createContext } from "react";
+import type { ElementsContextType } from "@/types";
+import { ToolApprovalContextType } from "./ToolApprovalContext";
 
 export const ElementsContext = createContext<ElementsContextType | undefined>(
-  undefined
-)
+  undefined,
+);
 
 export const ToolApprovalContext =
-  createContext<ToolApprovalContextType | null>(null)
+  createContext<ToolApprovalContextType | null>(null);
 
-export { useChatId } from './ChatIdContext'
+export { useChatId } from "./ChatIdContext";

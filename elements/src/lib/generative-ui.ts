@@ -1,8 +1,8 @@
 // Type for json-render tree structure
 export interface JsonRenderNode {
-  type: string
-  props?: Record<string, unknown>
-  children?: JsonRenderNode[]
+  type: string;
+  props?: Record<string, unknown>;
+  children?: JsonRenderNode[];
 }
 
 /**
@@ -10,9 +10,9 @@ export interface JsonRenderNode {
  */
 export function isJsonRenderTree(content: unknown): content is JsonRenderNode {
   return (
-    typeof content === 'object' &&
+    typeof content === "object" &&
     content !== null &&
-    'type' in content &&
-    typeof (content as JsonRenderNode).type === 'string'
-  )
+    "type" in content &&
+    typeof (content as JsonRenderNode).type === "string"
+  );
 }

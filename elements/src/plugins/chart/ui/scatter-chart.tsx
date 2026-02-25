@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { cn } from '@/lib/utils'
-import { FC } from 'react'
+import { cn } from "@/lib/utils";
+import { FC } from "react";
 import {
   ScatterChart as RechartsScatterChart,
   Scatter,
@@ -13,43 +13,43 @@ import {
   ZAxis,
   Cell,
   TooltipProps,
-} from 'recharts'
+} from "recharts";
 
 interface ScatterDataPoint {
-  x: number
-  y: number
-  label?: string
-  size?: number
-  color?: string
+  x: number;
+  y: number;
+  label?: string;
+  size?: number;
+  color?: string;
 }
 
 const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
-  if (!active || !payload || payload.length === 0) return null
-  const point = payload[0]?.payload as ScatterDataPoint | undefined
+  if (!active || !payload || payload.length === 0) return null;
+  const point = payload[0]?.payload as ScatterDataPoint | undefined;
   return (
-    <div className="bg-background text-foreground border-border rounded-md border px-2 py-1.5 text-xs shadow-sm">
+    <div className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground shadow-sm">
       {point?.label && <div className="font-medium">{point.label}</div>}
       <div>x: {point?.x?.toLocaleString()}</div>
       <div>y: {point?.y?.toLocaleString()}</div>
     </div>
-  )
-}
+  );
+};
 
 const COLORS = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-]
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
 export interface ScatterChartProps {
-  title?: string
-  data: ScatterDataPoint[]
-  xLabel?: string
-  yLabel?: string
-  showGrid?: boolean
-  className?: string
+  title?: string;
+  data: ScatterDataPoint[];
+  xLabel?: string;
+  yLabel?: string;
+  showGrid?: boolean;
+  className?: string;
 }
 
 export const ScatterChart: FC<ScatterChartProps> = ({
@@ -61,12 +61,12 @@ export const ScatterChart: FC<ScatterChartProps> = ({
   className,
 }) => {
   // Check if we have size data for bubble chart effect
-  const hasSizeData = data.some((d) => d.size !== undefined)
+  const hasSizeData = data.some((d) => d.size !== undefined);
 
   return (
-    <div className={cn('flex flex-col gap-2', className)}>
+    <div className={cn("flex flex-col gap-2", className)}>
       {title && (
-        <h3 className="text-foreground text-sm font-medium">{title}</h3>
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
       )}
       <div className="h-[250px] w-full">
         <ResponsiveContainer width="100%" height="100%">
@@ -82,17 +82,17 @@ export const ScatterChart: FC<ScatterChartProps> = ({
             <XAxis
               type="number"
               dataKey="x"
-              name={xLabel || 'x'}
-              tick={{ fill: 'var(--foreground)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border)' }}
-              tickLine={{ stroke: 'var(--border)' }}
+              name={xLabel || "x"}
+              tick={{ fill: "var(--foreground)", fontSize: 12 }}
+              axisLine={{ stroke: "var(--border)" }}
+              tickLine={{ stroke: "var(--border)" }}
               label={
                 xLabel
                   ? {
                       value: xLabel,
-                      position: 'bottom',
+                      position: "bottom",
                       offset: -5,
-                      fill: 'var(--foreground)',
+                      fill: "var(--foreground)",
                     }
                   : undefined
               }
@@ -100,17 +100,17 @@ export const ScatterChart: FC<ScatterChartProps> = ({
             <YAxis
               type="number"
               dataKey="y"
-              name={yLabel || 'y'}
-              tick={{ fill: 'var(--foreground)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border)' }}
-              tickLine={{ stroke: 'var(--border)' }}
+              name={yLabel || "y"}
+              tick={{ fill: "var(--foreground)", fontSize: 12 }}
+              axisLine={{ stroke: "var(--border)" }}
+              tickLine={{ stroke: "var(--border)" }}
               label={
                 yLabel
                   ? {
                       value: yLabel,
                       angle: -90,
-                      position: 'left',
-                      fill: 'var(--foreground)',
+                      position: "left",
+                      fill: "var(--foreground)",
                     }
                   : undefined
               }
@@ -128,5 +128,5 @@ export const ScatterChart: FC<ScatterChartProps> = ({
         </ResponsiveContainer>
       </div>
     </div>
-  )
-}
+  );
+};

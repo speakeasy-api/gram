@@ -18,13 +18,13 @@ We follow the **wide event** (or "wide structured log") pattern. Instead of scat
 
 Each telemetry log row in `telemetry_logs` contains:
 
-| Column Group | Purpose | Examples |
-|---|---|---|
-| **Core OTel fields** | Standard log record identity | `id`, `time_unix_nano`, `severity_text`, `body` |
-| **Trace context** | Distributed tracing correlation | `trace_id` (W3C 32-hex), `span_id` (W3C 16-hex) |
-| **`attributes` (JSON)** | The wide event payload — WHAT happened | HTTP details, GenAI metrics, tool info, user IDs, etc. |
-| **`resource_attributes` (JSON)** | WHO/WHERE produced the event | `service.name`, `service.version` |
-| **Materialized columns** | Auto-extracted from JSON at insert time for fast filtering | `project_id`, `deployment_id`, `urn`, `chat_id`, `user_id`, `external_user_id`, `api_key_id` |
+| Column Group                     | Purpose                                                    | Examples                                                                                     |
+| -------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Core OTel fields**             | Standard log record identity                               | `id`, `time_unix_nano`, `severity_text`, `body`                                              |
+| **Trace context**                | Distributed tracing correlation                            | `trace_id` (W3C 32-hex), `span_id` (W3C 16-hex)                                              |
+| **`attributes` (JSON)**          | The wide event payload — WHAT happened                     | HTTP details, GenAI metrics, tool info, user IDs, etc.                                       |
+| **`resource_attributes` (JSON)** | WHO/WHERE produced the event                               | `service.name`, `service.version`                                                            |
+| **Materialized columns**         | Auto-extracted from JSON at insert time for fast filtering | `project_id`, `deployment_id`, `urn`, `chat_id`, `user_id`, `external_user_id`, `api_key_id` |
 
 The `attributes` JSON column is the heart of the wide event — it holds arbitrarily many key-value pairs following OTel semantic conventions.
 
@@ -53,32 +53,32 @@ We align with the [OTel Semantic Conventions](https://opentelemetry.io/docs/spec
 
 The table below shows representative keys from each category. See `conventions.go` for the full set.
 
-| Category | Example Keys | Reference |
-|---|---|---|
-| **HTTP** | `http.request.method`, `http.response.status_code`, `http.route`, `url.full` | [HTTP semconv](https://opentelemetry.io/docs/specs/semconv/http/) |
-| **GenAI** (experimental) | `gen_ai.operation.name`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.conversation.id` | [GenAI semconv](https://opentelemetry.io/docs/specs/semconv/gen-ai/) |
-| **GenAI Tools** | `gen_ai.tool.call.id`, `gen_ai.tool.name`, `gen_ai.tool.type` | [GenAI semconv](https://opentelemetry.io/docs/specs/semconv/gen-ai/) |
-| **GenAI Evaluation** | `gen_ai.evaluation.name`, `gen_ai.evaluation.score.value`, `gen_ai.evaluation.score.label` | [GenAI semconv](https://opentelemetry.io/docs/specs/semconv/gen-ai/) |
-| **Service/Resource** | `service.name`, `service.version` | [Resource semconv](https://opentelemetry.io/docs/specs/semconv/resource/) |
-| **User** | `user.id` | [General semconv](https://opentelemetry.io/docs/specs/semconv/general/attributes/) |
-| **Error** | `error.message`, `exception.stacktrace` | [Error semconv](https://opentelemetry.io/docs/specs/semconv/exceptions/) |
+| Category                 | Example Keys                                                                                                                                                  | Reference                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **HTTP**                 | `http.request.method`, `http.response.status_code`, `http.route`, `url.full`                                                                                  | [HTTP semconv](https://opentelemetry.io/docs/specs/semconv/http/)                  |
+| **GenAI** (experimental) | `gen_ai.operation.name`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.conversation.id` | [GenAI semconv](https://opentelemetry.io/docs/specs/semconv/gen-ai/)               |
+| **GenAI Tools**          | `gen_ai.tool.call.id`, `gen_ai.tool.name`, `gen_ai.tool.type`                                                                                                 | [GenAI semconv](https://opentelemetry.io/docs/specs/semconv/gen-ai/)               |
+| **GenAI Evaluation**     | `gen_ai.evaluation.name`, `gen_ai.evaluation.score.value`, `gen_ai.evaluation.score.label`                                                                    | [GenAI semconv](https://opentelemetry.io/docs/specs/semconv/gen-ai/)               |
+| **Service/Resource**     | `service.name`, `service.version`                                                                                                                             | [Resource semconv](https://opentelemetry.io/docs/specs/semconv/resource/)          |
+| **User**                 | `user.id`                                                                                                                                                     | [General semconv](https://opentelemetry.io/docs/specs/semconv/general/attributes/) |
+| **Error**                | `error.message`, `exception.stacktrace`                                                                                                                       | [Error semconv](https://opentelemetry.io/docs/specs/semconv/exceptions/)           |
 
 ### Custom Gram keys (`gram.*`)
 
 The `gram.*` prefix is used for attributes that are **Gram system-generated** — they identify internal Gram concepts that have no OTel equivalent. These are not fallbacks; they are explicitly namespaced to make it clear the attribute originates from the Gram platform.
 
-| Key | Description |
-|---|---|
-| `gram.project.id` | Gram project UUID |
-| `gram.deployment.id` | Deployment UUID |
-| `gram.function.id` | Serverless function UUID |
-| `gram.tool.urn` | Tool URN (e.g., `tools:function:my-source:my-tool`) |
-| `gram.tool.name` | Human-readable tool name |
-| `gram.external_user.id` | End-user ID from the customer's system |
-| `gram.resource.urn` | Internal resource identifier (e.g., `agents:chat:completion`) |
-| `gram.log.severity_text` | Severity override from caller |
-| `gram.log.body` | Log body/message content |
-| `gram.api_key.id` | API key used for the request |
+| Key                      | Description                                                   |
+| ------------------------ | ------------------------------------------------------------- |
+| `gram.project.id`        | Gram project UUID                                             |
+| `gram.deployment.id`     | Deployment UUID                                               |
+| `gram.function.id`       | Serverless function UUID                                      |
+| `gram.tool.urn`          | Tool URN (e.g., `tools:function:my-source:my-tool`)           |
+| `gram.tool.name`         | Human-readable tool name                                      |
+| `gram.external_user.id`  | End-user ID from the customer's system                        |
+| `gram.resource.urn`      | Internal resource identifier (e.g., `agents:chat:completion`) |
+| `gram.log.severity_text` | Severity override from caller                                 |
+| `gram.log.body`          | Log body/message content                                      |
+| `gram.api_key.id`        | API key used for the request                                  |
 
 ### Adding new attributes
 
@@ -202,6 +202,7 @@ ClickHouse offers two mechanisms for pre-computing data from wide events. Choose
 **What:** A column whose value is computed from an expression at insert time and stored on disk alongside the row. Querying the materialized column is as fast as querying any regular column.
 
 **When to use:**
+
 - You frequently filter or GROUP BY a specific JSON path (e.g., `WHERE user_id = ?`).
 - The extraction expression is simple (e.g., `toString(attributes.user.id)`).
 - You want the value co-located with the row for point lookups.
@@ -224,6 +225,7 @@ CREATE INDEX idx_telemetry_logs_mat_user_id ON telemetry_logs (user_id)
 **What:** A separate table populated by a query that runs on each insert to the source table. Useful for pre-aggregating data.
 
 **When to use:**
+
 - You need pre-computed aggregations (counts, sums, averages) that would be expensive to compute at query time.
 - The aggregation is used frequently (e.g., dashboard summaries).
 - You're okay with eventual consistency (the view updates asynchronously on insert).
@@ -248,13 +250,13 @@ GROUP BY gram_project_id, day, model;
 
 ### Decision guide
 
-| Question | Materialized Column | Materialized View |
-|---|---|---|
-| Need to filter/GROUP BY a JSON path? | Yes | Overkill |
-| Need pre-aggregated rollups? | No | Yes |
-| Should new rows be queryable immediately? | Yes (sync on insert) | Mostly (async, slight delay) |
-| Adds storage overhead? | Minimal (one column) | Significant (separate table) |
-| Requires separate maintenance? | No | Yes (schema + view definition) |
+| Question                                  | Materialized Column  | Materialized View              |
+| ----------------------------------------- | -------------------- | ------------------------------ |
+| Need to filter/GROUP BY a JSON path?      | Yes                  | Overkill                       |
+| Need pre-aggregated rollups?              | No                   | Yes                            |
+| Should new rows be queryable immediately? | Yes (sync on insert) | Mostly (async, slight delay)   |
+| Adds storage overhead?                    | Minimal (one column) | Significant (separate table)   |
+| Requires separate maintenance?            | No                   | Yes (schema + view definition) |
 
 ### TODOs
 
@@ -307,6 +309,7 @@ sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)),
 ### Pagination Helpers
 
 `repo/pagination.go` provides cursor pagination:
+
 - `withPagination(sb, cursor, sortOrder)` — WHERE-based cursor for simple queries
 - `withHavingPagination(sb, cursor, sortOrder, projectID, groupColumn, timeExpr)` — HAVING-based cursor for GROUP BY queries
 - `withHavingTuplePagination(...)` — HAVING with tuple comparison for tie-breaking
@@ -363,6 +366,7 @@ Pagination logic lives in the **service layer** (`impl.go`), not the repo layer.
 Tests use testcontainers to spin up a real ClickHouse instance.
 
 Key testing patterns:
+
 - Use `testenv.Launch()` in `TestMain` to set up infrastructure
 - Create helper functions for inserting test data
 - Use table-driven tests with descriptive names

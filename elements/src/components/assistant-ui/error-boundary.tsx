@@ -1,27 +1,27 @@
-'use client'
+"use client";
 
-import { AlertCircle } from 'lucide-react'
-import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { trackError } from '@/lib/errorTracking'
-import { cn } from '@/lib/utils'
-import { Button } from '../ui/button'
+import { AlertCircle } from "lucide-react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
+import { trackError } from "@/lib/errorTracking";
+import { cn } from "@/lib/utils";
+import { Button } from "../ui/button";
 
 interface ErrorBoundaryProps {
-  children: ReactNode
-  fallback?: ReactNode
-  onError?: (error: Error, errorInfo: ErrorInfo) => void
-  onReset?: () => void
+  children: ReactNode;
+  fallback?: ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  onReset?: () => void;
 }
 
 interface ErrorBoundaryState {
-  hasError: boolean
-  error: Error | null
-  resetKey: number
+  hasError: boolean;
+  error: Error | null;
+  resetKey: number;
 }
 
 interface ErrorFallbackProps {
-  error: Error | null
-  onRetry: () => void
+  error: Error | null;
+  onRetry: () => void;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -29,7 +29,7 @@ const ErrorFallback = ({ error, onRetry }: ErrorFallbackProps) => {
   return (
     <div
       className={cn(
-        'aui-root aui-error-boundary bg-background flex h-full w-full flex-col items-center justify-center p-6'
+        "aui-root aui-error-boundary flex h-full w-full flex-col items-center justify-center bg-background p-6",
       )}
     >
       <div className="flex flex-col items-center gap-4 text-center">
@@ -37,14 +37,14 @@ const ErrorFallback = ({ error, onRetry }: ErrorFallbackProps) => {
           <AlertCircle className="size-12 stroke-[1.5px]" />
         </div>
         <div className="flex flex-col gap-2">
-          <h3 className="text-foreground text-xl font-semibold">
+          <h3 className="text-xl font-semibold text-foreground">
             Something went wrong
           </h3>
-          <p className="text-muted-foreground text-base">
+          <p className="text-base text-muted-foreground">
             An error occurred while loading the chat.
           </p>
           {error && (
-            <p className="text-muted-foreground/60 max-w-md truncate text-sm">
+            <p className="max-w-md truncate text-sm text-muted-foreground/60">
               {error.message}
             </p>
           )}
@@ -54,11 +54,11 @@ const ErrorFallback = ({ error, onRetry }: ErrorFallbackProps) => {
         </Button>
       </div>
     </div>
-  )
-}
+  );
+};
 
 // eslint-disable-next-line react-refresh/only-export-components
-const Remounter = ({ children }: { children: ReactNode }) => <>{children}</>
+const Remounter = ({ children }: { children: ReactNode }) => <>{children}</>;
 
 /**
  * Global error boundary for the Elements library. Catches unexpected errors and renders a fallback UI.
@@ -73,21 +73,21 @@ export class ErrorBoundary extends Component<
   ErrorBoundaryState
 > {
   constructor(props: ErrorBoundaryProps) {
-    super(props)
-    this.state = { hasError: false, error: null, resetKey: 0 }
+    super(props);
+    this.state = { hasError: false, error: null, resetKey: 0 };
   }
 
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    return { hasError: true, error }
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     // Track error to Datadog RUM
     trackError(error, {
-      source: 'error-boundary',
+      source: "error-boundary",
       componentStack: errorInfo.componentStack ?? undefined,
-    })
-    this.props.onError?.(error, errorInfo)
+    });
+    this.props.onError?.(error, errorInfo);
   }
 
   handleRetry = () => {
@@ -96,24 +96,24 @@ export class ErrorBoundary extends Component<
       hasError: false,
       error: null,
       resetKey: state.resetKey + 1,
-    }))
-    this.props.onReset?.()
-  }
+    }));
+    this.props.onReset?.();
+  };
 
   render(): ReactNode {
     if (this.state.hasError) {
       if (this.props.fallback) {
-        return this.props.fallback
+        return this.props.fallback;
       }
 
       return (
         <ErrorFallback error={this.state.error} onRetry={this.handleRetry} />
-      )
+      );
     }
 
     // Use Remounter with key to force unmount/remount of children when retry is clicked
     return (
       <Remounter key={this.state.resetKey}>{this.props.children}</Remounter>
-    )
+    );
   }
 }

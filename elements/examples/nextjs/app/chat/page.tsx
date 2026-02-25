@@ -1,41 +1,41 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Chat, GramElementsProvider } from '@gram-ai/elements'
-import type { ElementsConfig } from '@gram-ai/elements'
-import '@gram-ai/elements/elements.css'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Chat, GramElementsProvider } from "@gram-ai/elements";
+import type { ElementsConfig } from "@gram-ai/elements";
+import "@gram-ai/elements/elements.css";
 
 export default function ChatPage() {
-  const router = useRouter()
-  const [username, setUsername] = useState<string | null>(null)
-  const [token, setToken] = useState<string | null>(null)
+  const router = useRouter();
+  const [username, setUsername] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem('token')
+    const stored = localStorage.getItem("token");
     if (!stored) {
-      router.push('/')
-      return
+      router.push("/");
+      return;
     }
 
     try {
-      const payload = JSON.parse(atob(stored)) as { username: string }
-      setUsername(payload.username)
-      setToken(stored)
+      const payload = JSON.parse(atob(stored)) as { username: string };
+      setUsername(payload.username);
+      setToken(stored);
     } catch {
-      localStorage.removeItem('token')
-      router.push('/')
+      localStorage.removeItem("token");
+      router.push("/");
     }
-  }, [router])
+  }, [router]);
 
-  if (!username || !token) return null
+  if (!username || !token) return null;
 
   const config: ElementsConfig = {
     projectSlug: process.env.NEXT_PUBLIC_GRAM_PROJECT_SLUG!,
     mcp: process.env.NEXT_PUBLIC_GRAM_MCP_URL!,
-    variant: 'standalone',
+    variant: "standalone",
     environment: { MY_MCP_BEARER_TOKEN: token },
-  }
+  };
 
   return (
     <div className="flex h-screen flex-col">
@@ -43,8 +43,8 @@ export default function ChatPage() {
         <span className="text-sm text-gray-500">Logged in as {username}</span>
         <button
           onClick={() => {
-            localStorage.removeItem('token')
-            router.push('/')
+            localStorage.removeItem("token");
+            router.push("/");
           }}
           className="rounded border px-3 py-1 text-sm"
         >
@@ -59,5 +59,5 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

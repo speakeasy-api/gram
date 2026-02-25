@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { cn } from '@/lib/utils'
-import { FC } from 'react'
-import { MacOSWindowFrame } from './MacOSWindowFrame'
+import { cn } from "@/lib/utils";
+import { FC } from "react";
+import { MacOSWindowFrame } from "./MacOSWindowFrame";
 
 interface PluginLoadingStateProps {
-  text: string
-  className?: string
+  text: string;
+  className?: string;
 }
 
 /**
@@ -21,11 +21,11 @@ export const PluginLoadingState: FC<PluginLoadingStateProps> = ({
     <MacOSWindowFrame className={className}>
       <div
         className={cn(
-          'bg-background relative flex min-h-[400px] items-center justify-center'
+          "relative flex min-h-[400px] items-center justify-center bg-background",
         )}
       >
-        <span className="shimmer text-muted-foreground text-sm">{text}</span>
+        <span className="shimmer text-sm text-muted-foreground">{text}</span>
       </div>
     </MacOSWindowFrame>
-  )
-}
+  );
+};

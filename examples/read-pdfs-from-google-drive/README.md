@@ -51,7 +51,7 @@ const gram = new Gram({
   authInput: {
     oauthVariable: "GOOGLE_ACCESS_TOKEN",
   },
-})
+});
 ```
 
 The `oauthVariable` tells Gram that this function requires OAuth2 authentication and specifies which environment variable will receive the access token. When users invoke this function, Gram automatically handles the OAuth2 flow and injects the access token into the `GOOGLE_ACCESS_TOKEN` environment variable.
@@ -105,6 +105,7 @@ This starts a local MCP server over stdio transport, allowing you to interactive
 ### Example Usage
 
 **Search for files:**
+
 ```json
 {
   "query": "quarterly report",
@@ -114,6 +115,7 @@ This starts a local MCP server over stdio transport, allowing you to interactive
 ```
 
 **Read a PDF:**
+
 ```json
 {
   "fileId": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"

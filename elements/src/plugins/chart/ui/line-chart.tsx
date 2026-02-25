@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { cn } from '@/lib/utils'
-import { FC, useMemo } from 'react'
+import { cn } from "@/lib/utils";
+import { FC, useMemo } from "react";
 import {
   LineChart as RechartsLineChart,
   Line,
@@ -12,12 +12,12 @@ import {
   Legend,
   ResponsiveContainer,
   TooltipProps,
-} from 'recharts'
+} from "recharts";
 
 const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
-  if (!active || !payload || payload.length === 0) return null
+  if (!active || !payload || payload.length === 0) return null;
   return (
-    <div className="bg-background text-foreground border-border rounded-md border px-2 py-1.5 text-xs shadow-sm">
+    <div className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground shadow-sm">
       {payload.map((entry, index) => (
         <div key={index} className="flex items-center gap-2">
           <span
@@ -26,38 +26,38 @@ const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
           />
           <span>{entry.name}:</span>
           <span className="font-medium">
-            {typeof entry.value === 'number'
+            {typeof entry.value === "number"
               ? entry.value.toLocaleString()
               : entry.value}
           </span>
         </div>
       ))}
     </div>
-  )
-}
+  );
+};
 
 const COLORS = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-]
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
 interface SeriesDataPoint {
-  label: string
-  [key: string]: string | number
+  label: string;
+  [key: string]: string | number;
 }
 
 export interface LineChartProps {
-  title?: string
-  data: SeriesDataPoint[]
-  series?: string[]
-  showGrid?: boolean
-  showLegend?: boolean
-  showDots?: boolean
-  curved?: boolean
-  className?: string
+  title?: string;
+  data: SeriesDataPoint[];
+  series?: string[];
+  showGrid?: boolean;
+  showLegend?: boolean;
+  showDots?: boolean;
+  curved?: boolean;
+  className?: string;
 }
 
 export const LineChart: FC<LineChartProps> = ({
@@ -72,16 +72,16 @@ export const LineChart: FC<LineChartProps> = ({
 }) => {
   // Auto-detect series from data keys if not provided
   const seriesKeys = useMemo(() => {
-    if (series && series.length > 0) return series
-    if (data.length === 0) return []
-    const keys = Object.keys(data[0]).filter((k) => k !== 'label')
-    return keys
-  }, [data, series])
+    if (series && series.length > 0) return series;
+    if (data.length === 0) return [];
+    const keys = Object.keys(data[0]).filter((k) => k !== "label");
+    return keys;
+  }, [data, series]);
 
   return (
-    <div className={cn('flex flex-col gap-2', className)}>
+    <div className={cn("flex flex-col gap-2", className)}>
       {title && (
-        <h3 className="text-foreground text-sm font-medium">{title}</h3>
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
       )}
       <div className="h-[250px] w-full">
         <ResponsiveContainer width="100%" height="100%">
@@ -97,28 +97,28 @@ export const LineChart: FC<LineChartProps> = ({
             )}
             <XAxis
               dataKey="label"
-              tick={{ fill: 'var(--foreground)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border)' }}
-              tickLine={{ stroke: 'var(--border)' }}
+              tick={{ fill: "var(--foreground)", fontSize: 12 }}
+              axisLine={{ stroke: "var(--border)" }}
+              tickLine={{ stroke: "var(--border)" }}
             />
             <YAxis
-              tick={{ fill: 'var(--foreground)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border)' }}
-              tickLine={{ stroke: 'var(--border)' }}
+              tick={{ fill: "var(--foreground)", fontSize: 12 }}
+              axisLine={{ stroke: "var(--border)" }}
+              tickLine={{ stroke: "var(--border)" }}
             />
             <Tooltip content={<CustomTooltip />} />
             {showLegend && seriesKeys.length > 1 && (
               <Legend
-                wrapperStyle={{ color: 'var(--foreground)' }}
+                wrapperStyle={{ color: "var(--foreground)" }}
                 formatter={(value) => (
-                  <span style={{ color: 'var(--foreground)' }}>{value}</span>
+                  <span style={{ color: "var(--foreground)" }}>{value}</span>
                 )}
               />
             )}
             {seriesKeys.map((key, index) => (
               <Line
                 key={key}
-                type={curved ? 'monotone' : 'linear'}
+                type={curved ? "monotone" : "linear"}
                 dataKey={key}
                 stroke={COLORS[index % COLORS.length]}
                 strokeWidth={2}
@@ -131,5 +131,5 @@ export const LineChart: FC<LineChartProps> = ({
         </ResponsiveContainer>
       </div>
     </div>
-  )
-}
+  );
+};

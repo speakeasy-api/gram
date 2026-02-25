@@ -6,7 +6,6 @@ This directory contains ClickHouse migrations in the [golang-migrate](https://gi
 
 We provide golang-migrate as an alternative migration engine to [Atlas](https://atlasgo.io/) because Atlas requires an Atlas Pro account and login to apply migrations. golang-migrate runs completely locally without any external authentication.
 
-
 ## How It Works
 
 Both migration formats are maintained in parallel:

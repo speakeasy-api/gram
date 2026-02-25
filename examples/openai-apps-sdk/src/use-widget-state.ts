@@ -3,13 +3,13 @@ import { useOpenAiGlobal } from "./use-openai-global";
 import type { UnknownObject } from "./types";
 
 export function useWidgetState<T extends UnknownObject>(
-  defaultState: T | (() => T)
+  defaultState: T | (() => T),
 ): readonly [T, (state: SetStateAction<T>) => void];
 export function useWidgetState<T extends UnknownObject>(
-  defaultState?: T | (() => T | null) | null
+  defaultState?: T | (() => T | null) | null,
 ): readonly [T | null, (state: SetStateAction<T | null>) => void];
 export function useWidgetState<T extends UnknownObject>(
-  defaultState?: T | (() => T | null) | null
+  defaultState?: T | (() => T | null) | null,
 ): readonly [T | null, (state: SetStateAction<T | null>) => void] {
   const widgetStateFromWindow = useOpenAiGlobal("widgetState") as T;
 
@@ -20,7 +20,7 @@ export function useWidgetState<T extends UnknownObject>(
 
     return typeof defaultState === "function"
       ? defaultState()
-      : defaultState ?? null;
+      : (defaultState ?? null);
   });
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export function useWidgetState<T extends UnknownObject>(
         return newState;
       });
     },
-    [window.openai.setWidgetState]
+    [window.openai.setWidgetState],
   );
 
   return [widgetState, setWidgetState] as const;

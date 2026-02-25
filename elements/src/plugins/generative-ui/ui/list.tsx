@@ -1,18 +1,18 @@
-import * as React from 'react'
-import { cn } from '@/lib/utils'
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 export interface ListProps {
-  items: string[]
-  ordered?: boolean
-  className?: string
+  items: string[];
+  ordered?: boolean;
+  className?: string;
 }
 
 export function List({ items, ordered = false, className }: ListProps) {
   const listClasses = cn(
-    'text-foreground space-y-1 pl-4',
-    ordered ? 'list-decimal' : 'list-disc',
-    className
-  )
+    "space-y-1 pl-4 text-foreground",
+    ordered ? "list-decimal" : "list-disc",
+    className,
+  );
 
   if (ordered) {
     return (
@@ -21,7 +21,7 @@ export function List({ items, ordered = false, className }: ListProps) {
           <li key={index}>{item}</li>
         ))}
       </ol>
-    )
+    );
   }
 
   return (
@@ -30,5 +30,5 @@ export function List({ items, ordered = false, className }: ListProps) {
         <li key={index}>{item}</li>
       ))}
     </ul>
-  )
+  );
 }

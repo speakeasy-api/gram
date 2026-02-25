@@ -4,7 +4,7 @@ on:
     branches:
       - main
     paths:
-     - "elements/docs/**"
+      - "elements/docs/**"
   workflow_run:
     workflows: ["Generate Elements TypeDoc Documentation"]
     types:

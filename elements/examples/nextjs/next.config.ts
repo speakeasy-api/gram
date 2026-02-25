@@ -1,7 +1,7 @@
-import type { NextConfig } from 'next'
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@gram-ai/elements'],
-}
+  transpilePackages: ["@gram-ai/elements"],
+};
 
-export default nextConfig
+export default nextConfig;

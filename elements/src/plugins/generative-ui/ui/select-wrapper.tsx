@@ -1,19 +1,19 @@
-'use client'
+"use client";
 
-import * as React from 'react'
+import * as React from "react";
 import {
   Select,
   SelectTrigger,
   SelectValue,
   SelectContent,
   SelectItem,
-} from './select'
+} from "./select";
 
 export interface SelectWrapperProps {
-  placeholder?: string
+  placeholder?: string;
   /** Path for form state management (future use) */
-  valuePath: string
-  options: Array<{ value: string; label: string }>
+  valuePath: string;
+  options: Array<{ value: string; label: string }>;
 }
 
 /**
@@ -37,5 +37,5 @@ export function SelectWrapper({
         ))}
       </SelectContent>
     </Select>
-  )
+  );
 }

@@ -1,17 +1,17 @@
-'use client'
+"use client";
 
-import * as React from 'react'
-import { Button } from './button'
+import * as React from "react";
+import { Button } from "./button";
 
 export interface ButtonWrapperProps {
-  label: string
-  variant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost'
-  size?: 'default' | 'sm' | 'lg' | 'icon'
-  disabled?: boolean
+  label: string;
+  variant?: "default" | "secondary" | "destructive" | "outline" | "ghost";
+  size?: "default" | "sm" | "lg" | "icon";
+  disabled?: boolean;
   /** Backend action to trigger (future use) */
-  action?: string
+  action?: string;
   /** Parameters for the action (future use) */
-  actionParams?: Record<string, unknown>
+  actionParams?: Record<string, unknown>;
 }
 
 /**
@@ -20,13 +20,13 @@ export interface ButtonWrapperProps {
  */
 export function ButtonWrapper({
   label,
-  variant = 'default',
-  size = 'default',
+  variant = "default",
+  size = "default",
   disabled = false,
 }: ButtonWrapperProps) {
   return (
     <Button variant={variant} size={size} disabled={disabled}>
       {label}
     </Button>
-  )
+  );
 }

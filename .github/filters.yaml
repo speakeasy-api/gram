@@ -1,41 +1,41 @@
 server:
-  - 'go.mod'
-  - 'go.sum'
-  - 'server/**'
+  - "go.mod"
+  - "go.sum"
+  - "server/**"
 
 client:
-  - 'client/**'
-  - 'package.json'
-  - 'pnpm-lock.yaml'
-  - 'pnpm-workspace.yaml'
-  - 'tsconfig.json'
-  - 'sdks/typescript/**'
+  - "client/**"
+  - "package.json"
+  - "pnpm-lock.yaml"
+  - "pnpm-workspace.yaml"
+  - "tsconfig.json"
+  - "sdks/typescript/**"
 
 functions:
-  - 'go.mod'
-  - 'go.sum'
-  - 'functions/**'
+  - "go.mod"
+  - "go.sum"
+  - "functions/**"
 
 cli:
-  - 'go.mod'
-  - 'go.sum'
-  - 'cli/**'
-  - 'server/design/**'
-  - 'server/gen/**'
+  - "go.mod"
+  - "go.sum"
+  - "cli/**"
+  - "server/design/**"
+  - "server/gen/**"
 
 tsframework:
-  - 'ts-framework/**'
+  - "ts-framework/**"
 
 elements:
-  - 'elements/**'
+  - "elements/**"
 
 migrations:
-  - 'go.mod'
-  - 'go.sum'
-  - 'server/migrations/**'
-  - 'server/clickhouse/migrations/**'
+  - "go.mod"
+  - "go.sum"
+  - "server/migrations/**"
+  - "server/clickhouse/migrations/**"
 
 plog:
-  - 'go.mod'
-  - 'go.sum'
-  - 'plog/**'
+  - "go.mod"
+  - "go.sum"
+  - "plog/**"

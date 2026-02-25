@@ -5,22 +5,22 @@
  */
 export function getTokenExpiry(token: string): number | null {
   try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return null
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
 
     // base64url → base64 → decode
-    let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-    while (payload.length % 4) payload += '='
+    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (payload.length % 4) payload += "=";
 
-    const json = atob(payload)
-    const parsed = JSON.parse(json)
+    const json = atob(payload);
+    const parsed = JSON.parse(json);
 
-    if (typeof parsed.exp === 'number') {
-      return parsed.exp
+    if (typeof parsed.exp === "number") {
+      return parsed.exp;
     }
-    return null
+    return null;
   } catch {
-    return null
+    return null;
   }
 }
 
@@ -31,9 +31,9 @@ export function getTokenExpiry(token: string): number | null {
  */
 export function isTokenExpired(
   token: string,
-  bufferMs: number = 30_000
+  bufferMs: number = 30_000,
 ): boolean {
-  const exp = getTokenExpiry(token)
-  if (exp === null) return false // fail-open for non-JWT tokens
-  return Date.now() >= exp * 1000 - bufferMs
+  const exp = getTokenExpiry(token);
+  if (exp === null) return false; // fail-open for non-JWT tokens
+  return Date.now() >= exp * 1000 - bufferMs;
 }

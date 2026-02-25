@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import * as React from 'react'
+import * as React from "react";
 import {
   Table,
   TableHeader,
@@ -8,12 +8,12 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from './table'
-import { cn } from '@/lib/utils'
+} from "./table";
+import { cn } from "@/lib/utils";
 
-export interface DataTableProps extends React.ComponentProps<'div'> {
-  headers?: string[]
-  rows: (string | number)[][]
+export interface DataTableProps extends React.ComponentProps<"div"> {
+  headers?: string[];
+  rows: (string | number)[][];
 }
 
 /**
@@ -49,5 +49,5 @@ export function DataTable({
         </TableBody>
       </Table>
     </div>
-  )
+  );
 }

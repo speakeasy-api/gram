@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import * as React from 'react'
-import { Skeleton } from './skeleton'
-import { cn } from '@/lib/utils'
+import * as React from "react";
+import { Skeleton } from "./skeleton";
+import { cn } from "@/lib/utils";
 
 export interface SkeletonWrapperProps {
-  width?: string
-  height?: string
-  className?: string
+  width?: string;
+  height?: string;
+  className?: string;
 }
 
 /**
@@ -22,9 +22,9 @@ export function SkeletonWrapper({
     <Skeleton
       className={cn(className)}
       style={{
-        width: width ?? '100%',
-        height: height ?? '1rem',
+        width: width ?? "100%",
+        height: height ?? "1rem",
       }}
     />
-  )
+  );
 }

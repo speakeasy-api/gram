@@ -19,19 +19,19 @@ const gram = new Gram({
       query: z
         .string()
         .describe(
-          "Search query to match against filenames (e.g., 'report' will match files containing 'report' in the name)"
+          "Search query to match against filenames (e.g., 'report' will match files containing 'report' in the name)",
         ),
       folderId: z
         .string()
         .optional()
         .describe(
-          "Optional: Specific Google Drive folder ID to search within. If not provided, searches entire accessible drive."
+          "Optional: Specific Google Drive folder ID to search within. If not provided, searches entire accessible drive.",
         ),
       fileType: z
         .string()
         .optional()
         .describe(
-          "Optional: File type to search for (e.g., 'application/pdf')"
+          "Optional: File type to search for (e.g., 'application/pdf')",
         ),
     },
     async execute(ctx, input) {
@@ -50,7 +50,7 @@ const gram = new Gram({
           GOOGLE_ACCESS_TOKEN,
           input.query,
           input.folderId,
-          input.fileType
+          input.fileType,
         );
 
         return ctx.json({
@@ -82,7 +82,7 @@ const gram = new Gram({
       fileId: z
         .string()
         .describe(
-          "Google Drive file ID of the PDF file (e.g., '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms')"
+          "Google Drive file ID of the PDF file (e.g., '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms')",
         ),
     },
     async execute(ctx, input) {
@@ -99,7 +99,7 @@ const gram = new Gram({
         // Extract text from the PDF
         const content = await pdf.extractTextFromPDF(
           GOOGLE_ACCESS_TOKEN,
-          input.fileId
+          input.fileId,
         );
 
         // Limit response size to prevent EOF errors (max ~100KB of text)

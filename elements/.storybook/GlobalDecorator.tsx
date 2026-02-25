@@ -1,68 +1,68 @@
-import merge from 'lodash.merge'
-import React, { useMemo } from 'react'
-import { ROOT_SELECTOR } from '../src/constants/tailwind'
-import { ElementsProvider } from '../src/contexts/ElementsProvider'
-import { recommended } from '../src/plugins'
-import { ElementsConfig } from '../src/types'
+import merge from "lodash.merge";
+import React, { useMemo } from "react";
+import { ROOT_SELECTOR } from "../src/constants/tailwind";
+import { ElementsProvider } from "../src/contexts/ElementsProvider";
+import { recommended } from "../src/plugins";
+import { ElementsConfig } from "../src/types";
 
 // Custom merge function that replaces arrays instead of merging by index
 // This allows stories to fully override array configs like `plugins`
 function mergeConfig(
   defaultConfig: ElementsConfig,
-  storyConfig: Partial<ElementsConfig> | undefined
+  storyConfig: Partial<ElementsConfig> | undefined,
 ): ElementsConfig {
-  const merged = merge({}, defaultConfig, storyConfig ?? {})
+  const merged = merge({}, defaultConfig, storyConfig ?? {});
 
   // Arrays should be replaced, not merged - check for explicit overrides
   if (storyConfig?.plugins !== undefined) {
-    merged.plugins = storyConfig.plugins
+    merged.plugins = storyConfig.plugins;
   }
 
-  return merged
+  return merged;
 }
 
 interface ElementsDecoratorProps {
-  children: React.ReactNode
+  children: React.ReactNode;
   // Partial so stories can override only what they need
-  config?: Partial<ElementsConfig>
+  config?: Partial<ElementsConfig>;
 }
 
 // Injected via Vite' `define` config
-declare const __GRAM_API_URL__: string | undefined
+declare const __GRAM_API_URL__: string | undefined;
 
 const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
-  projectSlug: '',
-  mcp: '',
-  variant: 'widget',
+  projectSlug: "",
+  mcp: "",
+  variant: "widget",
   welcome: {
-    title: 'Hello there!',
-    subtitle: 'How can I help you today?',
+    title: "Hello there!",
+    subtitle: "How can I help you today?",
     suggestions: [
       {
-        title: 'Browse Products',
-        label: 'See what\'s available',
-        prompt: 'What products do you have?',
+        title: "Browse Products",
+        label: "See what's available",
+        prompt: "What products do you have?",
       },
     ],
   },
   composer: {
-    placeholder: 'Ask me anything...',
+    placeholder: "Ask me anything...",
     attachments: true,
   },
   modal: {
     defaultOpen: true,
     expandable: true,
     defaultExpanded: true,
-    title: 'Gram Elements Demo',
+    title: "Gram Elements Demo",
   },
   tools: {
     expandToolGroupsByDefault: true,
   },
   plugins: recommended,
   api: {
-    url: __GRAM_API_URL__ || 'https://api.getgram.ai',
+    url: __GRAM_API_URL__ || "https://api.getgram.ai",
   },
-}
+};
 
 /**
  * Global decorator that wraps all stories in the AssistantRuntimeProvider,
@@ -77,11 +77,11 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
   config,
 }) => {
   // Include colorScheme in deps to ensure theme changes trigger re-render
-  const colorScheme = config?.theme?.colorScheme
+  const colorScheme = config?.theme?.colorScheme;
   const finalConfig = useMemo(
     () => mergeConfig(DEFAULT_ELEMENTS_CONFIG, config),
-    [config, colorScheme]
-  )
+    [config, colorScheme],
+  );
 
   if (!finalConfig.projectSlug || !finalConfig.mcp) {
     return (
@@ -89,14 +89,14 @@ export const ElementsDecorator: React.FC<ElementsDecoratorProps> = ({
         Please provide both projectSlug and mcp in the controls panel to view
         this story.
       </div>
-    )
+    );
   }
 
   return (
     <div className={ROOT_SELECTOR}>
       <ElementsProvider config={finalConfig}>
-        <div className="bg-background h-screen">{children}</div>
+        <div className="h-screen bg-background">{children}</div>
       </ElementsProvider>
     </div>
-  )
-}
+  );
+};

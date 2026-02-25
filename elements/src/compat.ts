@@ -6,14 +6,14 @@
  * Must be imported before any modules that depend on these APIs.
  */
 
-import * as React from 'react'
-import { createShims } from './compat-shims'
+import * as React from "react";
+import { createShims } from "./compat-shims";
 
-const ReactMutable = React as Record<string, unknown>
-const shims = createShims(React)
+const ReactMutable = React as Record<string, unknown>;
+const shims = createShims(React);
 
 for (const [key, impl] of Object.entries(shims)) {
-  if (typeof ReactMutable[key] !== 'function') {
-    ReactMutable[key] = impl
+  if (typeof ReactMutable[key] !== "function") {
+    ReactMutable[key] = impl;
   }
 }

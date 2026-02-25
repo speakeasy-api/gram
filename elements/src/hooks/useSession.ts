@@ -1,8 +1,8 @@
-import { GetSessionFn } from '@/types'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { GetSessionFn } from "@/types";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function getChatSessionQueryKey(projectSlug: string) {
-  return ['chatSession', projectSlug] as const
+  return ["chatSession", projectSlug] as const;
 }
 
 /**
@@ -13,13 +13,13 @@ export const useSession = ({
   getSession,
   projectSlug,
 }: {
-  getSession: GetSessionFn | null
-  projectSlug: string
+  getSession: GetSessionFn | null;
+  projectSlug: string;
 }): string | null => {
-  const queryClient = useQueryClient()
-  const queryKey = getChatSessionQueryKey(projectSlug)
+  const queryClient = useQueryClient();
+  const queryKey = getChatSessionQueryKey(projectSlug);
 
-  const hasData = queryClient.getQueryState(queryKey)?.data !== undefined
+  const hasData = queryClient.getQueryState(queryKey)?.data !== undefined;
 
   const { data: fetchedSessionToken } = useQuery({
     queryKey,
@@ -27,7 +27,7 @@ export const useSession = ({
     enabled: !hasData && getSession !== null,
     staleTime: Infinity, // Session tokens don't need to be refetched
     gcTime: Infinity, // Keep in cache indefinitely
-  })
+  });
 
-  return fetchedSessionToken ?? null
-}
+  return fetchedSessionToken ?? null;
+};
