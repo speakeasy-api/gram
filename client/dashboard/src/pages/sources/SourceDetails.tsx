@@ -25,6 +25,7 @@ import { useGramContext } from "@gram/client/react-query/_context";
 import { useQuery } from "@tanstack/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useListTools } from "@/hooks/toolTypes";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -125,20 +126,23 @@ export default function SourceDetails() {
     [relatedTools],
   );
   const { data: telemetryData, isLoading: isLoadingTelemetry } =
-    useQuery<GetObservabilityOverviewResult>({
-      queryKey: ["source-telemetry", sourceSlug, telemetryFrom.toISOString()],
-      queryFn: () =>
-        unwrapAsync(
-          telemetryGetObservabilityOverview(gramClient, {
-            getObservabilityOverviewPayload: {
-              from: telemetryFrom,
-              to: telemetryTo,
-              includeTimeSeries: false,
-            },
-          }),
-        ),
-      enabled: relatedTools.length > 0,
-    });
+    useLogsEnabledErrorCheck(
+      useQuery<GetObservabilityOverviewResult>({
+        queryKey: ["source-telemetry", sourceSlug, telemetryFrom.toISOString()],
+        queryFn: () =>
+          unwrapAsync(
+            telemetryGetObservabilityOverview(gramClient, {
+              getObservabilityOverviewPayload: {
+                from: telemetryFrom,
+                to: telemetryTo,
+                includeTimeSeries: false,
+              },
+            }),
+          ),
+        enabled: relatedTools.length > 0,
+        throwOnError: false,
+      }),
+    );
 
   const sourceToolMetrics = useMemo(() => {
     if (!telemetryData?.topToolsByCount || sourceToolUrnsArray.length === 0)
