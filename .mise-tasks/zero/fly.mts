@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Setup Gram Functions to use Fly.io during development."
 //MISE dir="{{ config_root }}"

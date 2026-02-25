@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Undo a series of database migrations "
 //MISE dir="{{ config_root }}/server"

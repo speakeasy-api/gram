@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Setup GitHub token as part of onboarding"
 //MISE hide=true
@@ -21,15 +21,15 @@ async function run() {
       "Without a GitHub token, it will hit rate limits often and potentially fail.",
       "To fix, create a token WITH NO SCOPES here:",
       "\n\thttps://github.com/settings/tokens/new?description=MISE_GITHUB_TOKEN\n",
-    ].join("\n")
+    ].join("\n"),
   );
 
   const answer = await question(
-    "💬 Paste your GitHub token or press enter to skip: "
+    "💬 Paste your GitHub token or press enter to skip: ",
   );
   if (!answer) {
     console.log(
-      "⚠️ Proceed with caution: A GitHub token will eliminate rate limit errors when working with Mise."
+      "⚠️ Proceed with caution: A GitHub token will eliminate rate limit errors when working with Mise.",
     );
     console.log("⚠️ Run `mise run zero:github` when you have a key to use.");
     return;
