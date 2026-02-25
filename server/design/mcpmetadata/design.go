@@ -108,6 +108,7 @@ var McpMetadata = Type("McpMetadata", func() {
 	Attribute("installation_override_url", String, "URL to redirect to instead of showing the default installation page", func() {
 		Format(FormatURI)
 	})
+	Attribute("webmcp_enabled", Boolean, "Whether WebMCP tool registration is enabled on the install page for browsing agent discovery")
 	Attribute("environment_configs", ArrayOf(McpEnvironmentConfig), "The list of environment variables configured for this MCP")
 
 	Attribute("created_at", String, "When the metadata entry was created", func() {
@@ -183,6 +184,7 @@ var _ = Service("mcpMetadata", func() {
 			Attribute("installation_override_url", String, "URL to redirect to instead of showing the default installation page", func() {
 				Format(FormatURI)
 			})
+			Attribute("webmcp_enabled", Boolean, "Whether to enable WebMCP tool registration on the install page for browsing agent discovery")
 			Attribute("environment_configs", ArrayOf(McpEnvironmentConfigInput), "The list of environment variables to configure for this MCP")
 
 			Required("toolset_slug")

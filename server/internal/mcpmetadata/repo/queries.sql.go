@@ -62,6 +62,7 @@ SELECT id,
        header_display_names,
        default_environment_id,
        installation_override_url,
+       webmcp_enabled,
        created_at,
        updated_at
 FROM mcp_metadata
@@ -84,6 +85,7 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID
 		&i.HeaderDisplayNames,
 		&i.DefaultEnvironmentID,
 		&i.InstallationOverrideUrl,
+		&i.WebmcpEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -194,8 +196,9 @@ INSERT INTO mcp_metadata (
     logo_id,
     instructions,
     default_environment_id,
-    installation_override_url
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    installation_override_url,
+    webmcp_enabled
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (toolset_id)
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
@@ -204,6 +207,7 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               instructions = EXCLUDED.instructions,
               default_environment_id = EXCLUDED.default_environment_id,
               installation_override_url = EXCLUDED.installation_override_url,
+              webmcp_enabled = EXCLUDED.webmcp_enabled,
               updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
@@ -215,6 +219,7 @@ RETURNING id,
           header_display_names,
           default_environment_id,
           installation_override_url,
+          webmcp_enabled,
           created_at,
           updated_at
 `
@@ -228,6 +233,7 @@ type UpsertMetadataParams struct {
 	Instructions              pgtype.Text
 	DefaultEnvironmentID      uuid.NullUUID
 	InstallationOverrideUrl   pgtype.Text
+	WebmcpEnabled             bool
 }
 
 func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpMetadatum, error) {
@@ -240,6 +246,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		arg.Instructions,
 		arg.DefaultEnvironmentID,
 		arg.InstallationOverrideUrl,
+		arg.WebmcpEnabled,
 	)
 	var i McpMetadatum
 	err := row.Scan(
@@ -253,6 +260,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		&i.HeaderDisplayNames,
 		&i.DefaultEnvironmentID,
 		&i.InstallationOverrideUrl,
+		&i.WebmcpEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -269,6 +269,18 @@ export interface ElementsConfig {
   tools?: ToolsConfig
 
   /**
+   * Enable WebMCP tool registration for browsing agent discovery.
+   * When enabled, Gram tools are registered with the browser's `navigator.modelContext`
+   * API, making them discoverable by browsing agents visiting the page.
+   *
+   * Requires browser support for the WebMCP API. If the API is not available,
+   * the setting is ignored and a warning is logged.
+   *
+   * @default false
+   */
+  webMCP?: boolean
+
+  /**
    * Configuration for chat history and thread persistence.
    * When enabled, conversations are saved and the thread list is shown.
    *

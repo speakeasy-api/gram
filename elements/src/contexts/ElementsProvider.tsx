@@ -5,6 +5,7 @@ import {
   useGramThreadListAdapter,
 } from '@/hooks/useGramThreadListAdapter'
 import { useMCPTools } from '@/hooks/useMCPTools'
+import { useWebMCP } from '@/hooks/useWebMCP'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import { getApiUrl } from '@/lib/api'
 import { initErrorTracking, trackError } from '@/lib/errorTracking'
@@ -206,6 +207,13 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     environment: config.environment ?? {},
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
+  })
+
+  useWebMCP({
+    enabled: config.webMCP ?? false,
+    mcpUrl: config.mcp,
+    mcpHeaders,
+    tools: mcpTools,
   })
 
   // Store approval helpers in ref so they can be used in async contexts

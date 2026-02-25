@@ -32,6 +32,9 @@ type SetMcpMetadataRequestBody struct {
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 	// URL to redirect to instead of showing the default installation page
 	InstallationOverrideURL *string `form:"installation_override_url,omitempty" json:"installation_override_url,omitempty" xml:"installation_override_url,omitempty"`
+	// Whether to enable WebMCP tool registration on the install page for browsing
+	// agent discovery
+	WebmcpEnabled *bool `form:"webmcp_enabled,omitempty" json:"webmcp_enabled,omitempty" xml:"webmcp_enabled,omitempty"`
 	// The list of environment variables to configure for this MCP
 	EnvironmentConfigs []*McpEnvironmentConfigInputRequestBody `form:"environment_configs,omitempty" json:"environment_configs,omitempty" xml:"environment_configs,omitempty"`
 }
@@ -69,6 +72,9 @@ type SetMcpMetadataResponseBody struct {
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 	// URL to redirect to instead of showing the default installation page
 	InstallationOverrideURL *string `form:"installation_override_url,omitempty" json:"installation_override_url,omitempty" xml:"installation_override_url,omitempty"`
+	// Whether WebMCP tool registration is enabled on the install page for browsing
+	// agent discovery
+	WebmcpEnabled *bool `form:"webmcp_enabled,omitempty" json:"webmcp_enabled,omitempty" xml:"webmcp_enabled,omitempty"`
 	// The list of environment variables configured for this MCP
 	EnvironmentConfigs []*McpEnvironmentConfigResponseBody `form:"environment_configs,omitempty" json:"environment_configs,omitempty" xml:"environment_configs,omitempty"`
 	// When the metadata entry was created
@@ -680,6 +686,9 @@ type McpMetadataResponseBody struct {
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 	// URL to redirect to instead of showing the default installation page
 	InstallationOverrideURL *string `form:"installation_override_url,omitempty" json:"installation_override_url,omitempty" xml:"installation_override_url,omitempty"`
+	// Whether WebMCP tool registration is enabled on the install page for browsing
+	// agent discovery
+	WebmcpEnabled *bool `form:"webmcp_enabled,omitempty" json:"webmcp_enabled,omitempty" xml:"webmcp_enabled,omitempty"`
 	// The list of environment variables configured for this MCP
 	EnvironmentConfigs []*McpEnvironmentConfigResponseBody `form:"environment_configs,omitempty" json:"environment_configs,omitempty" xml:"environment_configs,omitempty"`
 	// When the metadata entry was created
@@ -766,6 +775,7 @@ func NewSetMcpMetadataResponseBody(res *types.McpMetadata) *SetMcpMetadataRespon
 		Instructions:              res.Instructions,
 		DefaultEnvironmentID:      res.DefaultEnvironmentID,
 		InstallationOverrideURL:   res.InstallationOverrideURL,
+		WebmcpEnabled:             res.WebmcpEnabled,
 		CreatedAt:                 res.CreatedAt,
 		UpdatedAt:                 res.UpdatedAt,
 	}
@@ -1265,6 +1275,7 @@ func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, apikeyToken *stri
 		Instructions:              body.Instructions,
 		DefaultEnvironmentID:      body.DefaultEnvironmentID,
 		InstallationOverrideURL:   body.InstallationOverrideURL,
+		WebmcpEnabled:             body.WebmcpEnabled,
 	}
 	if body.EnvironmentConfigs != nil {
 		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfigInput, len(body.EnvironmentConfigs))

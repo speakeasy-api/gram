@@ -1541,5 +1541,67 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
       type="module"
       src="{{ .SiteURL }}/external/hosted-install-page-2b40cdd1.js"
     ></script>
+    {{ if .WebMCPEnabled }}
+    <script id="gram-webmcp-tools" type="application/json">{{ .WebMCPTools }}</script>
+    <script type="module">
+    (function () {
+      'use strict';
+      if (!navigator.modelContext) {
+        console.warn('[Gram WebMCP] navigator.modelContext not available');
+        return;
+      }
+      var MCP_URL = "{{ .MCPURL }}";
+      var el = document.getElementById('gram-webmcp-tools');
+      if (!el) return;
+      var tools;
+      try { tools = JSON.parse(el.textContent); } catch (e) {
+        console.error('[Gram WebMCP] Failed to parse tool definitions:', e);
+        return;
+      }
+      var registered = [];
+      var idCounter = 1;
+      for (var i = 0; i < tools.length; i++) {
+        var tool = tools[i];
+        try {
+          navigator.modelContext.registerTool({
+            name: tool.name,
+            description: tool.description || '',
+            inputSchema: tool.input_schema || { type: 'object', properties: {} },
+            execute: (function (toolName) {
+              return function (args) {
+                var body = JSON.stringify({
+                  jsonrpc: '2.0',
+                  method: 'tools/call',
+                  params: { name: toolName, arguments: args || {} },
+                  id: idCounter++
+                });
+                return fetch(MCP_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: body
+                }).then(function (resp) {
+                  if (!resp.ok) throw new Error('MCP request failed: ' + resp.status);
+                  return resp.json();
+                }).then(function (data) {
+                  if (data.error) throw new Error(data.error.message || 'MCP tool call error');
+                  return data.result;
+                });
+              };
+            })(tool.name)
+          });
+          registered.push(tool.name);
+        } catch (e) {
+          console.warn('[Gram WebMCP] Failed to register tool "' + tool.name + '":', e);
+        }
+      }
+      console.log('[Gram WebMCP] Registered ' + registered.length + ' tools');
+      window.addEventListener('beforeunload', function () {
+        for (var j = 0; j < registered.length; j++) {
+          try { navigator.modelContext.unregisterTool(registered[j]); } catch (e) { /* ignore */ }
+        }
+      });
+    })();
+    </script>
+    {{ end }}
   </body>
 </html>

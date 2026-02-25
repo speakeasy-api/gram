@@ -26,6 +26,9 @@ type McpMetadata struct {
 	DefaultEnvironmentID *string
 	// URL to redirect to instead of showing the default installation page
 	InstallationOverrideURL *string
+	// Whether WebMCP tool registration is enabled on the install page for browsing
+	// agent discovery
+	WebmcpEnabled *bool
 	// The list of environment variables configured for this MCP
 	EnvironmentConfigs []*McpEnvironmentConfig
 	// When the metadata entry was created
