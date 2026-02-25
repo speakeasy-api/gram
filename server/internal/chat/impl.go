@@ -626,15 +626,25 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 		// Copy stream directly to response writer
 		// UnifiedClient's streamingResponseReader handles SSE parsing and message capture
-		_, err = io.Copy(w, streamBody)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "stream copy error", attr.SlogError(err))
-			return oops.E(oops.CodeGatewayError, err, "stream copy failed").Log(ctx, s.logger)
-		}
-
-		// Flush any remaining output
-		if flusher, ok := w.(http.Flusher); ok {
-			flusher.Flush()
+		flusher, canFlush := w.(http.Flusher)
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := streamBody.Read(buf)
+			if n > 0 {
+				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+					s.logger.ErrorContext(ctx, "stream write error", attr.SlogError(writeErr))
+					return oops.E(oops.CodeGatewayError, writeErr, "stream write failed").Log(ctx, s.logger)
+				}
+				if canFlush {
+					flusher.Flush()
+				}
+			}
+			if readErr != nil {
+				if readErr != io.EOF {
+					s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(readErr))
+				}
+				break
+			}
 		}
 
 		eventProperties["success"] = true

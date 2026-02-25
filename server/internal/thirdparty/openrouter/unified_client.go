@@ -245,12 +245,6 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, req CompletionReques
 func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	start := time.Now()
 
-	// Provision API key
-	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID)
-	if err != nil {
-		return nil, fmt.Errorf("provision OpenRouter key: %w", err)
-	}
-
 	// Build request body (non-streaming)
 	initResult, err := c.initializeRequest(ctx, req)
 	if err != nil {
@@ -260,7 +254,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	reqBody.Stream = false
 
 	// Make HTTP request
-	httpResp, err := c.makeHTTPRequest(ctx, apiKey, reqBody)
+	httpResp, err := c.makeHTTPRequest(ctx, initResult.apiKey, reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +327,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	}
 
 	// Apply message capture and usage tracking strategies
-	c.onMessageComplete(ctx, req, *response)
+	c.onMessageComplete(context.WithoutCancel(ctx), req, *response)
 
 	return response, nil
 }
@@ -492,7 +486,8 @@ func (r *streamingResponseReader) Close() error {
 			response.ToolCalls = append(response.ToolCalls, tc)
 		}
 
-		r.client.onMessageComplete(r.ctx, r.request, response)
+		// Use WithoutCancel to ensure message capture completes even if the stream was killed
+		r.client.onMessageComplete(context.WithoutCancel(r.ctx), r.request, response)
 	}
 
 	return err
