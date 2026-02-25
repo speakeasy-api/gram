@@ -2,8 +2,6 @@ package activities
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -38,58 +36,98 @@ type GenerateChatTitleArgs struct {
 	OrgID  string
 }
 
+const defaultChatTitle = "New Chat"
+
 func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) error {
 	chatID, err := uuid.Parse(args.ChatID)
 	if err != nil {
 		return fmt.Errorf("invalid chat ID: %w", err)
 	}
 
-	// Get the first user message for title generation
-	firstUserMessage, err := g.repo.GetFirstUserChatMessage(ctx, chatID)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return fmt.Errorf("no user messages found for chat: %w", err)
-	case err != nil:
-		return fmt.Errorf("failed to get first user message: %w", err)
+	chat, err := g.repo.GetChat(ctx, chatID)
+	if err != nil {
+		return fmt.Errorf("get chat: %w", err)
 	}
 
-	// Generate the title
-	title := g.generateTitle(ctx, args.OrgID, firstUserMessage)
+	// Already has a meaningful title — nothing to do.
+	if chat.Title.Valid && chat.Title.String != defaultChatTitle {
+		return nil
+	}
 
-	// Update the chat title in the database
+	// Build context from the first few user/assistant messages.
+	messages, err := g.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: chat.ProjectID,
+	})
+	if err != nil {
+		return fmt.Errorf("list chat messages: %w", err)
+	}
+
+	contextStr := buildTitleContext(messages)
+	if len(contextStr) < 20 {
+		return nil // Not enough context yet — will retry on next completion.
+	}
+
+	title := g.generateTitle(ctx, args.OrgID, contextStr)
+	if title == defaultChatTitle {
+		return nil
+	}
+
 	err = g.repo.UpdateChatTitle(ctx, repo.UpdateChatTitleParams{
 		ID:    chatID,
 		Title: conv.ToPGText(title),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update chat title: %w", err)
+		return fmt.Errorf("update chat title: %w", err)
 	}
 
 	return nil
 }
 
-func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, firstMessage string) string {
+// buildTitleContext concatenates the first few user/assistant messages into a
+// single string suitable for LLM title generation.
+func buildTitleContext(messages []repo.ChatMessage) string {
+	var b strings.Builder
+	count := 0
+	for _, msg := range messages {
+		if (msg.Role != "user" && msg.Role != "assistant") || strings.TrimSpace(msg.Content) == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "%s: %s\n", msg.Role, strings.TrimSpace(msg.Content))
+		count++
+		if count >= 6 {
+			break
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, conversationContext string) string {
 	if g.chatClient == nil {
-		return "New Chat"
+		return defaultChatTitle
 	}
 
 	titleCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	msg, err := g.chatClient.GetCompletion(titleCtx, orgID,
-		"Generate a concise title (3-6 words) for this conversation. Return only the title text, no quotes or explanation.",
-		firstMessage,
+		"Generate a concise title (3-6 words) for this conversation based on the messages below. "+
+			"Return ONLY the title text, no quotes or explanation. "+
+			"IMPORTANT: The title must directly relate to the content of the messages. "+
+			"Do NOT expand, interpret, or replace abbreviations or acronyms — use the user's exact terminology. "+
+			"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: New Chat",
+		conversationContext,
 		nil,
 		billing.ModelUsageSourceGram,
 	)
 	if err != nil {
 		g.logger.WarnContext(ctx, "failed to generate chat title via OpenRouter", attr.SlogError(err))
-		return "New Chat"
+		return defaultChatTitle
 	}
 
 	title := strings.TrimSpace(openrouter.GetText(*msg))
 	if title == "" {
-		return "New Chat"
+		return defaultChatTitle
 	}
 
 	return title
