@@ -55,6 +55,7 @@ type Configurations struct {
 }
 
 // Service for gram dashboard authentication endpoints
+// Service for gram dashboard authentication endpoints
 type Service struct {
 	tracer              trace.Tracer
 	logger              *slog.Logger
@@ -144,7 +145,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		returnURL = s.cfg.SignInRedirectURL
 	}
 
-	initialRedirectURI := fmt.Sprintf("%s/rpc/slack.callback", "https://recent-patrica-unmonastically.ngrok-free.dev") // s.cfg.GramServerURL)
+	initialRedirectURI := fmt.Sprintf("%s/rpc/slack.callback", s.cfg.GramServerURL)
 
 	response, err := s.client.OAuthV2Access(ctx, payload.Code, initialRedirectURI)
 	if err != nil {
@@ -161,7 +162,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		defaultToolsetSlug = toolsets[0].Slug
 	}
 
-	encryptedSlackToken, err := s.enc.Encrypt([]byte(response.AccessToken))
+	encrypedSlackToken, err := s.enc.Encrypt([]byte(response.AccessToken))
 	if err != nil {
 		return redirectWithError(returnURL, err)
 	}
@@ -171,7 +172,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		ProjectID:          uuid.MustParse(projectID),
 		SlackTeamID:        response.Team.ID,
 		SlackTeamName:      response.Team.Name,
-		AccessToken:        encryptedSlackToken,
+		AccessToken:        encrypedSlackToken,
 		DefaultToolsetSlug: conv.ToPGTextEmpty(defaultToolsetSlug),
 	})
 	if err != nil {
@@ -184,7 +185,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
-	redirectURI := fmt.Sprintf("%s/rpc/slack.callback", "https://recent-patrica-unmonastically.ngrok-free.dev") // s.cfg.GramServerURL)
+	redirectURI := fmt.Sprintf("%s/rpc/slack.callback", s.cfg.GramServerURL)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -210,8 +211,6 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	query.Set("redirect_uri", redirectURI)
 	query.Set("state", state.Encode())
 	installURL.RawQuery = query.Encode()
-
-	s.logger.InfoContext(ctx, "generated slack oauth url", attr.SlogURL(installURL.String()), slog.String("state", state.Encode()))
 
 	return &gen.LoginResult{
 		Location: installURL.String(),
