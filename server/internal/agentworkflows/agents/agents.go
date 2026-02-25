@@ -581,9 +581,17 @@ func (s *Service) GetCompletionFromMessages(
 	temperature *float64,
 	model string,
 ) (*or.Message, error) {
-	msg, err := s.chatClient.GetCompletionFromMessages(ctx, orgID, projectID, messages, toolDefs, temperature, model, billing.ModelUsageSourceAgents)
+	response, err := s.chatClient.GetCompletion(ctx, openrouter.CompletionRequest{
+		OrgID:       orgID,
+		ProjectID:   projectID,
+		Messages:    messages,
+		Tools:       toolDefs,
+		Temperature: temperature,
+		Model:       model,
+		UsageSource: billing.ModelUsageSourceAgents,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get completion from messages: %w", err)
 	}
-	return msg, nil
+	return response.Message, nil
 }

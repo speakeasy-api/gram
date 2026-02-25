@@ -176,21 +176,23 @@ There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, n
 	}
 
 	// Use Haiku (cheaper model) for segmentation
-	msg, err := s.chatClient.GetObjectCompletion(
+	response, err := s.chatClient.GetObjectCompletion(
 		analysisCtx,
-		orgID,
-		projectID.String(),
-		"anthropic/claude-haiku-4.5",
-		systemPrompt,
-		userPrompt,
-		jsonSchemaConfig,
-		billing.ModelUsageSourceGram,
+		openrouter.ObjectCompletionRequest{
+			OrgID:        orgID,
+			ProjectID:    projectID.String(),
+			Model:        "anthropic/claude-haiku-4.5",
+			SystemPrompt: systemPrompt,
+			Prompt:       userPrompt,
+			JSONSchema:   &jsonSchemaConfig,
+			UsageSource:  billing.ModelUsageSourceGram,
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get LLM completion: %w", err)
 	}
 
-	responseText := strings.TrimSpace(openrouter.GetText(*msg))
+	responseText := strings.TrimSpace(openrouter.GetText(*response.Message))
 
 	var segments []ChatSegment
 	if err := json.Unmarshal([]byte(responseText), &segments); err != nil {

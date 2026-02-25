@@ -411,6 +411,18 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 
+			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
+			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
+
+			// Create ClickHouse client and telemetry service for resolution events
+			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, chShutdown)
+
+			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
+
 			// Create message capture strategy for chat messages
 			messageCaptureStrategy := chat.NewChatMessageCaptureStrategy(
 				logger,
@@ -426,31 +438,6 @@ func newWorkerCommand() *cli.Command {
 				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
 			)
 
-			// Keep old ChatClient for backwards compatibility (e.g., RAG service)
-			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-
-			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
-			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
-				pulseTenantID: c.String("pulse-registry-tenant"),
-				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
-				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create mcp registry client: %w", err)
-			}
-
-			// Create ClickHouse client and telemetry service for resolution events
-			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
-			if err != nil {
-				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, chShutdown)
-
-			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
-			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
-
-			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
-
 			// Create UnifiedClient with strategies (after telemetryService is available)
 			unifiedClient := openrouter.NewUnifiedClient(
 				logger,
@@ -461,6 +448,16 @@ func newWorkerCommand() *cli.Command {
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
 				telemetryService,
 			)
+
+			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, unifiedClient)
+			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
+				pulseTenantID: c.String("pulse-registry-tenant"),
+				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
+				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create mcp registry client: %w", err)
+			}
 
 			chatClient := chat.NewChatClient(
 				logger,
@@ -488,7 +485,7 @@ func newWorkerCommand() *cli.Command {
 				guardianPolicy,
 				functionsOrchestrator,
 				openRouter,
-				baseChatClient,
+				unifiedClient,
 			)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
@@ -498,7 +495,7 @@ func newWorkerCommand() *cli.Command {
 				AssetStorage:         assetStorage,
 				SlackClient:          slackClient,
 				ChatClient:           chatClient,
-				OpenRouterChatClient: baseChatClient,
+				OpenRouterChatClient: unifiedClient,
 				OpenRouter:           openRouter,
 				K8sClient:            k8sClient,
 				ExpectedTargetCNAME:  c.String("custom-domain-cname"),

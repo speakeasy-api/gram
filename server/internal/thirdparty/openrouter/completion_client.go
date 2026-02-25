@@ -13,6 +13,7 @@ import (
 type CompletionClient interface {
 	GetCompletion(ctx context.Context, request CompletionRequest) (*CompletionResponse, error)
 	GetCompletionStream(ctx context.Context, request CompletionRequest) (StreamReader, error)
+	GetObjectCompletion(ctx context.Context, request ObjectCompletionRequest) (*CompletionResponse, error)
 }
 
 // StreamReader is an interface for reading streaming completion responses.
@@ -49,8 +50,20 @@ type CompletionRequest struct {
 	HTTPMetadata   *HTTPMetadata
 	APIKeyID       string
 
-	// Special fields
 	JSONSchema *or.JSONSchemaConfig // For structured output mode
+}
+
+type ObjectCompletionRequest struct {
+	OrgID          string
+	ProjectID      string
+	Model          string
+	SystemPrompt   string
+	Prompt         string
+	UsageSource    billing.ModelUsageSource
+	UserID         string
+	ExternalUserID string
+	HTTPMetadata   *HTTPMetadata
+	JSONSchema     *or.JSONSchemaConfig // For structured output mode
 }
 
 // CompletionResponse encapsulates the result of a completion call.

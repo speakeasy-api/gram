@@ -45,7 +45,7 @@ type ToolsetVectorStore struct {
 	embeddingModel string
 }
 
-func NewToolsetVectorStore(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *ToolsetVectorStore {
+func NewToolsetVectorStore(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, unifiedClient *openrouter.ChatClient) *ToolsetVectorStore {
 	if db == nil {
 		return nil
 	}
@@ -55,7 +55,7 @@ func NewToolsetVectorStore(logger *slog.Logger, tracerProvider trace.TracerProvi
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/rag"),
 		db:             db,
 		queries:        repo.New(db),
-		chatClient:     chatClient,
+		chatClient:     unifiedClient,
 		embeddingModel: defaultEmbeddingModel,
 	}
 }

@@ -311,21 +311,23 @@ If there are no tool calls, return an empty array.`, userPromptText)
 		Strict:      nil,
 	}
 
-	msg, err := a.chatClient.GetObjectCompletion(
+	response, err := a.chatClient.GetObjectCompletion(
 		analysisCtx,
-		orgID,
-		projectID.String(),
-		"", // Use default model
-		systemPrompt,
-		userPrompt,
-		jsonSchemaConfig,
-		billing.ModelUsageSourceGram,
+		openrouter.ObjectCompletionRequest{
+			OrgID:        orgID,
+			ProjectID:    projectID.String(),
+			Model:        "", // Use default model
+			SystemPrompt: systemPrompt,
+			Prompt:       userPrompt,
+			JSONSchema:   &jsonSchemaConfig,
+			UsageSource:  billing.ModelUsageSourceGram,
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get LLM completion: %w", err)
 	}
 
-	responseText := strings.TrimSpace(openrouter.GetText(*msg))
+	responseText := strings.TrimSpace(openrouter.GetText(*response.Message))
 
 	var result segmentAnalysisResult
 	if err := json.Unmarshal([]byte(responseText), &result); err != nil {

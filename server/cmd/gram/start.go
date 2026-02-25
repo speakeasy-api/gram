@@ -596,6 +596,11 @@ func newStartCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 
+			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
+			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
+
+			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
+
 			// Create message capture strategy for chat messages
 			messageCaptureStrategy := chat.NewChatMessageCaptureStrategy(
 				logger,
@@ -611,24 +616,6 @@ func newStartCommand() *cli.Command {
 				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
 			)
 
-			// Keep old ChatClient for backwards compatibility (e.g., RAG service)
-			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-
-			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
-			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
-				pulseTenantID: c.String("pulse-registry-tenant"),
-				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
-				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create mcp registry client: %w", err)
-			}
-
-			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
-			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
-
-			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
-
 			// Create UnifiedClient with strategies (after telemSvc is available)
 			unifiedClient := openrouter.NewUnifiedClient(
 				logger,
@@ -639,6 +626,16 @@ func newStartCommand() *cli.Command {
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
 				telemSvc,
 			)
+
+			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, unifiedClient)
+			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
+				pulseTenantID: c.String("pulse-registry-tenant"),
+				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
+				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create mcp registry client: %w", err)
+			}
 
 			chatClient := chat.NewChatClient(
 				logger,
@@ -668,7 +665,7 @@ func newStartCommand() *cli.Command {
 			authAuth := auth.New(logger, db, sessionManager)
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
-			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient, authAuth, temporalEnv))
+			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, unifiedClient, authAuth, temporalEnv))
 			auth.Attach(mux, auth.NewService(logger, db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
 				GramServerURL:          c.String("server-url"),
@@ -731,7 +728,7 @@ func newStartCommand() *cli.Command {
 
 			if temporalEnv != nil && c.Bool("dev-single-process") {
 				// Create agents service for the worker
-				agentsWorkerSvc := agents.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient)
+				agentsWorkerSvc := agents.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, unifiedClient)
 
 				workerInterruptCh := make(chan any)
 				group.Go(func() {
@@ -746,7 +743,7 @@ func newStartCommand() *cli.Command {
 						AssetStorage:         assetStorage,
 						SlackClient:          slackClient,
 						ChatClient:           chatClient,
-						OpenRouterChatClient: baseChatClient,
+						OpenRouterChatClient: unifiedClient,
 						OpenRouter:           openRouter,
 						K8sClient:            k8sClient,
 						ExpectedTargetCNAME:  c.String("custom-domain-cname"),

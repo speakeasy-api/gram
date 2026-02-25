@@ -15,7 +15,9 @@ import (
 	"github.com/hashicorp/go-cleanhttp"
 	"go.opentelemetry.io/otel/trace"
 
+	or_base "github.com/OpenRouterTeam/go-sdk"
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -23,7 +25,7 @@ import (
 
 // ChatTitleGenerator schedules async chat title generation.
 type ChatTitleGenerator interface {
-	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID string) error
+	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
 }
 
 // ChatResolutionAnalyzer schedules async chat resolution analysis.
@@ -36,9 +38,13 @@ type TelemetryService interface {
 	CreateLog(params telemetry.LogParams)
 }
 
-// UnifiedClient is the single HTTP client for all OpenRouter communication.
+const (
+	DefaultChatModel = "openai/gpt-4o"
+)
+
+// ChatClient is the single HTTP client for all OpenRouter communication.
 // It applies pluggable strategies for message capture and usage tracking.
-type UnifiedClient struct {
+type ChatClient struct {
 	logger                 *slog.Logger
 	httpClient             *http.Client
 	provisioner            Provisioner
@@ -58,8 +64,8 @@ func NewUnifiedClient(
 	chatTitleGenerator ChatTitleGenerator,
 	chatResolutionAnalyzer ChatResolutionAnalyzer,
 	telemetryService TelemetryService,
-) *UnifiedClient {
-	return &UnifiedClient{
+) *ChatClient {
+	return &ChatClient{
 		logger:                 logger,
 		httpClient:             cleanhttp.DefaultPooledClient(),
 		provisioner:            provisioner,
@@ -78,16 +84,24 @@ type initializeRequestResult struct {
 }
 
 // initializeRequest creates the OpenAI-compatible request body with defaults applied.
-func (c *UnifiedClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
+func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
 	// Provision API key
 	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID)
 	if err != nil {
 		return nil, fmt.Errorf("provision OpenRouter key: %w", err)
 	}
 
-	chatResult, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start or resume chat: %w", err)
+	isFirstMessage := true
+	if req.ChatID != uuid.Nil {
+		chatResult, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start or resume chat: %w", err)
+		}
+		isFirstMessage = chatResult.IsFirstMessage
+	}
+
+	if _, err := uuid.Parse(req.ProjectID); err != nil {
+		return nil, fmt.Errorf("invalid project ID: %w", err)
 	}
 
 	// Set defaults
@@ -122,13 +136,13 @@ func (c *UnifiedClient) initializeRequest(ctx context.Context, req CompletionReq
 
 	return &initializeRequestResult{
 		apiKey:         apiKey,
-		isFirstMessage: chatResult.IsFirstMessage,
+		isFirstMessage: isFirstMessage,
 		requestBody:    reqBody,
 	}, nil
 }
 
 // makeHTTPRequest creates and executes an HTTP request to OpenRouter.
-func (c *UnifiedClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody OpenAIChatRequest) (*http.Response, error) {
+func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody OpenAIChatRequest) (*http.Response, error) {
 	if !IsModelAllowed(reqBody.Model) {
 		return nil, fmt.Errorf("model %s is not allowed", reqBody.Model)
 	}
@@ -163,7 +177,7 @@ func (c *UnifiedClient) makeHTTPRequest(ctx context.Context, apiKey string, reqB
 }
 
 // onMessageComplete applies message capture and usage tracking strategies.
-func (c *UnifiedClient) onMessageComplete(ctx context.Context, isFirstMessage bool, req CompletionRequest, response CompletionResponse) {
+func (c *ChatClient) onMessageComplete(ctx context.Context, isFirstMessage bool, req CompletionRequest, response CompletionResponse) {
 	// Apply message capture strategy
 	if c.messageCaptureStrategy != nil {
 		if err := c.messageCaptureStrategy.CaptureMessage(ctx, req, response); err != nil {
@@ -188,6 +202,12 @@ func (c *UnifiedClient) onMessageComplete(ctx context.Context, isFirstMessage bo
 		}()
 	}
 
+	projectID, err := uuid.Parse(req.ProjectID)
+	if err != nil {
+		c.logger.WarnContext(ctx, "failed to parse project ID for chat title generation", attr.SlogError(err))
+		return
+	}
+
 	// Schedule chat title generation for first messages
 	// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
 	if isFirstMessage && c.chatTitleGenerator != nil {
@@ -195,6 +215,7 @@ func (c *UnifiedClient) onMessageComplete(ctx context.Context, isFirstMessage bo
 			context.WithoutCancel(ctx),
 			req.ChatID.String(),
 			req.OrgID,
+			projectID.String(),
 		); err != nil {
 			c.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
 		}
@@ -202,25 +223,20 @@ func (c *UnifiedClient) onMessageComplete(ctx context.Context, isFirstMessage bo
 
 	// Schedule chat resolution analysis (will reset timer if already scheduled)
 	if c.chatResolutionAnalyzer != nil {
-		projectID, err := uuid.Parse(req.ProjectID)
-		if err != nil {
-			c.logger.WarnContext(ctx, "failed to parse project ID for resolution analysis", attr.SlogError(err))
-		} else {
-			if err := c.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
-				context.WithoutCancel(ctx),
-				req.ChatID,
-				projectID,
-				req.OrgID,
-				req.APIKeyID,
-			); err != nil {
-				c.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
-			}
+		if err := c.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
+			context.WithoutCancel(ctx),
+			req.ChatID,
+			projectID,
+			req.OrgID,
+			req.APIKeyID,
+		); err != nil {
+			c.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
 		}
 	}
 }
 
 // GetCompletion makes a non-streaming completion request to OpenRouter and applies capture/tracking strategies.
-func (c *UnifiedClient) GetCompletion(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
+func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	// Provision API key
 	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID)
 	if err != nil {
@@ -318,7 +334,7 @@ func (c *UnifiedClient) GetCompletion(ctx context.Context, req CompletionRequest
 // - Streams SSE events to the caller transparently
 // - Parses SSE chunks internally to extract message metadata
 // - Automatically triggers capture/tracking strategies when the stream closes
-func (c *UnifiedClient) GetCompletionStream(ctx context.Context, req CompletionRequest) (StreamReader, error) {
+func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequest) (StreamReader, error) {
 	// Build request body (streaming)
 	initResult, err := c.initializeRequest(ctx, req)
 	if err != nil {
@@ -365,6 +381,43 @@ func (c *UnifiedClient) GetCompletionStream(ctx context.Context, req CompletionR
 	}
 
 	return streamReader, nil
+}
+
+func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompletionRequest) (*CompletionResponse, error) {
+	var messages []or.Message
+
+	// Optional system prompt
+	if req.SystemPrompt != "" {
+		messages = append(messages, or.CreateMessageSystem(or.SystemMessage{
+			Content: or.CreateSystemMessageContentStr(req.SystemPrompt),
+			Name:    nil,
+		}))
+	}
+
+	// User message
+	messages = append(messages, or.CreateMessageUser(or.UserMessage{
+		Content: or.CreateUserMessageContentStr(req.Prompt),
+		Name:    nil,
+	}))
+
+	completionReq := CompletionRequest{
+		OrgID:          req.OrgID,
+		ProjectID:      req.ProjectID,
+		Messages:       messages,
+		Tools:          nil,
+		Temperature:    nil,
+		Model:          req.Model,
+		Stream:         false,
+		UsageSource:    req.UsageSource,
+		UserID:         req.UserID,
+		ExternalUserID: req.ExternalUserID,
+		HTTPMetadata:   req.HTTPMetadata,
+		JSONSchema:     req.JSONSchema,
+		ChatID:         uuid.Nil,
+		APIKeyID:       "",
+	}
+
+	return c.GetCompletion(ctx, completionReq)
 }
 
 // streamingResponseReader wraps an HTTP response body and parses SSE chunks as they stream through.
@@ -437,7 +490,7 @@ func (r *streamingResponseReader) Close() error {
 		}
 
 		// Apply capture/tracking strategies
-		client := &UnifiedClient{
+		client := &ChatClient{
 			logger:                 r.logger,
 			httpClient:             nil, // Not needed for applyStrategies
 			provisioner:            nil, // Not needed for applyStrategies
@@ -621,4 +674,89 @@ func (r *streamingResponseReader) emitGenAITelemetry(toolCalls []ToolCall) {
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})
+}
+
+func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string) ([][]float32, error) {
+	openrouterKey, err := c.provisioner.ProvisionAPIKey(ctx, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
+	}
+
+	if model == "" {
+		return nil, fmt.Errorf("model is required")
+	}
+
+	if len(inputs) == 0 {
+		return nil, fmt.Errorf("at least one input is required")
+	}
+
+	// Truncate inputs that exceed token limits
+	// Embedding models have 8192 token limit, using ~4 chars/token as conservative estimate
+	const maxChars = 30_000
+	truncatedInputs := make([]string, len(inputs))
+	for i, input := range inputs {
+		if len(input) > maxChars {
+			c.logger.WarnContext(ctx, fmt.Sprintf("truncating input for embedding, orgID: %s, model: %s, input length: %d", orgID, model, len(input)))
+			truncatedInputs[i] = input[:maxChars]
+		} else {
+			truncatedInputs[i] = input
+		}
+	}
+	inputs = truncatedInputs
+
+	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
+	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
+		Model:          model,
+		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),
+		EncodingFormat: nil,
+		Dimensions:     nil,
+		User:           nil,
+		Provider:       nil,
+		InputType:      nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create embeddings error: %w", err)
+	}
+
+	// The new SDK returns errors via err, not via HTTPMeta
+	// Check if we got a response body
+	if result == nil || result.CreateEmbeddingsResponseBody == nil {
+		return nil, fmt.Errorf("embedding response body missing")
+	}
+
+	embeddingsData := result.CreateEmbeddingsResponseBody.Data
+
+	if len(embeddingsData) == 0 {
+		return nil, fmt.Errorf("embedding data missing in response")
+	}
+
+	results := make([][]float32, len(inputs))
+	for _, data := range embeddingsData {
+		if data.Index == nil {
+			return nil, fmt.Errorf("embedding data missing index")
+		}
+		index := int(*data.Index)
+		if index < 0 || index >= len(results) {
+			return nil, fmt.Errorf("embedding index out of range: %d", index)
+		}
+
+		embedding := data.GetEmbedding()
+		if embedding.ArrayOfNumber == nil {
+			return nil, fmt.Errorf("embedding vector missing for index %d", index)
+		}
+
+		vector := make([]float32, len(embedding.ArrayOfNumber))
+		for i, v := range embedding.ArrayOfNumber {
+			vector[i] = float32(v)
+		}
+		results[index] = vector
+	}
+
+	for i, vector := range results {
+		if vector == nil {
+			return nil, fmt.Errorf("missing embedding for input index %d", i)
+		}
+	}
+
+	return results, nil
 }

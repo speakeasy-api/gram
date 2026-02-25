@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -34,8 +35,9 @@ func NewGenerateChatTitle(logger *slog.Logger, db *pgxpool.Pool, chatClient *ope
 }
 
 type GenerateChatTitleArgs struct {
-	ChatID string
-	OrgID  string
+	ChatID    string
+	OrgID     string
+	ProjectID string
 }
 
 func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) error {
@@ -54,7 +56,7 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	}
 
 	// Generate the title
-	title := g.generateTitle(ctx, args.OrgID, firstUserMessage)
+	title := g.generateTitle(ctx, args.OrgID, args.ProjectID, firstUserMessage)
 
 	// Update the chat title in the database
 	err = g.repo.UpdateChatTitle(ctx, repo.UpdateChatTitleParams{
@@ -68,7 +70,7 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	return nil
 }
 
-func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, firstMessage string) string {
+func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID string, firstMessage string) string {
 	if g.chatClient == nil {
 		return "New Chat"
 	}
@@ -76,18 +78,23 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, firstMessa
 	titleCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	msg, err := g.chatClient.GetCompletion(titleCtx, orgID,
-		"Generate a concise title (3-6 words) for this conversation. Return only the title text, no quotes or explanation.",
-		firstMessage,
-		nil,
-		billing.ModelUsageSourceGram,
-	)
+	response, err := g.chatClient.GetCompletion(titleCtx, openrouter.CompletionRequest{
+		OrgID:     orgID,
+		ProjectID: projectID,
+		Messages: []or.Message{
+			openrouter.CreateMessageUser(firstMessage),
+		},
+		Tools:       nil,
+		Temperature: nil,
+		Model:       "",
+		UsageSource: billing.ModelUsageSourceGram,
+	})
 	if err != nil {
 		g.logger.WarnContext(ctx, "failed to generate chat title via OpenRouter", attr.SlogError(err))
 		return "New Chat"
 	}
 
-	title := strings.TrimSpace(openrouter.GetText(*msg))
+	title := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if title == "" {
 		return "New Chat"
 	}
