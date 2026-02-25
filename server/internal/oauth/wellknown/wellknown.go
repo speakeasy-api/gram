@@ -45,6 +45,7 @@ type OAuthServerMetadata struct {
 	AuthorizationEndpoint         string   `json:"authorization_endpoint"`
 	TokenEndpoint                 string   `json:"token_endpoint"`
 	RegistrationEndpoint          string   `json:"registration_endpoint"`
+	ScopesSupported               []string `json:"scopes_supported,omitempty"`
 	ResponseTypesSupported        []string `json:"response_types_supported"`
 	GrantTypesSupported           []string `json:"grant_types_supported"`
 	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
@@ -67,6 +68,7 @@ type OAuthServerMetadataResult struct {
 
 type OAuthRepo interface {
 	GetExternalOAuthServerMetadata(ctx context.Context, arg repo.GetExternalOAuthServerMetadataParams) (repo.ExternalOauthServerMetadatum, error)
+	ListOAuthProxyProvidersByServer(ctx context.Context, arg repo.ListOAuthProxyProvidersByServerParams) ([]repo.OauthProxyProvider, error)
 }
 
 func ResolveOAuthServerMetadataFromToolset(
@@ -80,6 +82,17 @@ func ResolveOAuthServerMetadataFromToolset(
 	mcpSlug string,
 ) (*OAuthServerMetadataResult, error) {
 	if toolset.OauthProxyServerID.Valid {
+		var scopesSupported []string
+		providers, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
+			OauthProxyServerID: toolset.OauthProxyServerID.UUID,
+			ProjectID:          toolset.ProjectID,
+		})
+		if err == nil {
+			for _, p := range providers {
+				scopesSupported = append(scopesSupported, p.ScopesSupported...)
+			}
+		}
+
 		return &OAuthServerMetadataResult{
 			Kind: OAuthServerMetadataResultKindStatic,
 			Static: &OAuthServerMetadata{
@@ -87,6 +100,7 @@ func ResolveOAuthServerMetadataFromToolset(
 				AuthorizationEndpoint:         baseURL + "/oauth/" + mcpSlug + "/authorize",
 				TokenEndpoint:                 baseURL + "/oauth/" + mcpSlug + "/token",
 				RegistrationEndpoint:          baseURL + "/oauth/" + mcpSlug + "/register",
+				ScopesSupported:               scopesSupported,
 				ResponseTypesSupported:        []string{"code"},
 				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
 				CodeChallengeMethodsSupported: []string{"plain", "S256"},
@@ -128,6 +142,7 @@ func ResolveOAuthServerMetadataFromToolset(
 				AuthorizationEndpoint:         oauthConfig.AuthorizationEndpoint,
 				TokenEndpoint:                 oauthConfig.TokenEndpoint,
 				RegistrationEndpoint:          oauthConfig.RegistrationEndpoint,
+				ScopesSupported:               oauthConfig.ScopesSupported,
 				ResponseTypesSupported:        []string{"code"},
 				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
 				CodeChallengeMethodsSupported: []string{"S256"},
