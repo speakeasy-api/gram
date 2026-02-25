@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.29.2
+
+### Patch Changes
+
+- 833263c: Prevent source detail page crash when logs are not enabled. The telemetry query now uses useLogsEnabledErrorCheck and throwOnError: false to gracefully degrade without metrics instead of crashing the entire page.
+
 ## 0.29.1
 
 ### Patch Changes
