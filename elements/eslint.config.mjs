@@ -8,7 +8,6 @@ import tseslint from "typescript-eslint";
 import { includeIgnoreFile } from "@eslint/compat";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import prettier from "eslint-plugin-prettier";
 import reactRefresh from "eslint-plugin-react-refresh";
 import unusedImports from "eslint-plugin-unused-imports";
 
@@ -41,12 +40,10 @@ export default tseslint.config(
   },
   {
     plugins: {
-      prettier,
       "react-refresh": reactRefresh,
       "unused-imports": unusedImports,
     },
     rules: {
-      "prettier/prettier": ["error", {}, { usePrettierrc: true }],
       "no-unused-vars": "off", // or "@typescript-eslint/no-unused-vars": "off",
       "unused-imports/no-unused-imports": "error",
 
