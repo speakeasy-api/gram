@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Seed the local database with data"
 
@@ -116,6 +116,9 @@ async function seed() {
     sessionId,
   });
 
+  // Collect all tool URNs per project for seeding observability data
+  const projectToolUrns: Record<string, string[]> = {};
+
   for (const { name, slug, assets, mcpPublic } of SEED_PROJECTS) {
     const {
       created,
@@ -128,6 +131,7 @@ async function seed() {
       slug,
     });
     projects[projectSlug] = { id, slug: projectSlug };
+    projectToolUrns[projectSlug] = [];
     let verb = created ? "Created" : "Found existing";
     log.info(`${verb} project '${projectSlug}' (project_id = ${id})`);
 
@@ -153,8 +157,11 @@ async function seed() {
       });
       verb = toolset.created ? "Created" : "Updated";
       log.info(
-        `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL})`,
+        `${verb} toolset '${toolset.slug}' for project '${projectSlug}' (mcp_url = ${toolset.mcpURL}, tools: ${toolset.toolUrns.length})`,
       );
+
+      // Collect tool URNs for observability seeding
+      projectToolUrns[projectSlug].push(...toolset.toolUrns);
 
       if (asset.storybookDefault) {
         await $`mise set --file mise.local.toml \
@@ -182,12 +189,15 @@ async function seed() {
     );
   }
 
-  // Seed observability data for the first project
-  const firstProject = Object.values(projects)[0];
+  // Seed observability data for the first seeded project
+  const firstSeededProjectSlug = Object.keys(projectToolUrns)[0];
+  const firstProject = firstSeededProjectSlug ? projects[firstSeededProjectSlug] : undefined;
   if (firstProject) {
+    const toolUrns = projectToolUrns[firstProject.slug] ?? [];
     await seedObservabilityData({
       projectId: firstProject.id,
       organizationId: activeOrgID,
+      toolUrns,
     });
   }
 
@@ -314,7 +324,10 @@ async function deployAssets(init: {
     if ("url" in asset) {
       const response = await fetch(asset.url);
       if (!response.ok) {
-        abort(`Failed to fetch OpenAPI spec from ${asset.url}`, response.statusText);
+        abort(
+          `Failed to fetch OpenAPI spec from ${asset.url}`,
+          response.statusText,
+        );
       }
       spec = await response.text();
       contentType = "application/json";
@@ -376,7 +389,7 @@ async function deployAssets(init: {
   return deploymentId;
 }
 
-type Toolset = { created: boolean; slug: string; mcpURL: string };
+type Toolset = { created: boolean; slug: string; mcpURL: string; toolUrns: string[] };
 
 async function upsertToolset(init: {
   gram: GramCore;
@@ -463,6 +476,7 @@ async function upsertToolset(init: {
         created: false,
         slug: updateRes.value.slug,
         mcpURL: `${serverURL}/mcp/${updateRes.value.mcpSlug}`,
+        toolUrns,
       };
       break;
     case !createRes.ok:
@@ -475,6 +489,7 @@ async function upsertToolset(init: {
         created: true,
         slug: createRes.value.slug,
         mcpURL: `${serverURL}/mcp/${createRes.value.mcpSlug}`,
+        toolUrns,
       };
       break;
   }
@@ -684,24 +699,22 @@ function generateChatUUID(chatNumber: number): string {
 async function seedObservabilityData(init: {
   projectId: string;
   organizationId: string;
+  toolUrns: string[];
 }): Promise<void> {
-  const { projectId, organizationId } = init;
+  const { projectId, organizationId, toolUrns } = init;
 
-  log.info("Seeding observability data...");
+  log.info(`Seeding observability data with ${toolUrns.length} tool URNs...`);
+
+  if (toolUrns.length === 0) {
+    log.warn("No tool URNs available for seeding observability data. Skipping.");
+    return;
+  }
 
   const NUM_CHATS = 500; // Reduced for faster seeding
   const DAYS_BACK = 30;
 
-  // Tool names for generating realistic data
-  const TOOLS = [
-    "github:list-repos",
-    "slack:send-message",
-    "postgres:query",
-    "openai:chat",
-    "jira:get-ticket",
-    "stripe:create-payment",
-    "notion:create-page",
-  ];
+  // Use actual tool URNs from the deployment
+  const TOOLS = toolUrns;
 
   const RESOLUTIONS = ["success", "partial", "failure"] as const;
   const RESOLUTION_WEIGHTS = [65, 15, 20]; // success: 65%, partial: 15%, failure: 20%
@@ -738,7 +751,16 @@ async function seedObservabilityData(init: {
 
   // Helper to generate large arrays for testing truncation
   function generateLargeRepositoryList(count: number) {
-    const languages = ["Go", "TypeScript", "Python", "Rust", "Java", "Ruby", "C++", "JavaScript"];
+    const languages = [
+      "Go",
+      "TypeScript",
+      "Python",
+      "Rust",
+      "Java",
+      "Ruby",
+      "C++",
+      "JavaScript",
+    ];
     const repos = [];
     for (let i = 0; i < count; i++) {
       repos.push({
@@ -753,10 +775,20 @@ async function seedObservabilityData(init: {
         watchers: Math.floor(Math.random() * 500),
         default_branch: "main",
         visibility: i % 3 === 0 ? "public" : "private",
-        created_at: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString(),
-        updated_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-        pushed_at: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-        topics: ["backend", "api", languages[i % languages.length].toLowerCase()],
+        created_at: new Date(
+          Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        updated_at: new Date(
+          Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        pushed_at: new Date(
+          Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        topics: [
+          "backend",
+          "api",
+          languages[i % languages.length].toLowerCase(),
+        ],
         license: { key: "mit", name: "MIT License" },
         permissions: { admin: true, push: true, pull: true },
       });
@@ -766,7 +798,13 @@ async function seedObservabilityData(init: {
 
   function generateLargeLogEntries(count: number) {
     const levels = ["DEBUG", "INFO", "WARN", "ERROR"];
-    const services = ["api-gateway", "auth-service", "payment-processor", "notification-worker", "analytics-pipeline"];
+    const services = [
+      "api-gateway",
+      "auth-service",
+      "payment-processor",
+      "notification-worker",
+      "analytics-pipeline",
+    ];
     const messages = [
       "Request received from client",
       "Processing authentication token",
@@ -799,7 +837,9 @@ async function seedObservabilityData(init: {
         duration_ms: Math.floor(Math.random() * 500),
         metadata: {
           host: `server-${Math.floor(Math.random() * 10) + 1}.prod.example.com`,
-          region: ["us-east-1", "us-west-2", "eu-west-1"][Math.floor(Math.random() * 3)],
+          region: ["us-east-1", "us-west-2", "eu-west-1"][
+            Math.floor(Math.random() * 3)
+          ],
           version: `v${Math.floor(Math.random() * 3) + 1}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 20)}`,
         },
       });
@@ -808,8 +848,23 @@ async function seedObservabilityData(init: {
   }
 
   function generateLargeOrderList(count: number) {
-    const statuses = ["pending", "processing", "shipped", "delivered", "cancelled"];
-    const customers = ["Acme Corp", "TechStart Inc", "Global Services", "DataFlow LLC", "CloudNine Solutions", "NextGen Systems", "Pioneer Tech", "Quantum Labs"];
+    const statuses = [
+      "pending",
+      "processing",
+      "shipped",
+      "delivered",
+      "cancelled",
+    ];
+    const customers = [
+      "Acme Corp",
+      "TechStart Inc",
+      "Global Services",
+      "DataFlow LLC",
+      "CloudNine Solutions",
+      "NextGen Systems",
+      "Pioneer Tech",
+      "Quantum Labs",
+    ];
     const orders = [];
     for (let i = 0; i < count; i++) {
       const itemCount = Math.floor(Math.random() * 5) + 1;
@@ -831,20 +886,29 @@ async function seedObservabilityData(init: {
           phone: `+1-555-${String(Math.floor(Math.random() * 10000)).padStart(4, "0")}`,
         },
         items,
-        subtotal: items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0),
+        subtotal: items.reduce(
+          (sum, item) => sum + item.quantity * item.unit_price,
+          0,
+        ),
         tax: Math.floor(Math.random() * 100),
         shipping: Math.floor(Math.random() * 50),
         total: 0,
         status: statuses[Math.floor(Math.random() * statuses.length)],
         shipping_address: {
           street: `${Math.floor(Math.random() * 9999) + 1} Main St`,
-          city: ["New York", "San Francisco", "Chicago", "Austin", "Seattle"][Math.floor(Math.random() * 5)],
+          city: ["New York", "San Francisco", "Chicago", "Austin", "Seattle"][
+            Math.floor(Math.random() * 5)
+          ],
           state: ["NY", "CA", "IL", "TX", "WA"][Math.floor(Math.random() * 5)],
           zip: String(Math.floor(Math.random() * 90000) + 10000),
           country: "US",
         },
-        created_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-        updated_at: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+        created_at: new Date(
+          Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        updated_at: new Date(
+          Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
       });
     }
     return orders;
@@ -888,7 +952,11 @@ async function seedObservabilityData(init: {
           text: JSON.stringify({
             logs: generateLargeLogEntries(80),
             total_entries: 80,
-            query: { start_time: "2024-01-15T00:00:00Z", end_time: "2024-01-15T23:59:59Z", level: "all" },
+            query: {
+              start_time: "2024-01-15T00:00:00Z",
+              end_time: "2024-01-15T23:59:59Z",
+              level: "all",
+            },
           }),
         },
       ],
@@ -921,9 +989,24 @@ async function seedObservabilityData(init: {
               commit_sha: "a1b2c3d4e5f6",
               logs_url: "https://logs.example.com/deploy-789xyz",
               stages: [
-                { name: "build", status: "success", duration_seconds: 45, logs: generateLargeLogEntries(10) },
-                { name: "test", status: "success", duration_seconds: 120, logs: generateLargeLogEntries(15) },
-                { name: "deploy", status: "success", duration_seconds: 30, logs: generateLargeLogEntries(8) },
+                {
+                  name: "build",
+                  status: "success",
+                  duration_seconds: 45,
+                  logs: generateLargeLogEntries(10),
+                },
+                {
+                  name: "test",
+                  status: "success",
+                  duration_seconds: 120,
+                  logs: generateLargeLogEntries(15),
+                },
+                {
+                  name: "deploy",
+                  status: "success",
+                  duration_seconds: 30,
+                  logs: generateLargeLogEntries(8),
+                },
               ],
             },
           }),
@@ -1101,7 +1184,9 @@ async function seedObservabilityData(init: {
     }
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(`Failed to seed PostgreSQL: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`);
+    log.warn(
+      `Failed to seed PostgreSQL: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
   }
 
   // Build ClickHouse insert for telemetry logs
@@ -1118,25 +1203,28 @@ async function seedObservabilityData(init: {
     const eventTime = new Date(now - daysAgo * msPerDay);
     const timeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
 
-    // Tool call event
-    const tool = TOOLS[Math.floor(Math.random() * TOOLS.length)];
+    // Generate a unique trace ID for each tool call (32 hex chars)
+    const traceId = crypto.randomBytes(16).toString("hex");
+
+    // Tool call event - TOOLS now contains full URNs like "tools:http:gram:operation"
+    const toolUrn = TOOLS[Math.floor(Math.random() * TOOLS.length)];
     const statusCode = Math.random() < 0.92 ? 200 : [400, 500, 502][Math.floor(Math.random() * 3)];
     const latency = (0.05 + Math.random() * 2).toFixed(3);
 
     chInserts.push(
-      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${tool}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "tools:${tool}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'tools:${tool}', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "${toolUrn}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`,
     );
 
-    // Chat completion event
+    // Chat completion event - same trace ID links it to the tool call
     const finishReason = Math.random() < 0.65 ? "stop" : Math.random() < 0.9 ? "length" : "error";
     const duration = 30 + Math.floor(Math.random() * 150);
     const completionStatus = Math.random() < 0.92 ? 200 : 500;
 
     chInserts.push(
-      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
     );
 
-    // Resolution event (70% of chats)
+    // Resolution event (70% of chats) - same trace ID
     if (Math.random() < 0.7) {
       const rand = Math.random() * 100;
       let resolution: string;
@@ -1154,14 +1242,14 @@ async function seedObservabilityData(init: {
       }
 
       chInserts.push(
-        `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
+        `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '${traceId}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
       );
     }
   }
 
   const chSQL = `
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}';
-    INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
+    INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chInserts.join(",\n")};
   `;
 
@@ -1175,9 +1263,7 @@ async function seedObservabilityData(init: {
     await $`docker cp ${tmpFile} gram-clickhouse-1:/tmp/seed.sql`.quiet();
     await $`docker exec gram-clickhouse-1 clickhouse-client --multiquery --queries-file /tmp/seed.sql`.quiet();
     await fs.unlink(tmpFile);
-    log.info(
-      `Inserted ${chInserts.length} telemetry events into ClickHouse`,
-    );
+    log.info(`Inserted ${chInserts.length} telemetry events into ClickHouse`);
   } catch (e) {
     log.warn(`Failed to seed ClickHouse: ${e}`);
   }

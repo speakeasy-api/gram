@@ -1,5 +1,25 @@
 # dashboard
 
+## 0.29.3
+
+### Patch Changes
+
+- 3cae542: Improve logs page timestamp display (no wrapping, remove comma, hide duplicate child timestamps)
+  Fix tree line alignment with parent chevron in expanded log rows
+  Fix loading state layout shift in expanded logs
+  Filter out chat completion logs (urn:uuid:) from tool calls list
+  Fix breadcrumb scrolling issue on insights page
+  Add click-outside-to-close for AI Insights sidebar
+  Remove Beta labels from AI Insights
+- Updated dependencies [3cae542]
+  - @gram/client@0.28.1
+
+## 0.29.2
+
+### Patch Changes
+
+- 833263c: Prevent source detail page crash when logs are not enabled. The telemetry query now uses useLogsEnabledErrorCheck and throwOnError: false to gracefully degrade without metrics instead of crashing the entire page.
+
 ## 0.29.1
 
 ### Patch Changes

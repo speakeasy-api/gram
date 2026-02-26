@@ -27,6 +27,7 @@ import {
 import {
   useFeaturesSetMutation,
   useGramContext,
+  useListToolsets,
 } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
@@ -36,7 +37,21 @@ import {
 } from "@gram-ai/elements";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { MoreHorizontal, XIcon } from "lucide-react";
+import { Check, ChevronDown, MoreHorizontal, XIcon } from "lucide-react";
+import { McpIcon } from "@/components/ui/mcp-icon";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { LogDetailSheet } from "./LogDetailSheet";
@@ -87,6 +102,98 @@ function safeBase64Decode(str: string): string | null {
 
 const perPage = 25;
 
+/**
+ * MCP Server filter dropdown
+ */
+function MCPServerFilter({
+  selectedServer,
+  onServerChange,
+  toolsets,
+  isLoading,
+  disabled,
+}: {
+  selectedServer: string | null;
+  onServerChange: (serverId: string | null) => void;
+  toolsets: Array<{ slug: string; name: string }>;
+  isLoading?: boolean;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const selectedToolset = toolsets.find((t) => t.slug === selectedServer);
+  const displayLabel = selectedToolset?.name ?? "All Servers";
+
+  return (
+    <div
+      className={`flex items-center gap-2 ${disabled ? "opacity-50 pointer-events-none" : ""}`}
+    >
+      <div className="flex items-center h-[42px] bg-muted/50 rounded-md p-1 border border-border">
+        <div className="flex items-center gap-1.5 h-8 px-3">
+          <McpIcon className="size-3.5 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">Server</span>
+        </div>
+        <div className="w-px h-6 bg-border/50 mx-1" />
+        <Popover open={!disabled && open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              disabled={disabled || isLoading}
+              className={`h-8 min-w-[140px] flex items-center justify-between gap-2 text-sm px-2 rounded transition-colors ${
+                disabled || isLoading
+                  ? "opacity-40 cursor-not-allowed"
+                  : "hover:bg-muted/50"
+              }`}
+            >
+              <span className="truncate max-w-[120px]">
+                {isLoading ? "Loading..." : displayLabel}
+              </span>
+              <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[220px] p-0" align="end">
+            <Command>
+              <CommandInput placeholder="Search servers..." className="h-9" />
+              <CommandList>
+                <CommandEmpty>No servers found.</CommandEmpty>
+                <CommandGroup>
+                  <CommandItem
+                    value="__all__"
+                    onSelect={() => {
+                      onServerChange(null);
+                      setOpen(false);
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <Check
+                      className={`mr-2 size-4 ${selectedServer === null ? "opacity-100" : "opacity-0"}`}
+                    />
+                    <span>All Servers</span>
+                  </CommandItem>
+                  {toolsets.map((toolset) => (
+                    <CommandItem
+                      key={toolset.slug}
+                      value={toolset.name}
+                      onSelect={() => {
+                        onServerChange(toolset.slug);
+                        setOpen(false);
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <Check
+                        className={`mr-2 size-4 ${selectedServer === toolset.slug ? "opacity-100" : "opacity-0"}`}
+                      />
+                      <span className="truncate">{toolset.name}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
+    </div>
+  );
+}
+
 export default function LogsPage() {
   return <LogsContent />;
 }
@@ -104,8 +211,22 @@ function LogsContent() {
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: logsToolFilter,
   });
-  const [searchQuery, setSearchQuery] = useState<string | null>(null);
-  const [searchInput, setSearchInput] = useState("");
+
+  // Fetch toolsets for MCP server filter
+  const { data: toolsetsData, isLoading: isLoadingToolsets } =
+    useListToolsets();
+  const toolsets = toolsetsData?.toolsets ?? [];
+
+  // Initialize search and server filter from URL params
+  const initialQuery = searchParams.get("q");
+  const initialServer = searchParams.get("server");
+  const [searchQuery, setSearchQuery] = useState<string | null>(
+    initialQuery || null,
+  );
+  const [searchInput, setSearchInput] = useState(initialQuery || "");
+  const [selectedServer, setSelectedServer] = useState<string | null>(
+    initialServer || null,
+  );
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
@@ -194,6 +315,31 @@ function LogsContent() {
     [customRange, dateRange],
   );
 
+  // Derive URN prefix from selected server's toolUrns
+  const serverUrnPrefix = useMemo(() => {
+    if (!selectedServer) return null;
+    const selectedToolset = toolsets.find((t) => t.slug === selectedServer);
+    if (selectedToolset?.toolUrns?.length) {
+      // Extract common URN prefix from the first tool URN
+      // e.g., "tools:http:gram:some_tool" -> "tools:http:gram"
+      const firstUrn = selectedToolset.toolUrns[0];
+      const parts = firstUrn.split(":");
+      if (parts.length >= 3) {
+        // Take first 3 parts: "tools:http:gram"
+        return parts.slice(0, 3).join(":");
+      }
+    }
+    return null;
+  }, [selectedServer, toolsets]);
+
+  // Combine search query with server filter - server filter takes precedence
+  const effectiveGramUrn = useMemo(() => {
+    if (serverUrnPrefix) {
+      return serverUrnPrefix;
+    }
+    return searchQuery;
+  }, [serverUrnPrefix, searchQuery]);
+
   const {
     data,
     error,
@@ -207,7 +353,8 @@ function LogsContent() {
     useInfiniteQuery({
       queryKey: [
         "tool-calls",
-        searchQuery,
+        effectiveGramUrn,
+        selectedServer,
         from.toISOString(),
         to.toISOString(),
       ],
@@ -216,7 +363,7 @@ function LogsContent() {
           telemetrySearchToolCalls(client, {
             searchToolCallsPayload: {
               filter: {
-                gramUrn: searchQuery || undefined,
+                ...(effectiveGramUrn ? { gramUrn: effectiveGramUrn } : {}),
                 from,
                 to,
               },
@@ -267,13 +414,48 @@ function LogsContent() {
     });
   };
 
-  // Debounce search input
+  // Handler for server filter change
+  const handleServerChange = useCallback(
+    (serverSlug: string | null) => {
+      setSelectedServer(serverSlug);
+      // Sync URL params preserving search query
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (serverSlug) {
+            next.set("server", serverSlug);
+          } else {
+            next.delete("server");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  // Debounce search input and sync URL params
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      setSearchQuery(searchInput || null);
+      const newQuery = searchInput || null;
+      setSearchQuery(newQuery);
+      // Sync URL params preserving server filter
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (newQuery) {
+            next.set("q", newQuery);
+          } else {
+            next.delete("q");
+          }
+          return next;
+        },
+        { replace: true },
+      );
     }, 500);
     return () => clearTimeout(timeoutId);
-  }, [searchInput]);
+  }, [searchInput, setSearchParams]);
 
   // Handle scroll for infinite loading
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -334,6 +516,10 @@ function LogsContent() {
         searchQuery={searchQuery}
         searchInput={searchInput}
         setSearchInput={setSearchInput}
+        selectedServer={selectedServer}
+        onServerChange={handleServerChange}
+        toolsets={toolsets}
+        isLoadingToolsets={isLoadingToolsets}
         expandedTraceId={expandedTraceId}
         toggleExpand={toggleExpand}
         selectedLog={selectedLog}
@@ -370,6 +556,10 @@ function LogsInnerContent({
   searchQuery,
   searchInput,
   setSearchInput,
+  selectedServer,
+  onServerChange,
+  toolsets,
+  isLoadingToolsets,
   expandedTraceId,
   toggleExpand,
   selectedLog,
@@ -401,6 +591,10 @@ function LogsInnerContent({
   searchQuery: string | null;
   searchInput: string;
   setSearchInput: (value: string) => void;
+  selectedServer: string | null;
+  onServerChange: (serverSlug: string | null) => void;
+  toolsets: Array<{ slug: string; name: string; toolUrns: string[] }>;
+  isLoadingToolsets?: boolean;
   expandedTraceId: string | null;
   toggleExpand: (traceId: string) => void;
   selectedLog: TelemetryLogRecord | null;
@@ -534,13 +728,21 @@ function LogsInnerContent({
                     </DropdownMenu>
                   </div>
                 </div>
-                {/* Search Row */}
-                <SearchBar
-                  value={searchInput}
-                  onChange={setSearchInput}
-                  placeholder="Search by tool URN"
-                  className="max-w-md"
-                />
+                {/* Filter and Search Row */}
+                <div className="flex items-center gap-4">
+                  <MCPServerFilter
+                    selectedServer={selectedServer}
+                    onServerChange={onServerChange}
+                    toolsets={toolsets}
+                    isLoading={isLoadingToolsets}
+                  />
+                  <SearchBar
+                    value={searchInput}
+                    onChange={setSearchInput}
+                    placeholder="Search by tool URN"
+                    className="flex-1 max-w-md"
+                  />
+                </div>
               </div>
 
               {/* Content section - full width */}

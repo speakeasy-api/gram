@@ -17,12 +17,14 @@ gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.1"
 melange = "0.40.4"
-nodejs = "24.10.0"
-pnpm = "10.28.2"
+nodejs = "24.13.1"
+pnpm = "10.30.2"
 watchexec = "2.3.3"
 mprocs = "0.8.3"
 uv = "0.10.4"
 yq = "4.52.4"
+hk = "1.36.0"
+pkl = "0.30.2"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.

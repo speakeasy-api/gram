@@ -16,6 +16,44 @@ export const ERROR_CODES = /** @type {const} */ ({
   INVALID_RESOURCE_FUNC: "gram_err_007",
 });
 
+/**
+ * Known patterns of bundling-incompatible packages. Each entry maps a regex
+ * (tested against the error message) to a hint shown to the user.
+ */
+const BUNDLING_HINTS = [
+  {
+    pattern: /Cannot find module ['"].*xhr-sync-worker/,
+    hint: "Your code (or a dependency) uses sync-request/sync-rpc, which requires a worker file that cannot be included in a single-file bundle. Replace it with an async alternative like fetch().",
+  },
+  {
+    pattern: /Cannot find module ['"].*\.node['"]/,
+    hint: "Your code (or a dependency) uses a native Node.js addon (.node file) that cannot be included in a single-file bundle. Use a pure-JavaScript alternative instead.",
+  },
+  {
+    pattern: /Cannot find module ['"]\.\.?\//,
+    hint: "Your code (or a dependency) tried to load a file using a relative path that doesn't exist in the bundle. This usually means a package requires auxiliary files that aren't compatible with single-file bundling.",
+  },
+];
+
+/**
+ * Inspect an import error and return an enriched message if a known bundling
+ * issue is detected, otherwise return the default message.
+ *
+ * @param {string} defaultMessage
+ * @param {unknown} cause
+ * @returns {string}
+ */
+function diagnoseImportError(defaultMessage, cause) {
+  const msg =
+    cause instanceof Error ? cause.message : typeof cause === "string" ? cause : "";
+  for (const { pattern, hint } of BUNDLING_HINTS) {
+    if (pattern.test(msg)) {
+      return `${defaultMessage}. ${hint}`;
+    }
+  }
+  return defaultMessage;
+}
+
 class FunctionsError extends Error {
   /**
    * @param {typeof ERROR_CODES[keyof typeof ERROR_CODES]} code
@@ -232,7 +270,7 @@ async function importToolCallHandler(codePath) {
       const filename = path.basename(codePath);
       throw new FunctionsError(
         ERROR_CODES.IMPORT_FAILURE,
-        `Unable to import user code: ${filename}`,
+        diagnoseImportError(`Unable to import user code: ${filename}`, e),
         e,
       );
     });
@@ -285,7 +323,7 @@ async function importResourceHandler(codePath) {
       const filename = path.basename(codePath);
       throw new FunctionsError(
         ERROR_CODES.IMPORT_FAILURE,
-        `Unable to import user code: ${filename}`,
+        diagnoseImportError(`Unable to import user code: ${filename}`, e),
         e,
       );
     });

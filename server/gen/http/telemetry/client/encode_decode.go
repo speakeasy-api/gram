@@ -2232,6 +2232,38 @@ func marshalTelemetrySearchLogsFilterToSearchLogsFilterRequestBody(v *telemetry.
 			res.GramUrns[i] = val
 		}
 	}
+	if v.AttributeFilters != nil {
+		res.AttributeFilters = make([]*AttributeFilterRequestBody, len(v.AttributeFilters))
+		for i, val := range v.AttributeFilters {
+			if val == nil {
+				res.AttributeFilters[i] = nil
+				continue
+			}
+			res.AttributeFilters[i] = marshalTelemetryAttributeFilterToAttributeFilterRequestBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalTelemetryAttributeFilterToAttributeFilterRequestBody builds a value
+// of type *AttributeFilterRequestBody from a value of type
+// *telemetry.AttributeFilter.
+func marshalTelemetryAttributeFilterToAttributeFilterRequestBody(v *telemetry.AttributeFilter) *AttributeFilterRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AttributeFilterRequestBody{
+		Path:  v.Path,
+		Op:    v.Op,
+		Value: v.Value,
+	}
+	{
+		var zero string
+		if res.Op == zero {
+			res.Op = "eq"
+		}
+	}
 
 	return res
 }
@@ -2263,6 +2295,38 @@ func marshalSearchLogsFilterRequestBodyToTelemetrySearchLogsFilter(v *SearchLogs
 		res.GramUrns = make([]string, len(v.GramUrns))
 		for i, val := range v.GramUrns {
 			res.GramUrns[i] = val
+		}
+	}
+	if v.AttributeFilters != nil {
+		res.AttributeFilters = make([]*telemetry.AttributeFilter, len(v.AttributeFilters))
+		for i, val := range v.AttributeFilters {
+			if val == nil {
+				res.AttributeFilters[i] = nil
+				continue
+			}
+			res.AttributeFilters[i] = marshalAttributeFilterRequestBodyToTelemetryAttributeFilter(val)
+		}
+	}
+
+	return res
+}
+
+// marshalAttributeFilterRequestBodyToTelemetryAttributeFilter builds a value
+// of type *telemetry.AttributeFilter from a value of type
+// *AttributeFilterRequestBody.
+func marshalAttributeFilterRequestBodyToTelemetryAttributeFilter(v *AttributeFilterRequestBody) *telemetry.AttributeFilter {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.AttributeFilter{
+		Path:  v.Path,
+		Op:    v.Op,
+		Value: v.Value,
+	}
+	{
+		var zero string
+		if res.Op == zero {
+			res.Op = "eq"
 		}
 	}
 
@@ -2346,9 +2410,6 @@ func unmarshalToolCallSummaryResponseBodyToTelemetryToolCallSummary(v *ToolCallS
 		LogCount:          *v.LogCount,
 		HTTPStatusCode:    v.HTTPStatusCode,
 		GramUrn:           *v.GramUrn,
-		ToolName:          v.ToolName,
-		ToolSource:        v.ToolSource,
-		EventSource:       v.EventSource,
 	}
 
 	return res

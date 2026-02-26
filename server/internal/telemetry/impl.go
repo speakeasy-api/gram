@@ -139,6 +139,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID, userID, externalUserID string
 	var httpStatusCode int32
 	var gramURNs []string
+	var attributeFilters []repo.AttributeFilter
 	if payload.Filter != nil {
 		// Handle both gram_urn (single) and gram_urns (array) for backwards compatibility
 		gramURNs = resolveGramURNs(payload.Filter.GramUrn, payload.Filter.GramUrns)
@@ -153,6 +154,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		gramChatID = conv.PtrValOr(payload.Filter.GramChatID, "")
 		userID = conv.PtrValOr(payload.Filter.UserID, "")
 		externalUserID = conv.PtrValOr(payload.Filter.ExternalUserID, "")
+		attributeFilters = toRepoAttributeFilters(payload.Filter.AttributeFilters)
 	}
 
 	// Query with limit+1 to detect if there are more results
@@ -172,6 +174,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		GramChatID:             gramChatID,
 		UserID:                 userID,
 		ExternalUserID:         externalUserID,
+		AttributeFilters:       attributeFilters,
 		SortOrder:              params.sortOrder,
 		Cursor:                 params.cursor,
 		Limit:                  params.limit + 1,
@@ -704,6 +707,25 @@ func toTelemetryLogPayload(log repo.TelemetryLog) (*telem_gen.TelemetryLogRecord
 	}, nil
 }
 
+// toRepoAttributeFilters converts generated Goa attribute filters to repo types.
+func toRepoAttributeFilters(filters []*telem_gen.AttributeFilter) []repo.AttributeFilter {
+	if len(filters) == 0 {
+		return nil
+	}
+	result := make([]repo.AttributeFilter, 0, len(filters))
+	for _, f := range filters {
+		if f == nil {
+			continue
+		}
+		result = append(result, repo.AttributeFilter{
+			Path:  f.Path,
+			Op:    f.Op,
+			Value: conv.PtrValOr(f.Value, ""),
+		})
+	}
+	return result
+}
+
 // sanitizeFloat64 returns 0 for NaN or Inf values which cannot be JSON-encoded.
 func sanitizeFloat64(v float64) float64 {
 	if math.IsNaN(v) || math.IsInf(v, 0) {
@@ -782,6 +804,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	projectID := authCtx.ProjectID.String()
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
+	toolsetID := conv.PtrValOr(payload.ToolsetID, "")
 
 	// Auto-calculate interval based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
@@ -798,6 +821,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
+		ToolsetID:      toolsetID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
@@ -809,6 +833,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        comparisonEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
+		ToolsetID:      toolsetID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -823,6 +848,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			IntervalSeconds: intervalSeconds,
 			ExternalUserID:  externalUserID,
 			APIKeyID:        apiKeyID,
+			ToolsetID:       toolsetID,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -835,6 +861,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
+		ToolsetID:      toolsetID,
 		Limit:          10,
 		SortBy:         "count",
 	})
@@ -848,6 +875,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
+		ToolsetID:      toolsetID,
 		Limit:          10,
 		SortBy:         "failure_rate",
 	})

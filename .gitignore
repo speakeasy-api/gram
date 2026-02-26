@@ -43,6 +43,7 @@ gram.code-workspace
 /local/cmd
 dist/
 **/.claude/settings.local.json
+**/.claude/.gram-install-prompted
 .vercel
 cover.*
 *gram.deploy.json

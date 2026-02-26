@@ -3,10 +3,35 @@ package repo
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
 )
+
+// validJSONPath matches safe dot-separated JSON paths for ClickHouse attribute access.
+// This prevents SQL injection since attribute paths cannot be parameterized.
+//
+//	^              - start of string
+//	@?             - optional @ prefix (user attribute marker, translated to "app." prefix)
+//	[a-zA-Z_]      - first segment char must be a letter or underscore
+//	[a-zA-Z0-9_]*  - rest of first segment: letters, digits, underscores
+//	(\.[a-zA-Z_][a-zA-Z0-9_]*)* - additional dot-separated segments
+//	$              - end of string
+//
+// Matches: "@user.region", "http.route", "env"
+// Rejects: "1bad", ".leading.dot", "path with spaces", "semi;colon", "@@double", "trailing.", "double..dot"
+var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
+
+// AttributeFilter represents a filter on an arbitrary JSON attribute path.
+// Paths prefixed with @ target user-defined attributes (translated to app.<path> in ClickHouse).
+// Bare paths target system/OTel attributes directly.
+type AttributeFilter struct {
+	Path  string // Attribute path, optionally @-prefixed (e.g. "@user.region", "http.route")
+	Op    string // Comparison operator: "eq", "not_eq", "contains", "exists", "not_exists"
+	Value string // Value to compare against (ignored for "exists"/"not_exists")
+}
 
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
@@ -102,6 +127,7 @@ type ListTelemetryLogsParams struct {
 	GramChatID             string
 	UserID                 string
 	ExternalUserID         string
+	AttributeFilters       []AttributeFilter
 	SortOrder              string
 	Cursor                 string
 	Limit                  int
@@ -175,6 +201,33 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 	}
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+
+	// Arbitrary attribute filters
+	for _, f := range arg.AttributeFilters {
+		if !validJSONPath.MatchString(f.Path) {
+			continue // skip invalid paths to prevent injection
+		}
+		// @prefix → user attribute (app.<path>), bare → system attribute (as-is)
+		path := f.Path
+		if strings.HasPrefix(path, "@") {
+			path = "app." + path[1:]
+		}
+		col := fmt.Sprintf("toString(attributes.%s)", path)
+		switch f.Op {
+		case "eq":
+			sb = sb.Where(fmt.Sprintf("%s = ?", col), f.Value)
+		case "not_eq":
+			sb = sb.Where(fmt.Sprintf("%s != ?", col), f.Value)
+		case "contains":
+			sb = sb.Where(fmt.Sprintf("position(%s, ?) > 0", col), f.Value)
+		case "exists":
+			sb = sb.Where(fmt.Sprintf("%s != ''", col))
+		case "not_exists":
+			sb = sb.Where(fmt.Sprintf("%s = ''", col))
+		default:
+			sb = sb.Where(fmt.Sprintf("%s = ?", col), f.Value)
+		}
 	}
 
 	sb = withPagination(sb, arg.Cursor, arg.SortOrder)
@@ -263,6 +316,13 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	// Only include traces with tool_name set OR gram_urn starting with "tools:"
 	// The urn check is mainly for backwards compatibility with old data.
 	sb = sb.Having("(tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:')")
+
+	// Exclude chat completion logs (urn:uuid:...) which are not tool calls.
+	// The trace_summaries_mv filters these at insert time via a WHERE clause,
+	// so for new data any(gram_urn) will never pick a urn:uuid: value.
+	// This HAVING clause is kept as a safety net for historical data that may
+	// have been inserted before the MV was updated to exclude these URNs.
+	sb = sb.Having("position(gram_urn, 'urn:uuid:') != 1")
 
 	sb = sb.GroupBy("trace_id")
 
@@ -436,6 +496,7 @@ type GetTimeSeriesMetricsParams struct {
 	IntervalSeconds int64  // Bucket interval in seconds
 	ExternalUserID  string // Optional filter
 	APIKeyID        string // Optional filter
+	ToolsetID       string // Optional filter - filters by toolset/MCP server
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -497,7 +558,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 		arg.TimeEnd, alignedStart, intervalNanos, // For calculating number of buckets
 		alignedStart, intervalNanos, arg.TimeEnd, // WHERE clause for bucket generation
 		arg.IntervalSeconds, // INTERVAL for data aggregation
-		buildOptionalFiltersSQL(arg.ExternalUserID, arg.APIKeyID), // Optional filters - parameterized
+		buildOptionalFiltersSQL(arg.ExternalUserID, arg.APIKeyID, arg.ToolsetID), // Optional filters - parameterized
 	)
 
 	queryArgs := []any{arg.GramProjectID, arg.TimeStart, arg.TimeEnd}
@@ -507,6 +568,11 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	}
 	if arg.APIKeyID != "" {
 		queryArgs = append(queryArgs, arg.APIKeyID)
+	}
+	if arg.ToolsetID != "" {
+		// ToolsetID is expected to be a URN prefix like "tools:http:gram"
+		// We append ":" to ensure we match the full prefix segment
+		queryArgs = append(queryArgs, arg.ToolsetID+":")
 	}
 
 	rows, err := q.conn.Query(ctx, query, queryArgs...)
@@ -533,13 +599,16 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 
 // buildOptionalFiltersSQL creates the WHERE clause additions for optional filters using parameterized placeholders.
 // The caller must append the corresponding values to queryArgs in the same order.
-func buildOptionalFiltersSQL(externalUserID, apiKeyID string) string {
+func buildOptionalFiltersSQL(externalUserID, apiKeyID, toolsetID string) string {
 	var filters string
 	if externalUserID != "" {
 		filters += " AND external_user_id = ?"
 	}
 	if apiKeyID != "" {
 		filters += " AND api_key_id = ?"
+	}
+	if toolsetID != "" {
+		filters += " AND startsWith(gram_urn, ?)"
 	}
 	return filters
 }
@@ -551,6 +620,7 @@ type GetToolMetricsBreakdownParams struct {
 	TimeEnd        int64
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
+	ToolsetID      string // Optional filter - filters by toolset/MCP server
 	Limit          int
 	SortBy         string // "count" or "failure_rate"
 }
@@ -579,6 +649,10 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+	}
+	if arg.ToolsetID != "" {
+		// Filter by toolset - ToolsetID is expected to be a URN prefix like "tools:http:gram"
+		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
 	}
 
 	sb = sb.GroupBy("gram_urn")
@@ -626,6 +700,7 @@ type GetOverviewSummaryParams struct {
 	TimeEnd        int64
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
+	ToolsetID      string // Optional filter - filters by toolset/MCP server
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -634,7 +709,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.ExternalUserID != "" || arg.APIKeyID != ""
+	hasFilters := arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetID != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -719,6 +794,10 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+	}
+	if arg.ToolsetID != "" {
+		// Filter by toolset - ToolsetID is expected to be a URN prefix like "tools:http:gram"
+		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
 	}
 
 	return sb

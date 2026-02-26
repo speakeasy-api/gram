@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env -S node
 
 //MISE description="Create a V1 Bearer token for calling a Gram Functions runner. Combines well with curl and other CLIs."
 //MISE quiet=true

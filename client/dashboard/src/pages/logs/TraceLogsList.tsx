@@ -11,6 +11,7 @@ interface TraceLogsListProps {
   toolName: string;
   isExpanded: boolean;
   onLogClick: (log: TelemetryLogRecord) => void;
+  parentTimestamp: number;
 }
 
 export function TraceLogsList({
@@ -18,6 +19,7 @@ export function TraceLogsList({
   toolName: _toolName,
   isExpanded,
   onLogClick,
+  parentTimestamp,
 }: TraceLogsListProps) {
   const client = useGramContext();
 
@@ -44,8 +46,11 @@ export function TraceLogsList({
 
   if (isPending) {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 pl-12 text-muted-foreground bg-muted/30">
-        <Icon name="loader-circle" className="size-4 animate-spin" />
+      <div className="flex items-center gap-3 px-5 py-2 text-muted-foreground bg-muted/30">
+        <div className="shrink-0 w-[150px]" />
+        <div className="shrink-0 w-5 flex justify-center">
+          <Icon name="loader-circle" className="size-4 animate-spin" />
+        </div>
         <span className="text-sm">Loading spans...</span>
       </div>
     );
@@ -53,7 +58,9 @@ export function TraceLogsList({
 
   if (error) {
     return (
-      <div className="px-4 py-3 pl-12 bg-muted/30">
+      <div className="flex items-center gap-3 px-5 py-2 bg-muted/30">
+        <div className="shrink-0 w-[150px]" />
+        <div className="shrink-0 w-5" />
         <span className="text-sm text-destructive">
           Failed to load spans: {error.message}
         </span>
@@ -65,8 +72,10 @@ export function TraceLogsList({
 
   if (logs.length === 0) {
     return (
-      <div className="px-4 py-3 pl-12 text-sm text-muted-foreground bg-muted/30">
-        No spans found for this trace
+      <div className="flex items-center gap-3 px-5 py-2 text-muted-foreground bg-muted/30">
+        <div className="shrink-0 w-[150px]" />
+        <div className="shrink-0 w-5" />
+        <span className="text-sm">No spans found for this trace</span>
       </div>
     );
   }
@@ -79,6 +88,7 @@ export function TraceLogsList({
           log={log}
           isLast={index === logs.length - 1}
           onClick={() => onLogClick(log)}
+          parentTimestamp={parentTimestamp}
         />
       ))}
     </div>
@@ -89,17 +99,27 @@ interface ChildLogRowProps {
   log: TelemetryLogRecord;
   isLast: boolean;
   onClick: () => void;
+  parentTimestamp: number;
 }
 
-function ChildLogRow({ log, isLast, onClick }: ChildLogRowProps) {
+function ChildLogRow({
+  log,
+  isLast,
+  onClick,
+  parentTimestamp,
+}: ChildLogRowProps) {
+  const formattedTimestamp = formatNanoTimestamp(log.timeUnixNano);
+  const formattedParentTimestamp = formatNanoTimestamp(parentTimestamp);
+  const showTimestamp = formattedTimestamp !== formattedParentTimestamp;
+
   return (
     <div
-      className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-background transition-colors group"
+      className="flex items-center gap-3 px-5 py-2 cursor-pointer hover:bg-background transition-colors group"
       onClick={onClick}
     >
-      {/* Timestamp - same width as parent for alignment */}
-      <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono">
-        {formatNanoTimestamp(log.timeUnixNano)}
+      {/* Timestamp - same width as parent for alignment, hidden if same as parent */}
+      <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono whitespace-nowrap">
+        {showTimestamp ? formattedTimestamp : null}
       </div>
 
       {/* Tree line area - aligns with parent's chevron */}

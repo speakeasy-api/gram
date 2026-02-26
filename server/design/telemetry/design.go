@@ -320,6 +320,29 @@ var SearchLogsFilter = Type("SearchLogsFilter", func() {
 	Attribute("gram_chat_id", String, "Chat ID filter")
 	Attribute("user_id", String, "User ID filter")
 	Attribute("external_user_id", String, "External user ID filter")
+	Attribute("attribute_filters", ArrayOf(AttributeFilter), "Filters on custom log attributes")
+})
+
+var AttributeFilter = Type("AttributeFilter", func() {
+	Description("Filter on a log attribute by path.")
+
+	Attribute("path", String, "Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').", func() {
+		// Optional @ prefix for user-defined attributes, then letter/underscore start,
+		// then letters/digits/underscores/dots. @ is translated to the internal 'app.' namespace.
+		Pattern(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
+		MinLength(1)
+		MaxLength(256)
+		Example("@user.region")
+	})
+	Attribute("op", String, "Comparison operator", func() {
+		Enum("eq", "not_eq", "contains", "exists", "not_exists")
+		Default("eq")
+	})
+	Attribute("value", String, "Value to compare against (ignored for 'exists' and 'not_exists' operators)", func() {
+		MaxLength(1024)
+		Example("us-east-1")
+	})
+	Required("path")
 })
 
 var SearchLogsPayload = Type("SearchLogsPayload", func() {
@@ -799,6 +822,7 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	})
 	Attribute("external_user_id", String, "Optional external user ID filter")
 	Attribute("api_key_id", String, "Optional API key ID filter")
+	Attribute("toolset_id", String, "Optional toolset/MCP server ID filter")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
 		Default(true)
 	})

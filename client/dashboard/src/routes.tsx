@@ -1,3 +1,4 @@
+import { McpIcon } from "@/components/ui/mcp-icon";
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -47,6 +48,7 @@ type AppRouteBasic = {
   url: string;
   external?: boolean;
   icon?: IconName;
+  customIcon?: React.ComponentType<{ className?: string }>;
   component?: React.ComponentType;
   indexComponent?: React.ComponentType;
   subPages?: AppRoutesBasic;
@@ -79,6 +81,7 @@ type RouteEntry = {
   title: string;
   url: string;
   icon?: IconName;
+  customIcon?: React.ComponentType<{ className?: string }>;
 } & (
   | {
       external: true;
@@ -265,9 +268,9 @@ const ROUTE_STRUCTURE = {
     component: ChatSessions,
   },
   logs: {
-    title: "Logs",
+    title: "MCP Logs",
     url: "logs",
-    icon: "scroll-text",
+    customIcon: McpIcon,
     component: Logs,
   },
   observability: {
@@ -451,8 +454,10 @@ export const useRoutes = (overrides?: {
     const newRoute: AppRoute = {
       ...route,
       active,
-      Icon: (props: Omit<IconProps, "name">) =>
-        route.icon ? <Icon {...props} name={route.icon} /> : null,
+      Icon: route.customIcon
+        ? route.customIcon
+        : (props: Omit<IconProps, "name">) =>
+            route.icon ? <Icon {...props} name={route.icon} /> : null,
       href: resolveUrl,
       goTo,
       Link: linkComponent,
