@@ -15,7 +15,7 @@ export type AddFunctionsForm = {
    */
   name: string;
   /**
-   * The runtime to use when executing functions. Allowed values are: nodejs:22, python:3.12.
+   * The runtime to use when executing functions. Allowed values are: nodejs:22, nodejs:24, python:3.12.
    */
   runtime: string;
   /**
