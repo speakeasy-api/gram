@@ -1,0 +1,650 @@
+package openrouter
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"testing"
+	"time"
+
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// Mock implementations for testing
+
+type mockProvisioner struct {
+	apiKey string
+	err    error
+}
+
+func (m *mockProvisioner) ProvisionAPIKey(ctx context.Context, orgID string) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return m.apiKey, nil
+}
+
+func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error) {
+	return 0, nil
+}
+
+func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
+	return 0, 0, nil
+}
+
+func (m *mockProvisioner) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
+	return nil, nil
+}
+
+type mockMessageCaptureStrategy struct {
+	mu                   sync.Mutex
+	startOrResumeCalled  bool
+	captureMessageCalled bool
+	startOrResumeError   error
+	captureError         error
+	capturedRequest      *CompletionRequest
+	capturedResponse     *CompletionResponse
+}
+
+func (m *mockMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.startOrResumeCalled = true
+	return m.startOrResumeError
+}
+
+func (m *mockMessageCaptureStrategy) CaptureMessage(ctx context.Context, request CompletionRequest, response CompletionResponse) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.captureMessageCalled = true
+	m.capturedRequest = &request
+	m.capturedResponse = &response
+	return m.captureError
+}
+
+type mockUsageTrackingStrategy struct {
+	mu               sync.Mutex
+	trackUsageCalled bool
+	trackUsageError  error
+	generationID     string
+	orgID            string
+	projectID        string
+	source           billing.ModelUsageSource
+	chatID           string
+}
+
+func (m *mockUsageTrackingStrategy) TrackUsage(ctx context.Context, generationID, orgID, projectID string, source billing.ModelUsageSource, chatID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.trackUsageCalled = true
+	m.generationID = generationID
+	m.orgID = orgID
+	m.projectID = projectID
+	m.source = source
+	m.chatID = chatID
+	return m.trackUsageError
+}
+
+type mockChatTitleGenerator struct {
+	mu        sync.Mutex
+	called    bool
+	err       error
+	chatID    string
+	orgID     string
+	projectID string
+	callCount int
+}
+
+func (m *mockChatTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.called = true
+	m.callCount++
+	m.chatID = chatID
+	m.orgID = orgID
+	m.projectID = projectID
+	return m.err
+}
+
+type mockChatResolutionAnalyzer struct {
+	mu        sync.Mutex
+	called    bool
+	err       error
+	chatID    uuid.UUID
+	projectID uuid.UUID
+	orgID     string
+	apiKeyID  string
+	callCount int
+}
+
+func (m *mockChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.called = true
+	m.callCount++
+	m.chatID = chatID
+	m.projectID = projectID
+	m.orgID = orgID
+	m.apiKeyID = apiKeyID
+	return m.err
+}
+
+type mockTelemetryService struct {
+	mu     sync.Mutex
+	called bool
+	logs   []telemetry.LogParams
+}
+
+func (m *mockTelemetryService) CreateLog(params telemetry.LogParams) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.called = true
+	m.logs = append(m.logs, params)
+}
+
+func TestChatClient_GetCompletion(t *testing.T) {
+	t.Parallel()
+
+	// Create a mock OpenRouter server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify request
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "/api/v1/chat/completions", r.URL.Path)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Contains(t, r.Header.Get("Authorization"), "Bearer test-api-key")
+
+		// Parse request body
+		var reqBody OpenAIChatRequest
+		err := json.NewDecoder(r.Body).Decode(&reqBody)
+		require.NoError(t, err)
+		assert.False(t, reqBody.Stream)
+
+		// Send mock response - using raw JSON to avoid type complexity
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"id": "msg_123",
+			"model": "openai/gpt-4o",
+			"choices": [{
+				"message": {
+					"role": "assistant",
+					"content": "Hello, world!"
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {
+				"prompt_tokens": 10,
+				"completion_tokens": 5,
+				"total_tokens": 15
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	// Create mocks
+	provisioner := &mockProvisioner{apiKey: "test-api-key"}
+	captureStrategy := &mockMessageCaptureStrategy{}
+	trackingStrategy := &mockUsageTrackingStrategy{}
+	titleGenerator := &mockChatTitleGenerator{}
+	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
+	telemetryService := &mockTelemetryService{}
+
+	// Create client
+	client := NewUnifiedClient(
+		slog.Default(),
+		provisioner,
+		captureStrategy,
+		trackingStrategy,
+		titleGenerator,
+		resolutionAnalyzer,
+		telemetryService,
+	)
+
+	// Override the HTTP client to use the test server
+	client.httpClient = &http.Client{
+		Transport: &testTransport{server: server},
+	}
+
+	// Create test request
+	chatID := uuid.New()
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: projectID.String(),
+		Messages: []or.Message{
+			CreateMessageUser("Hello"),
+		},
+		ChatID:      chatID,
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "test-api-key-id",
+	}
+
+	// Call GetCompletion
+	resp, err := client.GetCompletion(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Verify response
+	assert.Equal(t, "msg_123", resp.MessageID)
+	assert.Equal(t, "openai/gpt-4o", resp.Model)
+	assert.Equal(t, "Hello, world!", resp.Content)
+	assert.Equal(t, 10, resp.Usage.PromptTokens)
+	assert.Equal(t, 5, resp.Usage.CompletionTokens)
+	assert.Equal(t, 15, resp.Usage.TotalTokens)
+
+	// Give async operations time to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify all services were called
+	assert.True(t, captureStrategy.startOrResumeCalled, "StartOrResumeChat should be called")
+	assert.True(t, captureStrategy.captureMessageCalled, "CaptureMessage should be called")
+	assert.True(t, trackingStrategy.trackUsageCalled, "TrackUsage should be called")
+	assert.True(t, titleGenerator.called, "ScheduleChatTitleGeneration should be called")
+	assert.True(t, resolutionAnalyzer.called, "ScheduleChatResolutionAnalysis should be called")
+	assert.True(t, telemetryService.called, "CreateLog should be called")
+
+	// Verify captured data
+	assert.Equal(t, "msg_123", captureStrategy.capturedResponse.MessageID)
+	assert.Equal(t, "msg_123", trackingStrategy.generationID)
+	assert.Equal(t, "test-org", trackingStrategy.orgID)
+	assert.Equal(t, projectID.String(), trackingStrategy.projectID)
+	assert.Equal(t, chatID.String(), titleGenerator.chatID)
+	assert.Equal(t, "test-org", titleGenerator.orgID)
+	assert.Equal(t, projectID.String(), titleGenerator.projectID)
+	assert.Equal(t, chatID, resolutionAnalyzer.chatID)
+	assert.Equal(t, projectID, resolutionAnalyzer.projectID)
+	assert.Equal(t, "test-org", resolutionAnalyzer.orgID)
+	assert.Equal(t, "test-api-key-id", resolutionAnalyzer.apiKeyID)
+}
+
+func TestChatClient_GetCompletionStream(t *testing.T) {
+	t.Parallel()
+
+	// Create a mock OpenRouter server that streams SSE
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify request
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "/api/v1/chat/completions", r.URL.Path)
+
+		// Parse request body
+		var reqBody OpenAIChatRequest
+		err := json.NewDecoder(r.Body).Decode(&reqBody)
+		require.NoError(t, err)
+		assert.True(t, reqBody.Stream)
+
+		// Stream SSE response
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		flusher := w.(http.Flusher)
+
+		// Send initial chunk with ID and model
+		fmt.Fprintf(w, "data: {\"id\":\"msg_456\",\"model\":\"openai/gpt-4o\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
+		flusher.Flush()
+
+		// Send content chunk
+		fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\" streaming\"}}]}\n\n")
+		flusher.Flush()
+
+		// Send final chunk with usage and finish reason
+		fmt.Fprintf(w, "data: {\"choices\":[{\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n")
+		flusher.Flush()
+
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer server.Close()
+
+	// Create mocks
+	provisioner := &mockProvisioner{apiKey: "test-api-key"}
+	captureStrategy := &mockMessageCaptureStrategy{}
+	trackingStrategy := &mockUsageTrackingStrategy{}
+	titleGenerator := &mockChatTitleGenerator{}
+	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
+	telemetryService := &mockTelemetryService{}
+
+	// Create client
+	client := NewUnifiedClient(
+		slog.Default(),
+		provisioner,
+		captureStrategy,
+		trackingStrategy,
+		titleGenerator,
+		resolutionAnalyzer,
+		telemetryService,
+	)
+
+	// Override the HTTP client to use the test server
+	client.httpClient = &http.Client{
+		Transport: &testTransport{server: server},
+	}
+
+	// Create test request
+	chatID := uuid.New()
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: projectID.String(),
+		Messages: []or.Message{
+			CreateMessageUser("Hello"),
+		},
+		Stream:      true,
+		ChatID:      chatID,
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "test-api-key-id",
+	}
+
+	// Call GetCompletionStream
+	streamReader, err := client.GetCompletionStream(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, streamReader)
+
+	// Read the entire stream
+	body, err := io.ReadAll(streamReader)
+	require.NoError(t, err)
+
+	// Close the stream (this triggers message capture and tracking)
+	err = streamReader.Close()
+	require.NoError(t, err)
+
+	// Verify we received the streamed data (comes as raw SSE format)
+	bodyStr := string(body)
+	assert.Contains(t, bodyStr, "Hello")
+	assert.Contains(t, bodyStr, "streaming")
+
+	// Give async operations time to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify all services were called
+	assert.True(t, captureStrategy.startOrResumeCalled, "StartOrResumeChat should be called")
+	assert.True(t, captureStrategy.captureMessageCalled, "CaptureMessage should be called")
+	assert.True(t, trackingStrategy.trackUsageCalled, "TrackUsage should be called")
+	assert.True(t, titleGenerator.called, "ScheduleChatTitleGeneration should be called")
+	assert.True(t, resolutionAnalyzer.called, "ScheduleChatResolutionAnalysis should be called")
+	assert.True(t, telemetryService.called, "CreateLog should be called")
+
+	// Verify captured data
+	assert.Equal(t, "msg_456", captureStrategy.capturedResponse.MessageID)
+	assert.Equal(t, "openai/gpt-4o", captureStrategy.capturedResponse.Model)
+	assert.Equal(t, "Hello streaming", captureStrategy.capturedResponse.Content)
+	assert.Equal(t, 10, captureStrategy.capturedResponse.Usage.PromptTokens)
+	assert.Equal(t, 5, captureStrategy.capturedResponse.Usage.CompletionTokens)
+	assert.Equal(t, 15, captureStrategy.capturedResponse.Usage.TotalTokens)
+}
+
+func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
+	t.Parallel()
+
+	// Create a mock OpenRouter server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Send mock response with tool calls
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"id": "msg_789",
+			"model": "openai/gpt-4o",
+			"choices": [{
+				"message": {
+					"role": "assistant",
+					"content": "",
+					"tool_calls": [{
+						"id": "call_1",
+						"type": "function",
+						"function": {
+							"name": "get_weather",
+							"arguments": "{\"location\":\"NYC\"}"
+						}
+					}]
+				},
+				"finish_reason": "tool_calls"
+			}],
+			"usage": {
+				"prompt_tokens": 20,
+				"completion_tokens": 10,
+				"total_tokens": 30
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	// Create mocks
+	provisioner := &mockProvisioner{apiKey: "test-api-key"}
+	captureStrategy := &mockMessageCaptureStrategy{}
+	trackingStrategy := &mockUsageTrackingStrategy{}
+	titleGenerator := &mockChatTitleGenerator{}
+	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
+	telemetryService := &mockTelemetryService{}
+
+	// Create client
+	client := NewUnifiedClient(
+		slog.Default(),
+		provisioner,
+		captureStrategy,
+		trackingStrategy,
+		titleGenerator,
+		resolutionAnalyzer,
+		telemetryService,
+	)
+
+	// Override the HTTP client to use the test server
+	client.httpClient = &http.Client{
+		Transport: &testTransport{server: server},
+	}
+
+	// Create test request with tools
+	chatID := uuid.New()
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: projectID.String(),
+		Messages: []or.Message{
+			CreateMessageUser("What's the weather in NYC?"),
+		},
+		Tools: []Tool{
+			{
+				Type: "function",
+				Function: &FunctionDefinition{
+					Name:        "get_weather",
+					Description: "Get weather for a location",
+					Parameters:  json.RawMessage(`{"type":"object","properties":{"location":{"type":"string"}}}`),
+				},
+			},
+		},
+		ChatID:      chatID,
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "test-api-key-id",
+	}
+
+	// Call GetCompletion
+	resp, err := client.GetCompletion(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Verify tool calls were captured
+	assert.Len(t, resp.ToolCalls, 1)
+	assert.Equal(t, "call_1", resp.ToolCalls[0].ID)
+	assert.Equal(t, "get_weather", resp.ToolCalls[0].Function.Name)
+
+	// Give async operations time to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify telemetry includes tool calls
+	assert.True(t, telemetryService.called)
+	assert.NotEmpty(t, telemetryService.logs)
+}
+
+func TestChatClient_ErrorHandling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		provisionerError   error
+		startOrResumeError error
+		captureError       error
+		expectedError      string
+	}{
+		{
+			name:             "provisioner error",
+			provisionerError: fmt.Errorf("failed to provision key"),
+			expectedError:    "provision OpenRouter key",
+		},
+		{
+			name:               "start or resume error",
+			startOrResumeError: fmt.Errorf("failed to start chat"),
+			expectedError:      "failed to start or resume chat",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create mocks with errors
+			provisioner := &mockProvisioner{
+				apiKey: "test-api-key",
+				err:    tt.provisionerError,
+			}
+			captureStrategy := &mockMessageCaptureStrategy{
+				startOrResumeError: tt.startOrResumeError,
+				captureError:       tt.captureError,
+			}
+			trackingStrategy := &mockUsageTrackingStrategy{}
+			titleGenerator := &mockChatTitleGenerator{}
+			resolutionAnalyzer := &mockChatResolutionAnalyzer{}
+			telemetryService := &mockTelemetryService{}
+
+			// Create client
+			client := NewUnifiedClient(
+				slog.Default(),
+				provisioner,
+				captureStrategy,
+				trackingStrategy,
+				titleGenerator,
+				resolutionAnalyzer,
+				telemetryService,
+			)
+
+			// Create test request
+			projectID := uuid.New()
+			req := CompletionRequest{
+				OrgID:     "test-org",
+				ProjectID: projectID.String(),
+				Messages: []or.Message{
+					CreateMessageUser("Hello"),
+				},
+				ChatID:      uuid.New(),
+				UsageSource: billing.ModelUsageSourcePlayground,
+			}
+
+			// Call GetCompletion
+			_, err := client.GetCompletion(context.Background(), req)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.expectedError)
+		})
+	}
+}
+
+func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.T) {
+	t.Parallel()
+
+	// Create a mock OpenRouter server
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		response := fmt.Sprintf(`{
+			"id": "msg_%d",
+			"model": "openai/gpt-4o",
+			"choices": [{
+				"message": {
+					"role": "assistant",
+					"content": "Response %d"
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {
+				"prompt_tokens": 10,
+				"completion_tokens": 5,
+				"total_tokens": 15
+			}
+		}`, callCount, callCount)
+		w.Write([]byte(response))
+	}))
+	defer server.Close()
+
+	// Create mocks
+	provisioner := &mockProvisioner{apiKey: "test-api-key"}
+	captureStrategy := &mockMessageCaptureStrategy{}
+	trackingStrategy := &mockUsageTrackingStrategy{}
+	titleGenerator := &mockChatTitleGenerator{}
+	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
+	telemetryService := &mockTelemetryService{}
+
+	// Create client
+	client := NewUnifiedClient(
+		slog.Default(),
+		provisioner,
+		captureStrategy,
+		trackingStrategy,
+		titleGenerator,
+		resolutionAnalyzer,
+		telemetryService,
+	)
+
+	// Override the HTTP client to use the test server
+	client.httpClient = &http.Client{
+		Transport: &testTransport{server: server},
+	}
+
+	// Create test request
+	chatID := uuid.New()
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: projectID.String(),
+		Messages: []or.Message{
+			CreateMessageUser("Hello"),
+		},
+		ChatID:      chatID,
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "test-api-key-id",
+	}
+
+	// Make multiple completions
+	for i := 0; i < 3; i++ {
+		_, err := client.GetCompletion(context.Background(), req)
+		require.NoError(t, err)
+	}
+
+	// Give async operations time to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify title generation and resolution analysis were scheduled multiple times
+	titleGenerator.mu.Lock()
+	assert.Equal(t, 3, titleGenerator.callCount, "Title generation should be scheduled for each completion")
+	titleGenerator.mu.Unlock()
+
+	resolutionAnalyzer.mu.Lock()
+	assert.Equal(t, 3, resolutionAnalyzer.callCount, "Resolution analysis should be scheduled for each completion (resets timer)")
+	resolutionAnalyzer.mu.Unlock()
+}
+
+// testTransport is a custom http.RoundTripper that redirects all requests to the test server
+type testTransport struct {
+	server *httptest.Server
+}
+
+func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Modify the request URL to point to the test server
+	req.URL.Scheme = "http"
+	req.URL.Host = t.server.URL[7:] // Remove "http://" prefix
+	return http.DefaultTransport.RoundTrip(req)
+}
