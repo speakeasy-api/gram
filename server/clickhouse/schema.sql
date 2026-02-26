@@ -46,7 +46,10 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     user_id String MATERIALIZED toString(attributes.user.id) COMMENT 'User ID (materialized from attributes.user.id).',
     external_user_id String MATERIALIZED toString(attributes.gram.external_user.id) COMMENT 'External user ID (materialized from attributes.gram.external_user.id).',
     api_key_id String MATERIALIZED toString(attributes.gram.api_key.id) COMMENT 'API key ID (materialized from attributes.gram.api_key.id).',
-    evaluation_score_label String MATERIALIZED toString(attributes.gen_ai.evaluation.score.label) COMMENT 'Evaluation result label (success, failure, partial, abandoned).'
+    evaluation_score_label String MATERIALIZED toString(attributes.gen_ai.evaluation.score.label) COMMENT 'Evaluation result label (success, failure, partial, abandoned).',
+    tool_name String MATERIALIZED toString(attributes.gram.tool.name) COMMENT 'Tool name (materialized from attributes.gram.tool.name).',
+    tool_source String MATERIALIZED toString(attributes.gram.tool_call.source) COMMENT 'Tool call source (materialized from attributes.gram.tool_call.source).',
+    event_source String MATERIALIZED toString(attributes.gram.event.source) COMMENT 'Event source (materialized from attributes.gram.event.source).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -72,6 +75,9 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_user_id ON telemetry_logs (use
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_user_id ON telemetry_logs (external_user_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_api_key_id ON telemetry_logs (api_key_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_evaluation_score_label ON telemetry_logs (evaluation_score_label) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_tool_name ON telemetry_logs (tool_name) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_tool_source ON telemetry_logs (tool_source) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_event_source ON telemetry_logs (event_source) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Key cols
@@ -82,6 +88,9 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     gram_deployment_id SimpleAggregateFunction(any, Nullable(UUID)),
     gram_function_id SimpleAggregateFunction(any, Nullable(UUID)),
     gram_urn SimpleAggregateFunction(any, String),
+    tool_name SimpleAggregateFunction(any, String),
+    tool_source SimpleAggregateFunction(any, String),
+    event_source SimpleAggregateFunction(any, String),
 
     -- Aggregates
     start_time_unix_nano SimpleAggregateFunction(min, Int64),
@@ -101,6 +110,9 @@ SELECT
     any(gram_deployment_id) AS gram_deployment_id,
     any(gram_function_id) AS gram_function_id,
     any(gram_urn) AS gram_urn,
+    any(tool_name) AS tool_name,
+    any(tool_source) AS tool_source,
+    any(event_source) AS event_source,
     min(time_unix_nano) AS start_time_unix_nano,
     toUInt64(count(*)) AS log_count,
     anyIfState(
