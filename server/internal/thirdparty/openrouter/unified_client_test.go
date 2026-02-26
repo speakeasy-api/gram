@@ -634,14 +634,309 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	// Give async operations time to complete
 	time.Sleep(200 * time.Millisecond)
 
-	// Verify title generation and resolution analysis were scheduled multiple times
+	// Title generation should be scheduled for each completion since the simple mock always reports isFirstMessage=true.
+	// In production, the real capture strategy only returns isFirstMessage=true on the first call.
 	titleGenerator.mu.Lock()
-	assert.Equal(t, 3, titleGenerator.callCount, "Title generation should be scheduled for each completion")
+	assert.Equal(t, 3, titleGenerator.callCount, "Title generation should be scheduled when isFirstMessage=true (mock always returns true)")
 	titleGenerator.mu.Unlock()
 
+	// Resolution analysis should be scheduled for every message (resets timer)
 	resolutionAnalyzer.mu.Lock()
 	assert.Equal(t, 3, resolutionAnalyzer.callCount, "Resolution analysis should be scheduled for each completion (resets timer)")
 	resolutionAnalyzer.mu.Unlock()
+}
+
+// trackingTitleGenerator records every ScheduleChatTitleGeneration call with its chatID.
+type trackingTitleGenerator struct {
+	mu      sync.Mutex
+	calls   []string // chatIDs for each call
+	err     error
+}
+
+func (m *trackingTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls = append(m.calls, chatID)
+	return m.err
+}
+
+// trackingCaptureStrategy simulates the real ChatMessageCaptureStrategy counting behavior.
+// It maintains a per-chat message count and tracks all stored messages.
+type trackingCaptureStrategy struct {
+	mu             sync.Mutex
+	messageCount   map[uuid.UUID]int // per-chat message count (simulates CountChatMessages)
+	storedMessages []storedMessage
+}
+
+type storedMessage struct {
+	chatID uuid.UUID
+	role   string
+	source string // "StartOrResumeChat" or "CaptureMessage"
+}
+
+func newTrackingCaptureStrategy() *trackingCaptureStrategy {
+	return &trackingCaptureStrategy{
+		messageCount:   make(map[uuid.UUID]int),
+		storedMessages: nil,
+	}
+}
+
+func (t *trackingCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	chatID := request.ChatID
+	if chatID == uuid.Nil {
+		return nil
+	}
+
+	currentCount := t.messageCount[chatID]
+	if currentCount < len(request.Messages) {
+		newMessages := request.Messages[currentCount:]
+		for _, msg := range newMessages {
+			t.storedMessages = append(t.storedMessages, storedMessage{
+				chatID: chatID,
+				role:   GetRole(msg),
+				source: "StartOrResumeChat",
+			})
+			t.messageCount[chatID]++
+		}
+	}
+	return nil
+}
+
+func (t *trackingCaptureStrategy) CaptureMessage(ctx context.Context, request CompletionRequest, response CompletionResponse) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if request.ChatID == uuid.Nil {
+		return nil
+	}
+
+	t.storedMessages = append(t.storedMessages, storedMessage{
+		chatID: request.ChatID,
+		role:   "assistant",
+		source: "CaptureMessage",
+	})
+	t.messageCount[request.ChatID]++
+	return nil
+}
+
+func newMockServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	callCount := 0
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		response := fmt.Sprintf(`{
+			"id": "msg_%d",
+			"model": "openai/gpt-4o",
+			"choices": [{
+				"message": {
+					"role": "assistant",
+					"content": "Response %d"
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {
+				"prompt_tokens": 10,
+				"completion_tokens": 5,
+				"total_tokens": 15
+			}
+		}`, callCount, callCount)
+		_, _ = w.Write([]byte(response))
+	}))
+}
+
+// BUG: Title generation should NOT be scheduled when ChatID is nil.
+// The title generation activity itself uses GetCompletion with ChatID=uuid.Nil,
+// which means onMessageComplete erroneously schedules another title generation
+// workflow with the nil UUID, creating v1:generate-chat-title:00000000-...
+func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
+	t.Parallel()
+
+	server := newMockServer(t)
+	defer server.Close()
+
+	titleGenerator := &trackingTitleGenerator{}
+	client := NewUnifiedClient(
+		slog.Default(),
+		&mockProvisioner{apiKey: "test-api-key"},
+		&mockMessageCaptureStrategy{},
+		&mockUsageTrackingStrategy{},
+		titleGenerator,
+		&mockChatResolutionAnalyzer{},
+		&mockTelemetryService{},
+	)
+	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.Message{CreateMessageUser("Hello")},
+		ChatID:      uuid.Nil, // No chat — like title generation activity's internal call
+		UsageSource: billing.ModelUsageSourceGram,
+		APIKeyID:    "",
+	}
+
+	_, err := client.GetCompletion(context.Background(), req)
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+
+	titleGenerator.mu.Lock()
+	defer titleGenerator.mu.Unlock()
+	require.Empty(t, titleGenerator.calls,
+		"title generation must not be scheduled when ChatID is nil")
+}
+
+// Title generation should be scheduled on every completion that has a real ChatID,
+// but NEVER for completions with ChatID == uuid.Nil (e.g. internal title-gen calls).
+func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *testing.T) {
+	t.Parallel()
+
+	server := newMockServer(t)
+	defer server.Close()
+
+	titleGenerator := &trackingTitleGenerator{}
+	tracker := newTrackingCaptureStrategy()
+	client := NewUnifiedClient(
+		slog.Default(),
+		&mockProvisioner{apiKey: "test-api-key"},
+		tracker,
+		&mockUsageTrackingStrategy{},
+		titleGenerator,
+		&mockChatResolutionAnalyzer{},
+		&mockTelemetryService{},
+	)
+	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+	chatID := uuid.New()
+	projectID := uuid.New()
+
+	// Three completions with a valid ChatID
+	for i := 0; i < 3; i++ {
+		_, err := client.GetCompletion(context.Background(), CompletionRequest{
+			OrgID:       "test-org",
+			ProjectID:   projectID.String(),
+			Messages:    []or.Message{CreateMessageUser("Hello")},
+			ChatID:      chatID,
+			UsageSource: billing.ModelUsageSourcePlayground,
+			APIKeyID:    "key-1",
+		})
+		require.NoError(t, err)
+	}
+
+	// One completion with nil ChatID (simulating title-gen activity's internal call)
+	_, err := client.GetCompletion(context.Background(), CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.Message{CreateMessageUser("Generate title")},
+		ChatID:      uuid.Nil,
+		UsageSource: billing.ModelUsageSourceGram,
+		APIKeyID:    "",
+	})
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+
+	titleGenerator.mu.Lock()
+	defer titleGenerator.mu.Unlock()
+
+	// Only the 3 real-chat completions should trigger title gen, not the nil one
+	require.Len(t, titleGenerator.calls, 3,
+		"title generation should be scheduled for each completion with a valid ChatID")
+	for _, id := range titleGenerator.calls {
+		require.Equal(t, chatID.String(), id,
+			"all title generation calls should use the real chat ID, never nil")
+	}
+}
+
+// Verify that reloading a chat and sending a new message does not duplicate
+// the last message in the history.
+func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
+	t.Parallel()
+
+	server := newMockServer(t)
+	defer server.Close()
+
+	tracker := newTrackingCaptureStrategy()
+	client := NewUnifiedClient(
+		slog.Default(),
+		&mockProvisioner{apiKey: "test-api-key"},
+		tracker,
+		&mockUsageTrackingStrategy{},
+		&mockChatTitleGenerator{},
+		&mockChatResolutionAnalyzer{},
+		&mockTelemetryService{},
+	)
+	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+	chatID := uuid.New()
+	projectID := uuid.New()
+
+	// Round 1: First message
+	req1 := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.Message{CreateMessageUser("Hello")},
+		ChatID:      chatID,
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "key-1",
+	}
+	_, err := client.GetCompletion(context.Background(), req1)
+	require.NoError(t, err)
+
+	// After round 1: DB should have [user(StartOrResumeChat), assistant(CaptureMessage)]
+	tracker.mu.Lock()
+	require.Equal(t, 2, tracker.messageCount[chatID], "round 1: should have 2 messages stored")
+	require.Len(t, tracker.storedMessages, 2)
+	require.Equal(t, "user", tracker.storedMessages[0].role)
+	require.Equal(t, "StartOrResumeChat", tracker.storedMessages[0].source)
+	require.Equal(t, "assistant", tracker.storedMessages[1].role)
+	require.Equal(t, "CaptureMessage", tracker.storedMessages[1].source)
+	tracker.mu.Unlock()
+
+	// Round 2: Simulate reload — client sends all history + new user message
+	req2 := CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: projectID.String(),
+		Messages: []or.Message{
+			CreateMessageUser("Hello"),            // from history
+			CreateMessageAssistant("Response 1"),  // from history
+			CreateMessageUser("How are you?"),     // new user message
+		},
+		ChatID:      chatID,
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "key-1",
+	}
+	_, err = client.GetCompletion(context.Background(), req2)
+	require.NoError(t, err)
+
+	// After round 2: DB should have 4 messages total, NO duplicates
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+
+	require.Equal(t, 4, tracker.messageCount[chatID],
+		"round 2: should have exactly 4 messages (user1, assistant1, user2, assistant2)")
+	require.Len(t, tracker.storedMessages, 4)
+
+	// Verify the assistant from round 1 was NOT re-stored by StartOrResumeChat
+	assistantStoredByStartOrResume := 0
+	for _, msg := range tracker.storedMessages {
+		if msg.role == "assistant" && msg.source == "StartOrResumeChat" {
+			assistantStoredByStartOrResume++
+		}
+	}
+	require.Equal(t, 0, assistantStoredByStartOrResume,
+		"assistant messages should never be re-stored by StartOrResumeChat on reload")
+
+	// Verify the exact sequence of stored messages
+	require.Equal(t, "user", tracker.storedMessages[0].role)         // round 1: user
+	require.Equal(t, "assistant", tracker.storedMessages[1].role)     // round 1: assistant response
+	require.Equal(t, "user", tracker.storedMessages[2].role)         // round 2: new user message only
+	require.Equal(t, "assistant", tracker.storedMessages[3].role)     // round 2: assistant response
 }
 
 // testTransport is a custom http.RoundTripper that redirects all requests to the test server

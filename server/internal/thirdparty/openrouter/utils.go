@@ -1,6 +1,9 @@
 package openrouter
 
-import or "github.com/OpenRouterTeam/go-sdk/models/components"
+import (
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+)
 
 func CreateMessageUser(content string) or.Message {
 	return or.Message{
@@ -14,6 +17,19 @@ func CreateMessageUser(content string) or.Message {
 		AssistantMessage:   nil,
 		ToolResponseMessage: nil,
 	}
+}
+
+func CreateMessageAssistant(content string) or.Message {
+	c := or.CreateAssistantMessageContentStr(content)
+	return or.CreateMessageAssistant(or.AssistantMessage{
+		Content:          optionalnullable.From(&c),
+		Name:             nil,
+		ToolCalls:        nil,
+		Refusal:          nil,
+		Reasoning:        nil,
+		ReasoningDetails: nil,
+		Images:           nil,
+	})
 }
 
 func CreateMessageSystem(content string) or.Message {

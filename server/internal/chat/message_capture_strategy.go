@@ -50,7 +50,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 
 	projectID, err := uuid.Parse(request.ProjectID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to parse project ID").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "parse project ID").Log(ctx, s.logger)
 	}
 	orgID := request.OrgID
 	userID := request.UserID
@@ -67,14 +67,14 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
-		return oops.E(oops.CodeUnexpected, err, "failed to create chat")
+		return oops.E(oops.CodeUnexpected, err, "create chat")
 	}
 
 	// Get the number of already-stored messages so we can insert any new ones
 	chatCount, err := s.repo.CountChatMessages(ctx, chatID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get chat history", attr.SlogError(err))
-		return oops.E(oops.CodeUnexpected, err, "failed to get chat history")
+		return oops.E(oops.CodeUnexpected, err, "count chat messages")
 	}
 
 	// This shouldn't happen, and also it doesn't really matter if it does, but we error anyway so we can fix it
@@ -208,6 +208,14 @@ type NoOpCaptureStrategy struct{}
 // NewNoOpCaptureStrategy creates a new NoOpCaptureStrategy.
 func NewNoOpCaptureStrategy() *NoOpCaptureStrategy {
 	return &NoOpCaptureStrategy{}
+}
+
+// StartOrResumeChat does nothing.
+func (s *NoOpCaptureStrategy) StartOrResumeChat(
+	_ context.Context,
+	_ openrouter.CompletionRequest,
+) error {
+	return nil
 }
 
 // CaptureMessage does nothing and always returns nil.

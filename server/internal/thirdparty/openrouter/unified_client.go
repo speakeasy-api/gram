@@ -203,9 +203,9 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, req CompletionReques
 		return
 	}
 
-	// Schedule chat title generation
+	// Schedule chat title generation.
 	// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
-	if c.chatTitleGenerator != nil {
+	if c.chatTitleGenerator != nil && req.ChatID != uuid.Nil {
 		if err := c.chatTitleGenerator.ScheduleChatTitleGeneration(
 			context.WithoutCancel(ctx),
 			req.ChatID.String(),
@@ -217,7 +217,7 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, req CompletionReques
 	}
 
 	// Schedule chat resolution analysis (will reset timer if already scheduled)
-	if c.chatResolutionAnalyzer != nil {
+	if c.chatResolutionAnalyzer != nil && req.ChatID != uuid.Nil {
 		if err := c.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
 			context.WithoutCancel(ctx),
 			req.ChatID,
