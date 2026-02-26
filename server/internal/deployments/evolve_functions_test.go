@@ -1279,7 +1279,7 @@ func TestEvolve_WithResources_UpdateFunctions(t *testing.T) {
 
 	// Verify all resources have correct runtime
 	for _, resource := range evolvedResources {
-		require.Equal(t, "nodejs:24", resource.Runtime, "all resources should have nodejs:22 runtime")
+		require.Equal(t, "nodejs:24", resource.Runtime, "all resources should have nodejs:24 runtime")
 	}
 }
 
