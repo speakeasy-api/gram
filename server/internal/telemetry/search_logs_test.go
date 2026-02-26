@@ -3,6 +3,7 @@ package telemetry_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"testing"
 	"time"
 
@@ -819,6 +820,179 @@ func TestSearchLogs_Filters(t *testing.T) {
 	}
 }
 
+func TestSearchLogs_AttributeFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	baseTime := now.Add(-30 * time.Minute)
+
+	// Insert logs with custom user attributes (stored under app. prefix)
+	// and system attributes
+	testLogs := []testLogParams{
+		{
+			projectID:    projectID,
+			deploymentID: deploymentID,
+			timestamp:    baseTime.Add(1 * time.Minute),
+			gramURN:      "urn:gram:func:test",
+			severity:     "INFO",
+			serviceName:  "gram-functions",
+			customAttrs: map[string]any{
+				"app.user.region": "us-east-1",
+				"app.user.tier":   "premium",
+				"app.env":         "production",
+			},
+		},
+		{
+			projectID:    projectID,
+			deploymentID: deploymentID,
+			timestamp:    baseTime.Add(2 * time.Minute),
+			gramURN:      "urn:gram:func:test",
+			severity:     "INFO",
+			serviceName:  "gram-functions",
+			customAttrs: map[string]any{
+				"app.user.region": "eu-west-1",
+				"app.user.tier":   "free",
+				"app.env":         "production",
+			},
+		},
+		{
+			projectID:    projectID,
+			deploymentID: deploymentID,
+			timestamp:    baseTime.Add(3 * time.Minute),
+			gramURN:      "urn:gram:func:test",
+			severity:     "ERROR",
+			serviceName:  "gram-functions",
+			customAttrs: map[string]any{
+				"app.user.region": "us-east-1",
+				"app.user.tier":   "premium",
+				"app.env":         "staging",
+			},
+		},
+		{
+			projectID:    projectID,
+			deploymentID: deploymentID,
+			timestamp:    baseTime.Add(4 * time.Minute),
+			gramURN:      "urn:gram:func:test",
+			severity:     "INFO",
+			serviceName:  "gram-functions",
+			httpRoute:    new("/api/health"),
+			customAttrs:  map[string]any{},
+		},
+	}
+
+	for _, log := range testLogs {
+		insertTelemetryLogWithParams(t, ctx, log)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := baseTime.Add(-10 * time.Minute).Format(time.RFC3339)
+	to := now.Format(time.RFC3339)
+
+	eq := "eq"
+	notEq := "not_eq"
+	contains := "contains"
+	exists := "exists"
+	notExists := "not_exists"
+
+	tests := []struct {
+		name          string
+		filters       []*gen.AttributeFilter
+		expectedCount int
+	}{
+		{
+			name: "@ prefix equality matches user attribute",
+			filters: []*gen.AttributeFilter{
+				{Path: "@user.region", Op: eq, Value: &[]string{"us-east-1"}[0]},
+			},
+			expectedCount: 2,
+		},
+		{
+			name: "@ prefix not-equal excludes matching user attribute",
+			filters: []*gen.AttributeFilter{
+				{Path: "@user.region", Op: notEq, Value: &[]string{"us-east-1"}[0]},
+			},
+			expectedCount: 2, // eu-west-1 + log with no attribute (toString returns '' which != 'us-east-1')
+		},
+		{
+			name: "@ prefix contains searches within value",
+			filters: []*gen.AttributeFilter{
+				{Path: "@user.region", Op: contains, Value: &[]string{"east"}[0]},
+			},
+			expectedCount: 2,
+		},
+		{
+			name: "@ prefix exists returns logs with attribute set",
+			filters: []*gen.AttributeFilter{
+				{Path: "@user.tier", Op: exists},
+			},
+			expectedCount: 3,
+		},
+		{
+			name: "@ prefix not_exists returns logs without attribute",
+			filters: []*gen.AttributeFilter{
+				{Path: "@user.tier", Op: notExists},
+			},
+			expectedCount: 1,
+		},
+		{
+			name: "bare path matches system attribute directly",
+			filters: []*gen.AttributeFilter{
+				{Path: "http.route", Op: eq, Value: &[]string{"/api/health"}[0]},
+			},
+			expectedCount: 1,
+		},
+		{
+			name: "combine @ filter with existing filter field",
+			filters: []*gen.AttributeFilter{
+				{Path: "@env", Op: eq, Value: &[]string{"production"}[0]},
+			},
+			expectedCount: 2,
+		},
+		{
+			name: "multiple attribute filters are ANDed",
+			filters: []*gen.AttributeFilter{
+				{Path: "@user.region", Op: eq, Value: &[]string{"us-east-1"}[0]},
+				{Path: "@user.tier", Op: eq, Value: &[]string{"premium"}[0]},
+			},
+			expectedCount: 2,
+		},
+		{
+			name: "invalid path is silently skipped",
+			filters: []*gen.AttributeFilter{
+				{Path: "1invalid", Op: eq, Value: &[]string{"test"}[0]},
+			},
+			expectedCount: 4, // no filter applied, all logs returned
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+				Filter: &gen.SearchLogsFilter{
+					From:             &from,
+					To:               &to,
+					AttributeFilters: tt.filters,
+				},
+				Limit: 100,
+				Sort:  "desc",
+			})
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Len(t, result.Logs, tt.expectedCount, "expected %d logs but got %d", tt.expectedCount, len(result.Logs))
+		})
+	}
+}
+
 // SearchToolCalls tests
 
 func TestSearchToolCalls_LogsDisabled(t *testing.T) {
@@ -1095,6 +1269,7 @@ type testLogParams struct {
 	httpStatus   *int32
 	httpRoute    *string
 	serviceName  string
+	customAttrs  map[string]any // additional attributes merged into the JSON
 }
 
 func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params testLogParams) {
@@ -1106,7 +1281,7 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
-	// Build attributes JSON with HTTP fields
+	// Build attributes JSON with HTTP fields and custom attributes
 	attrs := map[string]any{}
 	if params.httpMethod != nil {
 		attrs["http.request.method"] = *params.httpMethod
@@ -1117,6 +1292,7 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 	if params.httpRoute != nil {
 		attrs["http.route"] = *params.httpRoute
 	}
+	maps.Copy(attrs, params.customAttrs)
 
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)

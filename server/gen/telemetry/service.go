@@ -62,6 +62,19 @@ const ServiceName = "telemetry"
 // MethodKey key.
 var MethodNames = [9]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions"}
 
+// Filter on a log attribute by path. Prefix with @ to search your custom
+// attributes (e.g. '@user.region'). Without @, the path matches system
+// attributes (e.g. 'http.route').
+type AttributeFilter struct {
+	// Attribute path. Use @ prefix for your custom attributes (e.g.
+	// '@user.region'), or bare path for system attributes (e.g. 'http.route').
+	Path string
+	// Comparison operator
+	Op string
+	// Value to compare against (ignored for 'exists' and 'not_exists' operators)
+	Value *string
+}
+
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
 type CaptureEventPayload struct {
@@ -378,6 +391,8 @@ type SearchLogsFilter struct {
 	UserID *string
 	// External user ID filter
 	ExternalUserID *string
+	// Filters on custom log attributes
+	AttributeFilters []*AttributeFilter
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')

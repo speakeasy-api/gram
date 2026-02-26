@@ -3,10 +3,34 @@ package repo
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
 )
+
+// validJSONPath matches safe dot-separated JSON paths for ClickHouse attribute access.
+// This prevents SQL injection since attribute paths cannot be parameterized.
+//
+//	^              - start of string
+//	@?             - optional @ prefix (user attribute marker, translated to "app." prefix)
+//	[a-zA-Z_]      - first path char must be a letter or underscore (no digits/symbols)
+//	[a-zA-Z0-9_.]* - subsequent chars: letters, digits, underscores, or dots (segment separators)
+//	$              - end of string
+//
+// Matches: "@user.region", "http.route", "env"
+// Rejects: "1bad", ".leading.dot", "path with spaces", "semi;colon", "@@double"
+var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_.]*$`)
+
+// AttributeFilter represents a filter on an arbitrary JSON attribute path.
+// Paths prefixed with @ target user-defined attributes (translated to app.<path> in ClickHouse).
+// Bare paths target system/OTel attributes directly.
+type AttributeFilter struct {
+	Path  string // Attribute path, optionally @-prefixed (e.g. "@user.region", "http.route")
+	Op    string // Comparison operator: "eq", "not_eq", "contains", "exists", "not_exists"
+	Value string // Value to compare against (ignored for "exists"/"not_exists")
+}
 
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
@@ -102,6 +126,7 @@ type ListTelemetryLogsParams struct {
 	GramChatID             string
 	UserID                 string
 	ExternalUserID         string
+	AttributeFilters       []AttributeFilter
 	SortOrder              string
 	Cursor                 string
 	Limit                  int
@@ -175,6 +200,33 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 	}
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+
+	// Arbitrary attribute filters
+	for _, f := range arg.AttributeFilters {
+		if !validJSONPath.MatchString(f.Path) {
+			continue // skip invalid paths to prevent injection
+		}
+		// @prefix → user attribute (app.<path>), bare → system attribute (as-is)
+		path := f.Path
+		if strings.HasPrefix(path, "@") {
+			path = "app." + path[1:]
+		}
+		col := fmt.Sprintf("toString(attributes.%s)", path)
+		switch f.Op {
+		case "eq":
+			sb = sb.Where(fmt.Sprintf("%s = ?", col), f.Value)
+		case "not_eq":
+			sb = sb.Where(fmt.Sprintf("%s != ?", col), f.Value)
+		case "contains":
+			sb = sb.Where(fmt.Sprintf("position(%s, ?) > 0", col), f.Value)
+		case "exists":
+			sb = sb.Where(fmt.Sprintf("%s != ''", col))
+		case "not_exists":
+			sb = sb.Where(fmt.Sprintf("%s = ''", col))
+		default:
+			sb = sb.Where(fmt.Sprintf("%s = ?", col), f.Value)
+		}
 	}
 
 	sb = withPagination(sb, arg.Cursor, arg.SortOrder)
