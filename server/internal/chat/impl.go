@@ -1003,24 +1003,24 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 type responseCaptor struct {
 	http.ResponseWriter
 	//nolint:containedctx // responseCaptor needs to implement io.Writer so its methods cannot accept a context
-	ctx                  context.Context
-	logger               *slog.Logger
-	isStreaming          bool
-	orgID                string
-	chatID               uuid.UUID
-	projectID            uuid.UUID
-	messageContent       *strings.Builder
-	lineBuf              *strings.Builder // Buffer for accumulating partial SSE lines across Write calls
-	messageID            string
-	model                string
-	isDone               bool
-	usageSet             bool
-	messageWritten       bool
-	finishReason         *string
-	repo                 *repo.Queries
-	toolCallID           string
-	accumulatedToolCalls map[int]openrouter.ToolCall // Map of index to accumulated tool call data
-	usage                openrouter.Usage
+	ctx                    context.Context
+	logger                 *slog.Logger
+	isStreaming            bool
+	orgID                  string
+	chatID                 uuid.UUID
+	projectID              uuid.UUID
+	messageContent         *strings.Builder
+	lineBuf                *strings.Builder // Buffer for accumulating partial SSE lines across Write calls
+	messageID              string
+	model                  string
+	isDone                 bool
+	usageSet               bool
+	messageWritten         bool
+	finishReason           *string
+	repo                   *repo.Queries
+	toolCallID             string
+	accumulatedToolCalls   map[int]openrouter.ToolCall // Map of index to accumulated tool call data
+	usage                  openrouter.Usage
 	chatTitleGenerator     ChatTitleGenerator
 	chatResolutionAnalyzer ChatResolutionAnalyzer
 	// GenAI telemetry
