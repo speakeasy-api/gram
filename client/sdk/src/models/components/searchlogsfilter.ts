@@ -5,6 +5,11 @@
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  AttributeFilter,
+  AttributeFilter$Outbound,
+  AttributeFilter$outboundSchema,
+} from "./attributefilter.js";
 
 /**
  * HTTP method filter
@@ -42,6 +47,10 @@ export type SeverityText = ClosedEnum<typeof SeverityText>;
  * Filter criteria for searching logs
  */
 export type SearchLogsFilter = {
+  /**
+   * Filters on custom log attributes
+   */
+  attributeFilters?: Array<AttributeFilter> | undefined;
   /**
    * Deployment ID filter
    */
@@ -114,6 +123,7 @@ export const SeverityText$outboundSchema: z.ZodNativeEnum<typeof SeverityText> =
 
 /** @internal */
 export type SearchLogsFilter$Outbound = {
+  attribute_filters?: Array<AttributeFilter$Outbound> | undefined;
   deployment_id?: string | undefined;
   external_user_id?: string | undefined;
   from?: string | undefined;
@@ -137,6 +147,7 @@ export const SearchLogsFilter$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   SearchLogsFilter
 > = z.object({
+  attributeFilters: z.array(AttributeFilter$outboundSchema).optional(),
   deploymentId: z.string().optional(),
   externalUserId: z.string().optional(),
   from: z.date().transform(v => v.toISOString()).optional(),
@@ -154,6 +165,7 @@ export const SearchLogsFilter$outboundSchema: z.ZodType<
   userId: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    attributeFilters: "attribute_filters",
     deploymentId: "deployment_id",
     externalUserId: "external_user_id",
     functionId: "function_id",

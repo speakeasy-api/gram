@@ -11,6 +11,7 @@ export * from "./addopenapiv3deploymentassetform.js";
 export * from "./addpackageform.js";
 export * from "./allowedorigin.js";
 export * from "./asset.js";
+export * from "./attributefilter.js";
 export * from "./canonicaltoolattributes.js";
 export * from "./captureeventpayload.js";
 export * from "./captureeventresult.js";
