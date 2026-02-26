@@ -482,7 +482,7 @@ func TestEvolve_UpsertFunctions_Multiple(t *testing.T) {
 	runtimes := lo.Map(functionTools, func(tool testrepo.FunctionToolDefinition, _ int) string {
 		return tool.Runtime
 	})
-	require.Contains(t, runtimes, "nodejs:24", "expected nodejs:22 runtime tools")
+	require.Contains(t, runtimes, "nodejs:24", "expected nodejs:24 runtime tools")
 	require.Contains(t, runtimes, "python:3.12", "expected python:3.12 runtime tools")
 
 	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
