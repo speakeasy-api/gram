@@ -55,7 +55,7 @@ func DoStageFunction(opts StageFunctionOptions) error {
 		opts.ConfigFile = "gram.deploy.json"
 	}
 	if opts.Runtime == "" {
-		opts.Runtime = "nodejs:24"
+		opts.Runtime = "nodejs:22"
 	}
 	if opts.Slug == "" {
 		return fmt.Errorf("slug is required")
@@ -219,7 +219,7 @@ func newStageFunctionCommand() *cli.Command {
 					}
 					return nil
 				},
-				Value: "nodejs:24",
+				Value: "nodejs:22",
 			},
 		},
 		Action: func(cCtx *cli.Context) error {
