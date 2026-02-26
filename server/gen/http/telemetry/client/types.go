@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	telemetry "github.com/speakeasy-api/gram/server/gen/telemetry"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -111,6 +113,8 @@ type GetObservabilityOverviewRequestBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// Optional API key ID filter
 	APIKeyID *string `form:"api_key_id,omitempty" json:"api_key_id,omitempty" xml:"api_key_id,omitempty"`
+	// Optional toolset/MCP server ID filter
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool `form:"include_time_series" json:"include_time_series" xml:"include_time_series"`
 }
@@ -1916,6 +1920,8 @@ type SearchLogsFilterRequestBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// External user ID filter
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// Filters on custom log attributes
+	AttributeFilters []*AttributeFilterRequestBody `form:"attribute_filters,omitempty" json:"attribute_filters,omitempty" xml:"attribute_filters,omitempty"`
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -1926,6 +1932,17 @@ type SearchLogsFilterRequestBody struct {
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
 	// Gram URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+}
+
+// AttributeFilterRequestBody is used to define fields on request body types.
+type AttributeFilterRequestBody struct {
+	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
+	// bare path for system attributes (e.g. 'http.route').
+	Path string `form:"path" json:"path" xml:"path"`
+	// Comparison operator
+	Op string `form:"op" json:"op" xml:"op"`
+	// Value to compare against (ignored for 'exists' and 'not_exists' operators)
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
 // TelemetryLogRecordResponseBody is used to define fields on response body
@@ -2374,6 +2391,7 @@ func NewGetObservabilityOverviewRequestBody(p *telemetry.GetObservabilityOvervie
 		To:                p.To,
 		ExternalUserID:    p.ExternalUserID,
 		APIKeyID:          p.APIKeyID,
+		ToolsetID:         p.ToolsetID,
 		IncludeTimeSeries: p.IncludeTimeSeries,
 	}
 	{
@@ -6290,6 +6308,13 @@ func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.http_method", *body.HTTPMethod, []any{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}))
 		}
 	}
+	for _, e := range body.AttributeFilters {
+		if e != nil {
+			if err2 := ValidateAttributeFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.From != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
 	}
@@ -6301,6 +6326,27 @@ func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err
 	}
 	if body.FunctionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.function_id", *body.FunctionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAttributeFilterRequestBody runs the validations defined on
+// AttributeFilterRequestBody
+func ValidateAttributeFilterRequestBody(body *AttributeFilterRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.path", body.Path, "^@?[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$"))
+	if utf8.RuneCountInString(body.Path) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 1, true))
+	}
+	if utf8.RuneCountInString(body.Path) > 256 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 256, false))
+	}
+	if !(body.Op == "eq" || body.Op == "not_eq" || body.Op == "contains" || body.Op == "exists" || body.Op == "not_exists") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", body.Op, []any{"eq", "not_eq", "contains", "exists", "not_exists"}))
+	}
+	if body.Value != nil {
+		if utf8.RuneCountInString(*body.Value) > 1024 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.value", *body.Value, utf8.RuneCountInString(*body.Value), 1024, false))
+		}
 	}
 	return
 }

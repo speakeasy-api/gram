@@ -381,7 +381,7 @@ func TestCreateLog_TraceAndSpanIDColumns(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 
 	traceID := "0af7651916cd43dd8448eb211c80319c" // 32 hex chars
-	spanID := "b7ad6b7169203331"                   // 16 hex chars
+	spanID := "b7ad6b7169203331"                  // 16 hex chars
 
 	attrs := telemetry.HTTPLogAttributes{}
 	attrs.RecordMethod("GET")

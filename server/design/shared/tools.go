@@ -106,7 +106,7 @@ var FunctionToolDefinition = Type("FunctionToolDefinition", func() {
 	Attribute("deployment_id", String, "The ID of the deployment")
 	Attribute("asset_id", String, "The ID of the asset")
 	Attribute("function_id", String, "The ID of the function")
-	Attribute("runtime", String, "Runtime environment (e.g., nodejs:22, python:3.12)")
+	Attribute("runtime", String, "Runtime environment (e.g., nodejs:24, python:3.12)")
 	Attribute("variables", Any, "Variables configuration for the function")
 	Attribute("meta", MapOf(String, Any), "Meta tags for the tool")
 

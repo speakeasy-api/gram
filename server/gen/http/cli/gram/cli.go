@@ -4170,7 +4170,7 @@ func telemetrySearchLogsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-logs --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_chat_id\": \"abc123\",\n         \"gram_urn\": \"abc123\",\n         \"gram_urns\": [\n            \"abc123\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"abc123\",\n         \"http_status_code\": 1,\n         \"service_name\": \"abc123\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"11111111111111111111111111111111\",\n         \"user_id\": \"abc123\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-logs --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"attribute_filters\": [\n            {\n               \"op\": \"not_eq\",\n               \"path\": \"@user.region\",\n               \"value\": \"us-east-1\"\n            }\n         ],\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_chat_id\": \"abc123\",\n         \"gram_urn\": \"abc123\",\n         \"gram_urns\": [\n            \"abc123\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"abc123\",\n         \"http_status_code\": 1,\n         \"service_name\": \"abc123\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"11111111111111111111111111111111\",\n         \"user_id\": \"abc123\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetrySearchToolCallsUsage() {
@@ -4340,7 +4340,7 @@ func telemetryGetObservabilityOverviewUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-observability-overview --body '{\n      \"api_key_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_time_series\": false,\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-observability-overview --body '{\n      \"api_key_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_time_series\": false,\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryListFilterOptionsUsage() {

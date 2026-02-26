@@ -41,7 +41,7 @@ type Source struct {
 	Slug string `json:"slug" yaml:"slug" toml:"slug"`
 
 	// Runtime is the runtime to use for function execution (required for functions).
-	// Allowed values are: nodejs:22, python:3.12
+	// Allowed values are: nodejs:22, nodejs:24, python:3.12
 	Runtime string `json:"runtime,omitempty" yaml:"runtime,omitempty" toml:"runtime,omitempty"`
 }
 
@@ -66,7 +66,7 @@ func (s Source) Validate() error {
 	}
 	if s.Type == SourceTypeFunction && s.Runtime == "" {
 		return fmt.Errorf(
-			"source of type 'function' is missing required field 'runtime' (allowed values: nodejs:22, python:3.12)",
+			"source of type 'function' is missing required field 'runtime' (allowed values: nodejs:22, nodejs:24, python:3.12)",
 		)
 	}
 	return nil

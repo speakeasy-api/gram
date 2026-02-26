@@ -322,7 +322,7 @@ var AddFunctionsForm = Type("AddFunctionsForm", func() {
 		Description("A URL-friendly string that identifies the functions file. Usually derived from the name.")
 	})
 	Attribute("runtime", String, func() {
-		Description("The runtime to use when executing functions. Allowed values are: nodejs:22, python:3.12.")
+		Description("The runtime to use when executing functions. Allowed values are: nodejs:22, nodejs:24, python:3.12.")
 	})
 })
 

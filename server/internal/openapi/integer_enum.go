@@ -16,11 +16,11 @@
 //  1. Open Anti-Gravity and press Cmd+Shift+P, then "Manage MCP Servers".
 //  2. Add the following to the config:
 //     {
-//       "mcpServers": {
-//         "integer-enum-test": {
-//           "serverUrl": "https://chat.speakeasy.com/mcp/integer-enum-test"
-//         }
-//       }
+//     "mcpServers": {
+//     "integer-enum-test": {
+//     "serverUrl": "https://chat.speakeasy.com/mcp/integer-enum-test"
+//     }
+//     }
 //     }
 //  3. Call the tool from the agent panel. The error only manifests at
 //     tool call time, not when the server/tools are initially loaded.

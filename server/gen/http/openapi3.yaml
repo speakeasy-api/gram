@@ -11666,7 +11666,7 @@ components:
                     description: The functions file display name.
                 runtime:
                     type: string
-                    description: 'The runtime to use when executing functions. Allowed values are: nodejs:22, python:3.12.'
+                    description: 'The runtime to use when executing functions. Allowed values are: nodejs:22, nodejs:24, python:3.12.'
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -11825,6 +11825,34 @@ components:
                 - content_length
                 - created_at
                 - updated_at
+        AttributeFilter:
+            type: object
+            properties:
+                op:
+                    type: string
+                    description: Comparison operator
+                    default: eq
+                    enum:
+                        - eq
+                        - not_eq
+                        - contains
+                        - exists
+                        - not_exists
+                path:
+                    type: string
+                    description: Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
+                    example: '@user.region'
+                    pattern: ^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$
+                    minLength: 1
+                    maxLength: 256
+                value:
+                    type: string
+                    description: Value to compare against (ignored for 'exists' and 'not_exists' operators)
+                    example: us-east-1
+                    maxLength: 1024
+            description: Filter on a log attribute by path.
+            required:
+                - path
         BaseResourceAttributes:
             type: object
             properties:
@@ -13496,7 +13524,7 @@ components:
                     description: The URN of this resource
                 runtime:
                     type: string
-                    description: Runtime environment (e.g., nodejs:22, python:3.12)
+                    description: Runtime environment (e.g., nodejs:24, python:3.12)
                 title:
                     type: string
                     description: Optional title for the resource
@@ -13569,7 +13597,7 @@ components:
                     description: The ID of the project
                 runtime:
                     type: string
-                    description: Runtime environment (e.g., nodejs:22, python:3.12)
+                    description: Runtime environment (e.g., nodejs:24, python:3.12)
                 schema:
                     type: string
                     description: JSON schema for the request
@@ -13874,6 +13902,9 @@ components:
                     description: End time in ISO 8601 format
                     example: "2025-12-19T11:00:00Z"
                     format: date-time
+                toolset_id:
+                    type: string
+                    description: Optional toolset/MCP server ID filter
             description: Payload for getting observability overview metrics
             required:
                 - from
@@ -15658,6 +15689,11 @@ components:
         SearchLogsFilter:
             type: object
             properties:
+                attribute_filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AttributeFilter'
+                    description: Filters on custom log attributes
                 deployment_id:
                     type: string
                     description: Deployment ID filter

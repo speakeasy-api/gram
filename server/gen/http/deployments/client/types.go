@@ -1799,7 +1799,7 @@ type AddFunctionsFormRequestBody struct {
 	// from the name.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// The runtime to use when executing functions. Allowed values are: nodejs:22,
-	// python:3.12.
+	// nodejs:24, python:3.12.
 	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
 }
 

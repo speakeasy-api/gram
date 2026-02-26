@@ -10,11 +10,11 @@ import (
 func TestBuildHeaders(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name        string
-		systemEnv   map[string]string
-		userConfig  map[string]string
-		headerDefs  []HeaderDefinition
-		expected    map[string]string
+		name       string
+		systemEnv  map[string]string
+		userConfig map[string]string
+		headerDefs []HeaderDefinition
+		expected   map[string]string
 	}{
 		{
 			name: "all system env flows through with ToHTTPHeader derivation for keys without definitions",
@@ -23,8 +23,8 @@ func TestBuildHeaders(t *testing.T) {
 				"api_secret":    "mysecret",
 				"service_token": "token456",
 			},
-			userConfig:  map[string]string{},
-			headerDefs:  []HeaderDefinition{},
+			userConfig: map[string]string{},
+			headerDefs: []HeaderDefinition{},
 			expected: map[string]string{
 				"Api-Key":       "secret123",
 				"Api-Secret":    "mysecret",
@@ -113,9 +113,9 @@ func TestBuildHeaders(t *testing.T) {
 				"another_key": "value",
 			},
 			userConfig: map[string]string{
-				"api_key":      "override",
-				"empty_user":   "",
-				"another_key":  "",
+				"api_key":     "override",
+				"empty_user":  "",
+				"another_key": "",
 			},
 			headerDefs: []HeaderDefinition{
 				{Name: "api_key", HeaderName: "X-Key"},
@@ -139,8 +139,8 @@ func TestBuildHeaders(t *testing.T) {
 				"db_host": "localhost",
 				"db_port": "5432",
 			},
-			userConfig:  map[string]string{},
-			headerDefs:  nil,
+			userConfig: map[string]string{},
+			headerDefs: nil,
 			expected: map[string]string{
 				"Db-Host": "localhost",
 				"Db-Port": "5432",
@@ -154,7 +154,7 @@ func TestBuildHeaders(t *testing.T) {
 				"another_def":   "another_value",
 			},
 			userConfig: map[string]string{
-				"defined_key": "user_def",
+				"defined_key":   "user_def",
 				"undefined_key": "user_undef",
 			},
 			headerDefs: []HeaderDefinition{
@@ -183,7 +183,7 @@ func TestBuildHeaders(t *testing.T) {
 			},
 		},
 		{
-			name: "only user config override with no system env",
+			name:      "only user config override with no system env",
 			systemEnv: map[string]string{},
 			userConfig: map[string]string{
 				"api_key": "user_value",
@@ -271,9 +271,9 @@ func TestBuildHeadersEdgeCases(t *testing.T) {
 		{
 			name: "multiple definitions with overlapping case",
 			systemEnv: map[string]string{
-				"db_host":  "localhost",
-				"db_port":  "5432",
-				"db_user":  "admin",
+				"db_host": "localhost",
+				"db_port": "5432",
+				"db_user": "admin",
 			},
 			userConfig: map[string]string{
 				"DB_HOST": "remotehost",

@@ -40,13 +40,13 @@ import (
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -194,15 +194,15 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	}
 
 	return &gen.GetInstanceResult{
-		Name:                          toolset.Name,
-		Description:                   toolset.Description,
-		SecurityVariables:             toolset.SecurityVariables,
-		ServerVariables:               toolset.ServerVariables,
-		FunctionEnvironmentVariables:  toolset.FunctionEnvironmentVariables,
-		ExternalMcpHeaderDefinitions:  toolset.ExternalMcpHeaderDefinitions,
-		Tools:                         toolset.Tools,
-		PromptTemplates:               promptTemplates,
-		McpServers:                    mcpServers,
+		Name:                         toolset.Name,
+		Description:                  toolset.Description,
+		SecurityVariables:            toolset.SecurityVariables,
+		ServerVariables:              toolset.ServerVariables,
+		FunctionEnvironmentVariables: toolset.FunctionEnvironmentVariables,
+		ExternalMcpHeaderDefinitions: toolset.ExternalMcpHeaderDefinitions,
+		Tools:                        toolset.Tools,
+		PromptTemplates:              promptTemplates,
+		McpServers:                   mcpServers,
 	}, nil
 }
 
@@ -445,7 +445,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 				ProjectID:      descriptor.ProjectID,
 				DeploymentID:   descriptor.DeploymentID,
 				OrganizationID: descriptor.OrganizationID,
-				FunctionID: nil,
+				FunctionID:     nil,
 			},
 			Attributes: attrRecorder,
 		}

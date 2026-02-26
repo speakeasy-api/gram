@@ -15,7 +15,7 @@ type FunctionToolDefinition struct {
 	AssetID string
 	// The ID of the function
 	FunctionID string
-	// Runtime environment (e.g., nodejs:22, python:3.12)
+	// Runtime environment (e.g., nodejs:24, python:3.12)
 	Runtime string
 	// Variables configuration for the function
 	Variables any

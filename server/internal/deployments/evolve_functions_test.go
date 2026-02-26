@@ -26,7 +26,7 @@ func TestEvolve_ReplaceFunctions(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions files
-	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 	pyRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-petstore.json", "python:3.12")
 
 	// Create initial deployment with only JS functions
@@ -41,7 +41,7 @@ func TestEvolve_ReplaceFunctions(t *testing.T) {
 				AssetID: jsRes.Asset.ID,
 				Name:    "js-functions",
 				Slug:    "js-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{}, // No packages
@@ -123,7 +123,7 @@ func TestEvolve_FunctionsFirst(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create initial deployment with only functions
 	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -137,7 +137,7 @@ func TestEvolve_FunctionsFirst(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "initial-functions",
 				Slug:    "initial-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -214,7 +214,7 @@ func TestEvolve_UpsertFunctions_InitialDeployment(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Test evolving when no previous deployments exist (should create initial deployment)
 	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -228,7 +228,7 @@ func TestEvolve_UpsertFunctions_InitialDeployment(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "initial-functions",
 				Slug:    "initial-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -300,7 +300,7 @@ func TestEvolve_UpsertFunctions_AddToExisting(t *testing.T) {
 	require.Empty(t, initial.Deployment.FunctionsAssets, "initial deployment should have no functions")
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Evolve deployment to add functions
 	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -314,7 +314,7 @@ func TestEvolve_UpsertFunctions_AddToExisting(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "added-functions",
 				Slug:    "added-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -348,7 +348,7 @@ func TestEvolve_UpsertFunctions_UpdateExisting(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload initial functions file
-	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create initial deployment with functions
 	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
@@ -359,7 +359,7 @@ func TestEvolve_UpsertFunctions_UpdateExisting(t *testing.T) {
 				AssetID: fres1.Asset.ID,
 				Name:    "my-functions",
 				Slug:    "my-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -431,7 +431,7 @@ func TestEvolve_UpsertFunctions_Multiple(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload multiple functions files with different manifests to avoid tool name conflicts
-	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 	pyRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-petstore.json", "python:3.12")
 
 	// Create initial deployment
@@ -446,7 +446,7 @@ func TestEvolve_UpsertFunctions_Multiple(t *testing.T) {
 				AssetID: jsRes.Asset.ID,
 				Name:    "js-functions",
 				Slug:    "js-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 			{
 				AssetID: pyRes.Asset.ID,
@@ -482,7 +482,7 @@ func TestEvolve_UpsertFunctions_Multiple(t *testing.T) {
 	runtimes := lo.Map(functionTools, func(tool testrepo.FunctionToolDefinition, _ int) string {
 		return tool.Runtime
 	})
-	require.Contains(t, runtimes, "nodejs:22", "expected nodejs:22 runtime tools")
+	require.Contains(t, runtimes, "nodejs:24", "expected nodejs:24 runtime tools")
 	require.Contains(t, runtimes, "python:3.12", "expected python:3.12 runtime tools")
 
 	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
@@ -511,7 +511,7 @@ func TestEvolve_UpsertFunctions_MixedWithOpenAPI(t *testing.T) {
 	require.NoError(t, err, "upload openapi v3 asset")
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create deployment with both OpenAPI and functions
 	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -531,7 +531,7 @@ func TestEvolve_UpsertFunctions_MixedWithOpenAPI(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "todo-functions",
 				Slug:    "todo-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -564,7 +564,7 @@ func TestEvolve_ExcludeFunctions_Single(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload two functions files
-	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 	pyRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-petstore.json", "python:3.12")
 
 	// Create initial deployment with both functions
@@ -576,7 +576,7 @@ func TestEvolve_ExcludeFunctions_Single(t *testing.T) {
 				AssetID: jsRes.Asset.ID,
 				Name:    "js-functions",
 				Slug:    "js-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 			{
 				AssetID: pyRes.Asset.ID,
@@ -643,7 +643,7 @@ func TestEvolve_ExcludeFunctions_Multiple(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload two functions files
-	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 	pyRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-petstore.json", "python:3.12")
 
 	// Create initial deployment with all functions
@@ -655,7 +655,7 @@ func TestEvolve_ExcludeFunctions_Multiple(t *testing.T) {
 				AssetID: jsRes.Asset.ID,
 				Name:    "js-functions",
 				Slug:    "js-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 			{
 				AssetID: pyRes.Asset.ID,
@@ -713,7 +713,7 @@ func TestEvolve_ExcludeFunctions_All(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file
-	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create initial deployment with functions
 	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
@@ -724,7 +724,7 @@ func TestEvolve_ExcludeFunctions_All(t *testing.T) {
 				AssetID: jsRes.Asset.ID,
 				Name:    "js-functions",
 				Slug:    "js-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -796,7 +796,7 @@ func TestEvolve_ExcludeFunctions_KeepOpenAPI(t *testing.T) {
 	require.NoError(t, err, "upload openapi v3 asset")
 
 	// Upload functions file
-	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create initial deployment with both OpenAPI and functions
 	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
@@ -813,7 +813,7 @@ func TestEvolve_ExcludeFunctions_KeepOpenAPI(t *testing.T) {
 				AssetID: jsRes.Asset.ID,
 				Name:    "js-functions",
 				Slug:    "js-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -885,7 +885,7 @@ func TestEvolve_Functions_ComplexScenario(t *testing.T) {
 	}, io.NopCloser(bs))
 	require.NoError(t, err, "upload openapi v3 asset")
 
-	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	jsRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 	pyRes := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-petstore.json", "python:3.12")
 
 	// Create initial deployment with OpenAPI and one functions file
@@ -903,7 +903,7 @@ func TestEvolve_Functions_ComplexScenario(t *testing.T) {
 				AssetID: jsRes.Asset.ID,
 				Name:    "js-functions",
 				Slug:    "js-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*gen.AddDeploymentPackageForm{},
@@ -998,7 +998,7 @@ func TestEvolve_UpsertFunctions_InvalidAssetID(t *testing.T) {
 				AssetID: "invalid-uuid",
 				Name:    "test-functions",
 				Slug:    "test-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1040,7 +1040,7 @@ func TestEvolve_UpsertFunctions_InvalidRuntime(t *testing.T) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
 		ApikeyToken:           nil,
@@ -1073,7 +1073,7 @@ func TestEvolve_UpsertFunctions_BadToolsManifest(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file with bad tools manifest that contains malformed tools
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-bad-tools.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-bad-tools.json", "nodejs:24")
 
 	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
 		ApikeyToken:           nil,
@@ -1086,7 +1086,7 @@ func TestEvolve_UpsertFunctions_BadToolsManifest(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "bad-tools-functions",
 				Slug:    "bad-tools-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1114,7 +1114,7 @@ func TestEvolve_UpsertFunctions_InvalidManifest(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file with invalid JSON manifest
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-invalid.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-invalid.json", "nodejs:24")
 
 	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
 		ApikeyToken:           nil,
@@ -1127,7 +1127,7 @@ func TestEvolve_UpsertFunctions_InvalidManifest(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "invalid-manifest-functions",
 				Slug:    "invalid-manifest-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1155,7 +1155,7 @@ func TestEvolve_WithResources_InitialDeployment(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file with resources
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:24")
 
 	// Create initial deployment with functions containing resources
 	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1169,7 +1169,7 @@ func TestEvolve_WithResources_InitialDeployment(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "functions-with-resources",
 				Slug:    "functions-with-resources",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1213,7 +1213,7 @@ func TestEvolve_WithResources_UpdateFunctions(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload initial functions file without resources
-	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create initial deployment
 	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1227,7 +1227,7 @@ func TestEvolve_WithResources_UpdateFunctions(t *testing.T) {
 				AssetID: fres1.Asset.ID,
 				Name:    "my-functions",
 				Slug:    "my-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1245,7 +1245,7 @@ func TestEvolve_WithResources_UpdateFunctions(t *testing.T) {
 	require.Empty(t, initialResources, "initial deployment should have no resources")
 
 	// Upload updated functions file with resources
-	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:24")
 
 	// Evolve to update functions with resources (same name/slug, different asset)
 	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1259,7 +1259,7 @@ func TestEvolve_WithResources_UpdateFunctions(t *testing.T) {
 				AssetID: fres2.Asset.ID,
 				Name:    "my-functions", // Same name
 				Slug:    "my-functions", // Same slug
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1279,7 +1279,7 @@ func TestEvolve_WithResources_UpdateFunctions(t *testing.T) {
 
 	// Verify all resources have correct runtime
 	for _, resource := range evolvedResources {
-		require.Equal(t, "nodejs:22", resource.Runtime, "all resources should have nodejs:22 runtime")
+		require.Equal(t, "nodejs:24", resource.Runtime, "all resources should have nodejs:24 runtime")
 	}
 }
 
@@ -1290,7 +1290,7 @@ func TestEvolve_WithResources_AddMultipleFunctions(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload initial functions without resources
-	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create initial deployment
 	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1304,7 +1304,7 @@ func TestEvolve_WithResources_AddMultipleFunctions(t *testing.T) {
 				AssetID: fres1.Asset.ID,
 				Name:    "todo-functions",
 				Slug:    "todo-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1368,7 +1368,7 @@ func TestEvolve_WithResources_ExcludeFunctionsWithResources(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions with resources
-	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:24")
 	// Upload functions without resources
 	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "python:3.12")
 
@@ -1381,7 +1381,7 @@ func TestEvolve_WithResources_ExcludeFunctionsWithResources(t *testing.T) {
 				AssetID: fres1.Asset.ID,
 				Name:    "functions-with-resources",
 				Slug:    "functions-with-resources",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 			{
 				AssetID: fres2.Asset.ID,
@@ -1450,7 +1450,7 @@ func TestEvolve_WithResources_ReplaceResourceFunctions(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload initial functions with resources
-	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:24")
 
 	// Create initial deployment
 	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1464,7 +1464,7 @@ func TestEvolve_WithResources_ReplaceResourceFunctions(t *testing.T) {
 				AssetID: fres1.Asset.ID,
 				Name:    "resource-functions",
 				Slug:    "resource-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1483,7 +1483,7 @@ func TestEvolve_WithResources_ReplaceResourceFunctions(t *testing.T) {
 
 	// Verify nodejs runtime
 	for _, resource := range initialResources {
-		require.Equal(t, "nodejs:22", resource.Runtime)
+		require.Equal(t, "nodejs:24", resource.Runtime)
 	}
 
 	// Upload different functions without resources
@@ -1547,7 +1547,7 @@ func TestEvolve_WithResources_MixedWithOpenAPI(t *testing.T) {
 	require.NoError(t, err, "upload openapi v3 asset")
 
 	// Upload functions with resources
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:24")
 
 	// Create deployment with both OpenAPI and functions with resources
 	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1567,7 +1567,7 @@ func TestEvolve_WithResources_MixedWithOpenAPI(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "functions-with-resources",
 				Slug:    "functions-with-resources",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1607,7 +1607,7 @@ func TestEvolve_WithFunctions_AuthInputSaved(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload functions file with authInput in manifest
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:24")
 
 	// Evolve deployment with functions that have authInput
 	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1621,7 +1621,7 @@ func TestEvolve_WithFunctions_AuthInputSaved(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "authinput-functions",
 				Slug:    "authinput-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1683,7 +1683,7 @@ func TestEvolve_UpdateFunctions_AddAuthInput(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload initial functions file without authInput
-	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create initial deployment with functions without authInput
 	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1697,7 +1697,7 @@ func TestEvolve_UpdateFunctions_AddAuthInput(t *testing.T) {
 				AssetID: fres1.Asset.ID,
 				Name:    "my-functions",
 				Slug:    "my-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1718,7 +1718,7 @@ func TestEvolve_UpdateFunctions_AddAuthInput(t *testing.T) {
 	}
 
 	// Upload updated functions file with authInput
-	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:22")
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:24")
 
 	// Evolve deployment to update functions with authInput (same name/slug, different asset)
 	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1732,7 +1732,7 @@ func TestEvolve_UpdateFunctions_AddAuthInput(t *testing.T) {
 				AssetID: fres2.Asset.ID,
 				Name:    "my-functions", // Same name
 				Slug:    "my-functions", // Same slug
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1776,7 +1776,7 @@ func TestEvolve_UpdateFunctions_RemoveAuthInput(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Upload initial functions file with authInput
-	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:22")
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-authinput.json", "nodejs:24")
 
 	// Create initial deployment with functions that have authInput
 	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1790,7 +1790,7 @@ func TestEvolve_UpdateFunctions_RemoveAuthInput(t *testing.T) {
 				AssetID: fres1.Asset.ID,
 				Name:    "my-functions",
 				Slug:    "my-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
@@ -1813,7 +1813,7 @@ func TestEvolve_UpdateFunctions_RemoveAuthInput(t *testing.T) {
 	require.NotNil(t, oauthTool.AuthInput, "initial tool should have authInput")
 
 	// Upload updated functions file without authInput
-	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Evolve deployment to update functions without authInput (same name/slug, different asset)
 	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
@@ -1827,7 +1827,7 @@ func TestEvolve_UpdateFunctions_RemoveAuthInput(t *testing.T) {
 				AssetID: fres2.Asset.ID,
 				Name:    "my-functions", // Same name
 				Slug:    "my-functions", // Same slug
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
