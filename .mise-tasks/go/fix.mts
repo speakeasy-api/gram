@@ -21,22 +21,3 @@ function run() {
 }
 
 run();
-
-// set -e
-
-// # the variable is `$usage_files`. parse it as an array.
-// IFS=' ' read -ra files <<< "$usage_files"
-
-// # get unique directories
-// declare -A seen
-// dirs=()
-// for f in "${files[@]}"; do
-//   d=$(dirname "$f")
-//   d="${d#./}"
-//   if [[ -z "${seen[$d]+_}" ]]; then
-//     seen[$d]=1
-//     dirs+=("$d")
-//   fi
-// done
-
-// go fix "${dirs[@]/#/./}"
