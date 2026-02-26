@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 
@@ -28,7 +29,7 @@ You are a helpful assistant named "gram". Your responses will be later be posted
 type SlackChatCompletion struct {
 	slackClient *client.SlackClient
 	logger      *slog.Logger
-	chatClient  *chat.ChatClient
+	chatClient  *chat.Client
 }
 
 type SlackChatCompletionInput struct {
@@ -37,7 +38,7 @@ type SlackChatCompletionInput struct {
 	ToolsetSlug string
 }
 
-func NewSlackChatCompletionActivity(logger *slog.Logger, client *client.SlackClient, chatClient *chat.ChatClient) *SlackChatCompletion {
+func NewSlackChatCompletionActivity(logger *slog.Logger, client *client.SlackClient, chatClient *chat.Client) *SlackChatCompletion {
 	return &SlackChatCompletion{
 		slackClient: client,
 		logger:      logger,
@@ -98,6 +99,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 	}
 
 	chatResponse, err := s.chatClient.AgentChat(ctx, authInfo.OrganizationID, authInfo.ProjectID, input.Prompt, chat.AgentChatOptions{
+		UsageSource:     billing.ModelUsageSourceSlack,
 		SystemPrompt:    &systemPrompt,
 		ToolsetSlug:     &input.ToolsetSlug,
 		AdditionalTools: []chat.AgentTool{currentDatetimeTool},
@@ -129,6 +131,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 			AddedEnvironmentEntries: map[string]string{},
 			Temperature:             nil,
 			Model:                   "",
+			UsageSource:             "",
 		})
 		if err != nil {
 			s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))

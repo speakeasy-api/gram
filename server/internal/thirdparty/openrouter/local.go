@@ -2,8 +2,6 @@ package openrouter
 
 import (
 	"context"
-
-	"github.com/speakeasy-api/gram/server/internal/billing"
 )
 
 type Development struct {
@@ -26,7 +24,17 @@ func (o *Development) GetCreditsUsed(ctx context.Context, orgID string) (float64
 	return 12.5, 10, nil // arbitrary local numbers
 }
 
-func (o *Development) TriggerModelUsageTracking(ctx context.Context, generationID string, orgID string, projectID string, source billing.ModelUsageSource, chatID string) error {
+func (o *Development) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
 	// Development mode doesn't track model usage
-	return nil
+	totalCost := 12.5
+	return &ModelUsage{
+		TotalCost:             &totalCost,
+		CacheDiscount:         0,
+		UpstreamInferenceCost: 0,
+		Model:                 "gpt-4o",
+		TokensPrompt:          100,
+		TokensCompletion:      100,
+		NativeTokensCached:    100,
+		NativeTokensReasoning: 100,
+	}, nil
 }

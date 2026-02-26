@@ -376,7 +376,14 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         try {
           // This works around AI SDK bug where these fields cause validation failures
           const cleanedMessages = cleanMessagesForModel(messages)
-          const modelMessages = convertToModelMessages(cleanedMessages)
+          // Filter out system messages from the UI state — the system prompt
+          // is already provided via the `system:` parameter to streamText().
+          // Without this, loaded chat history includes the system message which
+          // gets sent alongside the `system:` param, causing duplication.
+          const nonSystemMessages = cleanedMessages.filter(
+            (m) => m.role !== 'system'
+          )
+          const modelMessages = convertToModelMessages(nonSystemMessages)
 
           const result = streamText({
             system: systemPrompt,

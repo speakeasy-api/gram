@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
@@ -60,7 +61,7 @@ func NewService(
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	openRouter openrouter.Provisioner,
-	baseChatClient *openrouter.ChatClient,
+	baseChatClient *chat.Client,
 	authService *auth.Auth,
 	temporalEnv *temporal.Environment,
 ) *Service {

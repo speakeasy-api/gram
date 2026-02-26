@@ -41,11 +41,16 @@ type ToolsetVectorStore struct {
 	tracer         trace.Tracer
 	db             repo.DBTX
 	queries        *repo.Queries
-	chatClient     *openrouter.ChatClient
+	chatClient     openrouter.CompletionClient
 	embeddingModel string
 }
 
-func NewToolsetVectorStore(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *ToolsetVectorStore {
+func NewToolsetVectorStore(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	chatClient openrouter.CompletionClient,
+) *ToolsetVectorStore {
 	if db == nil {
 		return nil
 	}

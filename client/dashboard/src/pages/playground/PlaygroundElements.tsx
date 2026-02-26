@@ -18,21 +18,21 @@ import {
   type Model,
 } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { useToolset } from "@gram/client/react-query/toolset.js";
 import {
   useGetMcpMetadata,
   useListEnvironments,
 } from "@gram/client/react-query/index.js";
+import { useToolset } from "@gram/client/react-query/toolset.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
 import {
   getExternalMcpOAuthConfig,
   useExternalMcpOAuthStatus,
 } from "./PlaygroundAuth";
+import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
 
 interface PlaygroundElementsProps {
   toolsetSlug: string | null;
@@ -218,9 +218,9 @@ export function PlaygroundElements({
             </PopoverTrigger>
             <PopoverContent
               align="start"
-              className="w-72 p-0 max-h-96 overflow-y-scroll"
+              className="w-72 p-0 min-h-fit max-h-96 overflow-y-scroll"
             >
-              <ChatHistory className="h-full max-h-96 overflow-y-auto" />
+              <ChatHistory className="h-full min-h-fit max-h-96 overflow-y-auto" />
             </PopoverContent>
           </Popover>
           <div className="flex items-center gap-2">{additionalActions}</div>

@@ -594,10 +594,33 @@ func newStartCommand() *cli.Command {
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
-			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
-			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
+			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
+			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
+
+			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
+
+			chatClient := chat.NewAgenticChatClient(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				env,
+				encryptionClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				guardianPolicy,
+				functionsOrchestrator,
+				openRouter,
+				temporalEnv,
+				telemSvc,
+				assetStorage,
+				billingTracker,
+				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
+				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
+				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
+			)
+
+			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, chatClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
@@ -606,11 +629,6 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
-
-			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
-			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
-
-			telemSvc := tm.NewService(logger, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
 
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
@@ -626,7 +644,7 @@ func newStartCommand() *cli.Command {
 			authAuth := auth.New(logger, db, sessionManager)
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
-			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient, authAuth, temporalEnv))
+			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient, authAuth, temporalEnv))
 			auth.Attach(mux, auth.NewService(logger, db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
 				GramServerURL:          c.String("server-url"),
@@ -655,7 +673,13 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient))
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, telemSvc, productFeatures, ragService, temporalEnv), mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, baseChatClient, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, &background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv}, posthogClient, telemSvc, assetStorage))
+			chat.Attach(mux, chat.NewService(logger, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage))
+			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
+			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}))
+			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
+			tm.Attach(mux, telemSvc)
+			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
+
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
 					GramServerURL:      c.String("server-url"),
@@ -663,12 +687,9 @@ func newStartCommand() *cli.Command {
 					SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
 					SlackSigningSecret: c.String("slack-signing-secret"),
 				}))
+			} else {
+				logger.WarnContext(ctx, "slack client is not enabled")
 			}
-			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
-			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}))
-			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
-			tm.Attach(mux, telemSvc)
-			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -686,7 +707,7 @@ func newStartCommand() *cli.Command {
 
 			if temporalEnv != nil && c.Bool("dev-single-process") {
 				// Create agents service for the worker
-				agentsWorkerSvc := agents.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, baseChatClient)
+				agentsWorkerSvc := agents.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, openRouter, chatClient)
 
 				workerInterruptCh := make(chan any)
 				group.Go(func() {
@@ -695,26 +716,25 @@ func newStartCommand() *cli.Command {
 				})
 				group.Go(func() {
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						DB:                   db,
-						EncryptionClient:     encryptionClient,
-						FeatureProvider:      featureFlags,
-						AssetStorage:         assetStorage,
-						SlackClient:          slackClient,
-						ChatClient:           chatClient,
-						OpenRouterChatClient: baseChatClient,
-						OpenRouter:           openRouter,
-						K8sClient:            k8sClient,
-						ExpectedTargetCNAME:  c.String("custom-domain-cname"),
-						BillingTracker:       billingTracker,
-						BillingRepository:    billingRepo,
-						RedisClient:          redisClient,
-						PosthogClient:        posthogClient,
-						FunctionsDeployer:    functionsOrchestrator,
-						FunctionsVersion:     runnerVersion,
-						RagService:           ragService,
-						AgentsService:        agentsWorkerSvc,
-						MCPRegistryClient:    mcpRegistryClient,
-						TelemetryService:     telemSvc,
+						DB:                  db,
+						EncryptionClient:    encryptionClient,
+						FeatureProvider:     featureFlags,
+						AssetStorage:        assetStorage,
+						SlackClient:         slackClient,
+						ChatClient:          chatClient,
+						OpenRouter:          openRouter,
+						K8sClient:           k8sClient,
+						ExpectedTargetCNAME: c.String("custom-domain-cname"),
+						BillingTracker:      billingTracker,
+						BillingRepository:   billingRepo,
+						RedisClient:         redisClient,
+						PosthogClient:       posthogClient,
+						FunctionsDeployer:   functionsOrchestrator,
+						FunctionsVersion:    runnerVersion,
+						RagService:          ragService,
+						AgentsService:       agentsWorkerSvc,
+						MCPRegistryClient:   mcpRegistryClient,
+						TelemetryService:    telemSvc,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
