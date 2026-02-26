@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	telemetry_repo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -79,6 +80,9 @@ type ExternalOAuthState struct {
 	ProviderName      string `json:"provider_name"`
 	Scope             string `json:"scope"`
 
+	// Challenge tracking
+	ChallengeID string `json:"challenge_id"` // ClickHouse UUID for the oauth_challenges record
+
 	// Timing
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -108,6 +112,7 @@ func (s ExternalOAuthState) TTL() time.Duration {
 type ExternalOAuthService struct {
 	logger               *slog.Logger
 	oauthRepo            *repo.Queries
+	chRepo               *telemetry_repo.Queries
 	toolsetsRepo         *toolsets_repo.Queries
 	deploymentsRepo      *deployments_repo.Queries
 	externalmcpRepo      *externalmcp_repo.Queries
@@ -139,6 +144,7 @@ func (s *ExternalOAuthService) isAllowedRedirectHost(host string) bool {
 func NewExternalOAuthService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
+	chConn telemetry_repo.CHTX,
 	cacheImpl cache.Cache,
 	auth *auth.Auth,
 	enc *encryption.Client,
@@ -161,6 +167,7 @@ func NewExternalOAuthService(
 	return &ExternalOAuthService{
 		logger:               logger.With(attr.SlogComponent("external_oauth")),
 		oauthRepo:            repo.New(db),
+		chRepo:               telemetry_repo.New(chConn),
 		toolsetsRepo:         toolsets_repo.New(db),
 		deploymentsRepo:      deployments_repo.New(db),
 		externalmcpRepo:      externalmcp_repo.New(db),
@@ -329,6 +336,20 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 		return oops.E(oops.CodeUnexpected, err, "failed to generate state ID").Log(ctx, s.logger)
 	}
 
+	// Record challenge in ClickHouse for billing/analytics
+	challengeID := uuid.New().String()
+	if chErr := s.chRepo.InsertOAuthChallenge(ctx, telemetry_repo.InsertOAuthChallengeParams{
+		ID:                challengeID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         authCtx.ProjectID.String(),
+		UserID:            authCtx.UserID,
+		ToolsetID:         toolsetID.String(),
+		OAuthServerIssuer: oauthConfig.Issuer,
+		ProviderName:      oauthConfig.ProviderName,
+	}); chErr != nil {
+		s.logger.WarnContext(ctx, "failed to record OAuth challenge", attr.SlogError(chErr))
+	}
+
 	// Build authorization URL
 	authURL, err := url.Parse(oauthConfig.AuthorizationEndpoint)
 	if err != nil {
@@ -348,6 +369,7 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 		OAuthServerIssuer: oauthConfig.Issuer,
 		TokenEndpoint:     oauthConfig.TokenEndpoint,
 		ProviderName:      oauthConfig.ProviderName,
+		ChallengeID:       challengeID,
 		Scope:             strings.Join(oauthConfig.ScopesSupported, " "),
 		CreatedAt:         time.Now(),
 		ExpiresAt:         time.Now().Add(10 * time.Minute),
@@ -396,6 +418,14 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 		s.logger.ErrorContext(ctx, "external OAuth error",
 			attr.SlogErrorMessage(errorParam),
 			attr.SlogReason(errorDesc))
+
+		// Try to mark the challenge as failed if we can retrieve the state
+		if stateID != "" {
+			if state, stateErr := s.stateStorage.Get(ctx, ExternalOAuthStateCacheKey(stateID)); stateErr == nil {
+				s.updateChallengeStatus(ctx, state.ChallengeID, "failed", &errorParam, &errorDesc)
+			}
+		}
+
 		// Redirect back with error
 		return s.redirectWithError(w, r, "", "oauth_error", errorDesc)
 	}
@@ -415,6 +445,7 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 
 	// Check if state has expired
 	if time.Now().After(state.ExpiresAt) {
+		s.updateChallengeStatus(ctx, state.ChallengeID, "expired", nil, nil)
 		return oops.E(oops.CodeBadRequest, nil, "state has expired").Log(ctx, s.logger)
 	}
 
@@ -447,7 +478,10 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 	tokenResp, err := s.exchangeCodeForTokens(ctx, oauthConfig, code, callbackURL, state.CodeVerifier)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to exchange code for tokens", attr.SlogError(err))
-		return s.redirectWithError(w, r, state.RedirectURI, "token_exchange_failed", err.Error())
+		errCode := "token_exchange_failed"
+		errDesc := err.Error()
+		s.updateChallengeStatus(ctx, state.ChallengeID, "failed", &errCode, &errDesc)
+		return s.redirectWithError(w, r, state.RedirectURI, errCode, errDesc)
 	}
 
 	// Encrypt tokens before storing
@@ -491,8 +525,14 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 		ProviderName:          conv.ToPGText(state.ProviderName),
 	})
 	if err != nil {
+		errCode := "token_storage_failed"
+		errDesc := err.Error()
+		s.updateChallengeStatus(ctx, state.ChallengeID, "failed", &errCode, &errDesc)
 		return oops.E(oops.CodeUnexpected, err, "failed to store OAuth token").Log(ctx, s.logger)
 	}
+
+	// Mark challenge as completed
+	s.updateChallengeStatus(ctx, state.ChallengeID, "completed", nil, nil)
 
 	s.logger.InfoContext(ctx, "external OAuth token stored successfully",
 		attr.SlogUserID(state.UserID),
@@ -1072,6 +1112,23 @@ func (s *ExternalOAuthService) redirectWithError(w http.ResponseWriter, r *http.
 
 	http.Redirect(w, r, parsed.String(), http.StatusFound)
 	return nil
+}
+
+// updateChallengeStatus updates the status of an OAuth challenge in ClickHouse.
+// Errors are logged but not propagated since challenge tracking is non-critical.
+func (s *ExternalOAuthService) updateChallengeStatus(ctx context.Context, challengeID, status string, errorCode, errorDescription *string) {
+	if challengeID == "" {
+		return
+	}
+
+	if err := s.chRepo.UpdateOAuthChallengeStatus(ctx, telemetry_repo.UpdateOAuthChallengeStatusParams{
+		ID:               challengeID,
+		Status:           status,
+		ErrorCode:        errorCode,
+		ErrorDescription: errorDescription,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "failed to update OAuth challenge status", attr.SlogError(err))
+	}
 }
 
 // generateCodeVerifier generates a random PKCE code verifier

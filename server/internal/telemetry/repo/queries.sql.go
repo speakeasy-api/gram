@@ -1158,3 +1158,121 @@ func (q *Queries) ListFilterOptions(ctx context.Context, arg ListFilterOptionsPa
 
 	return options, nil
 }
+
+// InsertOAuthChallengeParams contains the parameters for inserting an OAuth challenge.
+type InsertOAuthChallengeParams struct {
+	ID                string
+	OrganizationID    string
+	ProjectID         string
+	UserID            string
+	ToolsetID         string
+	OAuthServerIssuer string
+	ProviderName      string
+}
+
+// InsertOAuthChallenge inserts an OAuth challenge record into ClickHouse.
+//
+//nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) InsertOAuthChallenge(ctx context.Context, arg InsertOAuthChallengeParams) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+
+	query, args, err := sq.Insert("oauth_challenges").
+		Columns(
+			"id",
+			"organization_id",
+			"project_id",
+			"user_id",
+			"toolset_id",
+			"oauth_server_issuer",
+			"provider_name",
+			"status",
+			"initiated_at",
+		).
+		Values(
+			arg.ID,
+			arg.OrganizationID,
+			arg.ProjectID,
+			arg.UserID,
+			arg.ToolsetID,
+			arg.OAuthServerIssuer,
+			arg.ProviderName,
+			"initiated",
+			squirrel.Expr("now()"),
+		).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("building insert oauth challenge query: %w", err)
+	}
+
+	return q.conn.Exec(ctx, query, args...)
+}
+
+// UpdateOAuthChallengeStatusParams contains the parameters for updating an OAuth challenge status.
+type UpdateOAuthChallengeStatusParams struct {
+	ID               string
+	Status           string  // "completed", "failed", "expired"
+	ErrorCode        *string // populated on failure
+	ErrorDescription *string // populated on failure
+}
+
+// UpdateOAuthChallengeStatus updates the status and completion time of an OAuth challenge.
+func (q *Queries) UpdateOAuthChallengeStatus(ctx context.Context, arg UpdateOAuthChallengeStatusParams) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+
+	query, args, err := sq.Update("oauth_challenges").
+		Set("status", arg.Status).
+		Set("error_code", arg.ErrorCode).
+		Set("error_description", arg.ErrorDescription).
+		Set("completed_at", squirrel.Expr("now()")).
+		Where("id = ?", arg.ID).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("building update oauth challenge query: %w", err)
+	}
+
+	return q.conn.Exec(ctx, query, args...)
+}
+
+// CountOAuthChallengesParams contains the parameters for counting OAuth challenges.
+type CountOAuthChallengesParams struct {
+	OrganizationID string
+	Since          int64 // Unix timestamp
+	Until          int64 // Unix timestamp
+}
+
+// CountOAuthChallenges counts OAuth challenges by status for an organization within a time range.
+func (q *Queries) CountOAuthChallenges(ctx context.Context, arg CountOAuthChallengesParams) (OAuthChallengeCount, error) {
+	sb := sq.Select(
+		"count(*) AS total_challenges",
+		"countIf(status = 'completed') AS completed_challenges",
+		"countIf(status = 'failed') AS failed_challenges",
+	).
+		From("oauth_challenges").
+		Where("organization_id = ?", arg.OrganizationID).
+		Where("toUnixTimestamp(initiated_at) >= ?", arg.Since).
+		Where("toUnixTimestamp(initiated_at) < ?", arg.Until)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return OAuthChallengeCount{}, fmt.Errorf("building count oauth challenges query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return OAuthChallengeCount{}, err
+	}
+	defer rows.Close()
+
+	var result OAuthChallengeCount
+	if rows.Next() {
+		if err = rows.ScanStruct(&result); err != nil {
+			return OAuthChallengeCount{}, fmt.Errorf("scanning oauth challenge count: %w", err)
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return OAuthChallengeCount{}, err
+	}
+
+	return result, nil
+}
