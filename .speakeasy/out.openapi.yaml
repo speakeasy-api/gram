@@ -11969,9 +11969,9 @@ components:
             - not_exists
         path:
           type: string
-          description: Attribute path. Use @ prefix for your custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
+          description: Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').
           example: '@user.region'
-          pattern: ^@?[a-zA-Z_][a-zA-Z0-9_.]*$
+          pattern: ^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$
           minLength: 1
           maxLength: 256
         value:
@@ -11979,7 +11979,7 @@ components:
           description: Value to compare against (ignored for 'exists' and 'not_exists' operators)
           example: us-east-1
           maxLength: 1024
-      description: Filter on a log attribute by path. Prefix with @ to search your custom attributes (e.g. '@user.region'). Without @, the path matches system attributes (e.g. 'http.route').
+      description: Filter on a log attribute by path.
       required:
         - path
     BaseResourceAttributes:

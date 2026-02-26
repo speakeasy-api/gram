@@ -15,13 +15,14 @@ import (
 //
 //	^              - start of string
 //	@?             - optional @ prefix (user attribute marker, translated to "app." prefix)
-//	[a-zA-Z_]      - first path char must be a letter or underscore (no digits/symbols)
-//	[a-zA-Z0-9_.]* - subsequent chars: letters, digits, underscores, or dots (segment separators)
+//	[a-zA-Z_]      - first segment char must be a letter or underscore
+//	[a-zA-Z0-9_]*  - rest of first segment: letters, digits, underscores
+//	(\.[a-zA-Z_][a-zA-Z0-9_]*)* - additional dot-separated segments
 //	$              - end of string
 //
 // Matches: "@user.region", "http.route", "env"
-// Rejects: "1bad", ".leading.dot", "path with spaces", "semi;colon", "@@double"
-var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_.]*$`)
+// Rejects: "1bad", ".leading.dot", "path with spaces", "semi;colon", "@@double", "trailing.", "double..dot"
+var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
 
 // AttributeFilter represents a filter on an arbitrary JSON attribute path.
 // Paths prefixed with @ target user-defined attributes (translated to app.<path> in ClickHouse).

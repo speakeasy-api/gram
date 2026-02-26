@@ -329,7 +329,7 @@ var AttributeFilter = Type("AttributeFilter", func() {
 	Attribute("path", String, "Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').", func() {
 		// Optional @ prefix for user-defined attributes, then letter/underscore start,
 		// then letters/digits/underscores/dots. @ is translated to the internal 'app.' namespace.
-		Pattern(`^@?[a-zA-Z_][a-zA-Z0-9_.]*$`)
+		Pattern(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
 		MinLength(1)
 		MaxLength(256)
 		Example("@user.region")

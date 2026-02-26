@@ -62,12 +62,10 @@ const ServiceName = "telemetry"
 // MethodKey key.
 var MethodNames = [9]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions"}
 
-// Filter on a log attribute by path. Prefix with @ to search your custom
-// attributes (e.g. '@user.region'). Without @, the path matches system
-// attributes (e.g. 'http.route').
+// Filter on a log attribute by path.
 type AttributeFilter struct {
-	// Attribute path. Use @ prefix for your custom attributes (e.g.
-	// '@user.region'), or bare path for system attributes (e.g. 'http.route').
+	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
+	// bare path for system attributes (e.g. 'http.route').
 	Path string
 	// Comparison operator
 	Op string

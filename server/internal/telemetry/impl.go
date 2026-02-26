@@ -708,13 +708,16 @@ func toRepoAttributeFilters(filters []*telem_gen.AttributeFilter) []repo.Attribu
 	if len(filters) == 0 {
 		return nil
 	}
-	result := make([]repo.AttributeFilter, len(filters))
-	for i, f := range filters {
-		result[i] = repo.AttributeFilter{
+	result := make([]repo.AttributeFilter, 0, len(filters))
+	for _, f := range filters {
+		if f == nil {
+			continue
+		}
+		result = append(result, repo.AttributeFilter{
 			Path:  f.Path,
 			Op:    f.Op,
 			Value: conv.PtrValOr(f.Value, ""),
-		}
+		})
 	}
 	return result
 }

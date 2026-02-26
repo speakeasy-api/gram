@@ -1936,8 +1936,8 @@ type SearchLogsFilterRequestBody struct {
 
 // AttributeFilterRequestBody is used to define fields on request body types.
 type AttributeFilterRequestBody struct {
-	// Attribute path. Use @ prefix for your custom attributes (e.g.
-	// '@user.region'), or bare path for system attributes (e.g. 'http.route').
+	// Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or
+	// bare path for system attributes (e.g. 'http.route').
 	Path string `form:"path" json:"path" xml:"path"`
 	// Comparison operator
 	Op string `form:"op" json:"op" xml:"op"`
@@ -6333,7 +6333,7 @@ func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err
 // ValidateAttributeFilterRequestBody runs the validations defined on
 // AttributeFilterRequestBody
 func ValidateAttributeFilterRequestBody(body *AttributeFilterRequestBody) (err error) {
-	err = goa.MergeErrors(err, goa.ValidatePattern("body.path", body.Path, "^@?[a-zA-Z_][a-zA-Z0-9_.]*$"))
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.path", body.Path, "^@?[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$"))
 	if utf8.RuneCountInString(body.Path) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 1, true))
 	}
