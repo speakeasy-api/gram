@@ -5,11 +5,16 @@
 //MISE dir="{{ config_root }}"
 
 import { existsSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { join } from "node:path";
 import { $ } from "zx";
 import { confirm, isCancel } from "@clack/prompts";
 
 async function run() {
-  if (existsSync(".git/hooks/pre-commit")) {
+  const gitDir = (await $`git rev-parse --git-dir`).stdout.trim();
+  const hooksDir = join(gitDir, "hooks");
+  const preCommit = join(hooksDir, "pre-commit");
+
+  if (existsSync(preCommit)) {
     return;
   }
 
@@ -18,9 +23,9 @@ async function run() {
   });
 
   if (isCancel(yes) || !yes) {
-    mkdirSync(".git/hooks", { recursive: true });
-    writeFileSync(".git/hooks/pre-commit", "#!/bin/sh\n");
-    chmodSync(".git/hooks/pre-commit", 0o755);
+    mkdirSync(hooksDir, { recursive: true });
+    writeFileSync(preCommit, "#!/bin/sh\n");
+    chmodSync(preCommit, 0o755);
     return;
   }
 
