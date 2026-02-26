@@ -1017,6 +1017,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
   default_environment_id UUID, -- Informs mcp_environment_configs which environment to load from by default
   installation_override_url TEXT, -- URL to redirect to instead of the default installation page
+  webmcp_enabled BOOLEAN NOT NULL DEFAULT false, -- Whether to register tools with the WebMCP browser API on the install page
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

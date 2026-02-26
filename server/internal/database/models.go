@@ -452,6 +452,7 @@ type McpMetadatum struct {
 	HeaderDisplayNames        []byte
 	DefaultEnvironmentID      uuid.NullUUID
 	InstallationOverrideUrl   pgtype.Text
+	WebmcpEnabled             bool
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 }
