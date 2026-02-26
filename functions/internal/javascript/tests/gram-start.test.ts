@@ -380,6 +380,65 @@ test("fails when resource request does not return Response", async () => {
   expect(content).toMatchSnapshot();
 });
 
+test("diagnoses sync-request/sync-rpc bundling error on tool call", async () => {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    name: "any-tool",
+    input: {},
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    join(import.meta.dirname, "bad-sync-request.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  expect(content).toContain(ERROR_CODES.IMPORT_FAILURE);
+
+  const res = JSON.parse(content.trim().split("\n").at(-1) ?? "");
+  expect(res.message).toContain("sync-request/sync-rpc");
+  expect(res.message).toContain("fetch()");
+});
+
+test("diagnoses native addon bundling error on tool call", async () => {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    name: "any-tool",
+    input: {},
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    join(import.meta.dirname, "bad-native-addon.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  expect(content).toContain(ERROR_CODES.IMPORT_FAILURE);
+
+  const res = JSON.parse(content.trim().split("\n").at(-1) ?? "");
+  expect(res.message).toContain("native Node.js addon");
+  expect(res.message).toContain("pure-JavaScript alternative");
+});
+
+test("diagnoses sync-request/sync-rpc bundling error on resource request", async () => {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    uri: "file:///anything",
+    input: {},
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    join(import.meta.dirname, "bad-sync-request.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  expect(content).toContain(ERROR_CODES.IMPORT_FAILURE);
+
+  const res = JSON.parse(content.trim().split("\n").at(-1) ?? "");
+  expect(res.message).toContain("sync-request/sync-rpc");
+});
+
 test("fails when functions file does not export handleResources", async () => {
   const pipePath = await fakepipe();
   const args = JSON.stringify({
