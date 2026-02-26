@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	infra             *testenv.Environment
+	infra *testenv.Environment
 )
 
 func TestMain(m *testing.M) {
@@ -109,11 +109,11 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 	svc := telemetry.NewService(logger, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient)
 
 	return ctx, &testInstance{
-		service:           svc,
-		logger:            logger,
-		conn:              conn,
-		chClient:          chClient,
-		sessionManager:    sessionManager,
+		service:            svc,
+		logger:             logger,
+		conn:               conn,
+		chClient:           chClient,
+		sessionManager:     sessionManager,
 		orgID:              authCtx.ActiveOrganizationID,
 		disabledLogsOrgID:  disabledLogsOrgID,
 		enabledToolIOOrgID: enabledToolIOOrgID,

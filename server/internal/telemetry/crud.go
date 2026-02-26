@@ -106,9 +106,9 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 		GramDeploymentID:     deploymentID,
 		GramFunctionID:       params.ToolInfo.FunctionID,
 		GramURN:              params.ToolInfo.URN,
-		ServiceName:    serviceName,
-		ServiceVersion: getStringPtr(allAttrs, attr.ServiceVersionKey),
-		GramChatID:     getStringPtr(allAttrs, attr.GenAIConversationIDKey),
+		ServiceName:          serviceName,
+		ServiceVersion:       getStringPtr(allAttrs, attr.ServiceVersionKey),
+		GramChatID:           getStringPtr(allAttrs, attr.GenAIConversationIDKey),
 	}, nil
 }
 
