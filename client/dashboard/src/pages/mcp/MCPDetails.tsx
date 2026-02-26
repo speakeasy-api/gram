@@ -1207,7 +1207,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
       <PageSection
         heading="Tool Selection Mode"
-        featureType="experimental"
         description="Change how this server's tools will be presented to the LLM. Can have drastic effects on context management, especially for larger toolsets. Use with care."
       >
         <ToolSelectionModeToggle
