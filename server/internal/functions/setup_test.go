@@ -150,7 +150,7 @@ func createFunctionsDeploymentWithKey(t *testing.T, ctx context.Context, ti *tes
 				AssetID: fres.Asset.ID,
 				Name:    "test-functions",
 				Slug:    "test-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*dgen.AddDeploymentPackageForm{},

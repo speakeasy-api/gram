@@ -698,7 +698,7 @@ func TestToolsService_ListTools_VerifyFunctionToolFields(t *testing.T) {
 	ctx, ti := newTestToolsService(t, assetStorage)
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create deployment with function tools
 	deployment, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
@@ -709,7 +709,7 @@ func TestToolsService_ListTools_VerifyFunctionToolFields(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "test-functions",
 				Slug:    "test-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*dgen.AddDeploymentPackageForm{},
@@ -770,7 +770,7 @@ func TestToolsService_ListTools_WithMixedToolTypes(t *testing.T) {
 	require.NoError(t, err, "upload openapi v3 asset")
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create deployment with HTTP tools and function tools
 	deployment, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
@@ -787,7 +787,7 @@ func TestToolsService_ListTools_WithMixedToolTypes(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "mixed-functions",
 				Slug:    "mixed-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*dgen.AddDeploymentPackageForm{},
@@ -860,7 +860,7 @@ func TestToolsService_ListTools_WithDeploymentIDAndFunctionTools(t *testing.T) {
 	ctx, ti := newTestToolsService(t, assetStorage)
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create deployment with function tools
 	deployment, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
@@ -871,7 +871,7 @@ func TestToolsService_ListTools_WithDeploymentIDAndFunctionTools(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "test-functions",
 				Slug:    "test-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*dgen.AddDeploymentPackageForm{},
@@ -1068,7 +1068,7 @@ func TestToolsService_ListTools_FunctionToolsWithMetaTags(t *testing.T) {
 	ctx, ti := newTestToolsService(t, assetStorage)
 
 	// Upload functions file with manifest that includes meta tags
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	// Create deployment with function tools
 	deployment, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
@@ -1079,7 +1079,7 @@ func TestToolsService_ListTools_FunctionToolsWithMetaTags(t *testing.T) {
 				AssetID: fres.Asset.ID,
 				Name:    "test-functions-meta",
 				Slug:    "test-functions-meta",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*dgen.AddDeploymentPackageForm{},

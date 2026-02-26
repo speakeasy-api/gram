@@ -11666,7 +11666,7 @@ components:
                     description: The functions file display name.
                 runtime:
                     type: string
-                    description: 'The runtime to use when executing functions. Allowed values are: nodejs:22, python:3.12.'
+                    description: 'The runtime to use when executing functions. Allowed values are: nodejs:22, nodejs:24, python:3.12.'
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -13524,7 +13524,7 @@ components:
                     description: The URN of this resource
                 runtime:
                     type: string
-                    description: Runtime environment (e.g., nodejs:22, python:3.12)
+                    description: Runtime environment (e.g., nodejs:24, python:3.12)
                 title:
                     type: string
                     description: Optional title for the resource
@@ -13597,7 +13597,7 @@ components:
                     description: The ID of the project
                 runtime:
                     type: string
-                    description: Runtime environment (e.g., nodejs:22, python:3.12)
+                    description: Runtime environment (e.g., nodejs:24, python:3.12)
                 schema:
                     type: string
                     description: JSON schema for the request

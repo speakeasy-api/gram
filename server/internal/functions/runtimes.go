@@ -10,6 +10,7 @@ type Runtime string
 
 const (
 	RuntimeNodeJS22  Runtime = "nodejs:22"
+	RuntimeNodeJS24  Runtime = "nodejs:24"
 	RuntimePython312 Runtime = "python:3.12"
 )
 
@@ -17,6 +18,8 @@ func (r Runtime) OCITag() string {
 	switch r {
 	case RuntimeNodeJS22:
 		return "nodejs22"
+	case RuntimeNodeJS24:
+		return "nodejs24"
 	case RuntimePython312:
 		return "python3.12"
 	default:
@@ -33,6 +36,7 @@ func (r Runtimes) String() string {
 func SupportedRuntimes() Runtimes {
 	return Runtimes{
 		RuntimeNodeJS22:  {},
+		RuntimeNodeJS24:  {},
 		RuntimePython312: {},
 	}
 }
