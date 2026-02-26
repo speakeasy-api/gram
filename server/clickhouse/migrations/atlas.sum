@@ -1,4 +1,4 @@
-h1:vfr8PAGdzSGw7gTxjS1F3Qmr83ouSsDmUkHNNPs8nyk=
+h1:TuyC6Wvu8439RTzHcoR6ISmwYM+ptYPRgM6SnS92DHI=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -23,6 +23,6 @@ h1:vfr8PAGdzSGw7gTxjS1F3Qmr83ouSsDmUkHNNPs8nyk=
 20260212181036_add-metrics-summaries-mv.sql h1:/+UesqwZ8s2mU9PcweEapcCyHMz8BgQwq6BU5D0BIwc=
 20260218145823_drop-http-requests-indices.sql h1:uBjSJXWXv/JlKSpNhpZ/16JCIB5g6Z2h3oAV3byoQng=
 20260218153311_drop-http-requests-raw-table.sql h1:9QBbHi9mALdsTkvwDq4zNdSREbkJKdeqp00yEGYDPtk=
-20260222230000_exclude-uuid-urns-from-trace-summaries-mv.sql h1:l4hOs5whg6aJv2hy82rJwpL0zKLBJLguiBssjnbhSl0=
-20260224141459_drop-telemetry-tool-logs-indices.sql h1:eBBxi6CrvqFtYcwn1f6Ng2zCILGRqCW6dxy7q6q202Y=
-20260224141530_drop-telemetry-tool-logs-table.sql h1:1pBAxx62LYUNWBQbRbaB4m96cVByjpzcRZRYL4ONG+Y=
+20260224141459_drop-telemetry-tool-logs-indices.sql h1:N7awTLVuFQEU/C2Pis3SFkuM1lie1oc7Fvqp7nTOLDg=
+20260224141530_drop-telemetry-tool-logs-table.sql h1:5W+Oag/bm1vdl9YUHm/gAoIuWaUB4RoeN/UAJpfNQi8=
+20260226021045_exclude-uuid-urns-from-trace-summaries-mv.sql h1:5Cg0Wd/3f5hKtvjV7wB/itsDP07LPzjQzxOGRa36jKo=
