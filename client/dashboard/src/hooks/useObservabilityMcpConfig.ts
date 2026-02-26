@@ -25,19 +25,9 @@ export function useObservabilityMcpConfig({
   const isLocal = process.env.NODE_ENV === "development";
   const { session } = useSession();
 
-  // For local development, look up the gram-seed toolset in the ecommerce-api project
-  const { data: toolsets } = useListToolsets(
-    {
-      gramProject: "ecommerce-api",
-    },
-    undefined,
-    {
-      enabled: isLocal,
-      headers: {
-        "gram-project": "ecommerce-api",
-      },
-    },
-  );
+  const { data: toolsets } = useListToolsets(undefined, undefined, {
+    enabled: isLocal && !!projectSlug,
+  });
 
   const getSession = useCallback(async (): Promise<string> => {
     const res = await chatSessionsCreate(
