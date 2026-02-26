@@ -24,7 +24,7 @@ async function run() {
 
   if (isCancel(yes) || !yes) {
     mkdirSync(hooksDir, { recursive: true });
-    writeFileSync(preCommit, "#!/bin/sh\n");
+    writeFileSync(preCommit, "");
     chmodSync(preCommit, 0o755);
     return;
   }
