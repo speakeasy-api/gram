@@ -84,8 +84,10 @@ type initializeRequestResult struct {
 
 // initializeRequest creates the OpenAI-compatible request body with defaults applied.
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
-	if err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req); err != nil {
-		return nil, fmt.Errorf("failed to start or resume chat: %w", err)
+	if c.messageCaptureStrategy != nil {
+		if err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req); err != nil {
+			return nil, fmt.Errorf("failed to start or resume chat: %w", err)
+		}
 	}
 
 	// Provision API key
@@ -374,7 +376,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		messageID:            "",
 		model:                "",
 		finishReason:         nil,
-		usage:                Usage{},
+		usage:                Usage{PromptTokens: 0, CompletionTokens: 0, TotalTokens: 0},
 		usageSet:             false,
 		isDone:               false,
 	}
@@ -452,7 +454,7 @@ func (r *streamingResponseReader) Read(p []byte) (int, error) {
 	}
 	// Return errors as-is (including io.EOF) - don't wrap them
 	// io.Copy and other readers expect io.EOF to signal normal stream completion
-	return n, err
+	return n, err //nolint:wrapcheck // io.EOF must not be wrapped for io.Reader contract
 }
 
 // Close implements io.Closer and triggers capture/tracking strategies.

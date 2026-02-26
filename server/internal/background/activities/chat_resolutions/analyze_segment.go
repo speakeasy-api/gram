@@ -314,13 +314,16 @@ If there are no tool calls, return an empty array.`, userPromptText)
 	response, err := a.chatClient.GetObjectCompletion(
 		analysisCtx,
 		openrouter.ObjectCompletionRequest{
-			OrgID:        orgID,
-			ProjectID:    projectID.String(),
-			Model:        "", // Use default model
-			SystemPrompt: systemPrompt,
-			Prompt:       userPrompt,
-			JSONSchema:   &jsonSchemaConfig,
-			UsageSource:  billing.ModelUsageSourceGram,
+			OrgID:          orgID,
+			ProjectID:      projectID.String(),
+			Model:          "", // Use default model
+			SystemPrompt:   systemPrompt,
+			Prompt:         userPrompt,
+			JSONSchema:     &jsonSchemaConfig,
+			UsageSource:    billing.ModelUsageSourceGram,
+			UserID:         "",
+			ExternalUserID: "",
+			HTTPMetadata:   nil,
 		},
 	)
 	if err != nil {

@@ -582,13 +582,20 @@ func (s *Service) GetCompletionFromMessages(
 	model string,
 ) (*or.Message, error) {
 	response, err := s.chatClient.GetCompletion(ctx, openrouter.CompletionRequest{
-		OrgID:       orgID,
-		ProjectID:   projectID,
-		Messages:    messages,
-		Tools:       toolDefs,
-		Temperature: temperature,
-		Model:       model,
-		UsageSource: billing.ModelUsageSourceAgents,
+		OrgID:          orgID,
+		ProjectID:      projectID,
+		Messages:       messages,
+		Tools:          toolDefs,
+		Temperature:    temperature,
+		Model:          model,
+		Stream:         false,
+		UsageSource:    billing.ModelUsageSourceAgents,
+		ChatID:         uuid.Nil,
+		UserID:         "",
+		ExternalUserID: "",
+		HTTPMetadata:   nil,
+		APIKeyID:       "",
+		JSONSchema:     nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get completion from messages: %w", err)

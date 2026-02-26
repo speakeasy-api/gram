@@ -640,7 +640,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				}
 			}
 			if readErr != nil {
-				if readErr != io.EOF {
+				if !errors.Is(readErr, io.EOF) {
 					s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(readErr))
 				}
 				break

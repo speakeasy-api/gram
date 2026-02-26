@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -26,5 +27,9 @@ type FallbackModelUsageTrackingArgs struct {
 }
 
 func (f *FallbackModelUsageTracking) Do(ctx context.Context, args FallbackModelUsageTrackingArgs) error {
-	return f.usageTracker.TrackUsage(ctx, args.GenerationID, args.OrgID, args.ProjectID, args.Source, args.ChatID)
+	err := f.usageTracker.TrackUsage(ctx, args.GenerationID, args.OrgID, args.ProjectID, args.Source, args.ChatID)
+	if err != nil {
+		return fmt.Errorf("track usage: %w", err)
+	}
+	return nil
 }

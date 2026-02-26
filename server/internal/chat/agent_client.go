@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -50,22 +49,38 @@ type Client struct {
 	toolsetCache     cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
-var _ openrouter.CompletionClient = &Client{}
+var _ openrouter.CompletionClient = (*Client)(nil)
 
 func (c *Client) GetCompletion(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
-	return c.completionClient.GetCompletion(ctx, request)
+	resp, err := c.completionClient.GetCompletion(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("get completion: %w", err)
+	}
+	return resp, nil
 }
 
 func (c *Client) GetCompletionStream(ctx context.Context, request openrouter.CompletionRequest) (openrouter.StreamReader, error) {
-	return c.completionClient.GetCompletionStream(ctx, request)
+	stream, err := c.completionClient.GetCompletionStream(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("get completion stream: %w", err)
+	}
+	return stream, nil
 }
 
 func (c *Client) GetObjectCompletion(ctx context.Context, request openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
-	return c.completionClient.GetObjectCompletion(ctx, request)
+	resp, err := c.completionClient.GetObjectCompletion(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("get object completion: %w", err)
+	}
+	return resp, nil
 }
 
 func (c *Client) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string) ([][]float32, error) {
-	return c.completionClient.CreateEmbeddings(ctx, orgID, model, inputs)
+	embeddings, err := c.completionClient.CreateEmbeddings(ctx, orgID, model, inputs)
+	if err != nil {
+		return nil, fmt.Errorf("create embeddings: %w", err)
+	}
+	return embeddings, nil
 }
 
 func NewAgenticChatClient(
@@ -345,7 +360,7 @@ func (c *Client) LoadToolsetTools(
 				SystemEnv:  systemConfig,
 				UserConfig: ciEnv,
 				OAuthToken: "", // Chat does not support OAuth tokens for external MCP
-			}, plan, tm.HTTPLogAttributes{})
+			}, plan, telemetry.HTTPLogAttributes{})
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

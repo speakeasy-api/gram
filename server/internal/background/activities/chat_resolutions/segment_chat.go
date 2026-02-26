@@ -179,13 +179,16 @@ There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, n
 	response, err := s.chatClient.GetObjectCompletion(
 		analysisCtx,
 		openrouter.ObjectCompletionRequest{
-			OrgID:        orgID,
-			ProjectID:    projectID.String(),
-			Model:        "anthropic/claude-haiku-4.5",
-			SystemPrompt: systemPrompt,
-			Prompt:       userPrompt,
-			JSONSchema:   &jsonSchemaConfig,
-			UsageSource:  billing.ModelUsageSourceGram,
+			OrgID:          orgID,
+			ProjectID:      projectID.String(),
+			Model:          "anthropic/claude-haiku-4.5",
+			SystemPrompt:   systemPrompt,
+			Prompt:         userPrompt,
+			JSONSchema:     &jsonSchemaConfig,
+			UsageSource:    billing.ModelUsageSourceGram,
+			UserID:         "",
+			ExternalUserID: "",
+			HTTPMetadata:   nil,
 		},
 	)
 	if err != nil {

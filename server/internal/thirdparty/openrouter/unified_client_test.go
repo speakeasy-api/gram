@@ -166,12 +166,14 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		// Parse request body
 		var reqBody OpenAIChatRequest
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			return
+		}
 		assert.False(t, reqBody.Stream)
 
 		// Send mock response - using raw JSON to avoid type complexity
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"id": "msg_123",
 			"model": "openai/gpt-4o",
 			"choices": [{
@@ -278,28 +280,33 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		// Parse request body
 		var reqBody OpenAIChatRequest
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			return
+		}
 		assert.True(t, reqBody.Stream)
 
 		// Stream SSE response
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
-		flusher := w.(http.Flusher)
+		flusher, ok := w.(http.Flusher)
+		if !assert.True(t, ok, "ResponseWriter should implement http.Flusher") {
+			return
+		}
 
 		// Send initial chunk with ID and model
-		fmt.Fprintf(w, "data: {\"id\":\"msg_456\",\"model\":\"openai/gpt-4o\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
+		_, _ = fmt.Fprintf(w, "data: {\"id\":\"msg_456\",\"model\":\"openai/gpt-4o\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
 		flusher.Flush()
 
 		// Send content chunk
-		fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\" streaming\"}}]}\n\n")
+		_, _ = fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\" streaming\"}}]}\n\n")
 		flusher.Flush()
 
 		// Send final chunk with usage and finish reason
-		fmt.Fprintf(w, "data: {\"choices\":[{\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n")
+		_, _ = fmt.Fprintf(w, "data: {\"choices\":[{\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n")
 		flusher.Flush()
 
-		fmt.Fprintf(w, "data: [DONE]\n\n")
+		_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
 		flusher.Flush()
 	}))
 	defer server.Close()
@@ -388,7 +395,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Send mock response with tool calls
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"id": "msg_789",
 			"model": "openai/gpt-4o",
 			"choices": [{
@@ -576,7 +583,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 				"total_tokens": 15
 			}
 		}`, callCount, callCount)
-		w.Write([]byte(response))
+		_, _ = w.Write([]byte(response))
 	}))
 	defer server.Close()
 
@@ -646,5 +653,9 @@ func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Modify the request URL to point to the test server
 	req.URL.Scheme = "http"
 	req.URL.Host = t.server.URL[7:] // Remove "http://" prefix
-	return http.DefaultTransport.RoundTrip(req)
+	resp, err := http.DefaultTransport.RoundTrip(req)
+	if err != nil {
+		return nil, fmt.Errorf("test transport round trip: %w", err)
+	}
+	return resp, nil
 }
