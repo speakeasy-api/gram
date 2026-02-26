@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: fffd9f3794e19b61016d839378f322a4
+  docChecksum: 0536e098e50bc7b6694657c4e75b6cd9
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.6
-  configChecksum: 517932b1dedda06272e4cedb9fa06477
+  releaseVersion: 0.27.7
+  configChecksum: 2e08e8e90fda143af1d65bb6e1c1bae1
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -77,7 +77,7 @@ trackedFiles:
   docs/models/components/addexternaloauthserverrequestbody.md:
     last_write_checksum: sha1:ec948ed2db5efd9e39cc838367ef4337d2b2f82e
   docs/models/components/addfunctionsform.md:
-    last_write_checksum: sha1:ef0b2ab17d5a9962b08c87a4077701a543157a9a
+    last_write_checksum: sha1:86862ee819b4aa7528a46833159fbfc899e835d6
   docs/models/components/addoauthproxyserverrequestbody.md:
     last_write_checksum: sha1:f18ade159662f0f0b08c87b56596158682f5b7f9
   docs/models/components/addopenapiv3deploymentassetform.md:
@@ -205,9 +205,9 @@ trackedFiles:
   docs/models/components/functionenvironmentvariable.md:
     last_write_checksum: sha1:d750799e5de2a9209b23025cc1961ecbc92874ae
   docs/models/components/functionresourcedefinition.md:
-    last_write_checksum: sha1:12fe3c7eb54330deb25ee717c1e51f57e7d0fe6b
+    last_write_checksum: sha1:1df20aa88f01f3862e289bca08c3495efc00d523
   docs/models/components/functiontooldefinition.md:
-    last_write_checksum: sha1:ff81e54eae9686ee3009acb3aed25416c707e3d8
+    last_write_checksum: sha1:c009199e05c8fa4216cea242dd224c2e7201e623
   docs/models/components/generatetitleresponsebody.md:
     last_write_checksum: sha1:38ee2cf743b12e9ffa968731732b84116e7d4da8
   docs/models/components/getactivedeploymentresult.md:
@@ -1364,11 +1364,11 @@ trackedFiles:
     pristine_git_object: 8a33dbb4b9cb9cefaa43e10ddf535cbcd13c9e72
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:97d9bf0dfff8b8ccd255f1818b79c9f4a8784156
+    last_write_checksum: sha1:bb2b59bc1a260837b3eb9a57dff94fb15655fd71
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:d81e9f06a0d51b50d9c084fba58cf66ef16640bb
+    last_write_checksum: sha1:63d159269ef0ac359091c2a9ab5e184751589a68
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1828,7 +1828,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:21a80fe804913908ccc644eed29d8722db3313c1
+    last_write_checksum: sha1:141f1fda74b110afff2364f0b447cfdbea8a3e29
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -1900,7 +1900,7 @@ trackedFiles:
     pristine_git_object: f5195c3419871dee3045ff5781105d81fb9f0c0a
   src/models/components/addfunctionsform.ts:
     id: 3d81813d3245
-    last_write_checksum: sha1:8852804fca8fd808dec7c715e9ed0746989b1af3
+    last_write_checksum: sha1:4e866a7fa0b8b440408591f21e14601ed2b5756c
     pristine_git_object: ead76a62dfa817b58014060ca245d0b66676fab7
   src/models/components/addoauthproxyserverrequestbody.ts:
     id: c26e9237511a
@@ -2108,11 +2108,11 @@ trackedFiles:
     pristine_git_object: 4ce18ea8790b9f5e6249ac071e7713cf9667fd52
   src/models/components/functionresourcedefinition.ts:
     id: 3a6cd657790f
-    last_write_checksum: sha1:45f48841ad62f23be224e53e1696d7db97fc979a
+    last_write_checksum: sha1:9fa8c088140dba6e9083c03d8a668a8fe469c1b4
     pristine_git_object: bf43ba5d4978f8b2cf1d169e71dc53b6ea96f6b4
   src/models/components/functiontooldefinition.ts:
     id: 6dfa614f7fa6
-    last_write_checksum: sha1:8b4ee240ba8f883ec281a2f2f83f0565377e213b
+    last_write_checksum: sha1:52fa3753509816ff4697aa3557fc65fc7bee7e8a
     pristine_git_object: 84f75d6992f3ea91d0144f003138b23d79de3a51
   src/models/components/generatetitleresponsebody.ts:
     id: 198c538ce22f
