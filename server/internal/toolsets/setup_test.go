@@ -248,7 +248,7 @@ func createFunctionsDeployment(t *testing.T, ctx context.Context, ti *testInstan
 	t.Helper()
 
 	// Upload functions file
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
 
 	dep, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-functions-toolset",
@@ -258,7 +258,7 @@ func createFunctionsDeployment(t *testing.T, ctx context.Context, ti *testInstan
 				AssetID: fres.Asset.ID,
 				Name:    "test-functions",
 				Slug:    "test-functions",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*dgen.AddDeploymentPackageForm{},
@@ -281,7 +281,7 @@ func createFunctionsDeploymentWithResources(t *testing.T, ctx context.Context, t
 	t.Helper()
 
 	// Upload functions file with resources in manifest
-	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:24")
 
 	dep, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-functions-with-resources",
@@ -291,7 +291,7 @@ func createFunctionsDeploymentWithResources(t *testing.T, ctx context.Context, t
 				AssetID: fres.Asset.ID,
 				Name:    "test-functions-with-resources",
 				Slug:    "test-functions-with-resources",
-				Runtime: "nodejs:22",
+				Runtime: "nodejs:24",
 			},
 		},
 		Packages:         []*dgen.AddDeploymentPackageForm{},

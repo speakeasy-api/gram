@@ -85,7 +85,7 @@ type AddFunctionsForm struct {
 	// from the name.
 	Slug types.Slug
 	// The runtime to use when executing functions. Allowed values are: nodejs:22,
-	// python:3.12.
+	// nodejs:24, python:3.12.
 	Runtime string
 }
 

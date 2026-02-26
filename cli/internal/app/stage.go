@@ -33,7 +33,7 @@ var (
 	}
 )
 
-var supportedRuntimes = map[string]struct{}{"nodejs:22": {}}
+var supportedRuntimes = map[string]struct{}{"nodejs:22": {}, "nodejs:24": {}}
 
 type StageFunctionOptions struct {
 	ConfigFile string
@@ -55,7 +55,7 @@ func DoStageFunction(opts StageFunctionOptions) error {
 		opts.ConfigFile = "gram.deploy.json"
 	}
 	if opts.Runtime == "" {
-		opts.Runtime = "nodejs:22"
+		opts.Runtime = "nodejs:24"
 	}
 	if opts.Slug == "" {
 		return fmt.Errorf("slug is required")
@@ -219,7 +219,7 @@ func newStageFunctionCommand() *cli.Command {
 					}
 					return nil
 				},
-				Value: "nodejs:22",
+				Value: "nodejs:24",
 			},
 		},
 		Action: func(cCtx *cli.Context) error {

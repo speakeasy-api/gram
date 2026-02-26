@@ -2590,7 +2590,7 @@ type FunctionToolDefinitionResponseBody struct {
 	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
 	// The ID of the function
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
-	// Runtime environment (e.g., nodejs:22, python:3.12)
+	// Runtime environment (e.g., nodejs:24, python:3.12)
 	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Variables configuration for the function
 	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
@@ -2764,7 +2764,7 @@ type FunctionResourceDefinitionResponseBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// The ID of the function
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
-	// Runtime environment (e.g., nodejs:22, python:3.12)
+	// Runtime environment (e.g., nodejs:24, python:3.12)
 	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Variables configuration for the resource
 	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
