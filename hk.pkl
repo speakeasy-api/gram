@@ -2,25 +2,38 @@ amends "package://github.com/jdx/hk/releases/download/v1.36.0/hk@1.36.0#/Config.
 import "package://github.com/jdx/hk/releases/download/v1.36.0/hk@1.36.0#/Builtins.pkl"
 
 local linters = new Mapping<String, Step> {
-    ["gomodtidy"] = Builtins.gomod_tidy
-    ["gofmt"] = Builtins.go_fmt
-    ["gofix"] {
-        glob = "**/*.go"
-        fix = "mise run -q go:fix {{files}}"
-    }
+  ["pkleval"] = Builtins.pkl
+  ["pklfmt"] = Builtins.pkl_format
+  ["gomodtidy"] = Builtins.gomod_tidy
+  ["gofmt"] {
+    glob = "**/*.go"
+    check_list_files =
+      """
+      FILES=$(gofmt -s -l {{files}})
+      if [ -n "$FILES" ]; then
+        echo "$FILES"
+        exit 1
+      fi
+      """
+    fix = "gofmt -s -w {{files}}"
+  }
+  ["gofix"] {
+    glob = "**/*.go"
+    fix = "mise run -q go:fix {{files}}"
+  }
 }
 
 hooks {
-    ["pre-commit"] {
-        fix = true
-        stash = "git"
-        steps = linters
-    }
-    ["fix"] {
-        fix = true
-        steps = linters
-    }
-    ["check"] {
-        steps = linters
-    }
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = linters
+  }
+  ["fix"] {
+    fix = true
+    steps = linters
+  }
+  ["check"] {
+    steps = linters
+  }
 }
