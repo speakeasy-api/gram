@@ -45,6 +45,8 @@ interface AttributeFilterBarProps {
   isLoadingKeys?: boolean;
   searchInput: string;
   onSearchInputChange: (value: string) => void;
+  /** Called with the current search text when user explicitly submits (Enter/Tab/clear). */
+  onSearchSubmit: (query: string) => void;
 }
 
 export function AttributeFilterBar({
@@ -54,6 +56,7 @@ export function AttributeFilterBar({
   isLoadingKeys,
   searchInput,
   onSearchInputChange,
+  onSearchSubmit,
 }: AttributeFilterBarProps) {
   const [step, setStep] = useState<Step>("key");
   const [selectedKey, setSelectedKey] = useState("");
@@ -132,6 +135,15 @@ export function AttributeFilterBar({
       resetFlow();
     }
     if (
+      (e.key === "Enter" || e.key === "Tab") &&
+      step === "key" &&
+      !popoverOpen &&
+      searchInput.trim()
+    ) {
+      e.preventDefault();
+      onSearchSubmit(searchInput.trim());
+    }
+    if (
       e.key === "Backspace" &&
       searchInput === "" &&
       step === "key" &&
@@ -181,7 +193,10 @@ export function AttributeFilterBar({
                   value={filterValue}
                   onChange={(e) => setFilterValue(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") handleValueSubmit();
+                    if (e.key === "Enter" || e.key === "Tab") {
+                      e.preventDefault();
+                      handleValueSubmit();
+                    }
                     if (e.key === "Escape") {
                       e.preventDefault();
                       resetFlow();
@@ -222,6 +237,7 @@ export function AttributeFilterBar({
                 onClick={() => {
                   onSearchInputChange("");
                   resetFlow();
+                  onSearchSubmit("");
                 }}
                 className="text-muted-foreground hover:text-foreground transition-opacity shrink-0"
                 aria-label="Clear search"
