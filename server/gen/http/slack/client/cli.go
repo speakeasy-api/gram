@@ -10,8 +10,10 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	slack "github.com/speakeasy-api/gram/server/gen/slack"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildCallbackPayload builds the payload for the slack callback endpoint from
@@ -129,6 +131,240 @@ func BuildDeleteSlackConnectionPayload(slackDeleteSlackConnectionSessionToken st
 		}
 	}
 	v := &slack.DeleteSlackConnectionPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateSlackAppPayload builds the payload for the slack createSlackApp
+// endpoint from CLI flags.
+func BuildCreateSlackAppPayload(slackCreateSlackAppBody string, slackCreateSlackAppSessionToken string, slackCreateSlackAppProjectSlugInput string) (*slack.CreateSlackAppPayload, error) {
+	var err error
+	var body CreateSlackAppRequestBody
+	{
+		err = json.Unmarshal([]byte(slackCreateSlackAppBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"icon_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"system_prompt\": \"abc123\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.ToolsetIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("toolset_ids", "body"))
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 36 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 36, false))
+		}
+		if body.IconAssetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_asset_id", *body.IconAssetID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if slackCreateSlackAppSessionToken != "" {
+			sessionToken = &slackCreateSlackAppSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if slackCreateSlackAppProjectSlugInput != "" {
+			projectSlugInput = &slackCreateSlackAppProjectSlugInput
+		}
+	}
+	v := &slack.CreateSlackAppPayload{
+		Name:         body.Name,
+		SystemPrompt: body.SystemPrompt,
+		IconAssetID:  body.IconAssetID,
+	}
+	if body.ToolsetIds != nil {
+		v.ToolsetIds = make([]string, len(body.ToolsetIds))
+		for i, val := range body.ToolsetIds {
+			v.ToolsetIds[i] = val
+		}
+	} else {
+		v.ToolsetIds = []string{}
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListSlackAppsPayload builds the payload for the slack listSlackApps
+// endpoint from CLI flags.
+func BuildListSlackAppsPayload(slackListSlackAppsSessionToken string, slackListSlackAppsProjectSlugInput string) (*slack.ListSlackAppsPayload, error) {
+	var sessionToken *string
+	{
+		if slackListSlackAppsSessionToken != "" {
+			sessionToken = &slackListSlackAppsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if slackListSlackAppsProjectSlugInput != "" {
+			projectSlugInput = &slackListSlackAppsProjectSlugInput
+		}
+	}
+	v := &slack.ListSlackAppsPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetSlackAppPayload builds the payload for the slack getSlackApp
+// endpoint from CLI flags.
+func BuildGetSlackAppPayload(slackGetSlackAppID string, slackGetSlackAppSessionToken string, slackGetSlackAppProjectSlugInput string) (*slack.GetSlackAppPayload, error) {
+	var err error
+	var id string
+	{
+		id = slackGetSlackAppID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if slackGetSlackAppSessionToken != "" {
+			sessionToken = &slackGetSlackAppSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if slackGetSlackAppProjectSlugInput != "" {
+			projectSlugInput = &slackGetSlackAppProjectSlugInput
+		}
+	}
+	v := &slack.GetSlackAppPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildConfigureSlackAppPayload builds the payload for the slack
+// configureSlackApp endpoint from CLI flags.
+func BuildConfigureSlackAppPayload(slackConfigureSlackAppBody string, slackConfigureSlackAppSessionToken string, slackConfigureSlackAppProjectSlugInput string) (*slack.ConfigureSlackAppPayload, error) {
+	var err error
+	var body ConfigureSlackAppRequestBody
+	{
+		err = json.Unmarshal([]byte(slackConfigureSlackAppBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slack_client_id\": \"abc123\",\n      \"slack_client_secret\": \"abc123\",\n      \"slack_signing_secret\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if slackConfigureSlackAppSessionToken != "" {
+			sessionToken = &slackConfigureSlackAppSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if slackConfigureSlackAppProjectSlugInput != "" {
+			projectSlugInput = &slackConfigureSlackAppProjectSlugInput
+		}
+	}
+	v := &slack.ConfigureSlackAppPayload{
+		ID:                 body.ID,
+		SlackClientID:      body.SlackClientID,
+		SlackClientSecret:  body.SlackClientSecret,
+		SlackSigningSecret: body.SlackSigningSecret,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateSlackAppPayload builds the payload for the slack updateSlackApp
+// endpoint from CLI flags.
+func BuildUpdateSlackAppPayload(slackUpdateSlackAppBody string, slackUpdateSlackAppSessionToken string, slackUpdateSlackAppProjectSlugInput string) (*slack.UpdateSlackAppPayload, error) {
+	var err error
+	var body UpdateSlackAppRequestBody
+	{
+		err = json.Unmarshal([]byte(slackUpdateSlackAppBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"icon_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"system_prompt\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+			}
+		}
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) > 36 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 36, false))
+			}
+		}
+		if body.IconAssetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_asset_id", *body.IconAssetID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if slackUpdateSlackAppSessionToken != "" {
+			sessionToken = &slackUpdateSlackAppSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if slackUpdateSlackAppProjectSlugInput != "" {
+			projectSlugInput = &slackUpdateSlackAppProjectSlugInput
+		}
+	}
+	v := &slack.UpdateSlackAppPayload{
+		ID:           body.ID,
+		Name:         body.Name,
+		SystemPrompt: body.SystemPrompt,
+		IconAssetID:  body.IconAssetID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteSlackAppPayload builds the payload for the slack deleteSlackApp
+// endpoint from CLI flags.
+func BuildDeleteSlackAppPayload(slackDeleteSlackAppID string, slackDeleteSlackAppSessionToken string, slackDeleteSlackAppProjectSlugInput string) (*slack.DeleteSlackAppPayload, error) {
+	var err error
+	var id string
+	{
+		id = slackDeleteSlackAppID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if slackDeleteSlackAppSessionToken != "" {
+			sessionToken = &slackDeleteSlackAppSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if slackDeleteSlackAppProjectSlugInput != "" {
+			projectSlugInput = &slackDeleteSlackAppProjectSlugInput
+		}
+	}
+	v := &slack.DeleteSlackAppPayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

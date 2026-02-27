@@ -21,6 +21,12 @@ type Endpoints struct {
 	GetSlackConnection    goa.Endpoint
 	UpdateSlackConnection goa.Endpoint
 	DeleteSlackConnection goa.Endpoint
+	CreateSlackApp        goa.Endpoint
+	ListSlackApps         goa.Endpoint
+	GetSlackApp           goa.Endpoint
+	ConfigureSlackApp     goa.Endpoint
+	UpdateSlackApp        goa.Endpoint
+	DeleteSlackApp        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "slack" service with endpoints.
@@ -33,6 +39,12 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSlackConnection:    NewGetSlackConnectionEndpoint(s, a.APIKeyAuth),
 		UpdateSlackConnection: NewUpdateSlackConnectionEndpoint(s, a.APIKeyAuth),
 		DeleteSlackConnection: NewDeleteSlackConnectionEndpoint(s, a.APIKeyAuth),
+		CreateSlackApp:        NewCreateSlackAppEndpoint(s, a.APIKeyAuth),
+		ListSlackApps:         NewListSlackAppsEndpoint(s, a.APIKeyAuth),
+		GetSlackApp:           NewGetSlackAppEndpoint(s, a.APIKeyAuth),
+		ConfigureSlackApp:     NewConfigureSlackAppEndpoint(s, a.APIKeyAuth),
+		UpdateSlackApp:        NewUpdateSlackAppEndpoint(s, a.APIKeyAuth),
+		DeleteSlackApp:        NewDeleteSlackAppEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -43,6 +55,12 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSlackConnection = m(e.GetSlackConnection)
 	e.UpdateSlackConnection = m(e.UpdateSlackConnection)
 	e.DeleteSlackConnection = m(e.DeleteSlackConnection)
+	e.CreateSlackApp = m(e.CreateSlackApp)
+	e.ListSlackApps = m(e.ListSlackApps)
+	e.GetSlackApp = m(e.GetSlackApp)
+	e.ConfigureSlackApp = m(e.ConfigureSlackApp)
+	e.UpdateSlackApp = m(e.UpdateSlackApp)
+	e.DeleteSlackApp = m(e.DeleteSlackApp)
 }
 
 // NewCallbackEndpoint returns an endpoint function that calls the method
@@ -191,5 +209,215 @@ func NewDeleteSlackConnectionEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return nil, s.DeleteSlackConnection(ctx, p)
+	}
+}
+
+// NewCreateSlackAppEndpoint returns an endpoint function that calls the method
+// "createSlackApp" of service "slack".
+func NewCreateSlackAppEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateSlackAppPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateSlackApp(ctx, p)
+	}
+}
+
+// NewListSlackAppsEndpoint returns an endpoint function that calls the method
+// "listSlackApps" of service "slack".
+func NewListSlackAppsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSlackAppsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSlackApps(ctx, p)
+	}
+}
+
+// NewGetSlackAppEndpoint returns an endpoint function that calls the method
+// "getSlackApp" of service "slack".
+func NewGetSlackAppEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSlackAppPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSlackApp(ctx, p)
+	}
+}
+
+// NewConfigureSlackAppEndpoint returns an endpoint function that calls the
+// method "configureSlackApp" of service "slack".
+func NewConfigureSlackAppEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ConfigureSlackAppPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ConfigureSlackApp(ctx, p)
+	}
+}
+
+// NewUpdateSlackAppEndpoint returns an endpoint function that calls the method
+// "updateSlackApp" of service "slack".
+func NewUpdateSlackAppEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateSlackAppPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateSlackApp(ctx, p)
+	}
+}
+
+// NewDeleteSlackAppEndpoint returns an endpoint function that calls the method
+// "deleteSlackApp" of service "slack".
+func NewDeleteSlackAppEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteSlackAppPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteSlackApp(ctx, p)
 	}
 }

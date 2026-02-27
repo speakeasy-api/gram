@@ -252,6 +252,12 @@ run();
 ### [Slack](docs/sdks/slack/README.md)
 
 * [slackLogin](docs/sdks/slack/README.md#slacklogin) - login slack
+* [configureSlackApp](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
+* [createSlackApp](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
+* [deleteSlackApp](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
+* [getSlackApp](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
+* [listSlackApps](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
+* [updateSlackApp](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 * [slackCallback](docs/sdks/slack/README.md#slackcallback) - callback slack
 * [deleteSlackConnection](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
 * [getSlackConnection](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
@@ -403,10 +409,16 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`projectsUpsertAllowedOrigin`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
+- [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
+- [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
+- [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
 - [`slackDeleteSlackConnection`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
+- [`slackGetSlackApp`](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
 - [`slackGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
+- [`slackListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
 - [`slackSlackCallback`](docs/sdks/slack/README.md#slackcallback) - callback slack
 - [`slackSlackLogin`](docs/sdks/slack/README.md#slacklogin) - login slack
+- [`slackUpdateSlackApp`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`telemetryGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
@@ -481,6 +493,7 @@ To learn about this feature and how to get started, check
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
+- [`useConfigureSlackAppMutation`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
@@ -489,12 +502,14 @@ To learn about this feature and how to get started, check
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
+- [`useCreateSlackAppMutation`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
+- [`useDeleteSlackAppMutation`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
 - [`useDeleteSlackConnectionMutation`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
 - [`useDeleteSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
 - [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
@@ -512,6 +527,7 @@ To learn about this feature and how to get started, check
 - [`useGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`useGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 - [`useGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
+- [`useGetSlackApp`](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
@@ -535,6 +551,7 @@ To learn about this feature and how to get started, check
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
+- [`useListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -570,6 +587,7 @@ To learn about this feature and how to get started, check
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
+- [`useUpdateSlackAppMutation`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`useUpdateSlackConnectionMutation`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets

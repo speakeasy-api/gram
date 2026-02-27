@@ -35,6 +35,8 @@ import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Settings from "./pages/settings/Settings";
+import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
+import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SourceDetails from "./pages/sources/SourceDetails";
 import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
@@ -225,6 +227,20 @@ const ROUTE_STRUCTURE = {
         url: ":serverSpecifier",
         component: CatalogDetailRoot,
         indexComponent: CatalogDetail,
+      },
+    },
+  },
+  slackApps: {
+    title: "Slack",
+    url: "slack",
+    icon: "slack",
+    component: SlackAppsRoot,
+    indexComponent: SlackAppsIndex,
+    subPages: {
+      detail: {
+        title: "Slack App",
+        url: ":slackAppId",
+        component: SlackAppDetailPage,
       },
     },
   },

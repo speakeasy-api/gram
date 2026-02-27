@@ -122,8 +122,8 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 	}
 
 	chosenToolsetSlug := ""
-	if toolsResponse.DefaultToolsetSlug != nil {
-		chosenToolsetSlug = *toolsResponse.DefaultToolsetSlug
+	if len(toolsResponse.Toolsets) > 0 {
+		chosenToolsetSlug = toolsResponse.Toolsets[0].Slug
 	}
 	if potentialSelectedToolset != "" {
 		for _, toolset := range toolsResponse.Toolsets {
@@ -174,9 +174,6 @@ func formatListToolsSlackMessage(input activities.SlackProjectContextResponse) s
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "*Project:* `%s`\n", input.ProjectSlug)
-	if input.DefaultToolsetSlug != nil {
-		fmt.Fprintf(&sb, "*Default Toolset:* `%s`\n", *input.DefaultToolsetSlug)
-	}
 	sb.WriteString("\n*Toolsets:*\n")
 
 	for _, ts := range input.Toolsets {

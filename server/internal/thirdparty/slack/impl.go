@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
@@ -37,7 +38,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -54,7 +54,6 @@ type Configurations struct {
 	SlackSigningSecret string
 }
 
-// Service for gram dashboard authentication endpoints
 // Service for gram dashboard authentication endpoints
 type Service struct {
 	tracer              trace.Tracer
@@ -124,6 +123,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	})
 }
 
+// --- Legacy methods (backward compat for old single-app model) ---
+
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
 	returnURL := s.cfg.SignInRedirectURL
 	redirectWithError := func(returnURL string, err error) (*gen.CallbackResult, error) {
@@ -137,7 +138,6 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(returnURL, err)
 	}
 
-	//TODO: Check organization and project relationship with exported utility
 	projectID := stateValues.Get("project_id")
 	organizationID := stateValues.Get("organization_id")
 	returnURL = stateValues.Get("return_url")
@@ -152,31 +152,51 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(returnURL, err)
 	}
 
-	toolsets, err := s.toolset.ListToolsetsByProject(ctx, uuid.MustParse(projectID))
-	if err != nil {
-		return redirectWithError(returnURL, errors.New("invalid project"))
-	}
-
-	defaultToolsetSlug := ""
-	if len(toolsets) > 0 {
-		defaultToolsetSlug = toolsets[0].Slug
-	}
-
-	encrypedSlackToken, err := s.enc.Encrypt([]byte(response.AccessToken))
+	encryptedSlackToken, err := s.enc.Encrypt([]byte(response.AccessToken))
 	if err != nil {
 		return redirectWithError(returnURL, err)
 	}
 
-	_, err = s.repo.CreateSlackAppConnection(ctx, repo.CreateSlackAppConnectionParams{
-		OrganizationID:     organizationID,
-		ProjectID:          uuid.MustParse(projectID),
-		SlackTeamID:        response.Team.ID,
-		SlackTeamName:      response.Team.Name,
-		AccessToken:        encrypedSlackToken,
-		DefaultToolsetSlug: conv.ToPGTextEmpty(defaultToolsetSlug),
+	// Create a slack app in installed state for backward compatibility
+	app, err := s.repo.CreateSlackApp(ctx, repo.CreateSlackAppParams{
+		OrganizationID: organizationID,
+		ProjectID:      uuid.MustParse(projectID),
+		Name:           response.Team.Name,
+		SystemPrompt:   pgtype.Text{String: "", Valid: false},
+		IconAssetID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return redirectWithError(returnURL, errors.New("this slack workspace is already linked to a gram project"))
+	}
+
+	// Configure with credentials and set configured status via direct update
+	_, err = s.repo.ConfigureSlackApp(ctx, repo.ConfigureSlackAppParams{
+		ID:                 app.ID,
+		ProjectID:          app.ProjectID,
+		SlackClientID:      conv.ToPGTextEmpty(""),
+		SlackClientSecret:  conv.ToPGTextEmpty(""),
+		SlackSigningSecret: conv.ToPGTextEmpty(""),
+	})
+	if err != nil {
+		return redirectWithError(returnURL, err)
+	}
+
+	// Set bot token and team info directly since we have them from OAuth
+	_, err = s.db.Exec(ctx,
+		`UPDATE slack_apps SET slack_bot_token = $1, slack_team_id = $2, slack_team_name = $3, status = 'active', updated_at = clock_timestamp() WHERE id = $4`,
+		encryptedSlackToken, response.Team.ID, response.Team.Name, app.ID,
+	)
+	if err != nil {
+		return redirectWithError(returnURL, err)
+	}
+
+	// Attach first toolset if available
+	toolsets, err := s.toolset.ListToolsetsByProject(ctx, uuid.MustParse(projectID))
+	if err == nil && len(toolsets) > 0 {
+		_, _ = s.repo.AddSlackAppToolset(ctx, repo.AddSlackAppToolsetParams{
+			SlackAppID: app.ID,
+			ToolsetID:  toolsets[0].ID,
+		})
 	}
 
 	return &gen.CallbackResult{
@@ -204,7 +224,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 
 	installURL, err := url.Parse(s.cfg.SlackAppInstallURL)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to delete Slack app connection").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "parse slack install URL").Log(ctx, s.logger)
 	}
 
 	query := installURL.Query()
@@ -223,20 +243,18 @@ func (s *Service) GetSlackConnection(ctx context.Context, payload *gen.GetSlackC
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	connection, err := s.repo.GetSlackAppConnection(ctx, repo.GetSlackAppConnectionParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "failed to get Slack app connection").Log(ctx, s.logger)
+	apps, err := s.repo.ListSlackApps(ctx, *authCtx.ProjectID)
+	if err != nil || len(apps) == 0 {
+		return nil, oops.E(oops.CodeNotFound, fmt.Errorf("no slack app found"), "no Slack connection found").Log(ctx, s.logger)
 	}
 
+	app := apps[0]
 	return &gen.GetSlackConnectionResult{
-		SlackTeamName:      connection.SlackTeamName,
-		SlackTeamID:        connection.SlackTeamID,
-		DefaultToolsetSlug: connection.DefaultToolsetSlug.String,
-		CreatedAt:          connection.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:          connection.UpdatedAt.Time.Format(time.RFC3339),
+		SlackTeamName:      conv.PtrValOr(conv.FromPGText[string](app.SlackTeamName), ""),
+		SlackTeamID:        conv.PtrValOr(conv.FromPGText[string](app.SlackTeamID), ""),
+		DefaultToolsetSlug: "",
+		CreatedAt:          app.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:          app.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
@@ -246,12 +264,17 @@ func (s *Service) DeleteSlackConnection(ctx context.Context, payload *gen.Delete
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	err = s.repo.DeleteSlackAppConnection(ctx, repo.DeleteSlackAppConnectionParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
+	apps, err := s.repo.ListSlackApps(ctx, *authCtx.ProjectID)
+	if err != nil || len(apps) == 0 {
+		return oops.E(oops.CodeNotFound, fmt.Errorf("no slack app found"), "no Slack connection found").Log(ctx, s.logger)
+	}
+
+	err = s.repo.SoftDeleteSlackApp(ctx, repo.SoftDeleteSlackAppParams{
+		ID:        apps[0].ID,
+		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to delete Slack app connection").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "soft delete slack app").Log(ctx, s.logger)
 	}
 
 	return nil
@@ -263,30 +286,22 @@ func (s *Service) UpdateSlackConnection(ctx context.Context, payload *gen.Update
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	sanitizedSlug := conv.ToLower(payload.DefaultToolsetSlug)
-
-	// Ensure the toolset exists for the given slug and project
-	if _, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(sanitizedSlug), nil); err != nil {
-		return nil, err
+	apps, err := s.repo.ListSlackApps(ctx, *authCtx.ProjectID)
+	if err != nil || len(apps) == 0 {
+		return nil, oops.E(oops.CodeNotFound, fmt.Errorf("no slack app found"), "no Slack connection found").Log(ctx, s.logger)
 	}
 
-	result, err := s.repo.UpdateSlackAppConnection(ctx, repo.UpdateSlackAppConnectionParams{
-		DefaultToolsetSlug: conv.ToPGText(sanitizedSlug),
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ProjectID:          *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to update Slack app connection").Log(ctx, s.logger)
-	}
-
+	app := apps[0]
 	return &gen.GetSlackConnectionResult{
-		SlackTeamName:      result.SlackTeamName,
-		SlackTeamID:        result.SlackTeamID,
-		DefaultToolsetSlug: result.DefaultToolsetSlug.String,
-		CreatedAt:          result.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:          result.UpdatedAt.Time.Format(time.RFC3339),
+		SlackTeamName:      conv.PtrValOr(conv.FromPGText[string](app.SlackTeamName), ""),
+		SlackTeamID:        conv.PtrValOr(conv.FromPGText[string](app.SlackTeamID), ""),
+		DefaultToolsetSlug: "",
+		CreatedAt:          app.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:          app.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
+
+// --- Legacy event handler (kept for backward compat) ---
 
 func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -305,15 +320,16 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 		w.Header().Set("Content-Type", "text/plain")
 		_, err := w.Write([]byte(event.Challenge))
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to write slack response").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "write slack challenge response").Log(ctx, s.logger)
 		}
 		return nil
 	}
 
-	_, err := s.repo.GetSlackAppConnectionByTeamID(ctx, event.TeamID)
+	_, err := s.repo.GetSlackAppByTeamID(ctx, conv.ToPGText(event.TeamID))
 	if err != nil {
 		s.logger.InfoContext(ctx, "skipping an event with no slack app connection", attr.SlogSlackTeamID(event.TeamID))
 		w.WriteHeader(http.StatusOK)
+		return nil
 	}
 
 	threadTs := event.Event.ThreadTs
@@ -378,6 +394,373 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
+
+// --- New Slack Apps CRUD ---
+
+func (s *Service) requireEnterprise(ctx context.Context) (*contextvalues.AuthContext, error) {
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if authCtx.AccountType != "enterprise" {
+		return nil, oops.E(oops.CodeUnauthorized, fmt.Errorf("only available for enterprise accounts"), "only available for enterprise accounts").Log(ctx, s.logger)
+	}
+	return authCtx, nil
+}
+
+const maxAppNameLength = 36
+
+func (s *Service) CreateSlackApp(ctx context.Context, payload *gen.CreateSlackAppPayload) (res *gen.CreateSlackAppResult, err error) {
+	authCtx, err := s.requireEnterprise(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(payload.Name) > maxAppNameLength {
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("app name must be %d characters or fewer", maxAppNameLength), "app name too long")
+	}
+
+	var iconAssetID uuid.NullUUID
+	if payload.IconAssetID != nil {
+		parsed, err := uuid.Parse(*payload.IconAssetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid icon asset ID").Log(ctx, s.logger)
+		}
+		iconAssetID = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
+
+	// Validate toolset ownership before creating anything
+	toolsetIDs := make([]string, 0, len(payload.ToolsetIds))
+	for _, tsID := range payload.ToolsetIds {
+		parsed, err := uuid.Parse(tsID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset ID").Log(ctx, s.logger)
+		}
+		ts, err := s.toolset.GetToolsetByID(ctx, parsed)
+		if err != nil {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		}
+		if ts.ProjectID != *authCtx.ProjectID {
+			return nil, oops.E(oops.CodeNotFound, nil, "toolset not found").Log(ctx, s.logger)
+		}
+		toolsetIDs = append(toolsetIDs, tsID)
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	txRepo := s.repo.WithTx(tx)
+
+	app, err := txRepo.CreateSlackApp(ctx, repo.CreateSlackAppParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           payload.Name,
+		SystemPrompt:   conv.PtrToPGText(payload.SystemPrompt),
+		IconAssetID:    iconAssetID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeConflict, err, "create slack app").Log(ctx, s.logger)
+	}
+
+	for _, tsID := range payload.ToolsetIds {
+		parsed, _ := uuid.Parse(tsID) // already validated above
+		_, err = txRepo.AddSlackAppToolset(ctx, repo.AddSlackAppToolsetParams{
+			SlackAppID: app.ID,
+			ToolsetID:  parsed,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "attach toolset to slack app").Log(ctx, s.logger)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit slack app creation").Log(ctx, s.logger)
+	}
+
+	redirectURL := s.oauthCallbackURL(app.ID)
+	requestURL := s.eventsURL(app.ID)
+
+	appResult := &gen.SlackAppResult{
+		ID:            app.ID.String(),
+		Name:          app.Name,
+		Status:        app.Status,
+		SlackClientID: conv.FromPGText[string](app.SlackClientID),
+		SlackTeamID:   conv.FromPGText[string](app.SlackTeamID),
+		SlackTeamName: conv.FromPGText[string](app.SlackTeamName),
+		SystemPrompt:  conv.FromPGText[string](app.SystemPrompt),
+		IconAssetID:   conv.FromNullableUUID(app.IconAssetID),
+		ToolsetIds:    toolsetIDs,
+		RedirectURL:   &redirectURL,
+		RequestURL:    &requestURL,
+		CreatedAt:     app.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:     app.UpdatedAt.Time.Format(time.RFC3339),
+	}
+
+	return &gen.CreateSlackAppResult{
+		App: appResult,
+	}, nil
+}
+
+func (s *Service) ListSlackApps(ctx context.Context, payload *gen.ListSlackAppsPayload) (res *gen.ListSlackAppsResult, err error) {
+	authCtx, err := s.requireEnterprise(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	apps, err := s.repo.ListSlackApps(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list slack apps").Log(ctx, s.logger)
+	}
+
+	items := make([]*gen.SlackAppResult, 0, len(apps))
+	for _, app := range apps {
+		toolsets, err := s.repo.ListSlackAppToolsets(ctx, repo.ListSlackAppToolsetsParams{
+			SlackAppID: app.ID,
+			ProjectID:  *authCtx.ProjectID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list slack app toolsets").Log(ctx, s.logger)
+		}
+
+		toolsetIDs := make([]string, 0, len(toolsets))
+		for _, ts := range toolsets {
+			toolsetIDs = append(toolsetIDs, ts.ToolsetID.String())
+		}
+
+		items = append(items, &gen.SlackAppResult{
+			ID:            app.ID.String(),
+			Name:          app.Name,
+			Status:        app.Status,
+			SlackClientID: conv.FromPGText[string](app.SlackClientID),
+			SlackTeamID:   conv.FromPGText[string](app.SlackTeamID),
+			SlackTeamName: conv.FromPGText[string](app.SlackTeamName),
+			SystemPrompt:  conv.FromPGText[string](app.SystemPrompt),
+			IconAssetID:   conv.FromNullableUUID(app.IconAssetID),
+			ToolsetIds:    toolsetIDs,
+			RedirectURL:   nil,
+			RequestURL:    nil,
+			CreatedAt:     app.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     app.UpdatedAt.Time.Format(time.RFC3339),
+		})
+	}
+
+	return &gen.ListSlackAppsResult{
+		Items: items,
+	}, nil
+}
+
+func (s *Service) GetSlackApp(ctx context.Context, payload *gen.GetSlackAppPayload) (res *gen.SlackAppResult, err error) {
+	authCtx, err := s.requireEnterprise(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	appID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid app ID").Log(ctx, s.logger)
+	}
+
+	app, err := s.repo.GetSlackApp(ctx, repo.GetSlackAppParams{
+		ID:        appID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "slack app not found").Log(ctx, s.logger)
+	}
+
+	toolsets, err := s.repo.ListSlackAppToolsets(ctx, repo.ListSlackAppToolsetsParams{
+		SlackAppID: app.ID,
+		ProjectID:  *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list slack app toolsets").Log(ctx, s.logger)
+	}
+
+	toolsetIDs := make([]string, 0, len(toolsets))
+	for _, ts := range toolsets {
+		toolsetIDs = append(toolsetIDs, ts.ToolsetID.String())
+	}
+
+	redirectURL := s.oauthCallbackURL(app.ID)
+	requestURL := s.eventsURL(app.ID)
+
+	return &gen.SlackAppResult{
+		ID:            app.ID.String(),
+		Name:          app.Name,
+		Status:        app.Status,
+		SlackClientID: conv.FromPGText[string](app.SlackClientID),
+		SlackTeamID:   conv.FromPGText[string](app.SlackTeamID),
+		SlackTeamName: conv.FromPGText[string](app.SlackTeamName),
+		SystemPrompt:  conv.FromPGText[string](app.SystemPrompt),
+		IconAssetID:   conv.FromNullableUUID(app.IconAssetID),
+		ToolsetIds:    toolsetIDs,
+		RedirectURL:   &redirectURL,
+		RequestURL:    &requestURL,
+		CreatedAt:     app.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:     app.UpdatedAt.Time.Format(time.RFC3339),
+	}, nil
+}
+
+func (s *Service) ConfigureSlackApp(ctx context.Context, payload *gen.ConfigureSlackAppPayload) (res *gen.SlackAppResult, err error) {
+	authCtx, err := s.requireEnterprise(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	appID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid app ID").Log(ctx, s.logger)
+	}
+
+	encClientSecret, err := s.enc.Encrypt([]byte(payload.SlackClientSecret))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "encrypt client secret").Log(ctx, s.logger)
+	}
+
+	encSigningSecret, err := s.enc.Encrypt([]byte(payload.SlackSigningSecret))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "encrypt signing secret").Log(ctx, s.logger)
+	}
+
+	app, err := s.repo.ConfigureSlackApp(ctx, repo.ConfigureSlackAppParams{
+		ID:                 appID,
+		ProjectID:          *authCtx.ProjectID,
+		SlackClientID:      conv.ToPGText(payload.SlackClientID),
+		SlackClientSecret:  conv.ToPGText(encClientSecret),
+		SlackSigningSecret: conv.ToPGText(encSigningSecret),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "configure slack app").Log(ctx, s.logger)
+	}
+
+	toolsets, err := s.repo.ListSlackAppToolsets(ctx, repo.ListSlackAppToolsetsParams{
+		SlackAppID: app.ID,
+		ProjectID:  *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list slack app toolsets").Log(ctx, s.logger)
+	}
+
+	toolsetIDs := make([]string, 0, len(toolsets))
+	for _, ts := range toolsets {
+		toolsetIDs = append(toolsetIDs, ts.ToolsetID.String())
+	}
+
+	return &gen.SlackAppResult{
+		ID:            app.ID.String(),
+		Name:          app.Name,
+		Status:        app.Status,
+		SlackClientID: conv.FromPGText[string](app.SlackClientID),
+		SlackTeamID:   conv.FromPGText[string](app.SlackTeamID),
+		SlackTeamName: conv.FromPGText[string](app.SlackTeamName),
+		SystemPrompt:  conv.FromPGText[string](app.SystemPrompt),
+		IconAssetID:   conv.FromNullableUUID(app.IconAssetID),
+		ToolsetIds:    toolsetIDs,
+		RedirectURL:   nil,
+		RequestURL:    nil,
+		CreatedAt:     app.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:     app.UpdatedAt.Time.Format(time.RFC3339),
+	}, nil
+}
+
+func (s *Service) UpdateSlackApp(ctx context.Context, payload *gen.UpdateSlackAppPayload) (res *gen.SlackAppResult, err error) {
+	authCtx, err := s.requireEnterprise(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if payload.Name != nil && len(*payload.Name) > maxAppNameLength {
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("app name must be %d characters or fewer", maxAppNameLength), "app name too long")
+	}
+
+	appID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid app ID").Log(ctx, s.logger)
+	}
+
+	var iconAssetID uuid.NullUUID
+	if payload.IconAssetID != nil {
+		parsed, err := uuid.Parse(*payload.IconAssetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid icon asset ID").Log(ctx, s.logger)
+		}
+		iconAssetID = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
+
+	app, err := s.repo.UpdateSlackApp(ctx, repo.UpdateSlackAppParams{
+		ID:           appID,
+		ProjectID:    *authCtx.ProjectID,
+		Name:         conv.PtrToPGText(payload.Name),
+		SystemPrompt: conv.PtrToPGText(payload.SystemPrompt),
+		IconAssetID:  iconAssetID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "update slack app").Log(ctx, s.logger)
+	}
+
+	toolsets, err := s.repo.ListSlackAppToolsets(ctx, repo.ListSlackAppToolsetsParams{
+		SlackAppID: app.ID,
+		ProjectID:  *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list slack app toolsets").Log(ctx, s.logger)
+	}
+
+	toolsetIDs := make([]string, 0, len(toolsets))
+	for _, ts := range toolsets {
+		toolsetIDs = append(toolsetIDs, ts.ToolsetID.String())
+	}
+
+	return &gen.SlackAppResult{
+		ID:            app.ID.String(),
+		Name:          app.Name,
+		Status:        app.Status,
+		SlackClientID: conv.FromPGText[string](app.SlackClientID),
+		SlackTeamID:   conv.FromPGText[string](app.SlackTeamID),
+		SlackTeamName: conv.FromPGText[string](app.SlackTeamName),
+		SystemPrompt:  conv.FromPGText[string](app.SystemPrompt),
+		IconAssetID:   conv.FromNullableUUID(app.IconAssetID),
+		ToolsetIds:    toolsetIDs,
+		RedirectURL:   nil,
+		RequestURL:    nil,
+		CreatedAt:     app.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:     app.UpdatedAt.Time.Format(time.RFC3339),
+	}, nil
+}
+
+func (s *Service) DeleteSlackApp(ctx context.Context, payload *gen.DeleteSlackAppPayload) (err error) {
+	authCtx, err := s.requireEnterprise(ctx)
+	if err != nil {
+		return err
+	}
+
+	appID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid app ID").Log(ctx, s.logger)
+	}
+
+	err = s.repo.SoftDeleteSlackApp(ctx, repo.SoftDeleteSlackAppParams{
+		ID:        appID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete slack app").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func (s *Service) oauthCallbackURL(appID uuid.UUID) string {
+	return fmt.Sprintf("%s/rpc/slack-apps/%s/oauth/callback", s.cfg.GramServerURL, appID.String())
+}
+
+func (s *Service) eventsURL(appID uuid.UUID) string {
+	return fmt.Sprintf("%s/rpc/slack-apps/%s/events", s.cfg.GramServerURL, appID.String())
+}
+
+// --- Auth ---
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)

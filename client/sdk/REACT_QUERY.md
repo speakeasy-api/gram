@@ -110,10 +110,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useUpdateSlackConnectionMutation } from "@gram/client/react-query/slackUpdateSlackConnection.js";
+import { useConfigureSlackAppMutation } from "@gram/client/react-query/slackConfigureSlackApp.js";
 
 export function Example() {
-  const { mutate, status } = useUpdateSlackConnectionMutation();
+  const { mutate, status } = useConfigureSlackAppMutation();
 
   return (
     <form
@@ -123,8 +123,11 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          updateSlackConnectionRequestBody: {
-            defaultToolsetSlug: "<value>",
+          configureSlackAppRequestBody: {
+            id: "2ae3bdef-e9cc-4500-b6ba-3cda2a954c12",
+            slackClientId: "<id>",
+            slackClientSecret: "<value>",
+            slackSigningSecret: "<value>",
           },
         });
       }}
@@ -142,10 +145,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useUpdateSlackConnectionMutation } from "@gram/client/react-query/slackUpdateSlackConnection.js";
+import { useConfigureSlackAppMutation } from "@gram/client/react-query/slackConfigureSlackApp.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useUpdateSlackConnectionMutation({
+  const { mutate, status } = useConfigureSlackAppMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes

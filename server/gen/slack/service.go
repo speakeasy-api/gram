@@ -26,6 +26,19 @@ type Service interface {
 	UpdateSlackConnection(context.Context, *UpdateSlackConnectionPayload) (res *GetSlackConnectionResult, err error)
 	// delete slack connection for an organization and project.
 	DeleteSlackConnection(context.Context, *DeleteSlackConnectionPayload) (err error)
+	// Create a new Slack app and generate its manifest.
+	CreateSlackApp(context.Context, *CreateSlackAppPayload) (res *CreateSlackAppResult, err error)
+	// List Slack apps for a project.
+	ListSlackApps(context.Context, *ListSlackAppsPayload) (res *ListSlackAppsResult, err error)
+	// Get details of a specific Slack app.
+	GetSlackApp(context.Context, *GetSlackAppPayload) (res *SlackAppResult, err error)
+	// Store Slack credentials (client ID, client secret, signing secret) for an
+	// app.
+	ConfigureSlackApp(context.Context, *ConfigureSlackAppPayload) (res *SlackAppResult, err error)
+	// Update a Slack app's settings.
+	UpdateSlackApp(context.Context, *UpdateSlackAppPayload) (res *SlackAppResult, err error)
+	// Soft-delete a Slack app.
+	DeleteSlackApp(context.Context, *DeleteSlackAppPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -48,7 +61,7 @@ const ServiceName = "slack"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"callback", "login", "getSlackConnection", "updateSlackConnection", "deleteSlackConnection"}
+var MethodNames = [11]string{"callback", "login", "getSlackConnection", "updateSlackConnection", "deleteSlackConnection", "createSlackApp", "listSlackApps", "getSlackApp", "configureSlackApp", "updateSlackApp", "deleteSlackApp"}
 
 // CallbackPayload is the payload type of the slack service callback method.
 type CallbackPayload struct {
@@ -64,11 +77,66 @@ type CallbackResult struct {
 	Location string
 }
 
+// ConfigureSlackAppPayload is the payload type of the slack service
+// configureSlackApp method.
+type ConfigureSlackAppPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The Slack app ID
+	ID string
+	// Slack app Client ID
+	SlackClientID string
+	// Slack app Client Secret
+	SlackClientSecret string
+	// Slack app Signing Secret
+	SlackSigningSecret string
+}
+
+// CreateSlackAppPayload is the payload type of the slack service
+// createSlackApp method.
+type CreateSlackAppPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Display name for the Slack app
+	Name string
+	// Toolset IDs to attach to this app
+	ToolsetIds []string
+	// System prompt for the Slack app
+	SystemPrompt *string
+	// Asset ID for the app icon
+	IconAssetID *string
+}
+
+// CreateSlackAppResult is the result type of the slack service createSlackApp
+// method.
+type CreateSlackAppResult struct {
+	// The created Slack app
+	App *SlackAppResult
+}
+
+// DeleteSlackAppPayload is the payload type of the slack service
+// deleteSlackApp method.
+type DeleteSlackAppPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The Slack app ID
+	ID string
+}
+
 // DeleteSlackConnectionPayload is the payload type of the slack service
 // deleteSlackConnection method.
 type DeleteSlackConnectionPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// GetSlackAppPayload is the payload type of the slack service getSlackApp
+// method.
+type GetSlackAppPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The Slack app ID
+	ID string
 }
 
 // GetSlackConnectionPayload is the payload type of the slack service
@@ -93,6 +161,20 @@ type GetSlackConnectionResult struct {
 	UpdatedAt string
 }
 
+// ListSlackAppsPayload is the payload type of the slack service listSlackApps
+// method.
+type ListSlackAppsPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListSlackAppsResult is the result type of the slack service listSlackApps
+// method.
+type ListSlackAppsResult struct {
+	// List of Slack apps
+	Items []*SlackAppResult
+}
+
 // LoginPayload is the payload type of the slack service login method.
 type LoginPayload struct {
 	SessionToken *string
@@ -105,6 +187,49 @@ type LoginPayload struct {
 type LoginResult struct {
 	// The URL to redirect to after authentication
 	Location string
+}
+
+// SlackAppResult is the result type of the slack service getSlackApp method.
+type SlackAppResult struct {
+	// The Slack app ID
+	ID string
+	// Display name of the Slack app
+	Name string
+	// Current status: unconfigured, active
+	Status string
+	// The Slack app Client ID
+	SlackClientID *string
+	// System prompt for the Slack app
+	SystemPrompt *string
+	// Asset ID for the app icon
+	IconAssetID *string
+	// The connected Slack workspace ID
+	SlackTeamID *string
+	// The connected Slack workspace name
+	SlackTeamName *string
+	// Attached toolset IDs
+	ToolsetIds []string
+	// OAuth callback URL for this app
+	RedirectURL *string
+	// Event subscription URL for this app
+	RequestURL *string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+// UpdateSlackAppPayload is the payload type of the slack service
+// updateSlackApp method.
+type UpdateSlackAppPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The Slack app ID
+	ID string
+	// New display name for the Slack app
+	Name *string
+	// System prompt for the Slack app
+	SystemPrompt *string
+	// Asset ID for the app icon
+	IconAssetID *string
 }
 
 // UpdateSlackConnectionPayload is the payload type of the slack service

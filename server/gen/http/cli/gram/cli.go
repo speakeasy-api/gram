@@ -67,7 +67,7 @@ func UsageCommands() []string {
 		"features set-product-feature",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
 		"resources list-resources",
-		"slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-connection)",
+		"slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-connection|create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -581,6 +581,35 @@ func ParseEndpoint(
 		slackDeleteSlackConnectionSessionTokenFlag     = slackDeleteSlackConnectionFlags.String("session-token", "", "")
 		slackDeleteSlackConnectionProjectSlugInputFlag = slackDeleteSlackConnectionFlags.String("project-slug-input", "", "")
 
+		slackCreateSlackAppFlags                = flag.NewFlagSet("create-slack-app", flag.ExitOnError)
+		slackCreateSlackAppBodyFlag             = slackCreateSlackAppFlags.String("body", "REQUIRED", "")
+		slackCreateSlackAppSessionTokenFlag     = slackCreateSlackAppFlags.String("session-token", "", "")
+		slackCreateSlackAppProjectSlugInputFlag = slackCreateSlackAppFlags.String("project-slug-input", "", "")
+
+		slackListSlackAppsFlags                = flag.NewFlagSet("list-slack-apps", flag.ExitOnError)
+		slackListSlackAppsSessionTokenFlag     = slackListSlackAppsFlags.String("session-token", "", "")
+		slackListSlackAppsProjectSlugInputFlag = slackListSlackAppsFlags.String("project-slug-input", "", "")
+
+		slackGetSlackAppFlags                = flag.NewFlagSet("get-slack-app", flag.ExitOnError)
+		slackGetSlackAppIDFlag               = slackGetSlackAppFlags.String("id", "REQUIRED", "")
+		slackGetSlackAppSessionTokenFlag     = slackGetSlackAppFlags.String("session-token", "", "")
+		slackGetSlackAppProjectSlugInputFlag = slackGetSlackAppFlags.String("project-slug-input", "", "")
+
+		slackConfigureSlackAppFlags                = flag.NewFlagSet("configure-slack-app", flag.ExitOnError)
+		slackConfigureSlackAppBodyFlag             = slackConfigureSlackAppFlags.String("body", "REQUIRED", "")
+		slackConfigureSlackAppSessionTokenFlag     = slackConfigureSlackAppFlags.String("session-token", "", "")
+		slackConfigureSlackAppProjectSlugInputFlag = slackConfigureSlackAppFlags.String("project-slug-input", "", "")
+
+		slackUpdateSlackAppFlags                = flag.NewFlagSet("update-slack-app", flag.ExitOnError)
+		slackUpdateSlackAppBodyFlag             = slackUpdateSlackAppFlags.String("body", "REQUIRED", "")
+		slackUpdateSlackAppSessionTokenFlag     = slackUpdateSlackAppFlags.String("session-token", "", "")
+		slackUpdateSlackAppProjectSlugInputFlag = slackUpdateSlackAppFlags.String("project-slug-input", "", "")
+
+		slackDeleteSlackAppFlags                = flag.NewFlagSet("delete-slack-app", flag.ExitOnError)
+		slackDeleteSlackAppIDFlag               = slackDeleteSlackAppFlags.String("id", "REQUIRED", "")
+		slackDeleteSlackAppSessionTokenFlag     = slackDeleteSlackAppFlags.String("session-token", "", "")
+		slackDeleteSlackAppProjectSlugInputFlag = slackDeleteSlackAppFlags.String("project-slug-input", "", "")
+
 		telemetryFlags = flag.NewFlagSet("telemetry", flag.ContinueOnError)
 
 		telemetrySearchLogsFlags                = flag.NewFlagSet("search-logs", flag.ExitOnError)
@@ -920,6 +949,12 @@ func ParseEndpoint(
 	slackGetSlackConnectionFlags.Usage = slackGetSlackConnectionUsage
 	slackUpdateSlackConnectionFlags.Usage = slackUpdateSlackConnectionUsage
 	slackDeleteSlackConnectionFlags.Usage = slackDeleteSlackConnectionUsage
+	slackCreateSlackAppFlags.Usage = slackCreateSlackAppUsage
+	slackListSlackAppsFlags.Usage = slackListSlackAppsUsage
+	slackGetSlackAppFlags.Usage = slackGetSlackAppUsage
+	slackConfigureSlackAppFlags.Usage = slackConfigureSlackAppUsage
+	slackUpdateSlackAppFlags.Usage = slackUpdateSlackAppUsage
+	slackDeleteSlackAppFlags.Usage = slackDeleteSlackAppUsage
 
 	telemetryFlags.Usage = telemetryUsage
 	telemetrySearchLogsFlags.Usage = telemetrySearchLogsUsage
@@ -1373,6 +1408,24 @@ func ParseEndpoint(
 
 			case "delete-slack-connection":
 				epf = slackDeleteSlackConnectionFlags
+
+			case "create-slack-app":
+				epf = slackCreateSlackAppFlags
+
+			case "list-slack-apps":
+				epf = slackListSlackAppsFlags
+
+			case "get-slack-app":
+				epf = slackGetSlackAppFlags
+
+			case "configure-slack-app":
+				epf = slackConfigureSlackAppFlags
+
+			case "update-slack-app":
+				epf = slackUpdateSlackAppFlags
+
+			case "delete-slack-app":
+				epf = slackDeleteSlackAppFlags
 
 			}
 
@@ -1861,6 +1914,24 @@ func ParseEndpoint(
 			case "delete-slack-connection":
 				endpoint = c.DeleteSlackConnection()
 				data, err = slackc.BuildDeleteSlackConnectionPayload(*slackDeleteSlackConnectionSessionTokenFlag, *slackDeleteSlackConnectionProjectSlugInputFlag)
+			case "create-slack-app":
+				endpoint = c.CreateSlackApp()
+				data, err = slackc.BuildCreateSlackAppPayload(*slackCreateSlackAppBodyFlag, *slackCreateSlackAppSessionTokenFlag, *slackCreateSlackAppProjectSlugInputFlag)
+			case "list-slack-apps":
+				endpoint = c.ListSlackApps()
+				data, err = slackc.BuildListSlackAppsPayload(*slackListSlackAppsSessionTokenFlag, *slackListSlackAppsProjectSlugInputFlag)
+			case "get-slack-app":
+				endpoint = c.GetSlackApp()
+				data, err = slackc.BuildGetSlackAppPayload(*slackGetSlackAppIDFlag, *slackGetSlackAppSessionTokenFlag, *slackGetSlackAppProjectSlugInputFlag)
+			case "configure-slack-app":
+				endpoint = c.ConfigureSlackApp()
+				data, err = slackc.BuildConfigureSlackAppPayload(*slackConfigureSlackAppBodyFlag, *slackConfigureSlackAppSessionTokenFlag, *slackConfigureSlackAppProjectSlugInputFlag)
+			case "update-slack-app":
+				endpoint = c.UpdateSlackApp()
+				data, err = slackc.BuildUpdateSlackAppPayload(*slackUpdateSlackAppBodyFlag, *slackUpdateSlackAppSessionTokenFlag, *slackUpdateSlackAppProjectSlugInputFlag)
+			case "delete-slack-app":
+				endpoint = c.DeleteSlackApp()
+				data, err = slackc.BuildDeleteSlackAppPayload(*slackDeleteSlackAppIDFlag, *slackDeleteSlackAppSessionTokenFlag, *slackDeleteSlackAppProjectSlugInputFlag)
 			}
 		case "telemetry":
 			c := telemetryc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4035,6 +4106,12 @@ func slackUsage() {
 	fmt.Fprintln(os.Stderr, `    get-slack-connection: get slack connection for an organization and project.`)
 	fmt.Fprintln(os.Stderr, `    update-slack-connection: update slack connection for an organization and project.`)
 	fmt.Fprintln(os.Stderr, `    delete-slack-connection: delete slack connection for an organization and project.`)
+	fmt.Fprintln(os.Stderr, `    create-slack-app: Create a new Slack app and generate its manifest.`)
+	fmt.Fprintln(os.Stderr, `    list-slack-apps: List Slack apps for a project.`)
+	fmt.Fprintln(os.Stderr, `    get-slack-app: Get details of a specific Slack app.`)
+	fmt.Fprintln(os.Stderr, `    configure-slack-app: Store Slack credentials (client ID, client secret, signing secret) for an app.`)
+	fmt.Fprintln(os.Stderr, `    update-slack-app: Update a Slack app's settings.`)
+	fmt.Fprintln(os.Stderr, `    delete-slack-app: Soft-delete a Slack app.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s slack COMMAND --help\n", os.Args[0])
@@ -4141,6 +4218,136 @@ func slackDeleteSlackConnectionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack delete-slack-connection --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func slackCreateSlackAppUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack create-slack-app", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new Slack app and generate its manifest.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack create-slack-app --body '{\n      \"icon_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"system_prompt\": \"abc123\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func slackListSlackAppsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack list-slack-apps", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List Slack apps for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack list-slack-apps --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func slackGetSlackAppUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack get-slack-app", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get details of a specific Slack app.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack get-slack-app --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func slackConfigureSlackAppUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack configure-slack-app", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Store Slack credentials (client ID, client secret, signing secret) for an app.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack configure-slack-app --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slack_client_id\": \"abc123\",\n      \"slack_client_secret\": \"abc123\",\n      \"slack_signing_secret\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func slackUpdateSlackAppUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack update-slack-app", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a Slack app's settings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack update-slack-app --body '{\n      \"icon_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"system_prompt\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func slackDeleteSlackAppUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack delete-slack-app", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a Slack app.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack delete-slack-app --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // telemetryUsage displays the usage of the telemetry command and its

@@ -9,6 +9,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useOrganization } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
@@ -23,8 +24,11 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const organization = useOrganization();
+  const telemetry = useTelemetry();
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+
+  const isSlackAppsEnabled = telemetry.isFeatureEnabled("slack-apps") ?? false;
 
   const teamUrl =
     organization?.userWorkspaceSlugs &&
@@ -34,7 +38,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
-    build: [routes.elements, routes.mcp],
+    build: [
+      routes.elements,
+      routes.mcp,
+      ...(isSlackAppsEnabled ? [routes.slackApps] : []),
+    ],
     observe: [routes.observability, routes.logs, routes.chatSessions],
     settings: [routes.settings, routes.billing, routes.docs] as AppRoute[],
   };

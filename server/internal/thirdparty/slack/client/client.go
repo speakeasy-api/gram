@@ -51,12 +51,12 @@ type slackOAuthResponse struct {
 }
 
 type SlackAppAuthInfoResponse struct {
-	OrganizationID     string
-	ProjectID          uuid.UUID
-	AccessToken        string
-	TeamName           string
-	TeamID             string
-	DefaultToolsetSlug *string
+	SlackAppID     uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	AccessToken    string
+	TeamName       string
+	TeamID         string
 }
 
 func (s *SlackClient) Enabled() bool {
@@ -68,23 +68,27 @@ func (s *SlackClient) GetAppAuthInfo(ctx context.Context, slackTeamID string) (*
 		return nil, fmt.Errorf("slack client is not enabled")
 	}
 
-	conn, err := s.repo.GetSlackAppConnectionByTeamID(ctx, slackTeamID)
+	app, err := s.repo.GetSlackAppByTeamID(ctx, conv.ToPGText(slackTeamID))
 	if err != nil {
-		return nil, fmt.Errorf("failed to get slack app connection: %w", err)
+		return nil, fmt.Errorf("get slack app by team id: %w", err)
 	}
 
-	decryptedAccessToken, err := s.enc.Decrypt(conn.AccessToken)
+	if !app.SlackBotToken.Valid {
+		return nil, fmt.Errorf("slack app has no bot token")
+	}
+
+	decryptedAccessToken, err := s.enc.Decrypt(app.SlackBotToken.String)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt access token: %w", err)
+		return nil, fmt.Errorf("decrypt bot token: %w", err)
 	}
 
 	return &SlackAppAuthInfoResponse{
-		AccessToken:        decryptedAccessToken,
-		OrganizationID:     conn.OrganizationID,
-		ProjectID:          conn.ProjectID,
-		TeamName:           conn.SlackTeamName,
-		TeamID:             conn.SlackTeamID,
-		DefaultToolsetSlug: conv.FromPGText[string](conn.DefaultToolsetSlug),
+		SlackAppID:     app.ID,
+		AccessToken:    decryptedAccessToken,
+		OrganizationID: app.OrganizationID,
+		ProjectID:      app.ProjectID,
+		TeamName:       conv.PtrValOr(conv.FromPGText[string](app.SlackTeamName), ""),
+		TeamID:         conv.PtrValOr(conv.FromPGText[string](app.SlackTeamID), ""),
 	}, nil
 }
 
