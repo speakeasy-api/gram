@@ -161,10 +161,10 @@ const HeadingSection = () => {
     } else if (deployment.status === "completed") {
       if (isPending) buttonText = "Rolling Back...";
       else buttonText = "Roll Back";
-    } else if (deployment.status === "failed") {
-      if (isPending) buttonText = "Retrying Deployment";
-      else buttonText = "Retry Deployment";
-    } else return null;
+    } else {
+      if (isPending) buttonText = "Redeploying...";
+      else buttonText = "Redeploy";
+    }
 
     return (
       <Button onClick={handleRedeploy} disabled={isPending}>
