@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Common functions shared across Gram hook scripts
+# This is the core module that can be packaged for different distributions
 
 # Ensure standard paths are available (hooks may have minimal PATH)
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
@@ -9,19 +10,12 @@ export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 validate_env_vars() {
   local hook_event_name="$1"
 
+  echo "RUNNING HOOK $hook_event_name"
+
   if [ -z "$GRAM_API_KEY" ]; then
     output_block_json "$hook_event_name" "GRAM_API_KEY environment variable is not set. Please set it to enable Gram hooks."
     exit 0
   fi
-
-  # Debug log to file
-  local log_file="$HOME/.claude/gram_hooks.log"
-  printf "========================\n[%s] Validating: %s\nGRAM_API_KEY set: %s\nGRAM_PROJECT: %s\n" \
-    "$(date '+%Y-%m-%d %H:%M:%S')" \
-    "$hook_event_name" \
-    "$([ -n "$GRAM_API_KEY" ] && echo "yes" || echo "NO")" \
-    "${GRAM_PROJECT:-"(not set)"}" \
-    | tee -a "$log_file" >/dev/null
 
   # Set default project if not specified
   if [ -z "$GRAM_PROJECT" ]; then

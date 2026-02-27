@@ -7,14 +7,14 @@ set -euo pipefail
 
 GITHUB_REPO="gram-ai/gram"
 GITHUB_BRANCH="main"
-HOOKS_BASE_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/hooks"
+HOOKS_BASE_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/hooks/core"
 CLAUDE_HOOKS_DIR="$HOME/.claude/hooks"
 
 # Check if running from the repo (local) or downloaded (remote)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
 LOCAL_HOOKS_DIR=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/pre_tool_use.sh" ]; then
-  LOCAL_HOOKS_DIR="$SCRIPT_DIR"
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/core/pre_tool_use.sh" ]; then
+  LOCAL_HOOKS_DIR="$SCRIPT_DIR/core"
 fi
 
 echo "Installing Gram Claude hooks..."
