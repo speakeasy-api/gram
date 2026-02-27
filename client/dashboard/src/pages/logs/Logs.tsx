@@ -2,7 +2,6 @@ import { InsightsSidebar } from "@/components/insights-sidebar";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
-import { SearchBar } from "@/components/ui/search-bar";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useSlugs } from "@/contexts/Sdk";
@@ -11,7 +10,11 @@ import {
   TelemetryLogRecord,
   ToolCallSummary,
 } from "@gram/client/models/components";
-import { useGramContext, useListToolsets } from "@gram/client/react-query";
+import {
+  useGramContext,
+  useListAttributeKeys,
+  useListToolsets,
+} from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,
@@ -38,8 +41,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
+import type { ActiveAttributeFilter } from "./attribute-filter-types";
+import { parseFilters, serializeFilters } from "./attribute-filter-url";
+import { AttributeFilterBar } from "./AttributeFilterBar";
 import { LogDetailSheet } from "./LogDetailSheet";
 import { TraceRow } from "./TraceRow";
+import { useAttributeLogsQuery } from "./use-attribute-logs-query";
 
 // Valid date range presets
 const validPresets: DateRangePreset[] = [
@@ -299,6 +306,33 @@ function LogsContent() {
     [customRange, dateRange],
   );
 
+  // Attribute filter state from URL
+  const [attributeFilters, setAttributeFilters] = useState<
+    ActiveAttributeFilter[]
+  >(() => parseFilters(searchParams.get("af")));
+
+  const hasAttributeFilters = attributeFilters.length > 0;
+
+  const handleAttributeFiltersChange = useCallback(
+    (filters: ActiveAttributeFilter[]) => {
+      setAttributeFilters(filters);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          const serialized = serializeFilters(filters);
+          if (serialized) {
+            next.set("af", serialized);
+          } else {
+            next.delete("af");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   // Derive URN prefix from selected server's toolUrns
   const serverUrnPrefix = useMemo(() => {
     if (!selectedServer) return null;
@@ -324,16 +358,15 @@ function LogsContent() {
     return searchQuery;
   }, [serverUrnPrefix, searchQuery]);
 
-  const {
-    data,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetching,
-    isFetchingNextPage,
-    refetch,
-    isLogsDisabled,
-  } = useLogsEnabledErrorCheck(
+  // Fetch attribute keys for filter bar
+  const { data: attributeKeysData, isLoading: isLoadingAttributeKeys } =
+    useListAttributeKeys({
+      getProjectMetricsSummaryPayload: { from, to },
+    });
+  const attributeKeys = attributeKeysData?.keys ?? [];
+
+  // Standard tool calls query (used when no attribute filters active)
+  const toolCallsQuery = useLogsEnabledErrorCheck(
     useInfiniteQuery({
       queryKey: [
         "tool-calls",
@@ -359,9 +392,33 @@ function LogsContent() {
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      enabled: !hasAttributeFilters,
       throwOnError: false,
     }),
   );
+
+  // Attribute-filtered logs query (used when attribute filters are active)
+  const attrLogsQuery = useLogsEnabledErrorCheck(
+    useAttributeLogsQuery({
+      attributeFilters,
+      gramUrn: effectiveGramUrn,
+      from,
+      to,
+      enabled: hasAttributeFilters,
+    }),
+  );
+
+  // Pick the active query based on whether attribute filters are active
+  const {
+    data,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    refetch,
+    isLogsDisabled,
+  } = hasAttributeFilters ? attrLogsQuery : toolCallsQuery;
 
   // Flatten all pages into a single array of traces
   const allTraces = data?.pages.flatMap((page) => page.toolCalls) ?? [];
@@ -490,6 +547,11 @@ function LogsContent() {
         onCustomRangeChange={setCustomRangeParam}
         onClearCustomRange={clearCustomRange}
         projectSlug={projectSlug}
+        // Attribute filter props
+        attributeFilters={attributeFilters}
+        onAttributeFiltersChange={handleAttributeFiltersChange}
+        attributeKeys={attributeKeys}
+        isLoadingAttributeKeys={isLoadingAttributeKeys}
       />
     </InsightsSidebar>
   );
@@ -526,6 +588,11 @@ function LogsInnerContent({
   onCustomRangeChange,
   onClearCustomRange,
   projectSlug,
+  // Attribute filter props
+  attributeFilters,
+  onAttributeFiltersChange,
+  attributeKeys,
+  isLoadingAttributeKeys,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
@@ -557,6 +624,11 @@ function LogsInnerContent({
   onCustomRangeChange: (from: Date, to: Date, label?: string) => void;
   onClearCustomRange: () => void;
   projectSlug?: string;
+  // Attribute filter props
+  attributeFilters: ActiveAttributeFilter[];
+  onAttributeFiltersChange: (filters: ActiveAttributeFilter[]) => void;
+  attributeKeys: string[];
+  isLoadingAttributeKeys?: boolean;
 }) {
   if (isLogsDisabled) {
     return (
@@ -620,12 +692,16 @@ function LogsInnerContent({
                     toolsets={toolsets}
                     isLoading={isLoadingToolsets}
                   />
-                  <SearchBar
-                    value={searchInput}
-                    onChange={setSearchInput}
-                    placeholder="Search by tool URN"
-                    className="flex-1 min-w-[200px]"
-                  />
+                  <div className="flex-1">
+                    <AttributeFilterBar
+                      filters={attributeFilters}
+                      onChange={onAttributeFiltersChange}
+                      attributeKeys={attributeKeys}
+                      isLoadingKeys={isLoadingAttributeKeys}
+                      searchInput={searchInput}
+                      onSearchInputChange={setSearchInput}
+                    />
+                  </div>
                   <div className="ml-auto">
                     <TimeRangePicker
                       preset={customRange ? null : dateRange}
