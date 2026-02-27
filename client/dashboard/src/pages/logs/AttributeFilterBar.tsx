@@ -64,6 +64,7 @@ export function AttributeFilterBar({
   const [filterValue, setFilterValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   // Filter attribute keys by typed text (only relevant in key step)
   const filteredKeys =
@@ -129,20 +130,36 @@ export function AttributeFilterBar({
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    // Never let Tab leave the search bar
+    if (e.key === "Tab") {
+      e.preventDefault();
+    }
+
     if (e.key === "Escape" && popoverOpen) {
       e.preventDefault();
       onSearchInputChange("");
       resetFlow();
     }
+
+    // Tab acts like Enter: select highlighted item when popover is open
+    if (e.key === "Tab" && popoverOpen) {
+      const selected = rootRef.current?.querySelector<HTMLElement>(
+        "[cmdk-item][aria-selected='true']",
+      );
+      selected?.click();
+      return;
+    }
+
+    // Submit text search when no popover is open
     if (
       (e.key === "Enter" || e.key === "Tab") &&
       step === "key" &&
       !popoverOpen &&
       searchInput.trim()
     ) {
-      e.preventDefault();
       onSearchSubmit(searchInput.trim());
     }
+
     if (
       e.key === "Backspace" &&
       searchInput === "" &&
@@ -155,6 +172,7 @@ export function AttributeFilterBar({
 
   return (
     <CmdkRoot
+      ref={rootRef}
       shouldFilter={false}
       className="relative overflow-visible bg-transparent"
     >
