@@ -26,7 +26,6 @@ func TestListAttributeKeys_Empty(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 	require.Empty(t, result.Keys)
 }
 
@@ -88,7 +87,6 @@ func TestListAttributeKeys_ReturnsSystemAndUserKeys(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.Enabled)
 
 	// Should contain system key (bare) and user keys (@-prefixed)
 	require.Contains(t, result.Keys, "http.route")

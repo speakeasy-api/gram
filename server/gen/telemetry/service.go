@@ -240,8 +240,6 @@ type ListAttributeKeysPayload struct {
 type ListAttributeKeysResult struct {
 	// Distinct attribute keys. User attributes are prefixed with @
 	Keys []string
-	// Whether telemetry is enabled for the organization
-	Enabled bool
 }
 
 // ListFilterOptionsPayload is the payload type of the telemetry service

@@ -243,8 +243,6 @@ type ListFilterOptionsResponseBody struct {
 type ListAttributeKeysResponseBody struct {
 	// Distinct attribute keys. User attributes are prefixed with @
 	Keys []string `form:"keys" json:"keys" xml:"keys"`
-	// Whether telemetry is enabled for the organization
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -2641,9 +2639,7 @@ func NewListFilterOptionsResponseBody(res *telemetry.ListFilterOptionsResult) *L
 // NewListAttributeKeysResponseBody builds the HTTP response body from the
 // result of the "listAttributeKeys" endpoint of the "telemetry" service.
 func NewListAttributeKeysResponseBody(res *telemetry.ListAttributeKeysResult) *ListAttributeKeysResponseBody {
-	body := &ListAttributeKeysResponseBody{
-		Enabled: res.Enabled,
-	}
+	body := &ListAttributeKeysResponseBody{}
 	if res.Keys != nil {
 		body.Keys = make([]string, len(res.Keys))
 		for i, val := range res.Keys {

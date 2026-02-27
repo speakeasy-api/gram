@@ -1062,7 +1062,6 @@ func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.List
 	}
 
 	return &telem_gen.ListAttributeKeysResult{
-		Keys:    keys,
-		Enabled: true,
+		Keys: keys,
 	}, nil
 }

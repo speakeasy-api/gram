@@ -243,8 +243,6 @@ type ListFilterOptionsResponseBody struct {
 type ListAttributeKeysResponseBody struct {
 	// Distinct attribute keys. User attributes are prefixed with @
 	Keys []string `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
-	// Whether telemetry is enabled for the organization
-	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -4146,9 +4144,7 @@ func NewListFilterOptionsGatewayError(body *ListFilterOptionsGatewayErrorRespons
 // NewListAttributeKeysResultOK builds a "telemetry" service
 // "listAttributeKeys" endpoint result from a HTTP "OK" response.
 func NewListAttributeKeysResultOK(body *ListAttributeKeysResponseBody) *telemetry.ListAttributeKeysResult {
-	v := &telemetry.ListAttributeKeysResult{
-		Enabled: *body.Enabled,
-	}
+	v := &telemetry.ListAttributeKeysResult{}
 	v.Keys = make([]string, len(body.Keys))
 	for i, val := range body.Keys {
 		v.Keys[i] = val
@@ -4511,9 +4507,6 @@ func ValidateListFilterOptionsResponseBody(body *ListFilterOptionsResponseBody) 
 func ValidateListAttributeKeysResponseBody(body *ListAttributeKeysResponseBody) (err error) {
 	if body.Keys == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("keys", "body"))
-	}
-	if body.Enabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	return
 }

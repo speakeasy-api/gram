@@ -998,7 +998,6 @@ var ListAttributeKeysResult = Type("ListAttributeKeysResult", func() {
 	Description("Result of listing distinct attribute keys")
 
 	Attribute("keys", ArrayOf(String), "Distinct attribute keys. User attributes are prefixed with @")
-	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
 
-	Required("keys", "enabled")
+	Required("keys")
 })
