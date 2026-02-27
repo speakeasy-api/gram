@@ -171,7 +171,6 @@ function ToolCallsTab({
   isLoading: boolean;
   error: Error | null;
 }) {
-
   if (isLoading) {
     return (
       <div className="p-6 text-center text-muted-foreground">
