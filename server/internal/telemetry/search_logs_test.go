@@ -1311,3 +1311,10 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 		params.serviceName, nil)
 	require.NoError(t, err)
 }
+
+// ptr returns a pointer to the given value
+//
+//go:fix inline
+func ptr[T any](v T) *T {
+	return new(v)
+}
