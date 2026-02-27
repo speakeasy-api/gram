@@ -5,39 +5,15 @@
 import { slackConfigureSlackApp } from "../funcs/slackConfigureSlackApp.js";
 import { slackCreateSlackApp } from "../funcs/slackCreateSlackApp.js";
 import { slackDeleteSlackApp } from "../funcs/slackDeleteSlackApp.js";
-import { slackDeleteSlackConnection } from "../funcs/slackDeleteSlackConnection.js";
 import { slackGetSlackApp } from "../funcs/slackGetSlackApp.js";
-import { slackGetSlackConnection } from "../funcs/slackGetSlackConnection.js";
 import { slackListSlackApps } from "../funcs/slackListSlackApps.js";
-import { slackSlackCallback } from "../funcs/slackSlackCallback.js";
-import { slackSlackLogin } from "../funcs/slackSlackLogin.js";
 import { slackUpdateSlackApp } from "../funcs/slackUpdateSlackApp.js";
-import { slackUpdateSlackConnection } from "../funcs/slackUpdateSlackConnection.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Slack extends ClientSDK {
-  /**
-   * login slack
-   *
-   * @remarks
-   * Proxies to auth login through speakeasy oidc.
-   */
-  async slackLogin(
-    request: operations.SlackLoginRequest,
-    security?: operations.SlackLoginSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<operations.SlackLoginResponse | undefined> {
-    return unwrapAsync(slackSlackLogin(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
   /**
    * configureSlackApp slack
    *
@@ -145,80 +121,6 @@ export class Slack extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.SlackAppResult> {
     return unwrapAsync(slackUpdateSlackApp(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * callback slack
-   *
-   * @remarks
-   * Handles the authentication callback.
-   */
-  async slackCallback(
-    request: operations.SlackCallbackRequest,
-    options?: RequestOptions,
-  ): Promise<operations.SlackCallbackResponse | undefined> {
-    return unwrapAsync(slackSlackCallback(
-      this,
-      request,
-      options,
-    ));
-  }
-
-  /**
-   * deleteSlackConnection slack
-   *
-   * @remarks
-   * delete slack connection for an organization and project.
-   */
-  async deleteSlackConnection(
-    request?: operations.DeleteSlackConnectionRequest | undefined,
-    security?: operations.DeleteSlackConnectionSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(slackDeleteSlackConnection(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * getSlackConnection slack
-   *
-   * @remarks
-   * get slack connection for an organization and project.
-   */
-  async getSlackConnection(
-    request?: operations.GetSlackConnectionRequest | undefined,
-    security?: operations.GetSlackConnectionSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.GetSlackConnectionResult> {
-    return unwrapAsync(slackGetSlackConnection(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * updateSlackConnection slack
-   *
-   * @remarks
-   * update slack connection for an organization and project.
-   */
-  async updateSlackConnection(
-    request: operations.UpdateSlackConnectionRequest,
-    security?: operations.UpdateSlackConnectionSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.GetSlackConnectionResult> {
-    return unwrapAsync(slackUpdateSlackConnection(
       this,
       request,
       security,
