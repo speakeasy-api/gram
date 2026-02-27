@@ -74,7 +74,10 @@ export default function SlackAppDetailPage() {
                 />
               )}
               {app.name}
-              <StatusBadge status={app.status} installCount={app.slackTeamId ? 1 : 0} />
+              <StatusBadge
+                status={app.status}
+                installCount={app.slackTeamId ? 1 : 0}
+              />
             </span>
           </Page.Section.Title>
           <Page.Section.MoreActions
@@ -245,7 +248,11 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allToolsets = useToolsets();
 
-  const inviteUrl = buildInviteUrl(app, app.slackClientId ?? "", window.location.href);
+  const inviteUrl = buildInviteUrl(
+    app,
+    app.slackClientId ?? "",
+    window.location.href,
+  );
 
   const handleCopyInviteLink = async () => {
     await navigator.clipboard.writeText(inviteUrl);
@@ -388,11 +395,20 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
               No installs yet. Share the invite link to get your first workspace
               connected.
             </Type>
-            <Button variant="secondary" size="sm" onClick={handleCopyInviteLink}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleCopyInviteLink}
+            >
               <Button.LeftIcon>
-                <Icon name={copied ? "check" : "copy"} className="w-3.5 h-3.5" />
+                <Icon
+                  name={copied ? "check" : "copy"}
+                  className="w-3.5 h-3.5"
+                />
               </Button.LeftIcon>
-              <Button.Text>{copied ? "Copied!" : "Copy Invite Link"}</Button.Text>
+              <Button.Text>
+                {copied ? "Copied!" : "Copy Invite Link"}
+              </Button.Text>
             </Button>
           </div>
         )}

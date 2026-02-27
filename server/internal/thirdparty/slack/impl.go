@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +43,7 @@ import (
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
+	toolset_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 type Configurations struct {
@@ -53,10 +55,12 @@ type Configurations struct {
 type Service struct {
 	tracer              trace.Tracer
 	logger              *slog.Logger
+	db                  *pgxpool.Pool
 	sessions            *sessions.Manager
 	enc                 *encryption.Client
 	repo                *repo.Queries
 	auth                *auth.Auth
+	toolsetRepo         *toolset_repo.Queries
 	cfg                 *Configurations
 	client              *slack_client.SlackClient
 	temporal            *temporal.Environment
@@ -71,10 +75,12 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 	return &Service{
 		tracer:              otel.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
 		logger:              logger,
+		db:                  db,
 		sessions:            sessions,
 		enc:                 enc,
 		repo:                repo.New(db),
 		auth:                auth.New(logger, db, sessions),
+		toolsetRepo:         toolset_repo.New(db),
 		cfg:                 &cfg,
 		client:              client,
 		temporal:            temporal,
@@ -145,9 +151,11 @@ func (s *Service) SlackAppOAuthCallback(w http.ResponseWriter, r *http.Request) 
 		return oops.E(oops.CodeUnexpected, err, "install slack app").Log(ctx, s.logger)
 	}
 
-	redirectURL := state
-	if redirectURL == "" {
-		redirectURL = s.cfg.SignInRedirectURL
+	redirectURL := s.cfg.SignInRedirectURL
+	if state != "" {
+		if parsed, err := url.Parse(state); err == nil && isTrustedRedirect(parsed, s.cfg.GramServerURL) {
+			redirectURL = state
+		}
 	}
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 	return nil
@@ -302,7 +310,7 @@ func (s *Service) CreateSlackApp(ctx context.Context, payload *gen.CreateSlackAp
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset ID").Log(ctx, s.logger)
 		}
-		ts, err := s.toolset.GetToolsetByID(ctx, parsed)
+		ts, err := s.toolsetRepo.GetToolsetByID(ctx, parsed)
 		if err != nil {
 			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
 		}
@@ -616,6 +624,19 @@ func (s *Service) DeleteSlackApp(ctx context.Context, payload *gen.DeleteSlackAp
 	}
 
 	return nil
+}
+
+// isTrustedRedirect checks that a redirect URL points to the same host as the
+// Gram server, or to localhost (for local development).
+func isTrustedRedirect(u *url.URL, gramServerURL string) bool {
+	host := u.Hostname()
+	if host == "localhost" || host == "127.0.0.1" {
+		return true
+	}
+	if server, err := url.Parse(gramServerURL); err == nil {
+		return u.Hostname() == server.Hostname()
+	}
+	return false
 }
 
 func (s *Service) oauthCallbackURL(appID uuid.UUID) string {

@@ -106,7 +106,10 @@ function SlackAppCard({ app }: { app: SlackAppResult }) {
       <div className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50">
         <div className="flex items-start justify-between mb-2">
           <Type className="font-semibold truncate">{app.name}</Type>
-          <StatusBadge status={app.status} installCount={app.slackTeamId ? 1 : 0} />
+          <StatusBadge
+            status={app.status}
+            installCount={app.slackTeamId ? 1 : 0}
+          />
         </div>
         <div className="space-y-1">
           <Type muted small>
