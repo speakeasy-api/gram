@@ -1220,22 +1220,16 @@ type ListAttributeKeysParams struct {
 }
 
 // ListAttributeKeys retrieves distinct attribute paths from telemetry logs for a project and time range.
-// Paths under the "app." namespace are translated to @-prefixed user attribute keys (e.g. "app.region" → "@region").
-// All other paths are returned as-is (system attribute keys).
+// Raw paths are returned as-is; the caller is responsible for any display transformation.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListAttributeKeys(ctx context.Context, arg ListAttributeKeysParams) ([]string, error) {
-	inner := sq.Select("arrayJoin(JSONAllPaths(attributes)) AS path").
+	sb := sq.Select("DISTINCT arrayJoin(JSONAllPaths(attributes)) AS path").
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd)
-
-	sb := sq.Select(
-		`DISTINCT IF(startsWith(path, 'app.'), concat('@', replaceOne(path, 'app.', '')), path) AS key`,
-	).
-		FromSelect(inner, "subq").
-		OrderBy("key")
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		OrderBy("path")
 
 	query, args, err := sb.ToSql()
 	if err != nil {

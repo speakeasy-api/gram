@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"math"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -1052,7 +1054,7 @@ func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.List
 		return nil, err
 	}
 
-	keys, err := s.chRepo.ListAttributeKeys(ctx, repo.ListAttributeKeysParams{
+	rawKeys, err := s.chRepo.ListAttributeKeys(ctx, repo.ListAttributeKeysParams{
 		GramProjectID: authCtx.ProjectID.String(),
 		TimeStart:     timeStart,
 		TimeEnd:       timeEnd,
@@ -1060,6 +1062,19 @@ func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.List
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing attribute keys")
 	}
+
+	// Translate raw attribute paths to display keys:
+	// "app.region" → "@region", everything else stays as-is.
+	keys := make([]string, 0, len(rawKeys))
+	for _, k := range rawKeys {
+		if after, ok := strings.CutPrefix(k, "app."); ok {
+			keys = append(keys, "@"+after)
+			continue
+		}
+
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 
 	return &telem_gen.ListAttributeKeysResult{
 		Keys: keys,
