@@ -523,3 +523,48 @@ func BuildListFilterOptionsPayload(telemetryListFilterOptionsBody string, teleme
 
 	return v, nil
 }
+
+// BuildListAttributeKeysPayload builds the payload for the telemetry
+// listAttributeKeys endpoint from CLI flags.
+func BuildListAttributeKeysPayload(telemetryListAttributeKeysBody string, telemetryListAttributeKeysApikeyToken string, telemetryListAttributeKeysSessionToken string, telemetryListAttributeKeysProjectSlugInput string) (*telemetry.ListAttributeKeysPayload, error) {
+	var err error
+	var body ListAttributeKeysRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryListAttributeKeysBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryListAttributeKeysApikeyToken != "" {
+			apikeyToken = &telemetryListAttributeKeysApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryListAttributeKeysSessionToken != "" {
+			sessionToken = &telemetryListAttributeKeysSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryListAttributeKeysProjectSlugInput != "" {
+			projectSlugInput = &telemetryListAttributeKeysProjectSlugInput
+		}
+	}
+	v := &telemetry.ListAttributeKeysPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

@@ -277,6 +277,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listFilterOptions")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListFilterOptions", "type": "query"}`)
 	})
+
+	Method("listAttributeKeys", func() {
+		Description("List distinct attribute keys available for filtering")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListAttributeKeysPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListAttributeKeysResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.listAttributeKeys")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAttributeKeys")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAttributeKeys")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAttributeKeys", "type": "query"}`)
+	})
 })
 
 var TelemetryFilter = Type("TelemetryFilter", func() {
@@ -946,4 +975,29 @@ var FilterOptionType = Type("FilterOption", func() {
 	Attribute("count", Int64, "Number of events for this option")
 
 	Required("id", "label", "count")
+})
+
+// Attribute keys types
+
+var ListAttributeKeysPayload = Type("ListAttributeKeysPayload", func() {
+	Description("Payload for listing distinct attribute keys available for filtering")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+
+	Required("from", "to")
+})
+
+var ListAttributeKeysResult = Type("ListAttributeKeysResult", func() {
+	Description("Result of listing distinct attribute keys")
+
+	Attribute("keys", ArrayOf(String), "Distinct attribute keys. User attributes are prefixed with @")
+
+	Required("keys")
 })
