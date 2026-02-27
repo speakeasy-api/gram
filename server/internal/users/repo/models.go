@@ -15,6 +15,7 @@ type User struct {
 	PhotoUrl    pgtype.Text
 	Admin       bool
 	LastLogin   pgtype.Timestamptz
+	WorkosID    pgtype.Text
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }
