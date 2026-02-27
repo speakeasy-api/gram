@@ -85,6 +85,24 @@ DELETE FROM slack_app_toolsets
 WHERE slack_app_id = @slack_app_id
   AND toolset_id = @toolset_id;
 
+-- name: InstallSlackApp :one
+UPDATE slack_apps
+SET
+    slack_bot_token  = @slack_bot_token,
+    slack_team_id    = @slack_team_id,
+    slack_team_name  = @slack_team_name,
+    slack_bot_user_id = @slack_bot_user_id,
+    updated_at       = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: GetSlackAppByID :one
+SELECT *
+FROM slack_apps
+WHERE id = @id
+  AND deleted IS FALSE;
+
 -- name: ListSlackAppToolsets :many
 SELECT sat.*
 FROM slack_app_toolsets sat

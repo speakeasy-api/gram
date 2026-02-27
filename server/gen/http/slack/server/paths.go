@@ -7,35 +7,6 @@
 
 package server
 
-import (
-	"fmt"
-)
-
-// CallbackSlackPath returns the URL path to the slack service callback HTTP endpoint.
-func CallbackSlackPath() string {
-	return "/rpc/slack.callback"
-}
-
-// LoginSlackPath returns the URL path to the slack service login HTTP endpoint.
-func LoginSlackPath(projectSlug string) string {
-	return fmt.Sprintf("/rpc/%v/slack.login", projectSlug)
-}
-
-// GetSlackConnectionSlackPath returns the URL path to the slack service getSlackConnection HTTP endpoint.
-func GetSlackConnectionSlackPath() string {
-	return "/rpc/slack.getConnection"
-}
-
-// UpdateSlackConnectionSlackPath returns the URL path to the slack service updateSlackConnection HTTP endpoint.
-func UpdateSlackConnectionSlackPath() string {
-	return "/rpc/slack.updateConnection"
-}
-
-// DeleteSlackConnectionSlackPath returns the URL path to the slack service deleteSlackConnection HTTP endpoint.
-func DeleteSlackConnectionSlackPath() string {
-	return "/rpc/slack.deleteConnection"
-}
-
 // CreateSlackAppSlackPath returns the URL path to the slack service createSlackApp HTTP endpoint.
 func CreateSlackAppSlackPath() string {
 	return "/rpc/slack-apps.create"

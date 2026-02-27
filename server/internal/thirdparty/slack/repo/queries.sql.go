@@ -192,6 +192,39 @@ func (q *Queries) GetSlackApp(ctx context.Context, arg GetSlackAppParams) (Slack
 	return i, err
 }
 
+const getSlackAppByID = `-- name: GetSlackAppByID :one
+SELECT created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
+FROM slack_apps
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+func (q *Queries) GetSlackAppByID(ctx context.Context, id uuid.UUID) (SlackApp, error) {
+	row := q.db.QueryRow(ctx, getSlackAppByID, id)
+	var i SlackApp
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SlackTeamName,
+		&i.SlackBotUserID,
+		&i.SlackClientSecret,
+		&i.SlackSigningSecret,
+		&i.SlackTeamID,
+		&i.OrganizationID,
+		&i.SlackBotToken,
+		&i.SlackClientID,
+		&i.SystemPrompt,
+		&i.Name,
+		&i.Status,
+		&i.IconAssetID,
+		&i.ProjectID,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getSlackAppByTeamID = `-- name: GetSlackAppByTeamID :one
 SELECT created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
 FROM slack_apps
@@ -201,6 +234,59 @@ WHERE slack_team_id = $1
 
 func (q *Queries) GetSlackAppByTeamID(ctx context.Context, slackTeamID pgtype.Text) (SlackApp, error) {
 	row := q.db.QueryRow(ctx, getSlackAppByTeamID, slackTeamID)
+	var i SlackApp
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SlackTeamName,
+		&i.SlackBotUserID,
+		&i.SlackClientSecret,
+		&i.SlackSigningSecret,
+		&i.SlackTeamID,
+		&i.OrganizationID,
+		&i.SlackBotToken,
+		&i.SlackClientID,
+		&i.SystemPrompt,
+		&i.Name,
+		&i.Status,
+		&i.IconAssetID,
+		&i.ProjectID,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const installSlackApp = `-- name: InstallSlackApp :one
+UPDATE slack_apps
+SET
+    slack_bot_token  = $1,
+    slack_team_id    = $2,
+    slack_team_name  = $3,
+    slack_bot_user_id = $4,
+    updated_at       = clock_timestamp()
+WHERE id = $5
+  AND deleted IS FALSE
+RETURNING created_at, deleted_at, updated_at, slack_team_name, slack_bot_user_id, slack_client_secret, slack_signing_secret, slack_team_id, organization_id, slack_bot_token, slack_client_id, system_prompt, name, status, icon_asset_id, project_id, id, deleted
+`
+
+type InstallSlackAppParams struct {
+	SlackBotToken  pgtype.Text
+	SlackTeamID    pgtype.Text
+	SlackTeamName  pgtype.Text
+	SlackBotUserID pgtype.Text
+	ID             uuid.UUID
+}
+
+func (q *Queries) InstallSlackApp(ctx context.Context, arg InstallSlackAppParams) (SlackApp, error) {
+	row := q.db.QueryRow(ctx, installSlackApp,
+		arg.SlackBotToken,
+		arg.SlackTeamID,
+		arg.SlackTeamName,
+		arg.SlackBotUserID,
+		arg.ID,
+	)
 	var i SlackApp
 	err := row.Scan(
 		&i.CreatedAt,
