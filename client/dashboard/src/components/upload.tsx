@@ -13,7 +13,14 @@ export function useAssetImageUploadHandler(
   const { fetch } = useFetcher();
 
   return async (file: File) => {
-    console.log("[upload] file:", file.name, "type:", file.type, "size:", file.size);
+    console.log(
+      "[upload] file:",
+      file.name,
+      "type:",
+      file.type,
+      "size:",
+      file.size,
+    );
 
     const res = await fetch("/rpc/assets.uploadImage", {
       method: "POST",

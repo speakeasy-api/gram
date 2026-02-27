@@ -19,7 +19,13 @@ import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { Outlet } from "react-router";
 import React, { useState } from "react";
 
-export function StatusBadge({ status, installCount }: { status: string; installCount?: number }) {
+export function StatusBadge({
+  status,
+  installCount,
+}: {
+  status: string;
+  installCount?: number;
+}) {
   if (status === "active") {
     const n = installCount ?? 0;
     return (
@@ -106,7 +112,8 @@ function SlackAppCard({ app }: { app: SlackAppResult }) {
           </Type>
           <div className="flex items-center justify-between">
             <Type muted small>
-              {app.toolsetIds.length} toolset{app.toolsetIds.length !== 1 ? "s" : ""}
+              {app.toolsetIds.length} toolset
+              {app.toolsetIds.length !== 1 ? "s" : ""}
             </Type>
             <Type muted small>
               <HumanizeDateTime date={new Date(app.createdAt)} />
@@ -196,9 +203,7 @@ function CreateSlackAppDialog({
               placeholder="My Slack App"
               maxLength={36}
               validate={(v) =>
-                v.length > 36
-                  ? "Name must be 36 characters or fewer"
-                  : true
+                v.length > 36 ? "Name must be 36 characters or fewer" : true
               }
             />
           </div>
@@ -253,9 +258,7 @@ function CreateSlackAppDialog({
                             : "border-muted-foreground/40",
                         )}
                       >
-                        {selected && (
-                          <Icon name="check" className="h-3 w-3" />
-                        )}
+                        {selected && <Icon name="check" className="h-3 w-3" />}
                       </div>
                       <div className="min-w-0">
                         <Type className="font-medium truncate block">
@@ -326,11 +329,7 @@ export default function SlackAppsIndex() {
             </Page.Section.CTA>
             <Page.Section.Body>
               {isLoading ? (
-                <Stack
-                  align="center"
-                  justify="center"
-                  className="py-16"
-                >
+                <Stack align="center" justify="center" className="py-16">
                   <Icon
                     name="loader-circle"
                     className="w-6 h-6 animate-spin text-muted-foreground"

@@ -104,8 +104,8 @@ export default function SlackAppDetailPage() {
             <Dialog.Header>
               <Dialog.Title>Delete Slack App</Dialog.Title>
               <Dialog.Description>
-                Are you sure you want to delete <strong>{app.name}</strong>? This
-                action cannot be undone.
+                Are you sure you want to delete <strong>{app.name}</strong>?
+                This action cannot be undone.
               </Dialog.Description>
             </Dialog.Header>
             <Dialog.Footer>
@@ -307,20 +307,11 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
           </Button.LeftIcon>
           <Button.Text>Manage on Slack</Button.Text>
         </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleCopyInviteLink}
-        >
+        <Button variant="secondary" size="sm" onClick={handleCopyInviteLink}>
           <Button.LeftIcon>
-            <Icon
-              name={copied ? "check" : "copy"}
-              className="w-3.5 h-3.5"
-            />
+            <Icon name={copied ? "check" : "copy"} className="w-3.5 h-3.5" />
           </Button.LeftIcon>
-          <Button.Text>
-            {copied ? "Copied!" : "Copy Invite Link"}
-          </Button.Text>
+          <Button.Text>{copied ? "Copied!" : "Copy Invite Link"}</Button.Text>
         </Button>
       </Stack>
 
@@ -374,23 +365,16 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
           Installations
         </Type>
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 px-6">
-          <Icon
-            name="slack"
-            className="w-6 h-6 text-muted-foreground mb-3"
-          />
+          <Icon name="slack" className="w-6 h-6 text-muted-foreground mb-3" />
           <Type muted small className="text-center mb-3">
-            No installs yet. Share the invite link to get your first workspace connected.
+            No installs yet. Share the invite link to get your first workspace
+            connected.
           </Type>
           <Button variant="secondary" size="sm" onClick={handleCopyInviteLink}>
             <Button.LeftIcon>
-              <Icon
-                name={copied ? "check" : "copy"}
-                className="w-3.5 h-3.5"
-              />
+              <Icon name={copied ? "check" : "copy"} className="w-3.5 h-3.5" />
             </Button.LeftIcon>
-            <Button.Text>
-              {copied ? "Copied!" : "Copy Invite Link"}
-            </Button.Text>
+            <Button.Text>{copied ? "Copied!" : "Copy Invite Link"}</Button.Text>
           </Button>
         </div>
       </Stack>
@@ -422,10 +406,7 @@ function RightPanel() {
         Chat Logs
       </Type>
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-warning/40 bg-warning/5 py-16 px-6">
-        <Icon
-          name="triangle-alert"
-          className="w-6 h-6 text-warning mb-3"
-        />
+        <Icon name="triangle-alert" className="w-6 h-6 text-warning mb-3" />
         <Type small className="text-warning text-center">
           I need to be wired up before we remove the feature flag
         </Type>

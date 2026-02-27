@@ -28,8 +28,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const isSlackAppsEnabled =
-    telemetry.isFeatureEnabled("slack-apps") ?? false;
+  const isSlackAppsEnabled = telemetry.isFeatureEnabled("slack-apps") ?? false;
 
   const teamUrl =
     organization?.userWorkspaceSlugs &&
