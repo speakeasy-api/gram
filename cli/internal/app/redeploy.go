@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -31,10 +30,6 @@ If no deployment ID is provided, redeploys the latest deployment.`,
 			&cli.StringFlag{
 				Name:  "id",
 				Usage: "The deployment ID to redeploy (if not provided, redeploys the latest deployment)",
-			},
-			&cli.BoolFlag{
-				Name:  "latest",
-				Usage: "Explicitly redeploy the latest deployment (this is the default behavior)",
 			},
 			&cli.BoolFlag{
 				Name:  "skip-poll",
@@ -96,12 +91,7 @@ If no deployment ID is provided, redeploys the latest deployment.`,
 
 			// Output result
 			if jsonOutput {
-				jsonData, err := json.MarshalIndent(wf.Deployment, "", "  ")
-				if err != nil {
-					return fmt.Errorf("failed to marshal deployment to JSON: %w", err)
-				}
-				fmt.Println(string(jsonData))
-				return nil
+				return printDeploymentStatusJSON(wf.Deployment)
 			}
 
 			logsURL := fmt.Sprintf("%s://%s/%s/%s/deployments/%s",
