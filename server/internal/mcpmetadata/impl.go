@@ -114,6 +114,8 @@ type hostedPageData struct {
 	DocsText          string
 	Instructions      string
 	IsPublic          bool
+	WebMCPEnabled     bool
+	WebMCPTools       template.JS
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -237,6 +239,8 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		installationOverrideURL = conv.ToPGText(*payload.InstallationOverrideURL)
 	}
 
+	webmcpEnabled := conv.PtrValOr(payload.WebmcpEnabled, false)
+
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
 		ToolsetID:                 toolset.ID,
 		ProjectID:                 *authCtx.ProjectID,
@@ -246,6 +250,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		Instructions:              instructions,
 		DefaultEnvironmentID:      defaultEnvironmentID,
 		InstallationOverrideUrl:   installationOverrideURL,
+		WebmcpEnabled:             webmcpEnabled,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
@@ -526,6 +531,7 @@ func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 		Instructions:              conv.FromPGText[string](record.Instructions),
 		DefaultEnvironmentID:      conv.FromNullableUUID(record.DefaultEnvironmentID),
 		InstallationOverrideURL:   conv.FromPGText[string](record.InstallationOverrideUrl),
+		WebmcpEnabled:             &record.WebmcpEnabled,
 		EnvironmentConfigs:        environmentConfigs,
 	}
 	return metadata, nil
@@ -759,6 +765,22 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "failed to sanitize cursor install URL").Log(ctx, s.logger)
 	}
 
+	// Determine if WebMCP is enabled and prepare tool definitions for the template
+	webmcpEnabled := false
+	var webmcpToolsJS template.JS
+	if metadataErr == nil && metadataRecord.WebmcpEnabled {
+		webmcpEnabled = true
+		exportTools := s.buildExportTools(ctx, toolsetDetails)
+		toolsJSON, jsonErr := json.Marshal(exportTools)
+		if jsonErr != nil {
+			s.logger.WarnContext(ctx, "marshal WebMCP tools", attr.SlogError(jsonErr))
+		} else {
+			// Safe: json.Marshal escapes <, >, & as unicode escapes (\u003c etc.)
+			// so the serialized JSON cannot contain a literal </script> sequence.
+			webmcpToolsJS = template.JS(toolsJSON) //nolint:gosec
+		}
+	}
+
 	data := hostedPageData{
 		jsonSnippetData:   configSnippetData,
 		MCPConfig:         configSnippet.String(),
@@ -771,6 +793,8 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		DocsText:          docsText,
 		Instructions:      instructions,
 		IsPublic:          toolset.McpIsPublic,
+		WebMCPEnabled:     webmcpEnabled,
+		WebMCPTools:       webmcpToolsJS,
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Funcs(templatefuncs.FuncMap()).Parse(hostedPageTmplData)

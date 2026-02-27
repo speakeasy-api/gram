@@ -43,6 +43,10 @@ export type SetMcpMetadataRequestBody = {
    * The slug of the toolset associated with this install page metadata
    */
   toolsetSlug: string;
+  /**
+   * Whether to enable WebMCP tool registration on the install page for browsing agent discovery
+   */
+  webmcpEnabled?: boolean | undefined;
 };
 
 /** @internal */
@@ -55,6 +59,7 @@ export type SetMcpMetadataRequestBody$Outbound = {
   instructions?: string | undefined;
   logo_asset_id?: string | undefined;
   toolset_slug: string;
+  webmcp_enabled?: boolean | undefined;
 };
 
 /** @internal */
@@ -72,6 +77,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
   instructions: z.string().optional(),
   logoAssetId: z.string().optional(),
   toolsetSlug: z.string(),
+  webmcpEnabled: z.boolean().optional(),
 }).transform((v) => {
   return remap$(v, {
     defaultEnvironmentId: "default_environment_id",
@@ -81,6 +87,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
     installationOverrideUrl: "installation_override_url",
     logoAssetId: "logo_asset_id",
     toolsetSlug: "toolset_slug",
+    webmcpEnabled: "webmcp_enabled",
   });
 });
 

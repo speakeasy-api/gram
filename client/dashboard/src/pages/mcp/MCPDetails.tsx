@@ -37,6 +37,7 @@ import { Confirm, ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
+  invalidateGetMcpMetadata,
   invalidateTemplate,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
@@ -44,6 +45,7 @@ import {
   useGetMcpMetadata,
   useLatestDeployment,
   useListEnvironments,
+  useMcpMetadataSetMutation,
   useRemoveOAuthServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
@@ -806,6 +808,29 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
 
+  // WebMCP metadata
+  const { data: mcpMetadata } = useGetMcpMetadata(
+    { toolsetSlug: toolset.slug },
+    undefined,
+    { enabled: !!toolset.slug, throwOnError: false },
+  );
+  const webmcpEnabled = mcpMetadata?.metadata?.webmcpEnabled ?? false;
+  const setMcpMetadataMutation = useMcpMetadataSetMutation({
+    onSuccess: () => {
+      toast.success("WebMCP settings saved");
+    },
+    onError: (error) => {
+      toast.error(
+        `Failed to save WebMCP settings: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    },
+    onSettled: () => {
+      invalidateGetMcpMetadata(queryClient, [
+        { toolsetSlug: toolset.slug },
+      ]);
+    },
+  });
+
   // Export mutation
   const exportMutation = useExportMcpMetadataMutation();
 
@@ -1190,11 +1215,46 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
       <PageSection
         heading="Tool Selection Mode"
-        featureType="experimental"
         description="Change how this server's tools will be presented to the LLM. Can have drastic effects on context management, especially for larger toolsets. Use with care."
       >
         <ToolSelectionModeToggle
           toolSelectionMode={toolset.toolSelectionMode ?? "static"}
+        />
+      </PageSection>
+
+      <PageSection
+        heading="WebMCP"
+        featureType="experimental"
+        description="Register tools with the browser's WebMCP API on the install page, making them discoverable by browsing agents."
+      >
+        <BigToggle
+          options={[
+            {
+              value: "enabled",
+              icon: "globe",
+              label: "Enabled",
+              description:
+                "The install page injects a script that registers tools with navigator.modelContext for browsing agent discovery.",
+            },
+            {
+              value: "disabled",
+              icon: "eye-off",
+              label: "Disabled",
+              description:
+                "Tools are not registered with the browser's WebMCP API.",
+            },
+          ]}
+          selectedValue={webmcpEnabled ? "enabled" : "disabled"}
+          onSelect={(value) => {
+            setMcpMetadataMutation.mutate({
+              request: {
+                setMcpMetadataRequestBody: {
+                  toolsetSlug: toolset.slug,
+                  webmcpEnabled: value === "enabled",
+                },
+              },
+            });
+          }}
         />
       </PageSection>
 

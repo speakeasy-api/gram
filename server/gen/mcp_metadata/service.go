@@ -91,6 +91,9 @@ type SetMcpMetadataPayload struct {
 	DefaultEnvironmentID *string
 	// URL to redirect to instead of showing the default installation page
 	InstallationOverrideURL *string
+	// Whether to enable WebMCP tool registration on the install page for browsing
+	// agent discovery
+	WebmcpEnabled *bool
 	// The list of environment variables to configure for this MCP
 	EnvironmentConfigs []*types.McpEnvironmentConfigInput
 	ApikeyToken        *string

@@ -9,6 +9,7 @@ SELECT id,
        header_display_names,
        default_environment_id,
        installation_override_url,
+       webmcp_enabled,
        created_at,
        updated_at
 FROM mcp_metadata
@@ -25,8 +26,9 @@ INSERT INTO mcp_metadata (
     logo_id,
     instructions,
     default_environment_id,
-    installation_override_url
-) VALUES (@toolset_id, @project_id, @external_documentation_url, @external_documentation_text, @logo_id, @instructions, @default_environment_id, @installation_override_url)
+    installation_override_url,
+    webmcp_enabled
+) VALUES (@toolset_id, @project_id, @external_documentation_url, @external_documentation_text, @logo_id, @instructions, @default_environment_id, @installation_override_url, @webmcp_enabled)
 ON CONFLICT (toolset_id)
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
@@ -35,6 +37,7 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               instructions = EXCLUDED.instructions,
               default_environment_id = EXCLUDED.default_environment_id,
               installation_override_url = EXCLUDED.installation_override_url,
+              webmcp_enabled = EXCLUDED.webmcp_enabled,
               updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
@@ -46,6 +49,7 @@ RETURNING id,
           header_display_names,
           default_environment_id,
           installation_override_url,
+          webmcp_enabled,
           created_at,
           updated_at;
 
