@@ -9,13 +9,13 @@ import type { ActiveAttributeFilter } from "./attribute-filter-types";
 
 const PER_PAGE = 100; // fetch more logs to improve grouping coverage
 
-function getNestedAttr(attrs: any, path: string): unknown {
+function getNestedAttr(attrs: Record<string, unknown>, path: string): unknown {
   if (!attrs || typeof attrs !== "object") return undefined;
   const parts = path.split(".");
-  let cur: any = attrs;
+  let cur: unknown = attrs;
   for (const part of parts) {
     if (cur == null || typeof cur !== "object") return undefined;
-    cur = cur[part];
+    cur = (cur as Record<string, unknown>)[part];
   }
   return cur;
 }
