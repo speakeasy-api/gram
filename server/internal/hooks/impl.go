@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -84,7 +85,7 @@ func (s *Service) PreToolUse(ctx context.Context, payload *gen.PreToolUsePayload
 	attrs[attr.TraceIDKey] = traceID
 	attrs[attr.SpanIDKey] = spanID
 
-	s.writeToClickHouse(ctx, payload.ToolName, attrs)
+	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, payload.ToolName, attrs)
 
 	return &gen.HookResult{OK: true}, nil
 }
@@ -116,7 +117,7 @@ func (s *Service) PostToolUse(ctx context.Context, payload *gen.PostToolUsePaylo
 	attrs[attr.TraceIDKey] = traceID
 	attrs[attr.SpanIDKey] = spanID
 
-	s.writeToClickHouse(ctx, payload.ToolName, attrs)
+	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, payload.ToolName, attrs)
 
 	return &gen.HookResult{OK: true}, nil
 }
@@ -148,7 +149,7 @@ func (s *Service) PostToolUseFailure(ctx context.Context, payload *gen.PostToolU
 	attrs[attr.TraceIDKey] = traceID
 	attrs[attr.SpanIDKey] = spanID
 
-	s.writeToClickHouse(ctx, payload.ToolName, attrs)
+	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, payload.ToolName, attrs)
 
 	return &gen.HookResult{OK: true}, nil
 }
@@ -191,20 +192,7 @@ func (s *Service) buildBaseAttributes(toolName string, toolInput any) map[attr.K
 }
 
 // writeToClickHouse writes the hook event to ClickHouse telemetry
-func (s *Service) writeToClickHouse(ctx context.Context, toolName string, attrs map[attr.Key]any) {
-	// Extract auth context to get project and organization IDs
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-
-	var projectID string
-	var organizationID string
-
-	if ok && authCtx != nil {
-		if authCtx.ProjectID != nil {
-			projectID = authCtx.ProjectID.String()
-		}
-		organizationID = authCtx.ActiveOrganizationID
-	}
-
+func (s *Service) writeToClickHouse(projectID *uuid.UUID, organizationID string, toolName string, attrs map[attr.Key]any) {
 	// Make sure we don't discard any tool name information
 	if actualToolName, ok := attrs[attr.ToolNameKey]; ok {
 		tn, ok := actualToolName.(string)
@@ -217,7 +205,7 @@ func (s *Service) writeToClickHouse(ctx context.Context, toolName string, attrs 
 	toolInfo := telemetry.ToolInfo{
 		Name:           toolName,
 		OrganizationID: organizationID,
-		ProjectID:      projectID,
+		ProjectID:      projectID.String(),
 		ID:             "",
 		URN:            "", // These tools have no real URN
 		DeploymentID:   "",
