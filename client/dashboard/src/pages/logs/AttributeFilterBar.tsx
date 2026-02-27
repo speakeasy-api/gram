@@ -64,7 +64,6 @@ export function AttributeFilterBar({
   const [filterValue, setFilterValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
 
   // Filter attribute keys by typed text (only relevant in key step)
   const filteredKeys =
@@ -143,7 +142,8 @@ export function AttributeFilterBar({
 
     // Tab acts like Enter: select highlighted item when popover is open
     if (e.key === "Tab" && popoverOpen) {
-      const selected = rootRef.current?.querySelector<HTMLElement>(
+      // PopoverContent renders in a portal, so query the document
+      const selected = document.querySelector<HTMLElement>(
         "[cmdk-item][aria-selected='true']",
       );
       selected?.click();
@@ -172,7 +172,6 @@ export function AttributeFilterBar({
 
   return (
     <CmdkRoot
-      ref={rootRef}
       shouldFilter={false}
       className="relative overflow-visible bg-transparent"
     >
