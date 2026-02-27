@@ -549,13 +549,14 @@ type OrganizationMetadatum struct {
 }
 
 type OrganizationUserRelationship struct {
-	ID             int64
-	OrganizationID string
-	UserID         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                 int64
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
 }
 
 type Package struct {
@@ -786,6 +787,7 @@ type User struct {
 	PhotoUrl    pgtype.Text
 	Admin       bool
 	LastLogin   pgtype.Timestamptz
+	WorkosID    pgtype.Text
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }
