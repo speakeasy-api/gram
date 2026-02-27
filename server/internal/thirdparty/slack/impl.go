@@ -429,7 +429,31 @@ func (s *Service) CreateSlackApp(ctx context.Context, payload *gen.CreateSlackAp
 		iconAssetID = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
 
-	app, err := s.repo.CreateSlackApp(ctx, repo.CreateSlackAppParams{
+	// Validate toolset ownership before creating anything
+	toolsetIDs := make([]string, 0, len(payload.ToolsetIds))
+	for _, tsID := range payload.ToolsetIds {
+		parsed, err := uuid.Parse(tsID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset ID").Log(ctx, s.logger)
+		}
+		ts, err := s.toolset.GetToolsetByID(ctx, parsed)
+		if err != nil {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		}
+		if ts.ProjectID != *authCtx.ProjectID {
+			return nil, oops.E(oops.CodeNotFound, nil, "toolset not found").Log(ctx, s.logger)
+		}
+		toolsetIDs = append(toolsetIDs, tsID)
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	txRepo := s.repo.WithTx(tx)
+
+	app, err := txRepo.CreateSlackApp(ctx, repo.CreateSlackAppParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		Name:           payload.Name,
@@ -440,21 +464,19 @@ func (s *Service) CreateSlackApp(ctx context.Context, payload *gen.CreateSlackAp
 		return nil, oops.E(oops.CodeConflict, err, "create slack app").Log(ctx, s.logger)
 	}
 
-	// Attach toolsets
-	toolsetIDs := make([]string, 0, len(payload.ToolsetIds))
 	for _, tsID := range payload.ToolsetIds {
-		parsed, err := uuid.Parse(tsID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset ID").Log(ctx, s.logger)
-		}
-		_, err = s.repo.AddSlackAppToolset(ctx, repo.AddSlackAppToolsetParams{
+		parsed, _ := uuid.Parse(tsID) // already validated above
+		_, err = txRepo.AddSlackAppToolset(ctx, repo.AddSlackAppToolsetParams{
 			SlackAppID: app.ID,
 			ToolsetID:  parsed,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "attach toolset to slack app").Log(ctx, s.logger)
 		}
-		toolsetIDs = append(toolsetIDs, tsID)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit slack app creation").Log(ctx, s.logger)
 	}
 
 	redirectURL := s.oauthCallbackURL(app.ID)
