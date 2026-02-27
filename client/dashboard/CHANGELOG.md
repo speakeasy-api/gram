@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.29.4
+
+### Patch Changes
+
+- Updated dependencies [f364cc0]
+- Updated dependencies [e2c00cb]
+  - @gram/client@0.28.0
+
 ## 0.29.3
 
 ### Patch Changes
