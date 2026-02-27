@@ -1,5 +1,37 @@
 #!/usr/bin/env bash
+
 #MISE description="Generate SDK from OpenAPI spec"
 
+#USAGE flag "-c --check" help="Check if the Gram-Internal OpenAPI output is up-to-date"
+
 set -e
-exec speakeasy run
+
+generate() {
+  speakeasy run
+}
+
+check_inputs() {
+  workflow=".speakeasy/workflow.yaml"
+  source_key=".sources.Gram-Internal"
+  schema=$(yq "${source_key}.inputs[0].location" "$workflow")
+  output=$(yq "${source_key}.output" "$workflow")
+  readarray -t overlays < <(yq -r "${source_key}.overlays[].location" "$workflow")
+
+  args=(--schema "$schema")
+  for overlay in "${overlays[@]}"; do
+    args+=(--overlay "$overlay")
+  done
+  result=$(speakeasy overlay apply "${args[@]}")
+
+  if ! diff -q <(echo "$result") "$output" >/dev/null 2>&1; then
+    echo "Gram-Internal OpenAPI spec is out of date. Run 'mise gen:sdk' to regenerate." >&2
+    exit 1
+  fi
+  echo "Gram-Internal OpenAPI spec is up to date."
+}
+
+if [[ "${usage_check:-}" == "true" ]]; then
+  check_inputs
+else
+  generate
+fi
