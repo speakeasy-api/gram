@@ -1,5 +1,11 @@
 # function-runners
 
+## 0.3.2
+
+### Patch Changes
+
+- ee55fa5: Add diagnostic hints for node.js module loading failures in functions runner
+
 ## 0.3.1
 
 ### Patch Changes
