@@ -174,10 +174,26 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		return reader.Close()
 	})
 
+	s.logger.InfoContext(ctx, "upload image request",
+		slog.String("content_type", payload.ContentType),
+		slog.Int64("content_length", payload.ContentLength),
+	)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.WarnContext(ctx, "upload image: unauthorized",
+			slog.Bool("auth_ctx_ok", ok),
+			slog.Bool("auth_ctx_nil", authCtx == nil),
+		)
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
+	s.logger.InfoContext(ctx, "upload image: downloading pending asset",
+		slog.String("project_id", authCtx.ProjectID.String()),
+		slog.Int64("max_length", MaxFileSizeImage),
+		slog.Int64("content_length", payload.ContentLength),
+		slog.String("content_type", payload.ContentType),
+	)
 
 	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
 		maxLength:     MaxFileSizeImage,
@@ -185,11 +201,16 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		contentType:   payload.ContentType,
 	})
 	if err != nil {
+		s.logger.ErrorContext(ctx, "upload image: downloadPendingAsset failed", attr.SlogError(err))
 		return nil, err
 	}
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return result.cleanup()
 	})
+
+	s.logger.InfoContext(ctx, "upload image: pending asset downloaded",
+		slog.String("hash", result.hash),
+	)
 
 	existing, err := s.findExistingAsset(ctx, &findAssetParams{
 		projectID: *authCtx.ProjectID,
@@ -199,13 +220,25 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		return nil, err
 	}
 	if existing != nil {
+		s.logger.InfoContext(ctx, "upload image: returning existing asset",
+			slog.String("existing_id", existing.ID),
+		)
 		return &gen.UploadImageResult{Asset: existing}, nil
 	}
 
 	inContentType, _, err := mime.ParseMediaType(payload.ContentType)
 	if err != nil {
+		s.logger.ErrorContext(ctx, "upload image: failed to parse media type",
+			slog.String("raw_content_type", payload.ContentType),
+			attr.SlogError(err),
+		)
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse content type: %w", err), "error parsing content type")
 	}
+
+	s.logger.InfoContext(ctx, "upload image: parsed media type",
+		slog.String("raw_content_type", payload.ContentType),
+		slog.String("parsed_content_type", inContentType),
+	)
 
 	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
 		contentLength: payload.ContentLength,
@@ -213,8 +246,18 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		allowedTypes:  []string{"image/png", "image/jpeg", "image/gif", "image/webp"},
 	})
 	if err != nil {
+		s.logger.ErrorContext(ctx, "upload image: sniffMimeType rejected",
+			slog.String("parsed_content_type", inContentType),
+			slog.Int64("content_length", payload.ContentLength),
+			attr.SlogError(err),
+		)
 		return nil, err
 	}
+
+	s.logger.InfoContext(ctx, "upload image: mime type accepted",
+		slog.String("mime_type", mimeType),
+		slog.String("ext", ext),
+	)
 
 	filename := fmt.Sprintf("image-%s%s", result.hash, ext)
 	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
@@ -440,17 +483,29 @@ type downloadPendingAssetResult struct {
 }
 
 func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, params *downloadPendingAssetParams) (*downloadPendingAssetResult, error) {
+	s.logger.InfoContext(ctx, "downloadPendingAsset: start",
+		slog.Int64("content_length", params.contentLength),
+		slog.Int64("max_length", params.maxLength),
+		slog.String("content_type", params.contentType),
+	)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.WarnContext(ctx, "downloadPendingAsset: unauthorized")
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	if params.contentLength == 0 {
+		s.logger.WarnContext(ctx, "downloadPendingAsset: content length is 0")
 		return nil, oops.E(oops.CodeBadRequest, nil, "no content")
 	}
 
 	if params.contentLength > params.maxLength {
-		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 8 MiB limit")
+		s.logger.WarnContext(ctx, "downloadPendingAsset: content length exceeds limit",
+			slog.Int64("content_length", params.contentLength),
+			slog.Int64("max_length", params.maxLength),
+		)
+		return nil, oops.E(oops.CodeBadRequest, nil, "content length %d exceeds %d MiB limit", params.contentLength, params.maxLength/mib)
 	}
 
 	f, err := os.CreateTemp("", "asset-*")
@@ -490,9 +545,15 @@ func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, pa
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seek to start: offset not 0: %d", off), "error reading file")
 	}
 
+	hash := hex.EncodeToString(h.Sum(nil))
+	s.logger.InfoContext(ctx, "downloadPendingAsset: complete",
+		slog.String("hash", hash),
+		slog.String("temp_file", f.Name()),
+	)
+
 	return &downloadPendingAssetResult{
 		file:    f,
-		hash:    hex.EncodeToString(h.Sum(nil)),
+		hash:    hash,
 		cleanup: cleanup,
 	}, nil
 }
