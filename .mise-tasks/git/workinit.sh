@@ -28,6 +28,7 @@ copy_from_main=(
   ./.vscode
   ./.cursor
   ./.claude
+  ./.mise-tasks
 )
 
 for item in "${copy_from_main[@]}"; do
