@@ -252,7 +252,9 @@ export default function Sources() {
             ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"
             : "OpenAPI documents and third-party MCP servers providing tools for your project"}
         </Page.Section.Description>
-        <DeploymentsButton deploymentId={deployment?.id} />
+        <Page.Section.CTA>
+          <DeploymentsButton deploymentId={deployment?.id} />
+        </Page.Section.CTA>
         <Page.Section.CTA>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -421,29 +423,25 @@ function DeploymentsButton({ deploymentId }: { deploymentId?: string }) {
 
   if (failedDeployment.hasFailures && deploymentId) {
     return (
-      <Page.Section.CTA>
-        <a href={routes.deployments.deployment.href(deploymentId)}>
-          <Button variant="secondary" className="text-destructive">
-            <Button.LeftIcon>
-              <CircleAlert className="w-4 h-4" />
-            </Button.LeftIcon>
-            <Button.Text>Deployment Errors</Button.Text>
-          </Button>
-        </a>
-      </Page.Section.CTA>
+      <a href={routes.deployments.deployment.href(deploymentId)}>
+        <Button variant="secondary" className="text-destructive">
+          <Button.LeftIcon>
+            <CircleAlert className="w-4 h-4" />
+          </Button.LeftIcon>
+          <Button.Text>Deployment Errors</Button.Text>
+        </Button>
+      </a>
     );
   }
 
   return (
-    <Page.Section.CTA>
-      <a href={routes.deployments.href()}>
-        <Button variant="secondary">
-          <Button.LeftIcon>
-            <Icon name="history" />
-          </Button.LeftIcon>
-          <Button.Text>Deployments</Button.Text>
-        </Button>
-      </a>
-    </Page.Section.CTA>
+    <a href={routes.deployments.href()}>
+      <Button variant="secondary">
+        <Button.LeftIcon>
+          <Icon name="history" />
+        </Button.LeftIcon>
+        <Button.Text>Deployments</Button.Text>
+      </Button>
+    </a>
   );
 }
