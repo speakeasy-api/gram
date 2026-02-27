@@ -816,6 +816,14 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   );
   const webmcpEnabled = mcpMetadata?.metadata?.webmcpEnabled ?? false;
   const setMcpMetadataMutation = useMcpMetadataSetMutation({
+    onSuccess: () => {
+      toast.success("WebMCP settings saved");
+    },
+    onError: (error) => {
+      toast.error(
+        `Failed to save WebMCP settings: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    },
     onSettled: () => {
       invalidateGetMcpMetadata(queryClient, [
         { toolsetSlug: toolset.slug },
