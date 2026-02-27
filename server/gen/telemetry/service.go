@@ -36,6 +36,8 @@ type Service interface {
 	// List available filter options (API keys or users) for the observability
 	// overview
 	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
+	// List distinct attribute keys available for filtering
+	ListAttributeKeys(context.Context, *ListAttributeKeysPayload) (res *ListAttributeKeysResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -60,7 +62,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions"}
+var MethodNames = [10]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys"}
 
 // Filter on a log attribute by path.
 type AttributeFilter struct {
@@ -217,6 +219,27 @@ type GetUserMetricsSummaryPayload struct {
 type GetUserMetricsSummaryResult struct {
 	// Aggregated metrics for the user
 	Metrics *ProjectSummary
+	// Whether telemetry is enabled for the organization
+	Enabled bool
+}
+
+// ListAttributeKeysPayload is the payload type of the telemetry service
+// listAttributeKeys method.
+type ListAttributeKeysPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
+// ListAttributeKeysResult is the result type of the telemetry service
+// listAttributeKeys method.
+type ListAttributeKeysResult struct {
+	// Distinct attribute keys. User attributes are prefixed with @
+	Keys []string
 	// Whether telemetry is enabled for the organization
 	Enabled bool
 }
