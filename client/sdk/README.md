@@ -263,6 +263,7 @@ run();
 * [getObservabilityOverview](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 * [getProjectMetricsSummary](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 * [getUserMetricsSummary](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
+* [listAttributeKeys](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 * [listFilterOptions](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 * [searchChats](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
@@ -411,6 +412,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`telemetryGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`telemetryGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`telemetryGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
+- [`telemetryListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`telemetryListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 - [`telemetrySearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
@@ -522,6 +524,7 @@ To learn about this feature and how to get started, check
 - [`useListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
+- [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
 - [`useListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
