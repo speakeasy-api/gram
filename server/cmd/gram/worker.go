@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,7 +15,10 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
+	"github.com/speakeasy-api/gram/server/internal/agentworkflows/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -26,13 +30,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 )
@@ -422,27 +429,17 @@ func newWorkerCommand() *cli.Command {
 
 			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
 
-			chatClient := chat.NewAgenticChatClient(
+			completionsClient := openrouter.NewUnifiedClient(
 				logger,
-				tracerProvider,
-				meterProvider,
-				db,
-				env,
-				encryptionClient,
-				cache.NewRedisCacheAdapter(redisClient),
-				guardianPolicy,
-				functionsOrchestrator,
 				openRouter,
-				temporalEnv,
-				telemetryService,
-				assetStorage,
-				billingTracker,
-				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
+				chat.NewChatMessageCaptureStrategy(logger, db, assetStorage),
+				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
+				telemetryService,
 			)
 
-			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, chatClient)
+			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
@@ -451,6 +448,66 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
+
+			serverURL, err := url.Parse(c.String("server-url"))
+			if err != nil {
+				return fmt.Errorf("failed to parse server url: %w", err)
+			}
+
+			pylonClient, err := pylon.NewPylon(logger, c.String("pylon-verification-secret"))
+			if err != nil {
+				return fmt.Errorf("failed to create pylon client: %w", err)
+			}
+
+			localEnvPath := c.String("unsafe-local-env-path")
+			var sessionManager *sessions.Manager
+			if localEnvPath == "" {
+				sessionManager = sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo)
+			} else {
+				logger.WarnContext(ctx, "enabling unsafe session store", attr.SlogFilePath(localEnvPath))
+				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath, billingRepo)
+				if err != nil {
+					return fmt.Errorf("failed to create unsafe session manager: %w", err)
+				}
+
+				sessionManager = s
+			}
+
+			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
+
+			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
+
+			mcpService := mcp.NewService(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				sessionManager,
+				chatSessionsManager,
+				env,
+				posthogClient,
+				serverURL,
+				encryptionClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				guardianPolicy,
+				functionsOrchestrator,
+				oauthService,
+				billingTracker,
+				billingRepo,
+				telemetryService,
+				productFeatures,
+				ragService,
+				temporalEnv,
+			)
+
+			chatClient := chat.NewAgenticChatClient(
+				logger,
+				db,
+				env,
+				cache.NewRedisCacheAdapter(redisClient),
+				completionsClient,
+				mcpclient.NewInternalMCPClient(mcpService),
+			)
 
 			// Create agents service for the worker
 			agentsService := agents.NewService(
