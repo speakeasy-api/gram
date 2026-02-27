@@ -1,15 +1,10 @@
 package chat
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"mime"
-	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
@@ -30,9 +25,9 @@ import (
 // without creating import cycles with the mcp package.
 type MCPClient interface {
 	// ListTools lists all tools in a toolset via MCP protocol
-	ListTools(ctx context.Context, projectID uuid.UUID, toolset, environment string) ([]MCPTool, error)
+	ListTools(ctx context.Context, projectID uuid.UUID, toolset, environment string, isAuthenticated bool) ([]MCPTool, error)
 	// CallTool executes a tool via MCP protocol
-	CallTool(ctx context.Context, projectID uuid.UUID, toolset, environment, toolName string, args json.RawMessage) (*MCPToolResult, error)
+	CallTool(ctx context.Context, projectID uuid.UUID, toolset, environment, toolName string, args json.RawMessage, isAuthenticated bool) (*MCPToolResult, error)
 }
 
 // MCPTool represents a tool definition from MCP
@@ -269,7 +264,7 @@ func (c *Client) LoadToolsetTools(
 	envSlug := string(*toolset.DefaultEnvironmentSlug)
 
 	// Use MCP protocol to list tools
-	mcpTools, err := c.toolsetLoader.ListTools(ctx, projectID, toolsetSlug, envSlug)
+	mcpTools, err := c.toolsetLoader.ListTools(ctx, projectID, toolsetSlug, envSlug, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tools via MCP: %w", err)
 	}
@@ -286,7 +281,7 @@ func (c *Client) LoadToolsetTools(
 		// Create executor that calls tool via MCP
 		executor := func(ctx context.Context, rawArgs string) (string, error) {
 			// Call tool via MCP protocol
-			result, err := c.toolsetLoader.CallTool(ctx, projID, tslug, eslug, toolName, json.RawMessage(rawArgs))
+			result, err := c.toolsetLoader.CallTool(ctx, projID, tslug, eslug, toolName, json.RawMessage(rawArgs), true)
 			if err != nil {
 				return "", fmt.Errorf("MCP tool call error: %w", err)
 			}
@@ -342,62 +337,4 @@ func formatMCPResult(result *MCPToolResult) string {
 		return "" // Empty successful response
 	}
 	return strings.Join(parts, "\n")
-}
-
-type toolCallResponseWriter struct {
-	statusCode int
-	headers    http.Header
-	body       *bytes.Buffer
-}
-
-func (w *toolCallResponseWriter) Header() http.Header {
-	return w.headers
-}
-
-func (w *toolCallResponseWriter) WriteHeader(statusCode int) {
-	w.statusCode = statusCode
-}
-
-func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
-	n, err := w.body.Write(p)
-	if err != nil {
-		return n, fmt.Errorf("write response body error: %w", err)
-	}
-
-	return n, nil
-}
-
-var jsonRE = regexp.MustCompile(`\bjson\b`)
-var yamlRE = regexp.MustCompile(`\byaml\b`)
-
-type FormatResult struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-	Data string `json:"data,omitempty"`
-}
-
-func formatResult(rw toolCallResponseWriter) (FormatResult, error) {
-	body := rw.body.Bytes()
-	if len(body) == 0 {
-		return FormatResult{"", "", ""}, nil
-	}
-
-	ct := rw.headers.Get("content-type")
-	mt, _, err := mime.ParseMediaType(ct)
-	if err != nil {
-		return FormatResult{"", "", ""}, fmt.Errorf("failed to parse content type %q: %w", ct, err)
-	}
-
-	switch {
-	case strings.HasPrefix(mt, "text/"), jsonRE.MatchString(mt), yamlRE.MatchString(mt):
-		return FormatResult{Type: "text", Text: string(body), Data: ""}, nil
-	case strings.HasPrefix(mt, "image/"):
-		encoded := base64.StdEncoding.EncodeToString(body)
-		return FormatResult{Type: "image", Data: encoded, Text: ""}, nil
-	case strings.HasPrefix(mt, "audio/"):
-		encoded := base64.StdEncoding.EncodeToString(body)
-		return FormatResult{Type: "audio", Data: encoded, Text: ""}, nil
-	default:
-		return FormatResult{"", "", ""}, fmt.Errorf("unsupported content type %q", ct)
-	}
 }

@@ -242,6 +242,35 @@ func newWorkerCommand() *cli.Command {
 			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
 		},
+		&cli.StringFlag{
+			Name:     "pylon-verification-secret",
+			Usage:    "The identity verification secret for pylon",
+			EnvVars:  []string{"PYLON_VERIFICATION_SECRET"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:    "unsafe-local-env-path",
+			Usage:   "The path to the local environment file used for session auth in local development",
+			EnvVars: []string{"GRAM_UNSAFE_LOCAL_ENV_PATH"},
+		},
+		&cli.StringFlag{
+			Name:     "speakeasy-server-address",
+			Usage:    "Speakeasy server address",
+			EnvVars:  []string{"SPEAKEASY_SERVER_ADDRESS"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "speakeasy-secret-key",
+			Usage:    "Speakeasy secret key",
+			EnvVars:  []string{"SPEAKEASY_SECRET_KEY"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "jwt-signing-key",
+			Usage:    "Key for JWT signing",
+			Required: true,
+			EnvVars:  []string{"GRAM_JWT_SIGNING_KEY"},
+		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",

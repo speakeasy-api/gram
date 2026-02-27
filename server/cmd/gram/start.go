@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -766,17 +765,6 @@ func newStartCommand() *cli.Command {
 					}
 				})
 			}
-
-			_ = uuid.MustParse("0199c537-5b9a-7d78-a26a-7ded0db74922")
-			// toolsetSlug := "hubspot"
-			// response, err := chatClient.AgentChat(ctx, "921b56f1-040b-4dfe-ae58-4b723df2500e", uuid.MustParse("0199c537-5b9a-7d78-a26a-7ded0db74922"), "List 3 deals", chat.AgentChatOptions{
-			// 	ToolsetSlug: &toolsetSlug,
-			// })
-			// if err != nil {
-			// 	logger.ErrorContext(ctx, "failed to chat", attr.SlogError(err))
-			// }
-			// logger.InfoContext(ctx, "chat response: "+response)
-			// os.Exit(0)
 
 			group.Go(func() {
 				<-sigctx.Done()

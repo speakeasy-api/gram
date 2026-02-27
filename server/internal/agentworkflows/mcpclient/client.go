@@ -3,6 +3,7 @@ package mcpclient
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -28,6 +29,7 @@ func (l *InternalMCPClient) ListTools(
 	projectID uuid.UUID,
 	toolset string,
 	environment string,
+	isAuthenticated bool,
 ) ([]chat.MCPTool, error) {
 	inputs := &mcp.McpInputs{
 		ProjectID:        projectID,
@@ -38,7 +40,7 @@ func (l *InternalMCPClient) ListTools(
 		Mode:             mcp.ToolModeStatic,
 		McpEnvVariables:  nil,
 		OauthTokenInputs: nil,
-		Authenticated:    false,
+		Authenticated:    isAuthenticated,
 		UserID:           "",
 		ExternalUserID:   "",
 		APIKeyID:         "",
@@ -46,7 +48,7 @@ func (l *InternalMCPClient) ListTools(
 
 	result, err := l.mcpService.HandleToolsList(ctx, inputs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("handle tools list: %w", err)
 	}
 
 	// Convert to chat.MCPTool
@@ -70,6 +72,7 @@ func (l *InternalMCPClient) CallTool(
 	environment string,
 	toolName string,
 	args json.RawMessage,
+	isAuthenticated bool,
 ) (*chat.MCPToolResult, error) {
 	inputs := &mcp.McpInputs{
 		ProjectID:        projectID,
@@ -80,7 +83,7 @@ func (l *InternalMCPClient) CallTool(
 		Mode:             mcp.ToolModeStatic,
 		McpEnvVariables:  nil,
 		OauthTokenInputs: nil,
-		Authenticated:    false,
+		Authenticated:    isAuthenticated,
 		UserID:           "",
 		ExternalUserID:   "",
 		APIKeyID:         "",
@@ -88,7 +91,7 @@ func (l *InternalMCPClient) CallTool(
 
 	result, err := l.mcpService.HandleToolsCall(ctx, inputs, toolName, args)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("handle tools call: %w", err)
 	}
 
 	// Convert to chat.MCPToolResult
