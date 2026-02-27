@@ -14623,9 +14623,6 @@ components:
     ListAttributeKeysResult:
       type: object
       properties:
-        enabled:
-          type: boolean
-          description: Whether telemetry is enabled for the organization
         keys:
           type: array
           items:
@@ -14634,7 +14631,6 @@ components:
       description: Result of listing distinct attribute keys
       required:
         - keys
-        - enabled
     ListCatalogResponseBody:
       type: object
       properties:

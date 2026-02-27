@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 9a15eec970ed8422a4cc0bbf30775260
+  docChecksum: abe78fffeab91402b0a96cc2530719ee
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.8
-  configChecksum: 33bffd4a10cfce3bbb50ccbf02cf601c
+  releaseVersion: 0.27.9
+  configChecksum: 94739b67ae728967be58ccb3e1b5a30a
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -267,7 +267,7 @@ trackedFiles:
   docs/models/components/listassetsresult.md:
     last_write_checksum: sha1:ed48c9ec80037eedfd05a11eddbf357966ee0699
   docs/models/components/listattributekeysresult.md:
-    last_write_checksum: sha1:b285befa3464ee6eb1ee8ea56a3a80bc41535882
+    last_write_checksum: sha1:b124b1b58ce146a7b4b1acaef8baa0d4e991f5dc
   docs/models/components/listcatalogresponsebody.md:
     last_write_checksum: sha1:c72b7daebcaec401a59c137e89ab02f377a52910
   docs/models/components/listchatsresult.md:
@@ -1374,11 +1374,11 @@ trackedFiles:
     pristine_git_object: 8a33dbb4b9cb9cefaa43e10ddf535cbcd13c9e72
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:fb68d0cb4779ff24fea3e91c8c4a71355f034088
+    last_write_checksum: sha1:1567b59452ee5cc6446f4c46305b6c9ae2b967c0
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:fdd5397755249852f52eeb6b6f1c64babaf382db
+    last_write_checksum: sha1:f6cf669178d75c9dcdce3ed87336a6d0bcaf94a8
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1840,7 +1840,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:bf3ca6b8e4bf09712cc16d138e460a07f9302eb0
+    last_write_checksum: sha1:513e4f91d9e085fd785c6b1862a3360cce7b60e5
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2227,7 +2227,7 @@ trackedFiles:
     last_write_checksum: sha1:c0d1220e876f08b4676051d73a64b1cc6f84b73b
     pristine_git_object: 6427a6e34fb58ac89627c6dd02c4e7dc4a25e463
   src/models/components/listattributekeysresult.ts:
-    last_write_checksum: sha1:6c0874a73460b27fab05f63e79a67e52996e205b
+    last_write_checksum: sha1:59df93f739be5d7582a62d1ee8be3a433ff39d20
   src/models/components/listcatalogresponsebody.ts:
     id: 1efbc782ad1d
     last_write_checksum: sha1:d3c6eaefbcf0214b6837313d976125ba9add7a85
@@ -5218,7 +5218,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"enabled": true, "keys": ["<value 1>", "<value 2>"]}
+          application/json: {"keys": ["<value 1>", "<value 2>"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

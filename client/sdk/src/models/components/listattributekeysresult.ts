@@ -12,10 +12,6 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type ListAttributeKeysResult = {
   /**
-   * Whether telemetry is enabled for the organization
-   */
-  enabled: boolean;
-  /**
    * Distinct attribute keys. User attributes are prefixed with @
    */
   keys: Array<string>;
@@ -27,7 +23,6 @@ export const ListAttributeKeysResult$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  enabled: z.boolean(),
   keys: z.array(z.string()),
 });
 
