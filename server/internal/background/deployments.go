@@ -35,7 +35,7 @@ func ExecuteProcessDeploymentWorkflow(ctx context.Context, env *tenv.Environment
 		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		WorkflowRunTimeout:       time.Minute * 15,
+		WorkflowRunTimeout:       15 * time.Minute,
 	}, ProcessDeploymentWorkflow, params)
 }
 
@@ -47,10 +47,10 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 	logger := workflow.GetLogger(ctx)
 
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 2 * time.Minute,
+		StartToCloseTimeout: 10 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			MaximumInterval:    time.Minute,
+			InitialInterval:    30 * time.Second,
+			MaximumInterval:    2 * time.Minute,
 			BackoffCoefficient: 2,
 			MaximumAttempts:    5,
 		},
@@ -141,23 +141,14 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 			)
 		}
 
-		deployCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			StartToCloseTimeout: 2 * time.Minute,
-			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval:    time.Minute,
-				MaximumInterval:    2 * time.Minute,
-				BackoffCoefficient: 2,
-				MaximumAttempts:    3,
-			},
-		})
 		err = workflow.ExecuteActivity(
-			deployCtx,
+			ctx,
 			a.DeployFunctionRunners,
 			activities.DeployFunctionRunnersRequest{
 				ProjectID:    params.ProjectID,
 				DeploymentID: params.DeploymentID,
 			},
-		).Get(deployCtx, nil)
+		).Get(ctx, nil)
 		if err != nil {
 			finalStatus = "failed"
 			logger.Error(
