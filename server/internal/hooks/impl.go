@@ -65,7 +65,8 @@ func (s *Service) PreToolUse(ctx context.Context, payload *gen.PreToolUsePayload
 	// Extract auth context for project and organization IDs
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.WarnContext(ctx, "PreToolUse called without valid auth context")
+		s.logger.ErrorContext(ctx, "PreToolUse called without valid auth context")
+		return &gen.HookResult{OK: true}, nil // TODO different failure modes
 	}
 
 	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK PreToolUse: %s", payload.ToolName),
@@ -94,7 +95,8 @@ func (s *Service) PostToolUse(ctx context.Context, payload *gen.PostToolUsePaylo
 	// Extract auth context for project and organization IDs
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.WarnContext(ctx, "PostToolUse called without valid auth context")
+		s.logger.ErrorContext(ctx, "PostToolUse called without valid auth context")
+		return &gen.HookResult{OK: true}, nil // TODO different failure modes
 	}
 
 	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK PostToolUse: %s", payload.ToolName),
@@ -126,7 +128,8 @@ func (s *Service) PostToolUseFailure(ctx context.Context, payload *gen.PostToolU
 	// Extract auth context for project and organization IDs
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.WarnContext(ctx, "PostToolUseFailure called without valid auth context")
+		s.logger.ErrorContext(ctx, "PostToolUseFailure called without valid auth context")
+		return &gen.HookResult{OK: true}, nil // TODO different failure modes
 	}
 
 	s.logger.WarnContext(ctx, fmt.Sprintf("🪝 HOOK PostToolUseFailure: %s", payload.ToolName),
