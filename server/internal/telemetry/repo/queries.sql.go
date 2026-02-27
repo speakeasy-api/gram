@@ -1217,3 +1217,49 @@ func (q *Queries) ListFilterOptions(ctx context.Context, arg ListFilterOptionsPa
 
 	return options, nil
 }
+
+// ListAttributeKeysParams defines the parameters for listing distinct attribute keys.
+type ListAttributeKeysParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+}
+
+// ListAttributeKeys retrieves distinct attribute paths from telemetry logs for a project and time range.
+// Raw paths are returned as-is; the caller is responsible for any display transformation.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListAttributeKeys(ctx context.Context, arg ListAttributeKeysParams) ([]string, error) {
+	sb := sq.Select("DISTINCT arrayJoin(JSONAllPaths(attributes)) AS path").
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		OrderBy("path")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list attribute keys query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []string
+	for rows.Next() {
+		var key string
+		if err = rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("scanning attribute key: %w", err)
+		}
+		keys = append(keys, key)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return keys, nil
+}

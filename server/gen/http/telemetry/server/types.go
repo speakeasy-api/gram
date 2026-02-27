@@ -130,6 +130,15 @@ type ListFilterOptionsRequestBody struct {
 	FilterType *string `form:"filter_type,omitempty" json:"filter_type,omitempty" xml:"filter_type,omitempty"`
 }
 
+// ListAttributeKeysRequestBody is the type of the "telemetry" service
+// "listAttributeKeys" endpoint HTTP request body.
+type ListAttributeKeysRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
 // SearchLogsResponseBody is the type of the "telemetry" service "searchLogs"
 // endpoint HTTP response body.
 type SearchLogsResponseBody struct {
@@ -227,6 +236,13 @@ type ListFilterOptionsResponseBody struct {
 	Options []*FilterOptionResponseBody `form:"options" json:"options" xml:"options"`
 	// Whether telemetry is enabled for the organization
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+}
+
+// ListAttributeKeysResponseBody is the type of the "telemetry" service
+// "listAttributeKeys" endpoint HTTP response body.
+type ListAttributeKeysResponseBody struct {
+	// Distinct attribute keys. User attributes are prefixed with @
+	Keys []string `form:"keys" json:"keys" xml:"keys"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -1898,6 +1914,193 @@ type ListFilterOptionsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListAttributeKeysUnauthorizedResponseBody is the type of the "telemetry"
+// service "listAttributeKeys" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListAttributeKeysUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAttributeKeysForbiddenResponseBody is the type of the "telemetry"
+// service "listAttributeKeys" endpoint HTTP response body for the "forbidden"
+// error.
+type ListAttributeKeysForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAttributeKeysBadRequestResponseBody is the type of the "telemetry"
+// service "listAttributeKeys" endpoint HTTP response body for the
+// "bad_request" error.
+type ListAttributeKeysBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAttributeKeysNotFoundResponseBody is the type of the "telemetry" service
+// "listAttributeKeys" endpoint HTTP response body for the "not_found" error.
+type ListAttributeKeysNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAttributeKeysConflictResponseBody is the type of the "telemetry" service
+// "listAttributeKeys" endpoint HTTP response body for the "conflict" error.
+type ListAttributeKeysConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAttributeKeysUnsupportedMediaResponseBody is the type of the "telemetry"
+// service "listAttributeKeys" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListAttributeKeysUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAttributeKeysInvalidResponseBody is the type of the "telemetry" service
+// "listAttributeKeys" endpoint HTTP response body for the "invalid" error.
+type ListAttributeKeysInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAttributeKeysInvariantViolationResponseBody is the type of the
+// "telemetry" service "listAttributeKeys" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListAttributeKeysInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAttributeKeysUnexpectedResponseBody is the type of the "telemetry"
+// service "listAttributeKeys" endpoint HTTP response body for the "unexpected"
+// error.
+type ListAttributeKeysUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAttributeKeysGatewayErrorResponseBody is the type of the "telemetry"
+// service "listAttributeKeys" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListAttributeKeysGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TelemetryLogRecordResponseBody is used to define fields on response body
 // types.
 type TelemetryLogRecordResponseBody struct {
@@ -2435,6 +2638,21 @@ func NewListFilterOptionsResponseBody(res *telemetry.ListFilterOptionsResult) *L
 		}
 	} else {
 		body.Options = []*FilterOptionResponseBody{}
+	}
+	return body
+}
+
+// NewListAttributeKeysResponseBody builds the HTTP response body from the
+// result of the "listAttributeKeys" endpoint of the "telemetry" service.
+func NewListAttributeKeysResponseBody(res *telemetry.ListAttributeKeysResult) *ListAttributeKeysResponseBody {
+	body := &ListAttributeKeysResponseBody{}
+	if res.Keys != nil {
+		body.Keys = make([]string, len(res.Keys))
+		for i, val := range res.Keys {
+			body.Keys[i] = val
+		}
+	} else {
+		body.Keys = []string{}
 	}
 	return body
 }
@@ -3736,6 +3954,152 @@ func NewListFilterOptionsGatewayErrorResponseBody(res *goa.ServiceError) *ListFi
 	return body
 }
 
+// NewListAttributeKeysUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listAttributeKeys" endpoint of the "telemetry"
+// service.
+func NewListAttributeKeysUnauthorizedResponseBody(res *goa.ServiceError) *ListAttributeKeysUnauthorizedResponseBody {
+	body := &ListAttributeKeysUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAttributeKeysForbiddenResponseBody builds the HTTP response body from
+// the result of the "listAttributeKeys" endpoint of the "telemetry" service.
+func NewListAttributeKeysForbiddenResponseBody(res *goa.ServiceError) *ListAttributeKeysForbiddenResponseBody {
+	body := &ListAttributeKeysForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAttributeKeysBadRequestResponseBody builds the HTTP response body
+// from the result of the "listAttributeKeys" endpoint of the "telemetry"
+// service.
+func NewListAttributeKeysBadRequestResponseBody(res *goa.ServiceError) *ListAttributeKeysBadRequestResponseBody {
+	body := &ListAttributeKeysBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAttributeKeysNotFoundResponseBody builds the HTTP response body from
+// the result of the "listAttributeKeys" endpoint of the "telemetry" service.
+func NewListAttributeKeysNotFoundResponseBody(res *goa.ServiceError) *ListAttributeKeysNotFoundResponseBody {
+	body := &ListAttributeKeysNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAttributeKeysConflictResponseBody builds the HTTP response body from
+// the result of the "listAttributeKeys" endpoint of the "telemetry" service.
+func NewListAttributeKeysConflictResponseBody(res *goa.ServiceError) *ListAttributeKeysConflictResponseBody {
+	body := &ListAttributeKeysConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAttributeKeysUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listAttributeKeys" endpoint of the "telemetry"
+// service.
+func NewListAttributeKeysUnsupportedMediaResponseBody(res *goa.ServiceError) *ListAttributeKeysUnsupportedMediaResponseBody {
+	body := &ListAttributeKeysUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAttributeKeysInvalidResponseBody builds the HTTP response body from
+// the result of the "listAttributeKeys" endpoint of the "telemetry" service.
+func NewListAttributeKeysInvalidResponseBody(res *goa.ServiceError) *ListAttributeKeysInvalidResponseBody {
+	body := &ListAttributeKeysInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAttributeKeysInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listAttributeKeys" endpoint of the "telemetry"
+// service.
+func NewListAttributeKeysInvariantViolationResponseBody(res *goa.ServiceError) *ListAttributeKeysInvariantViolationResponseBody {
+	body := &ListAttributeKeysInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAttributeKeysUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listAttributeKeys" endpoint of the "telemetry"
+// service.
+func NewListAttributeKeysUnexpectedResponseBody(res *goa.ServiceError) *ListAttributeKeysUnexpectedResponseBody {
+	body := &ListAttributeKeysUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAttributeKeysGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listAttributeKeys" endpoint of the "telemetry"
+// service.
+func NewListAttributeKeysGatewayErrorResponseBody(res *goa.ServiceError) *ListAttributeKeysGatewayErrorResponseBody {
+	body := &ListAttributeKeysGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSearchLogsPayload builds a telemetry service searchLogs endpoint payload.
 func NewSearchLogsPayload(body *SearchLogsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.SearchLogsPayload {
 	v := &telemetry.SearchLogsPayload{
@@ -3929,6 +4293,20 @@ func NewListFilterOptionsPayload(body *ListFilterOptionsRequestBody, apikeyToken
 		From:       *body.From,
 		To:         *body.To,
 		FilterType: *body.FilterType,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListAttributeKeysPayload builds a telemetry service listAttributeKeys
+// endpoint payload.
+func NewListAttributeKeysPayload(body *ListAttributeKeysRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.ListAttributeKeysPayload {
+	v := &telemetry.ListAttributeKeysPayload{
+		From: *body.From,
+		To:   *body.To,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -4147,6 +4525,24 @@ func ValidateListFilterOptionsRequestBody(body *ListFilterOptionsRequestBody) (e
 		if !(*body.FilterType == "api_key" || *body.FilterType == "user") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.filter_type", *body.FilterType, []any{"api_key", "user"}))
 		}
+	}
+	return
+}
+
+// ValidateListAttributeKeysRequestBody runs the validations defined on
+// ListAttributeKeysRequestBody
+func ValidateListAttributeKeysRequestBody(body *ListAttributeKeysRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	return
 }

@@ -60,6 +60,7 @@ export * from "./latestDeployment.js";
 export * from "./listAllowedOrigins.js";
 export * from "./listAPIKeys.js";
 export * from "./listAssets.js";
+export * from "./listAttributeKeys.js";
 export * from "./listChats.js";
 export * from "./listChatsWithResolutions.js";
 export * from "./listDeployments.js";

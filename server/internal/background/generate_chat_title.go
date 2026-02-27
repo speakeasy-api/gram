@@ -14,8 +14,9 @@ import (
 )
 
 type GenerateChatTitleParams struct {
-	ChatID string
-	OrgID  string
+	ChatID    string
+	OrgID     string
+	ProjectID string
 }
 
 // ChatTitleGenerator schedules async chat title generation.
@@ -28,10 +29,11 @@ type TemporalChatTitleGenerator struct {
 	TemporalEnv *tenv.Environment
 }
 
-func (t *TemporalChatTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID string) error {
+func (t *TemporalChatTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error {
 	_, err := ExecuteGenerateChatTitleWorkflow(ctx, t.TemporalEnv, GenerateChatTitleParams{
-		ChatID: chatID,
-		OrgID:  orgID,
+		ChatID:    chatID,
+		OrgID:     orgID,
+		ProjectID: projectID,
 	})
 	return err
 }
@@ -62,8 +64,9 @@ func GenerateChatTitleWorkflow(ctx workflow.Context, params GenerateChatTitlePar
 		ctx,
 		a.GenerateChatTitle,
 		activities.GenerateChatTitleArgs{
-			ChatID: params.ChatID,
-			OrgID:  params.OrgID,
+			ChatID:    params.ChatID,
+			OrgID:     params.OrgID,
+			ProjectID: params.ProjectID,
 		},
 	).Get(ctx, nil)
 	if err != nil {

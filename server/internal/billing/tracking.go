@@ -20,6 +20,7 @@ const (
 	ModelUsageSourceAgents     ModelUsageSource = "agents"
 	ModelUsageSourceElements   ModelUsageSource = "elements"
 	ModelUsageSourceGram       ModelUsageSource = "gram"
+	ModelUsageSourceSlack      ModelUsageSource = "slack"
 )
 
 type ModelUsageEvent struct {

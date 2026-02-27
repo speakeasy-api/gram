@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -20,10 +21,10 @@ import (
 type GenerateChatTitle struct {
 	logger     *slog.Logger
 	repo       *repo.Queries
-	chatClient *openrouter.ChatClient
+	chatClient openrouter.CompletionClient
 }
 
-func NewGenerateChatTitle(logger *slog.Logger, db *pgxpool.Pool, chatClient *openrouter.ChatClient) *GenerateChatTitle {
+func NewGenerateChatTitle(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient) *GenerateChatTitle {
 	return &GenerateChatTitle{
 		logger:     logger,
 		repo:       repo.New(db),
@@ -32,8 +33,9 @@ func NewGenerateChatTitle(logger *slog.Logger, db *pgxpool.Pool, chatClient *ope
 }
 
 type GenerateChatTitleArgs struct {
-	ChatID string
-	OrgID  string
+	ChatID    string
+	OrgID     string
+	ProjectID string
 }
 
 const defaultChatTitle = "New Chat"
@@ -68,7 +70,7 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return nil // Not enough context yet — will retry on next completion.
 	}
 
-	title := g.generateTitle(ctx, args.OrgID, contextStr)
+	title := g.generateTitle(ctx, args.OrgID, chat.ProjectID.String(), contextStr)
 	if title == defaultChatTitle {
 		return nil
 	}
@@ -102,7 +104,7 @@ func buildTitleContext(messages []repo.ChatMessage) string {
 	return strings.TrimSpace(b.String())
 }
 
-func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, conversationContext string) string {
+func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID string, conversationContext string) string {
 	if g.chatClient == nil {
 		return defaultChatTitle
 	}
@@ -110,22 +112,37 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, conversati
 	titleCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	msg, err := g.chatClient.GetCompletion(titleCtx, orgID,
-		"Generate a concise title (3-6 words) for this conversation based on the messages below. "+
-			"Return ONLY the title text, no quotes or explanation. "+
-			"IMPORTANT: The title must directly relate to the content of the messages. "+
-			"Do NOT expand, interpret, or replace abbreviations or acronyms — use the user's exact terminology. "+
-			"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: New Chat",
-		conversationContext,
-		nil,
-		billing.ModelUsageSourceGram,
-	)
+	systemPrompt := "Generate a concise title (3-6 words) for this conversation based on the messages below. " +
+		"Return ONLY the title text, no quotes or explanation. " +
+		"IMPORTANT: The title must directly relate to the content of the messages. " +
+		"Do NOT expand, interpret, or replace abbreviations or acronyms — use the user's exact terminology. " +
+		"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: New Chat"
+
+	response, err := g.chatClient.GetCompletion(titleCtx, openrouter.CompletionRequest{
+		OrgID:     orgID,
+		ProjectID: projectID,
+		ChatID:    uuid.Nil,
+		Messages: []or.Message{
+			openrouter.CreateMessageSystem(systemPrompt),
+			openrouter.CreateMessageUser(conversationContext),
+		},
+		Tools:          nil,
+		Temperature:    nil,
+		Model:          "",
+		Stream:         false,
+		UsageSource:    billing.ModelUsageSourceGram,
+		UserID:         "",
+		ExternalUserID: "",
+		HTTPMetadata:   nil,
+		APIKeyID:       "",
+		JSONSchema:     nil,
+	})
 	if err != nil {
 		g.logger.WarnContext(ctx, "failed to generate chat title via OpenRouter", attr.SlogError(err))
 		return defaultChatTitle
 	}
 
-	title := strings.TrimSpace(openrouter.GetText(*msg))
+	title := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if title == "" {
 		return defaultChatTitle
 	}

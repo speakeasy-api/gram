@@ -8306,6 +8306,112 @@ paths:
       x-speakeasy-react-hook:
         name: GetUserMetricsSummary
         type: query
+  /rpc/telemetry.listAttributeKeys:
+    post:
+      description: List distinct attribute keys available for filtering
+      operationId: listAttributeKeys
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAttributeKeysResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listAttributeKeys telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: listAttributeKeys
+      x-speakeasy-react-hook:
+        name: ListAttributeKeys
+        type: query
   /rpc/telemetry.listFilterOptions:
     post:
       description: List available filter options (API keys or users) for the observability overview
@@ -11795,7 +11901,7 @@ components:
           description: The functions file display name.
         runtime:
           type: string
-          description: 'The runtime to use when executing functions. Allowed values are: nodejs:22, python:3.12.'
+          description: 'The runtime to use when executing functions. Allowed values are: nodejs:22, nodejs:24, python:3.12.'
         slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -13654,7 +13760,7 @@ components:
           description: The URN of this resource
         runtime:
           type: string
-          description: Runtime environment (e.g., nodejs:22, python:3.12)
+          description: Runtime environment (e.g., nodejs:24, python:3.12)
         title:
           type: string
           description: Optional title for the resource
@@ -13727,7 +13833,7 @@ components:
           description: The ID of the project
         runtime:
           type: string
-          description: Runtime environment (e.g., nodejs:22, python:3.12)
+          description: Runtime environment (e.g., nodejs:24, python:3.12)
         schema:
           type: string
           description: JSON schema for the request
@@ -14505,6 +14611,34 @@ components:
           description: The list of assets
       required:
         - assets
+    ListAttributeKeysPayload:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Payload for listing distinct attribute keys available for filtering
+      required:
+        - from
+        - to
+    ListAttributeKeysResult:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            type: string
+          description: Distinct attribute keys. User attributes are prefixed with @
+      description: Result of listing distinct attribute keys
+      required:
+        - keys
     ListCatalogResponseBody:
       type: object
       properties:

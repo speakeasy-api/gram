@@ -410,9 +410,39 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 
-			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, baseChatClient)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
+			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
+			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
+
+			// Create ClickHouse client and telemetry service for resolution events
+			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, chShutdown)
+
+			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
+
+			chatClient := chat.NewAgenticChatClient(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				env,
+				encryptionClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				guardianPolicy,
+				functionsOrchestrator,
+				openRouter,
+				temporalEnv,
+				telemetryService,
+				assetStorage,
+				billingTracker,
+				&background.FallbackModelUsageTracker{TemporalEnv: temporalEnv},
+				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
+				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
+			)
+
+			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, chatClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
@@ -434,42 +464,29 @@ func newWorkerCommand() *cli.Command {
 				guardianPolicy,
 				functionsOrchestrator,
 				openRouter,
-				baseChatClient,
+				chatClient,
 			)
 
-			// Create ClickHouse client and telemetry service for resolution events
-			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
-			if err != nil {
-				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, chShutdown)
-
-			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
-			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
-
-			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
-
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				DB:                   db,
-				EncryptionClient:     encryptionClient,
-				FeatureProvider:      featureFlags,
-				AssetStorage:         assetStorage,
-				SlackClient:          slackClient,
-				ChatClient:           chatClient,
-				OpenRouterChatClient: baseChatClient,
-				OpenRouter:           openRouter,
-				K8sClient:            k8sClient,
-				ExpectedTargetCNAME:  c.String("custom-domain-cname"),
-				BillingTracker:       billingTracker,
-				BillingRepository:    billingRepo,
-				RedisClient:          redisClient,
-				PosthogClient:        posthogClient,
-				FunctionsDeployer:    functionsOrchestrator,
-				FunctionsVersion:     runnerVersion,
-				RagService:           ragService,
-				AgentsService:        agentsService,
-				MCPRegistryClient:    mcpRegistryClient,
-				TelemetryService:     telemetryService,
+				DB:                  db,
+				EncryptionClient:    encryptionClient,
+				FeatureProvider:     featureFlags,
+				AssetStorage:        assetStorage,
+				SlackClient:         slackClient,
+				ChatClient:          chatClient,
+				OpenRouter:          openRouter,
+				K8sClient:           k8sClient,
+				ExpectedTargetCNAME: c.String("custom-domain-cname"),
+				BillingTracker:      billingTracker,
+				BillingRepository:   billingRepo,
+				RedisClient:         redisClient,
+				PosthogClient:       posthogClient,
+				FunctionsDeployer:   functionsOrchestrator,
+				FunctionsVersion:    runnerVersion,
+				RagService:          ragService,
+				AgentsService:       agentsService,
+				MCPRegistryClient:   mcpRegistryClient,
+				TelemetryService:    telemetryService,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

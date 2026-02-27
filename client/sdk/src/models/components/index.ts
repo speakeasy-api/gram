@@ -90,6 +90,7 @@ export * from "./integrationversion.js";
 export * from "./key.js";
 export * from "./listallowedoriginsresult.js";
 export * from "./listassetsresult.js";
+export * from "./listattributekeysresult.js";
 export * from "./listcatalogresponsebody.js";
 export * from "./listchatsresult.js";
 export * from "./listchatswithresolutionsresult.js";

@@ -926,7 +926,11 @@ jobs:
     needs: [changes, functions-build-host]
     strategy:
       matrix:
-        runtime: ["nodejs22"]
+        include:
+          - runtime: nodejs22
+            apko-config: ./images/nodejs22-alpine3.22.yaml
+          - runtime: nodejs24
+            apko-config: ./images/nodejs24-alpine3.23.yaml
     steps:
       - name: Skip if no functions changes exist
         if: ${{ needs.changes.outputs.functions != 'true' }}
@@ -982,7 +986,7 @@ jobs:
 
           mise run build:functions-image \
             --melange-public-key "$KEY_FILE" \
-            --apko-config ./images/${{ matrix.runtime }}-alpine3.22.yaml \
+            --apko-config ${{ matrix.apko-config }} \
             --image "apko-${{ matrix.runtime }}:${{ github.sha }}" \
             --tarball-name ${{ matrix.runtime }} \
             --out oci/${{ matrix.runtime }}

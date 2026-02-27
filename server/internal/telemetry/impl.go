@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"math"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -1032,5 +1034,53 @@ func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.List
 	return &telem_gen.ListFilterOptionsResult{
 		Options: result,
 		Enabled: true,
+	}, nil
+}
+
+// ListAttributeKeys retrieves distinct attribute keys from telemetry logs for the current project.
+func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.ListAttributeKeysPayload) (res *telem_gen.ListAttributeKeysResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	rawKeys, err := s.chRepo.ListAttributeKeys(ctx, repo.ListAttributeKeysParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing attribute keys")
+	}
+
+	// Translate raw attribute paths to display keys:
+	// "app.region" → "@region", everything else stays as-is.
+	keys := make([]string, 0, len(rawKeys))
+	for _, k := range rawKeys {
+		if after, ok := strings.CutPrefix(k, "app."); ok {
+			keys = append(keys, "@"+after)
+			continue
+		}
+
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	return &telem_gen.ListAttributeKeysResult{
+		Keys: keys,
 	}, nil
 }

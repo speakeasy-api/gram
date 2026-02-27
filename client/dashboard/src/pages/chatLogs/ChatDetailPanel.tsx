@@ -147,31 +147,30 @@ function TelemetryLogsTab({
   );
 }
 
+function filterToolLogs(logs: TelemetryLogRecord[]): TelemetryLogRecord[] {
+  return logs.filter((log) => {
+    const body = log.body.toLowerCase();
+    const hasToolKeyword =
+      body.includes("tool") ||
+      body.includes("function") ||
+      body.includes("mcp");
+    const attrs = log.attributes || {};
+    const hasToolAttr =
+      attrs.tool_name || attrs.function_name || attrs.gram_urn;
+    return hasToolKeyword || hasToolAttr;
+  });
+}
+
 // Tool Calls Tab Component - filters logs to show only tool-related entries
 function ToolCallsTab({
-  logs,
+  toolLogs,
   isLoading,
   error,
 }: {
-  logs: TelemetryLogRecord[];
+  toolLogs: TelemetryLogRecord[];
   isLoading: boolean;
   error: Error | null;
 }) {
-  // Filter logs to find tool-related entries
-  const toolLogs = useMemo(() => {
-    return logs.filter((log) => {
-      const body = log.body.toLowerCase();
-      const hasToolKeyword =
-        body.includes("tool") ||
-        body.includes("function") ||
-        body.includes("mcp");
-      const attrs = log.attributes || {};
-      const hasToolAttr =
-        attrs.tool_name || attrs.function_name || attrs.gram_urn;
-      return hasToolKeyword || hasToolAttr;
-    });
-  }, [logs]);
-
   if (isLoading) {
     return (
       <div className="p-6 text-center text-muted-foreground">
@@ -290,6 +289,7 @@ export function ChatDetailPanel({
   }, [chatId, searchLogs]);
 
   const logs = logsData?.logs || [];
+  const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
   if (chatLoading) {
     return <div className="p-8">Loading chat details...</div>;
@@ -306,9 +306,6 @@ export function ChatDetailPanel({
     (new Date(chat.updatedAt).getTime() - new Date(chat.createdAt).getTime()) /
       1000,
   );
-
-  // Count tool calls (messages with tool role)
-  const toolCallsCount = chat.messages.filter((m) => m.role === "tool").length;
 
   // Filter out system messages for display count
   const nonSystemMessages = chat.messages.filter((m) => m.role !== "system");
@@ -392,9 +389,9 @@ export function ChatDetailPanel({
           >
             <Icon name="zap" className="size-4 mr-2" />
             Tool Calls
-            {toolCallsCount > 0 && (
+            {toolLogs.length > 0 && (
               <span className="ml-1.5 text-xs bg-muted px-1.5 rounded-full">
-                {toolCallsCount}
+                {toolLogs.length}
               </span>
             )}
           </TabsTrigger>
@@ -443,7 +440,7 @@ export function ChatDetailPanel({
                 <div className="text-xs text-muted-foreground mb-1">
                   Tool Calls:
                 </div>
-                <div className="text-sm font-medium">{toolCallsCount}</div>
+                <div className="text-sm font-medium">{toolLogs.length}</div>
               </div>
               {resolutions.length > 0 && (
                 <>
@@ -600,7 +597,7 @@ export function ChatDetailPanel({
           className="flex-1 overflow-y-auto m-0 data-[state=inactive]:hidden"
         >
           <ToolCallsTab
-            logs={logs}
+            toolLogs={toolLogs}
             isLoading={logsLoading}
             error={logsError as Error | null}
           />

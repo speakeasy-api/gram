@@ -2203,6 +2203,248 @@ func DecodeListFilterOptionsResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildListAttributeKeysRequest instantiates a HTTP request object with method
+// and path set to call the "telemetry" service "listAttributeKeys" endpoint
+func (c *Client) BuildListAttributeKeysRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAttributeKeysTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "listAttributeKeys", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAttributeKeysRequest returns an encoder for requests sent to the
+// telemetry listAttributeKeys server.
+func EncodeListAttributeKeysRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.ListAttributeKeysPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "listAttributeKeys", "*telemetry.ListAttributeKeysPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewListAttributeKeysRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "listAttributeKeys", err)
+		}
+		return nil
+	}
+}
+
+// DecodeListAttributeKeysResponse returns a decoder for responses returned by
+// the telemetry listAttributeKeys endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListAttributeKeysResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAttributeKeysResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAttributeKeysResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+			}
+			err = ValidateListAttributeKeysResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+			}
+			res := NewListAttributeKeysResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAttributeKeysUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+			}
+			err = ValidateListAttributeKeysUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+			}
+			return nil, NewListAttributeKeysUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAttributeKeysForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+			}
+			err = ValidateListAttributeKeysForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+			}
+			return nil, NewListAttributeKeysForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAttributeKeysBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+			}
+			err = ValidateListAttributeKeysBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+			}
+			return nil, NewListAttributeKeysBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAttributeKeysNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+			}
+			err = ValidateListAttributeKeysNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+			}
+			return nil, NewListAttributeKeysNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAttributeKeysConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+			}
+			err = ValidateListAttributeKeysConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+			}
+			return nil, NewListAttributeKeysConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAttributeKeysUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+			}
+			err = ValidateListAttributeKeysUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+			}
+			return nil, NewListAttributeKeysUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAttributeKeysInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+			}
+			err = ValidateListAttributeKeysInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+			}
+			return nil, NewListAttributeKeysInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAttributeKeysInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+				}
+				err = ValidateListAttributeKeysInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+				}
+				return nil, NewListAttributeKeysInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAttributeKeysUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+				}
+				err = ValidateListAttributeKeysUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+				}
+				return nil, NewListAttributeKeysUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "listAttributeKeys", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAttributeKeysGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listAttributeKeys", err)
+			}
+			err = ValidateListAttributeKeysGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listAttributeKeys", err)
+			}
+			return nil, NewListAttributeKeysGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "listAttributeKeys", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalTelemetrySearchLogsFilterToSearchLogsFilterRequestBody builds a value
 // of type *SearchLogsFilterRequestBody from a value of type
 // *telemetry.SearchLogsFilter.

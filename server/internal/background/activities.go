@@ -71,9 +71,8 @@ func NewActivities(
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
-	chatClient *chat.ChatClient,
 	openrouterProvisioner openrouter.Provisioner,
-	openrouterChatClient *openrouter.ChatClient,
+	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
 	billingTracker billing.Tracker,
@@ -87,13 +86,15 @@ func NewActivities(
 	temporalClient client.Client,
 	telemetryService *telemetry.Service,
 ) *Activities {
+	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
+
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
 		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
-		fallbackModelUsageTracking:    activities.NewFallbackModelUsageTracking(logger, openrouterProvisioner),
+		fallbackModelUsageTracking:    activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		firePlatformUsageMetrics:      activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		freeTierReportingUsageMetrics: activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
-		generateChatTitle:             activities.NewGenerateChatTitle(logger, db, openrouterChatClient),
+		generateChatTitle:             activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:           activities.NewGetAllOrganizations(logger, db),
 		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
@@ -113,9 +114,9 @@ func NewActivities(
 		executeModelCall:              activities.NewExecuteModelCall(logger, agentsService),
 		loadAgentTools:                activities.NewLoadAgentTools(logger, agentsService),
 		recordAgentExecution:          activities.NewRecordAgentExecution(logger, db),
-		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, openrouterChatClient),
+		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, openrouterChatClient, telemetryService),
+		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryService),
 		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 	}
 }

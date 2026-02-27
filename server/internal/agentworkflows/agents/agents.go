@@ -251,7 +251,7 @@ type Service struct {
 	toolProxy    *gateway.ToolProxy
 	cache        cache.Cache
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
-	chatClient   *openrouter.ChatClient
+	chatClient   openrouter.CompletionClient
 }
 
 // NewService creates a new agents service
@@ -266,7 +266,7 @@ func NewService(
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	openRouter openrouter.Provisioner,
-	baseChatClient *openrouter.ChatClient,
+	baseChatClient openrouter.CompletionClient,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agents"))
 
@@ -581,9 +581,24 @@ func (s *Service) GetCompletionFromMessages(
 	temperature *float64,
 	model string,
 ) (*or.Message, error) {
-	msg, err := s.chatClient.GetCompletionFromMessages(ctx, orgID, projectID, messages, toolDefs, temperature, model, billing.ModelUsageSourceAgents)
+	response, err := s.chatClient.GetCompletion(ctx, openrouter.CompletionRequest{
+		OrgID:          orgID,
+		ProjectID:      projectID,
+		Messages:       messages,
+		Tools:          toolDefs,
+		Temperature:    temperature,
+		Model:          model,
+		Stream:         false,
+		UsageSource:    billing.ModelUsageSourceAgents,
+		ChatID:         uuid.Nil,
+		UserID:         "",
+		ExternalUserID: "",
+		HTTPMetadata:   nil,
+		APIKeyID:       "",
+		JSONSchema:     nil,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get completion from messages: %w", err)
 	}
-	return msg, nil
+	return response.Message, nil
 }

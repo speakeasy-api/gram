@@ -1,5 +1,15 @@
 # @gram/client
 
+## 0.28.0
+
+### Minor Changes
+
+- f364cc0: Adds listAttributeKeys endpoint to retrieve distinct attribute keys for telemetry filtering.
+
+### Patch Changes
+
+- e2c00cb: Adds a new filtering option to the search logs endpoint to filter any attribute.
+
 ## 0.28.1
 
 ### Patch Changes

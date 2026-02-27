@@ -364,7 +364,7 @@ type FunctionToolDefinitionResponseBody struct {
 	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
 	// The ID of the function
 	FunctionID string `form:"function_id" json:"function_id" xml:"function_id"`
-	// Runtime environment (e.g., nodejs:22, python:3.12)
+	// Runtime environment (e.g., nodejs:24, python:3.12)
 	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
 	// Variables configuration for the function
 	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`

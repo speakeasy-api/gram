@@ -78,7 +78,7 @@ export type FunctionToolDefinition = {
    */
   projectId: string;
   /**
-   * Runtime environment (e.g., nodejs:22, python:3.12)
+   * Runtime environment (e.g., nodejs:24, python:3.12)
    */
   runtime: string;
   /**
