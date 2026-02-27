@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
@@ -161,6 +162,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		OrganizationID: organizationID,
 		ProjectID:      uuid.MustParse(projectID),
 		Name:           response.Team.Name,
+		SystemPrompt:   pgtype.Text{String: "", Valid: false},
+		IconAssetID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return redirectWithError(returnURL, errors.New("this slack workspace is already linked to a gram project"))
@@ -508,6 +511,7 @@ func (s *Service) ListSlackApps(ctx context.Context, payload *gen.ListSlackAppsP
 			ID:            app.ID.String(),
 			Name:          app.Name,
 			Status:        app.Status,
+			SlackClientID: conv.FromPGText[string](app.SlackClientID),
 			SlackTeamID:   conv.FromPGText[string](app.SlackTeamID),
 			SlackTeamName: conv.FromPGText[string](app.SlackTeamName),
 			SystemPrompt:  conv.FromPGText[string](app.SystemPrompt),

@@ -153,8 +153,8 @@ func BuildCreateSlackAppPayload(slackCreateSlackAppBody string, slackCreateSlack
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
 		}
-		if utf8.RuneCountInString(body.Name) > 60 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 60, false))
+		if utf8.RuneCountInString(body.Name) > 36 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 36, false))
 		}
 		if body.IconAssetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_asset_id", *body.IconAssetID, goa.FormatUUID))
@@ -304,8 +304,8 @@ func BuildUpdateSlackAppPayload(slackUpdateSlackAppBody string, slackUpdateSlack
 			}
 		}
 		if body.Name != nil {
-			if utf8.RuneCountInString(*body.Name) > 60 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 60, false))
+			if utf8.RuneCountInString(*body.Name) > 36 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 36, false))
 			}
 		}
 		if body.IconAssetID != nil {

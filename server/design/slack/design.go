@@ -146,7 +146,7 @@ var _ = Service("slack", func() {
 			security.ProjectPayload()
 			Attribute("name", String, "Display name for the Slack app", func() {
 				MinLength(1)
-				MaxLength(60)
+				MaxLength(36)
 			})
 			Attribute("toolset_ids", ArrayOf(String), "Toolset IDs to attach to this app")
 			Attribute("system_prompt", String, "System prompt for the Slack app")
@@ -255,7 +255,7 @@ var _ = Service("slack", func() {
 			})
 			Attribute("name", String, "New display name for the Slack app", func() {
 				MinLength(1)
-				MaxLength(60)
+				MaxLength(36)
 			})
 			Attribute("system_prompt", String, "System prompt for the Slack app")
 			Attribute("icon_asset_id", String, "Asset ID for the app icon", func() {

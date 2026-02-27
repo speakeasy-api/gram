@@ -13349,7 +13349,7 @@ components:
                     type: string
                     description: Display name for the Slack app
                     minLength: 1
-                    maxLength: 60
+                    maxLength: 36
                 system_prompt:
                     type: string
                     description: System prompt for the Slack app
@@ -17921,7 +17921,7 @@ components:
                     type: string
                     description: New display name for the Slack app
                     minLength: 1
-                    maxLength: 60
+                    maxLength: 36
                 system_prompt:
                     type: string
                     description: System prompt for the Slack app
