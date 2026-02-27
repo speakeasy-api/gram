@@ -38,7 +38,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import type { ActiveAttributeFilter } from "./attribute-filter-types";
@@ -444,12 +444,11 @@ function LogsContent() {
     [setSearchParams],
   );
 
-  // Debounce search input and sync URL params
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      const newQuery = searchInput || null;
+  // Submit search explicitly (Enter / Tab / clear)
+  const handleSearchSubmit = useCallback(
+    (query: string) => {
+      const newQuery = query || null;
       setSearchQuery(newQuery);
-      // Sync URL params preserving server filter
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -462,9 +461,9 @@ function LogsContent() {
         },
         { replace: true },
       );
-    }, 500);
-    return () => clearTimeout(timeoutId);
-  }, [searchInput, setSearchParams]);
+    },
+    [setSearchParams],
+  );
 
   // Handle scroll for infinite loading
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -525,6 +524,7 @@ function LogsContent() {
         searchQuery={searchQuery}
         searchInput={searchInput}
         setSearchInput={setSearchInput}
+        onSearchSubmit={handleSearchSubmit}
         selectedServer={selectedServer}
         onServerChange={handleServerChange}
         toolsets={toolsets}
@@ -566,6 +566,7 @@ function LogsInnerContent({
   searchQuery,
   searchInput,
   setSearchInput,
+  onSearchSubmit,
   selectedServer,
   onServerChange,
   toolsets,
@@ -602,6 +603,7 @@ function LogsInnerContent({
   searchQuery: string | null;
   searchInput: string;
   setSearchInput: (value: string) => void;
+  onSearchSubmit: (query: string) => void;
   selectedServer: string | null;
   onServerChange: (serverSlug: string | null) => void;
   toolsets: Array<{ slug: string; name: string; toolUrns: string[] }>;
@@ -700,6 +702,7 @@ function LogsInnerContent({
                       isLoadingKeys={isLoadingAttributeKeys}
                       searchInput={searchInput}
                       onSearchInputChange={setSearchInput}
+                      onSearchSubmit={onSearchSubmit}
                     />
                   </div>
                   <div className="ml-auto">
