@@ -24,6 +24,12 @@ type Server struct {
 	GetSlackConnection    http.Handler
 	UpdateSlackConnection http.Handler
 	DeleteSlackConnection http.Handler
+	CreateSlackApp        http.Handler
+	ListSlackApps         http.Handler
+	GetSlackApp           http.Handler
+	ConfigureSlackApp     http.Handler
+	UpdateSlackApp        http.Handler
+	DeleteSlackApp        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -58,12 +64,24 @@ func New(
 			{"GetSlackConnection", "GET", "/rpc/slack.getConnection"},
 			{"UpdateSlackConnection", "POST", "/rpc/slack.updateConnection"},
 			{"DeleteSlackConnection", "DELETE", "/rpc/slack.deleteConnection"},
+			{"CreateSlackApp", "POST", "/rpc/slack-apps.create"},
+			{"ListSlackApps", "GET", "/rpc/slack-apps.list"},
+			{"GetSlackApp", "GET", "/rpc/slack-apps.get"},
+			{"ConfigureSlackApp", "POST", "/rpc/slack-apps.configure"},
+			{"UpdateSlackApp", "PUT", "/rpc/slack-apps.update"},
+			{"DeleteSlackApp", "DELETE", "/rpc/slack-apps.delete"},
 		},
 		Callback:              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
 		Login:                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		GetSlackConnection:    NewGetSlackConnectionHandler(e.GetSlackConnection, mux, decoder, encoder, errhandler, formatter),
 		UpdateSlackConnection: NewUpdateSlackConnectionHandler(e.UpdateSlackConnection, mux, decoder, encoder, errhandler, formatter),
 		DeleteSlackConnection: NewDeleteSlackConnectionHandler(e.DeleteSlackConnection, mux, decoder, encoder, errhandler, formatter),
+		CreateSlackApp:        NewCreateSlackAppHandler(e.CreateSlackApp, mux, decoder, encoder, errhandler, formatter),
+		ListSlackApps:         NewListSlackAppsHandler(e.ListSlackApps, mux, decoder, encoder, errhandler, formatter),
+		GetSlackApp:           NewGetSlackAppHandler(e.GetSlackApp, mux, decoder, encoder, errhandler, formatter),
+		ConfigureSlackApp:     NewConfigureSlackAppHandler(e.ConfigureSlackApp, mux, decoder, encoder, errhandler, formatter),
+		UpdateSlackApp:        NewUpdateSlackAppHandler(e.UpdateSlackApp, mux, decoder, encoder, errhandler, formatter),
+		DeleteSlackApp:        NewDeleteSlackAppHandler(e.DeleteSlackApp, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -77,6 +95,12 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSlackConnection = m(s.GetSlackConnection)
 	s.UpdateSlackConnection = m(s.UpdateSlackConnection)
 	s.DeleteSlackConnection = m(s.DeleteSlackConnection)
+	s.CreateSlackApp = m(s.CreateSlackApp)
+	s.ListSlackApps = m(s.ListSlackApps)
+	s.GetSlackApp = m(s.GetSlackApp)
+	s.ConfigureSlackApp = m(s.ConfigureSlackApp)
+	s.UpdateSlackApp = m(s.UpdateSlackApp)
+	s.DeleteSlackApp = m(s.DeleteSlackApp)
 }
 
 // MethodNames returns the methods served.
@@ -89,6 +113,12 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSlackConnectionHandler(mux, h.GetSlackConnection)
 	MountUpdateSlackConnectionHandler(mux, h.UpdateSlackConnection)
 	MountDeleteSlackConnectionHandler(mux, h.DeleteSlackConnection)
+	MountCreateSlackAppHandler(mux, h.CreateSlackApp)
+	MountListSlackAppsHandler(mux, h.ListSlackApps)
+	MountGetSlackAppHandler(mux, h.GetSlackApp)
+	MountConfigureSlackAppHandler(mux, h.ConfigureSlackApp)
+	MountUpdateSlackAppHandler(mux, h.UpdateSlackApp)
+	MountDeleteSlackAppHandler(mux, h.DeleteSlackApp)
 }
 
 // Mount configures the mux to serve the slack endpoints.
@@ -338,6 +368,324 @@ func NewDeleteSlackConnectionHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteSlackConnection")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slack")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateSlackAppHandler configures the mux to serve the "slack" service
+// "createSlackApp" endpoint.
+func MountCreateSlackAppHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/slack-apps.create", f)
+}
+
+// NewCreateSlackAppHandler creates a HTTP handler which loads the HTTP request
+// and calls the "slack" service "createSlackApp" endpoint.
+func NewCreateSlackAppHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateSlackAppRequest(mux, decoder)
+		encodeResponse = EncodeCreateSlackAppResponse(encoder)
+		encodeError    = EncodeCreateSlackAppError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createSlackApp")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slack")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListSlackAppsHandler configures the mux to serve the "slack" service
+// "listSlackApps" endpoint.
+func MountListSlackAppsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/slack-apps.list", f)
+}
+
+// NewListSlackAppsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "slack" service "listSlackApps" endpoint.
+func NewListSlackAppsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListSlackAppsRequest(mux, decoder)
+		encodeResponse = EncodeListSlackAppsResponse(encoder)
+		encodeError    = EncodeListSlackAppsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listSlackApps")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slack")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSlackAppHandler configures the mux to serve the "slack" service
+// "getSlackApp" endpoint.
+func MountGetSlackAppHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/slack-apps.get", f)
+}
+
+// NewGetSlackAppHandler creates a HTTP handler which loads the HTTP request
+// and calls the "slack" service "getSlackApp" endpoint.
+func NewGetSlackAppHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSlackAppRequest(mux, decoder)
+		encodeResponse = EncodeGetSlackAppResponse(encoder)
+		encodeError    = EncodeGetSlackAppError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSlackApp")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slack")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountConfigureSlackAppHandler configures the mux to serve the "slack"
+// service "configureSlackApp" endpoint.
+func MountConfigureSlackAppHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/slack-apps.configure", f)
+}
+
+// NewConfigureSlackAppHandler creates a HTTP handler which loads the HTTP
+// request and calls the "slack" service "configureSlackApp" endpoint.
+func NewConfigureSlackAppHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeConfigureSlackAppRequest(mux, decoder)
+		encodeResponse = EncodeConfigureSlackAppResponse(encoder)
+		encodeError    = EncodeConfigureSlackAppError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "configureSlackApp")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slack")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateSlackAppHandler configures the mux to serve the "slack" service
+// "updateSlackApp" endpoint.
+func MountUpdateSlackAppHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("PUT", "/rpc/slack-apps.update", f)
+}
+
+// NewUpdateSlackAppHandler creates a HTTP handler which loads the HTTP request
+// and calls the "slack" service "updateSlackApp" endpoint.
+func NewUpdateSlackAppHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateSlackAppRequest(mux, decoder)
+		encodeResponse = EncodeUpdateSlackAppResponse(encoder)
+		encodeError    = EncodeUpdateSlackAppError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateSlackApp")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slack")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteSlackAppHandler configures the mux to serve the "slack" service
+// "deleteSlackApp" endpoint.
+func MountDeleteSlackAppHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/slack-apps.delete", f)
+}
+
+// NewDeleteSlackAppHandler creates a HTTP handler which loads the HTTP request
+// and calls the "slack" service "deleteSlackApp" endpoint.
+func NewDeleteSlackAppHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteSlackAppRequest(mux, decoder)
+		encodeResponse = EncodeDeleteSlackAppResponse(encoder)
+		encodeError    = EncodeDeleteSlackAppError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteSlackApp")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "slack")
 		payload, err := decodeRequest(r)
 		if err != nil {

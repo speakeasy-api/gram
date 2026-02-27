@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	slack "github.com/speakeasy-api/gram/server/gen/slack"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -17,6 +19,45 @@ import (
 type UpdateSlackConnectionRequestBody struct {
 	// The default toolset slug for this Slack connection
 	DefaultToolsetSlug *string `form:"default_toolset_slug,omitempty" json:"default_toolset_slug,omitempty" xml:"default_toolset_slug,omitempty"`
+}
+
+// CreateSlackAppRequestBody is the type of the "slack" service
+// "createSlackApp" endpoint HTTP request body.
+type CreateSlackAppRequestBody struct {
+	// Display name for the Slack app
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Toolset IDs to attach to this app
+	ToolsetIds []string `form:"toolset_ids,omitempty" json:"toolset_ids,omitempty" xml:"toolset_ids,omitempty"`
+	// System prompt for the Slack app
+	SystemPrompt *string `form:"system_prompt,omitempty" json:"system_prompt,omitempty" xml:"system_prompt,omitempty"`
+	// Asset ID for the app icon
+	IconAssetID *string `form:"icon_asset_id,omitempty" json:"icon_asset_id,omitempty" xml:"icon_asset_id,omitempty"`
+}
+
+// ConfigureSlackAppRequestBody is the type of the "slack" service
+// "configureSlackApp" endpoint HTTP request body.
+type ConfigureSlackAppRequestBody struct {
+	// The Slack app ID
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Slack app Client ID
+	SlackClientID *string `form:"slack_client_id,omitempty" json:"slack_client_id,omitempty" xml:"slack_client_id,omitempty"`
+	// Slack app Client Secret
+	SlackClientSecret *string `form:"slack_client_secret,omitempty" json:"slack_client_secret,omitempty" xml:"slack_client_secret,omitempty"`
+	// Slack app Signing Secret
+	SlackSigningSecret *string `form:"slack_signing_secret,omitempty" json:"slack_signing_secret,omitempty" xml:"slack_signing_secret,omitempty"`
+}
+
+// UpdateSlackAppRequestBody is the type of the "slack" service
+// "updateSlackApp" endpoint HTTP request body.
+type UpdateSlackAppRequestBody struct {
+	// The Slack app ID
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// New display name for the Slack app
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// System prompt for the Slack app
+	SystemPrompt *string `form:"system_prompt,omitempty" json:"system_prompt,omitempty" xml:"system_prompt,omitempty"`
+	// Asset ID for the app icon
+	IconAssetID *string `form:"icon_asset_id,omitempty" json:"icon_asset_id,omitempty" xml:"icon_asset_id,omitempty"`
 }
 
 // GetSlackConnectionResponseBody is the type of the "slack" service
@@ -47,6 +88,107 @@ type UpdateSlackConnectionResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// CreateSlackAppResponseBody is the type of the "slack" service
+// "createSlackApp" endpoint HTTP response body.
+type CreateSlackAppResponseBody struct {
+	// The created Slack app
+	App *SlackAppResultResponseBody `form:"app" json:"app" xml:"app"`
+}
+
+// ListSlackAppsResponseBody is the type of the "slack" service "listSlackApps"
+// endpoint HTTP response body.
+type ListSlackAppsResponseBody struct {
+	// List of Slack apps
+	Items []*SlackAppResultResponseBody `form:"items" json:"items" xml:"items"`
+}
+
+// GetSlackAppResponseBody is the type of the "slack" service "getSlackApp"
+// endpoint HTTP response body.
+type GetSlackAppResponseBody struct {
+	// The Slack app ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Display name of the Slack app
+	Name string `form:"name" json:"name" xml:"name"`
+	// Current status: unconfigured, active
+	Status string `form:"status" json:"status" xml:"status"`
+	// The Slack app Client ID
+	SlackClientID *string `form:"slack_client_id,omitempty" json:"slack_client_id,omitempty" xml:"slack_client_id,omitempty"`
+	// System prompt for the Slack app
+	SystemPrompt *string `form:"system_prompt,omitempty" json:"system_prompt,omitempty" xml:"system_prompt,omitempty"`
+	// Asset ID for the app icon
+	IconAssetID *string `form:"icon_asset_id,omitempty" json:"icon_asset_id,omitempty" xml:"icon_asset_id,omitempty"`
+	// The connected Slack workspace ID
+	SlackTeamID *string `form:"slack_team_id,omitempty" json:"slack_team_id,omitempty" xml:"slack_team_id,omitempty"`
+	// The connected Slack workspace name
+	SlackTeamName *string `form:"slack_team_name,omitempty" json:"slack_team_name,omitempty" xml:"slack_team_name,omitempty"`
+	// Attached toolset IDs
+	ToolsetIds []string `form:"toolset_ids" json:"toolset_ids" xml:"toolset_ids"`
+	// OAuth callback URL for this app
+	RedirectURL *string `form:"redirect_url,omitempty" json:"redirect_url,omitempty" xml:"redirect_url,omitempty"`
+	// Event subscription URL for this app
+	RequestURL *string `form:"request_url,omitempty" json:"request_url,omitempty" xml:"request_url,omitempty"`
+	CreatedAt  string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt  string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ConfigureSlackAppResponseBody is the type of the "slack" service
+// "configureSlackApp" endpoint HTTP response body.
+type ConfigureSlackAppResponseBody struct {
+	// The Slack app ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Display name of the Slack app
+	Name string `form:"name" json:"name" xml:"name"`
+	// Current status: unconfigured, active
+	Status string `form:"status" json:"status" xml:"status"`
+	// The Slack app Client ID
+	SlackClientID *string `form:"slack_client_id,omitempty" json:"slack_client_id,omitempty" xml:"slack_client_id,omitempty"`
+	// System prompt for the Slack app
+	SystemPrompt *string `form:"system_prompt,omitempty" json:"system_prompt,omitempty" xml:"system_prompt,omitempty"`
+	// Asset ID for the app icon
+	IconAssetID *string `form:"icon_asset_id,omitempty" json:"icon_asset_id,omitempty" xml:"icon_asset_id,omitempty"`
+	// The connected Slack workspace ID
+	SlackTeamID *string `form:"slack_team_id,omitempty" json:"slack_team_id,omitempty" xml:"slack_team_id,omitempty"`
+	// The connected Slack workspace name
+	SlackTeamName *string `form:"slack_team_name,omitempty" json:"slack_team_name,omitempty" xml:"slack_team_name,omitempty"`
+	// Attached toolset IDs
+	ToolsetIds []string `form:"toolset_ids" json:"toolset_ids" xml:"toolset_ids"`
+	// OAuth callback URL for this app
+	RedirectURL *string `form:"redirect_url,omitempty" json:"redirect_url,omitempty" xml:"redirect_url,omitempty"`
+	// Event subscription URL for this app
+	RequestURL *string `form:"request_url,omitempty" json:"request_url,omitempty" xml:"request_url,omitempty"`
+	CreatedAt  string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt  string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateSlackAppResponseBody is the type of the "slack" service
+// "updateSlackApp" endpoint HTTP response body.
+type UpdateSlackAppResponseBody struct {
+	// The Slack app ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Display name of the Slack app
+	Name string `form:"name" json:"name" xml:"name"`
+	// Current status: unconfigured, active
+	Status string `form:"status" json:"status" xml:"status"`
+	// The Slack app Client ID
+	SlackClientID *string `form:"slack_client_id,omitempty" json:"slack_client_id,omitempty" xml:"slack_client_id,omitempty"`
+	// System prompt for the Slack app
+	SystemPrompt *string `form:"system_prompt,omitempty" json:"system_prompt,omitempty" xml:"system_prompt,omitempty"`
+	// Asset ID for the app icon
+	IconAssetID *string `form:"icon_asset_id,omitempty" json:"icon_asset_id,omitempty" xml:"icon_asset_id,omitempty"`
+	// The connected Slack workspace ID
+	SlackTeamID *string `form:"slack_team_id,omitempty" json:"slack_team_id,omitempty" xml:"slack_team_id,omitempty"`
+	// The connected Slack workspace name
+	SlackTeamName *string `form:"slack_team_name,omitempty" json:"slack_team_name,omitempty" xml:"slack_team_name,omitempty"`
+	// Attached toolset IDs
+	ToolsetIds []string `form:"toolset_ids" json:"toolset_ids" xml:"toolset_ids"`
+	// OAuth callback URL for this app
+	RedirectURL *string `form:"redirect_url,omitempty" json:"redirect_url,omitempty" xml:"redirect_url,omitempty"`
+	// Event subscription URL for this app
+	RequestURL *string `form:"request_url,omitempty" json:"request_url,omitempty" xml:"request_url,omitempty"`
+	CreatedAt  string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt  string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CallbackUnauthorizedResponseBody is the type of the "slack" service
@@ -969,6 +1111,1126 @@ type DeleteSlackConnectionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateSlackAppUnauthorizedResponseBody is the type of the "slack" service
+// "createSlackApp" endpoint HTTP response body for the "unauthorized" error.
+type CreateSlackAppUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSlackAppForbiddenResponseBody is the type of the "slack" service
+// "createSlackApp" endpoint HTTP response body for the "forbidden" error.
+type CreateSlackAppForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSlackAppBadRequestResponseBody is the type of the "slack" service
+// "createSlackApp" endpoint HTTP response body for the "bad_request" error.
+type CreateSlackAppBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSlackAppNotFoundResponseBody is the type of the "slack" service
+// "createSlackApp" endpoint HTTP response body for the "not_found" error.
+type CreateSlackAppNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSlackAppConflictResponseBody is the type of the "slack" service
+// "createSlackApp" endpoint HTTP response body for the "conflict" error.
+type CreateSlackAppConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSlackAppUnsupportedMediaResponseBody is the type of the "slack"
+// service "createSlackApp" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateSlackAppUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSlackAppInvalidResponseBody is the type of the "slack" service
+// "createSlackApp" endpoint HTTP response body for the "invalid" error.
+type CreateSlackAppInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSlackAppInvariantViolationResponseBody is the type of the "slack"
+// service "createSlackApp" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateSlackAppInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSlackAppUnexpectedResponseBody is the type of the "slack" service
+// "createSlackApp" endpoint HTTP response body for the "unexpected" error.
+type CreateSlackAppUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSlackAppGatewayErrorResponseBody is the type of the "slack" service
+// "createSlackApp" endpoint HTTP response body for the "gateway_error" error.
+type CreateSlackAppGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSlackAppsUnauthorizedResponseBody is the type of the "slack" service
+// "listSlackApps" endpoint HTTP response body for the "unauthorized" error.
+type ListSlackAppsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSlackAppsForbiddenResponseBody is the type of the "slack" service
+// "listSlackApps" endpoint HTTP response body for the "forbidden" error.
+type ListSlackAppsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSlackAppsBadRequestResponseBody is the type of the "slack" service
+// "listSlackApps" endpoint HTTP response body for the "bad_request" error.
+type ListSlackAppsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSlackAppsNotFoundResponseBody is the type of the "slack" service
+// "listSlackApps" endpoint HTTP response body for the "not_found" error.
+type ListSlackAppsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSlackAppsConflictResponseBody is the type of the "slack" service
+// "listSlackApps" endpoint HTTP response body for the "conflict" error.
+type ListSlackAppsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSlackAppsUnsupportedMediaResponseBody is the type of the "slack" service
+// "listSlackApps" endpoint HTTP response body for the "unsupported_media"
+// error.
+type ListSlackAppsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSlackAppsInvalidResponseBody is the type of the "slack" service
+// "listSlackApps" endpoint HTTP response body for the "invalid" error.
+type ListSlackAppsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSlackAppsInvariantViolationResponseBody is the type of the "slack"
+// service "listSlackApps" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSlackAppsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSlackAppsUnexpectedResponseBody is the type of the "slack" service
+// "listSlackApps" endpoint HTTP response body for the "unexpected" error.
+type ListSlackAppsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSlackAppsGatewayErrorResponseBody is the type of the "slack" service
+// "listSlackApps" endpoint HTTP response body for the "gateway_error" error.
+type ListSlackAppsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSlackAppUnauthorizedResponseBody is the type of the "slack" service
+// "getSlackApp" endpoint HTTP response body for the "unauthorized" error.
+type GetSlackAppUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSlackAppForbiddenResponseBody is the type of the "slack" service
+// "getSlackApp" endpoint HTTP response body for the "forbidden" error.
+type GetSlackAppForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSlackAppBadRequestResponseBody is the type of the "slack" service
+// "getSlackApp" endpoint HTTP response body for the "bad_request" error.
+type GetSlackAppBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSlackAppNotFoundResponseBody is the type of the "slack" service
+// "getSlackApp" endpoint HTTP response body for the "not_found" error.
+type GetSlackAppNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSlackAppConflictResponseBody is the type of the "slack" service
+// "getSlackApp" endpoint HTTP response body for the "conflict" error.
+type GetSlackAppConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSlackAppUnsupportedMediaResponseBody is the type of the "slack" service
+// "getSlackApp" endpoint HTTP response body for the "unsupported_media" error.
+type GetSlackAppUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSlackAppInvalidResponseBody is the type of the "slack" service
+// "getSlackApp" endpoint HTTP response body for the "invalid" error.
+type GetSlackAppInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSlackAppInvariantViolationResponseBody is the type of the "slack" service
+// "getSlackApp" endpoint HTTP response body for the "invariant_violation"
+// error.
+type GetSlackAppInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSlackAppUnexpectedResponseBody is the type of the "slack" service
+// "getSlackApp" endpoint HTTP response body for the "unexpected" error.
+type GetSlackAppUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSlackAppGatewayErrorResponseBody is the type of the "slack" service
+// "getSlackApp" endpoint HTTP response body for the "gateway_error" error.
+type GetSlackAppGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureSlackAppUnauthorizedResponseBody is the type of the "slack" service
+// "configureSlackApp" endpoint HTTP response body for the "unauthorized" error.
+type ConfigureSlackAppUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureSlackAppForbiddenResponseBody is the type of the "slack" service
+// "configureSlackApp" endpoint HTTP response body for the "forbidden" error.
+type ConfigureSlackAppForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureSlackAppBadRequestResponseBody is the type of the "slack" service
+// "configureSlackApp" endpoint HTTP response body for the "bad_request" error.
+type ConfigureSlackAppBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureSlackAppNotFoundResponseBody is the type of the "slack" service
+// "configureSlackApp" endpoint HTTP response body for the "not_found" error.
+type ConfigureSlackAppNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureSlackAppConflictResponseBody is the type of the "slack" service
+// "configureSlackApp" endpoint HTTP response body for the "conflict" error.
+type ConfigureSlackAppConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureSlackAppUnsupportedMediaResponseBody is the type of the "slack"
+// service "configureSlackApp" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ConfigureSlackAppUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureSlackAppInvalidResponseBody is the type of the "slack" service
+// "configureSlackApp" endpoint HTTP response body for the "invalid" error.
+type ConfigureSlackAppInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureSlackAppInvariantViolationResponseBody is the type of the "slack"
+// service "configureSlackApp" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ConfigureSlackAppInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureSlackAppUnexpectedResponseBody is the type of the "slack" service
+// "configureSlackApp" endpoint HTTP response body for the "unexpected" error.
+type ConfigureSlackAppUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureSlackAppGatewayErrorResponseBody is the type of the "slack" service
+// "configureSlackApp" endpoint HTTP response body for the "gateway_error"
+// error.
+type ConfigureSlackAppGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSlackAppUnauthorizedResponseBody is the type of the "slack" service
+// "updateSlackApp" endpoint HTTP response body for the "unauthorized" error.
+type UpdateSlackAppUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSlackAppForbiddenResponseBody is the type of the "slack" service
+// "updateSlackApp" endpoint HTTP response body for the "forbidden" error.
+type UpdateSlackAppForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSlackAppBadRequestResponseBody is the type of the "slack" service
+// "updateSlackApp" endpoint HTTP response body for the "bad_request" error.
+type UpdateSlackAppBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSlackAppNotFoundResponseBody is the type of the "slack" service
+// "updateSlackApp" endpoint HTTP response body for the "not_found" error.
+type UpdateSlackAppNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSlackAppConflictResponseBody is the type of the "slack" service
+// "updateSlackApp" endpoint HTTP response body for the "conflict" error.
+type UpdateSlackAppConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSlackAppUnsupportedMediaResponseBody is the type of the "slack"
+// service "updateSlackApp" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateSlackAppUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSlackAppInvalidResponseBody is the type of the "slack" service
+// "updateSlackApp" endpoint HTTP response body for the "invalid" error.
+type UpdateSlackAppInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSlackAppInvariantViolationResponseBody is the type of the "slack"
+// service "updateSlackApp" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateSlackAppInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSlackAppUnexpectedResponseBody is the type of the "slack" service
+// "updateSlackApp" endpoint HTTP response body for the "unexpected" error.
+type UpdateSlackAppUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSlackAppGatewayErrorResponseBody is the type of the "slack" service
+// "updateSlackApp" endpoint HTTP response body for the "gateway_error" error.
+type UpdateSlackAppGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteSlackAppUnauthorizedResponseBody is the type of the "slack" service
+// "deleteSlackApp" endpoint HTTP response body for the "unauthorized" error.
+type DeleteSlackAppUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteSlackAppForbiddenResponseBody is the type of the "slack" service
+// "deleteSlackApp" endpoint HTTP response body for the "forbidden" error.
+type DeleteSlackAppForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteSlackAppBadRequestResponseBody is the type of the "slack" service
+// "deleteSlackApp" endpoint HTTP response body for the "bad_request" error.
+type DeleteSlackAppBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteSlackAppNotFoundResponseBody is the type of the "slack" service
+// "deleteSlackApp" endpoint HTTP response body for the "not_found" error.
+type DeleteSlackAppNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteSlackAppConflictResponseBody is the type of the "slack" service
+// "deleteSlackApp" endpoint HTTP response body for the "conflict" error.
+type DeleteSlackAppConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteSlackAppUnsupportedMediaResponseBody is the type of the "slack"
+// service "deleteSlackApp" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DeleteSlackAppUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteSlackAppInvalidResponseBody is the type of the "slack" service
+// "deleteSlackApp" endpoint HTTP response body for the "invalid" error.
+type DeleteSlackAppInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteSlackAppInvariantViolationResponseBody is the type of the "slack"
+// service "deleteSlackApp" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DeleteSlackAppInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteSlackAppUnexpectedResponseBody is the type of the "slack" service
+// "deleteSlackApp" endpoint HTTP response body for the "unexpected" error.
+type DeleteSlackAppUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteSlackAppGatewayErrorResponseBody is the type of the "slack" service
+// "deleteSlackApp" endpoint HTTP response body for the "gateway_error" error.
+type DeleteSlackAppGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SlackAppResultResponseBody is used to define fields on response body types.
+type SlackAppResultResponseBody struct {
+	// The Slack app ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Display name of the Slack app
+	Name string `form:"name" json:"name" xml:"name"`
+	// Current status: unconfigured, active
+	Status string `form:"status" json:"status" xml:"status"`
+	// The Slack app Client ID
+	SlackClientID *string `form:"slack_client_id,omitempty" json:"slack_client_id,omitempty" xml:"slack_client_id,omitempty"`
+	// System prompt for the Slack app
+	SystemPrompt *string `form:"system_prompt,omitempty" json:"system_prompt,omitempty" xml:"system_prompt,omitempty"`
+	// Asset ID for the app icon
+	IconAssetID *string `form:"icon_asset_id,omitempty" json:"icon_asset_id,omitempty" xml:"icon_asset_id,omitempty"`
+	// The connected Slack workspace ID
+	SlackTeamID *string `form:"slack_team_id,omitempty" json:"slack_team_id,omitempty" xml:"slack_team_id,omitempty"`
+	// The connected Slack workspace name
+	SlackTeamName *string `form:"slack_team_name,omitempty" json:"slack_team_name,omitempty" xml:"slack_team_name,omitempty"`
+	// Attached toolset IDs
+	ToolsetIds []string `form:"toolset_ids" json:"toolset_ids" xml:"toolset_ids"`
+	// OAuth callback URL for this app
+	RedirectURL *string `form:"redirect_url,omitempty" json:"redirect_url,omitempty" xml:"redirect_url,omitempty"`
+	// Event subscription URL for this app
+	RequestURL *string `form:"request_url,omitempty" json:"request_url,omitempty" xml:"request_url,omitempty"`
+	CreatedAt  string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt  string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // NewGetSlackConnectionResponseBody builds the HTTP response body from the
 // result of the "getSlackConnection" endpoint of the "slack" service.
 func NewGetSlackConnectionResponseBody(res *slack.GetSlackConnectionResult) *GetSlackConnectionResponseBody {
@@ -991,6 +2253,119 @@ func NewUpdateSlackConnectionResponseBody(res *slack.GetSlackConnectionResult) *
 		DefaultToolsetSlug: res.DefaultToolsetSlug,
 		CreatedAt:          res.CreatedAt,
 		UpdatedAt:          res.UpdatedAt,
+	}
+	return body
+}
+
+// NewCreateSlackAppResponseBody builds the HTTP response body from the result
+// of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppResponseBody(res *slack.CreateSlackAppResult) *CreateSlackAppResponseBody {
+	body := &CreateSlackAppResponseBody{}
+	if res.App != nil {
+		body.App = marshalSlackSlackAppResultToSlackAppResultResponseBody(res.App)
+	}
+	return body
+}
+
+// NewListSlackAppsResponseBody builds the HTTP response body from the result
+// of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsResponseBody(res *slack.ListSlackAppsResult) *ListSlackAppsResponseBody {
+	body := &ListSlackAppsResponseBody{}
+	if res.Items != nil {
+		body.Items = make([]*SlackAppResultResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalSlackSlackAppResultToSlackAppResultResponseBody(val)
+		}
+	} else {
+		body.Items = []*SlackAppResultResponseBody{}
+	}
+	return body
+}
+
+// NewGetSlackAppResponseBody builds the HTTP response body from the result of
+// the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppResponseBody(res *slack.SlackAppResult) *GetSlackAppResponseBody {
+	body := &GetSlackAppResponseBody{
+		ID:            res.ID,
+		Name:          res.Name,
+		Status:        res.Status,
+		SlackClientID: res.SlackClientID,
+		SystemPrompt:  res.SystemPrompt,
+		IconAssetID:   res.IconAssetID,
+		SlackTeamID:   res.SlackTeamID,
+		SlackTeamName: res.SlackTeamName,
+		RedirectURL:   res.RedirectURL,
+		RequestURL:    res.RequestURL,
+		CreatedAt:     res.CreatedAt,
+		UpdatedAt:     res.UpdatedAt,
+	}
+	if res.ToolsetIds != nil {
+		body.ToolsetIds = make([]string, len(res.ToolsetIds))
+		for i, val := range res.ToolsetIds {
+			body.ToolsetIds[i] = val
+		}
+	} else {
+		body.ToolsetIds = []string{}
+	}
+	return body
+}
+
+// NewConfigureSlackAppResponseBody builds the HTTP response body from the
+// result of the "configureSlackApp" endpoint of the "slack" service.
+func NewConfigureSlackAppResponseBody(res *slack.SlackAppResult) *ConfigureSlackAppResponseBody {
+	body := &ConfigureSlackAppResponseBody{
+		ID:            res.ID,
+		Name:          res.Name,
+		Status:        res.Status,
+		SlackClientID: res.SlackClientID,
+		SystemPrompt:  res.SystemPrompt,
+		IconAssetID:   res.IconAssetID,
+		SlackTeamID:   res.SlackTeamID,
+		SlackTeamName: res.SlackTeamName,
+		RedirectURL:   res.RedirectURL,
+		RequestURL:    res.RequestURL,
+		CreatedAt:     res.CreatedAt,
+		UpdatedAt:     res.UpdatedAt,
+	}
+	if res.ToolsetIds != nil {
+		body.ToolsetIds = make([]string, len(res.ToolsetIds))
+		for i, val := range res.ToolsetIds {
+			body.ToolsetIds[i] = val
+		}
+	} else {
+		body.ToolsetIds = []string{}
+	}
+	return body
+}
+
+// NewUpdateSlackAppResponseBody builds the HTTP response body from the result
+// of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppResponseBody(res *slack.SlackAppResult) *UpdateSlackAppResponseBody {
+	body := &UpdateSlackAppResponseBody{
+		ID:            res.ID,
+		Name:          res.Name,
+		Status:        res.Status,
+		SlackClientID: res.SlackClientID,
+		SystemPrompt:  res.SystemPrompt,
+		IconAssetID:   res.IconAssetID,
+		SlackTeamID:   res.SlackTeamID,
+		SlackTeamName: res.SlackTeamName,
+		RedirectURL:   res.RedirectURL,
+		RequestURL:    res.RequestURL,
+		CreatedAt:     res.CreatedAt,
+		UpdatedAt:     res.UpdatedAt,
+	}
+	if res.ToolsetIds != nil {
+		body.ToolsetIds = make([]string, len(res.ToolsetIds))
+		for i, val := range res.ToolsetIds {
+			body.ToolsetIds[i] = val
+		}
+	} else {
+		body.ToolsetIds = []string{}
 	}
 	return body
 }
@@ -1717,6 +3092,848 @@ func NewDeleteSlackConnectionGatewayErrorResponseBody(res *goa.ServiceError) *De
 	return body
 }
 
+// NewCreateSlackAppUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppUnauthorizedResponseBody(res *goa.ServiceError) *CreateSlackAppUnauthorizedResponseBody {
+	body := &CreateSlackAppUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSlackAppForbiddenResponseBody builds the HTTP response body from
+// the result of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppForbiddenResponseBody(res *goa.ServiceError) *CreateSlackAppForbiddenResponseBody {
+	body := &CreateSlackAppForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSlackAppBadRequestResponseBody builds the HTTP response body from
+// the result of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppBadRequestResponseBody(res *goa.ServiceError) *CreateSlackAppBadRequestResponseBody {
+	body := &CreateSlackAppBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSlackAppNotFoundResponseBody builds the HTTP response body from the
+// result of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppNotFoundResponseBody(res *goa.ServiceError) *CreateSlackAppNotFoundResponseBody {
+	body := &CreateSlackAppNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSlackAppConflictResponseBody builds the HTTP response body from the
+// result of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppConflictResponseBody(res *goa.ServiceError) *CreateSlackAppConflictResponseBody {
+	body := &CreateSlackAppConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSlackAppUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateSlackAppUnsupportedMediaResponseBody {
+	body := &CreateSlackAppUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSlackAppInvalidResponseBody builds the HTTP response body from the
+// result of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppInvalidResponseBody(res *goa.ServiceError) *CreateSlackAppInvalidResponseBody {
+	body := &CreateSlackAppInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSlackAppInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppInvariantViolationResponseBody(res *goa.ServiceError) *CreateSlackAppInvariantViolationResponseBody {
+	body := &CreateSlackAppInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSlackAppUnexpectedResponseBody builds the HTTP response body from
+// the result of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppUnexpectedResponseBody(res *goa.ServiceError) *CreateSlackAppUnexpectedResponseBody {
+	body := &CreateSlackAppUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSlackAppGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "createSlackApp" endpoint of the "slack" service.
+func NewCreateSlackAppGatewayErrorResponseBody(res *goa.ServiceError) *CreateSlackAppGatewayErrorResponseBody {
+	body := &CreateSlackAppGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSlackAppsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsUnauthorizedResponseBody(res *goa.ServiceError) *ListSlackAppsUnauthorizedResponseBody {
+	body := &ListSlackAppsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSlackAppsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsForbiddenResponseBody(res *goa.ServiceError) *ListSlackAppsForbiddenResponseBody {
+	body := &ListSlackAppsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSlackAppsBadRequestResponseBody builds the HTTP response body from
+// the result of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsBadRequestResponseBody(res *goa.ServiceError) *ListSlackAppsBadRequestResponseBody {
+	body := &ListSlackAppsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSlackAppsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsNotFoundResponseBody(res *goa.ServiceError) *ListSlackAppsNotFoundResponseBody {
+	body := &ListSlackAppsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSlackAppsConflictResponseBody builds the HTTP response body from the
+// result of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsConflictResponseBody(res *goa.ServiceError) *ListSlackAppsConflictResponseBody {
+	body := &ListSlackAppsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSlackAppsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListSlackAppsUnsupportedMediaResponseBody {
+	body := &ListSlackAppsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSlackAppsInvalidResponseBody builds the HTTP response body from the
+// result of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsInvalidResponseBody(res *goa.ServiceError) *ListSlackAppsInvalidResponseBody {
+	body := &ListSlackAppsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSlackAppsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsInvariantViolationResponseBody(res *goa.ServiceError) *ListSlackAppsInvariantViolationResponseBody {
+	body := &ListSlackAppsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSlackAppsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsUnexpectedResponseBody(res *goa.ServiceError) *ListSlackAppsUnexpectedResponseBody {
+	body := &ListSlackAppsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSlackAppsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listSlackApps" endpoint of the "slack" service.
+func NewListSlackAppsGatewayErrorResponseBody(res *goa.ServiceError) *ListSlackAppsGatewayErrorResponseBody {
+	body := &ListSlackAppsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSlackAppUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppUnauthorizedResponseBody(res *goa.ServiceError) *GetSlackAppUnauthorizedResponseBody {
+	body := &GetSlackAppUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSlackAppForbiddenResponseBody builds the HTTP response body from the
+// result of the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppForbiddenResponseBody(res *goa.ServiceError) *GetSlackAppForbiddenResponseBody {
+	body := &GetSlackAppForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSlackAppBadRequestResponseBody builds the HTTP response body from the
+// result of the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppBadRequestResponseBody(res *goa.ServiceError) *GetSlackAppBadRequestResponseBody {
+	body := &GetSlackAppBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSlackAppNotFoundResponseBody builds the HTTP response body from the
+// result of the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppNotFoundResponseBody(res *goa.ServiceError) *GetSlackAppNotFoundResponseBody {
+	body := &GetSlackAppNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSlackAppConflictResponseBody builds the HTTP response body from the
+// result of the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppConflictResponseBody(res *goa.ServiceError) *GetSlackAppConflictResponseBody {
+	body := &GetSlackAppConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSlackAppUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSlackAppUnsupportedMediaResponseBody {
+	body := &GetSlackAppUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSlackAppInvalidResponseBody builds the HTTP response body from the
+// result of the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppInvalidResponseBody(res *goa.ServiceError) *GetSlackAppInvalidResponseBody {
+	body := &GetSlackAppInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSlackAppInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppInvariantViolationResponseBody(res *goa.ServiceError) *GetSlackAppInvariantViolationResponseBody {
+	body := &GetSlackAppInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSlackAppUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppUnexpectedResponseBody(res *goa.ServiceError) *GetSlackAppUnexpectedResponseBody {
+	body := &GetSlackAppUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSlackAppGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getSlackApp" endpoint of the "slack" service.
+func NewGetSlackAppGatewayErrorResponseBody(res *goa.ServiceError) *GetSlackAppGatewayErrorResponseBody {
+	body := &GetSlackAppGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureSlackAppUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "configureSlackApp" endpoint of the "slack" service.
+func NewConfigureSlackAppUnauthorizedResponseBody(res *goa.ServiceError) *ConfigureSlackAppUnauthorizedResponseBody {
+	body := &ConfigureSlackAppUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureSlackAppForbiddenResponseBody builds the HTTP response body from
+// the result of the "configureSlackApp" endpoint of the "slack" service.
+func NewConfigureSlackAppForbiddenResponseBody(res *goa.ServiceError) *ConfigureSlackAppForbiddenResponseBody {
+	body := &ConfigureSlackAppForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureSlackAppBadRequestResponseBody builds the HTTP response body
+// from the result of the "configureSlackApp" endpoint of the "slack" service.
+func NewConfigureSlackAppBadRequestResponseBody(res *goa.ServiceError) *ConfigureSlackAppBadRequestResponseBody {
+	body := &ConfigureSlackAppBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureSlackAppNotFoundResponseBody builds the HTTP response body from
+// the result of the "configureSlackApp" endpoint of the "slack" service.
+func NewConfigureSlackAppNotFoundResponseBody(res *goa.ServiceError) *ConfigureSlackAppNotFoundResponseBody {
+	body := &ConfigureSlackAppNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureSlackAppConflictResponseBody builds the HTTP response body from
+// the result of the "configureSlackApp" endpoint of the "slack" service.
+func NewConfigureSlackAppConflictResponseBody(res *goa.ServiceError) *ConfigureSlackAppConflictResponseBody {
+	body := &ConfigureSlackAppConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureSlackAppUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "configureSlackApp" endpoint of the "slack"
+// service.
+func NewConfigureSlackAppUnsupportedMediaResponseBody(res *goa.ServiceError) *ConfigureSlackAppUnsupportedMediaResponseBody {
+	body := &ConfigureSlackAppUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureSlackAppInvalidResponseBody builds the HTTP response body from
+// the result of the "configureSlackApp" endpoint of the "slack" service.
+func NewConfigureSlackAppInvalidResponseBody(res *goa.ServiceError) *ConfigureSlackAppInvalidResponseBody {
+	body := &ConfigureSlackAppInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureSlackAppInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "configureSlackApp" endpoint of the "slack"
+// service.
+func NewConfigureSlackAppInvariantViolationResponseBody(res *goa.ServiceError) *ConfigureSlackAppInvariantViolationResponseBody {
+	body := &ConfigureSlackAppInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureSlackAppUnexpectedResponseBody builds the HTTP response body
+// from the result of the "configureSlackApp" endpoint of the "slack" service.
+func NewConfigureSlackAppUnexpectedResponseBody(res *goa.ServiceError) *ConfigureSlackAppUnexpectedResponseBody {
+	body := &ConfigureSlackAppUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureSlackAppGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "configureSlackApp" endpoint of the "slack" service.
+func NewConfigureSlackAppGatewayErrorResponseBody(res *goa.ServiceError) *ConfigureSlackAppGatewayErrorResponseBody {
+	body := &ConfigureSlackAppGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSlackAppUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppUnauthorizedResponseBody(res *goa.ServiceError) *UpdateSlackAppUnauthorizedResponseBody {
+	body := &UpdateSlackAppUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSlackAppForbiddenResponseBody builds the HTTP response body from
+// the result of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppForbiddenResponseBody(res *goa.ServiceError) *UpdateSlackAppForbiddenResponseBody {
+	body := &UpdateSlackAppForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSlackAppBadRequestResponseBody builds the HTTP response body from
+// the result of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppBadRequestResponseBody(res *goa.ServiceError) *UpdateSlackAppBadRequestResponseBody {
+	body := &UpdateSlackAppBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSlackAppNotFoundResponseBody builds the HTTP response body from the
+// result of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppNotFoundResponseBody(res *goa.ServiceError) *UpdateSlackAppNotFoundResponseBody {
+	body := &UpdateSlackAppNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSlackAppConflictResponseBody builds the HTTP response body from the
+// result of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppConflictResponseBody(res *goa.ServiceError) *UpdateSlackAppConflictResponseBody {
+	body := &UpdateSlackAppConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSlackAppUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateSlackAppUnsupportedMediaResponseBody {
+	body := &UpdateSlackAppUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSlackAppInvalidResponseBody builds the HTTP response body from the
+// result of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppInvalidResponseBody(res *goa.ServiceError) *UpdateSlackAppInvalidResponseBody {
+	body := &UpdateSlackAppInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSlackAppInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppInvariantViolationResponseBody(res *goa.ServiceError) *UpdateSlackAppInvariantViolationResponseBody {
+	body := &UpdateSlackAppInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSlackAppUnexpectedResponseBody builds the HTTP response body from
+// the result of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppUnexpectedResponseBody(res *goa.ServiceError) *UpdateSlackAppUnexpectedResponseBody {
+	body := &UpdateSlackAppUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSlackAppGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "updateSlackApp" endpoint of the "slack" service.
+func NewUpdateSlackAppGatewayErrorResponseBody(res *goa.ServiceError) *UpdateSlackAppGatewayErrorResponseBody {
+	body := &UpdateSlackAppGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteSlackAppUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "deleteSlackApp" endpoint of the "slack" service.
+func NewDeleteSlackAppUnauthorizedResponseBody(res *goa.ServiceError) *DeleteSlackAppUnauthorizedResponseBody {
+	body := &DeleteSlackAppUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteSlackAppForbiddenResponseBody builds the HTTP response body from
+// the result of the "deleteSlackApp" endpoint of the "slack" service.
+func NewDeleteSlackAppForbiddenResponseBody(res *goa.ServiceError) *DeleteSlackAppForbiddenResponseBody {
+	body := &DeleteSlackAppForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteSlackAppBadRequestResponseBody builds the HTTP response body from
+// the result of the "deleteSlackApp" endpoint of the "slack" service.
+func NewDeleteSlackAppBadRequestResponseBody(res *goa.ServiceError) *DeleteSlackAppBadRequestResponseBody {
+	body := &DeleteSlackAppBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteSlackAppNotFoundResponseBody builds the HTTP response body from the
+// result of the "deleteSlackApp" endpoint of the "slack" service.
+func NewDeleteSlackAppNotFoundResponseBody(res *goa.ServiceError) *DeleteSlackAppNotFoundResponseBody {
+	body := &DeleteSlackAppNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteSlackAppConflictResponseBody builds the HTTP response body from the
+// result of the "deleteSlackApp" endpoint of the "slack" service.
+func NewDeleteSlackAppConflictResponseBody(res *goa.ServiceError) *DeleteSlackAppConflictResponseBody {
+	body := &DeleteSlackAppConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteSlackAppUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "deleteSlackApp" endpoint of the "slack" service.
+func NewDeleteSlackAppUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteSlackAppUnsupportedMediaResponseBody {
+	body := &DeleteSlackAppUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteSlackAppInvalidResponseBody builds the HTTP response body from the
+// result of the "deleteSlackApp" endpoint of the "slack" service.
+func NewDeleteSlackAppInvalidResponseBody(res *goa.ServiceError) *DeleteSlackAppInvalidResponseBody {
+	body := &DeleteSlackAppInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteSlackAppInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "deleteSlackApp" endpoint of the "slack" service.
+func NewDeleteSlackAppInvariantViolationResponseBody(res *goa.ServiceError) *DeleteSlackAppInvariantViolationResponseBody {
+	body := &DeleteSlackAppInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteSlackAppUnexpectedResponseBody builds the HTTP response body from
+// the result of the "deleteSlackApp" endpoint of the "slack" service.
+func NewDeleteSlackAppUnexpectedResponseBody(res *goa.ServiceError) *DeleteSlackAppUnexpectedResponseBody {
+	body := &DeleteSlackAppUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteSlackAppGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "deleteSlackApp" endpoint of the "slack" service.
+func NewDeleteSlackAppGatewayErrorResponseBody(res *goa.ServiceError) *DeleteSlackAppGatewayErrorResponseBody {
+	body := &DeleteSlackAppGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCallbackPayload builds a slack service callback endpoint payload.
 func NewCallbackPayload(state string, code string) *slack.CallbackPayload {
 	v := &slack.CallbackPayload{}
@@ -1768,11 +3985,161 @@ func NewDeleteSlackConnectionPayload(sessionToken *string, projectSlugInput *str
 	return v
 }
 
+// NewCreateSlackAppPayload builds a slack service createSlackApp endpoint
+// payload.
+func NewCreateSlackAppPayload(body *CreateSlackAppRequestBody, sessionToken *string, projectSlugInput *string) *slack.CreateSlackAppPayload {
+	v := &slack.CreateSlackAppPayload{
+		Name:         *body.Name,
+		SystemPrompt: body.SystemPrompt,
+		IconAssetID:  body.IconAssetID,
+	}
+	v.ToolsetIds = make([]string, len(body.ToolsetIds))
+	for i, val := range body.ToolsetIds {
+		v.ToolsetIds[i] = val
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListSlackAppsPayload builds a slack service listSlackApps endpoint
+// payload.
+func NewListSlackAppsPayload(sessionToken *string, projectSlugInput *string) *slack.ListSlackAppsPayload {
+	v := &slack.ListSlackAppsPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetSlackAppPayload builds a slack service getSlackApp endpoint payload.
+func NewGetSlackAppPayload(id string, sessionToken *string, projectSlugInput *string) *slack.GetSlackAppPayload {
+	v := &slack.GetSlackAppPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewConfigureSlackAppPayload builds a slack service configureSlackApp
+// endpoint payload.
+func NewConfigureSlackAppPayload(body *ConfigureSlackAppRequestBody, sessionToken *string, projectSlugInput *string) *slack.ConfigureSlackAppPayload {
+	v := &slack.ConfigureSlackAppPayload{
+		ID:                 *body.ID,
+		SlackClientID:      *body.SlackClientID,
+		SlackClientSecret:  *body.SlackClientSecret,
+		SlackSigningSecret: *body.SlackSigningSecret,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUpdateSlackAppPayload builds a slack service updateSlackApp endpoint
+// payload.
+func NewUpdateSlackAppPayload(body *UpdateSlackAppRequestBody, sessionToken *string, projectSlugInput *string) *slack.UpdateSlackAppPayload {
+	v := &slack.UpdateSlackAppPayload{
+		ID:           *body.ID,
+		Name:         body.Name,
+		SystemPrompt: body.SystemPrompt,
+		IconAssetID:  body.IconAssetID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDeleteSlackAppPayload builds a slack service deleteSlackApp endpoint
+// payload.
+func NewDeleteSlackAppPayload(id string, sessionToken *string, projectSlugInput *string) *slack.DeleteSlackAppPayload {
+	v := &slack.DeleteSlackAppPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateUpdateSlackConnectionRequestBody runs the validations defined on
 // UpdateSlackConnectionRequestBody
 func ValidateUpdateSlackConnectionRequestBody(body *UpdateSlackConnectionRequestBody) (err error) {
 	if body.DefaultToolsetSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("default_toolset_slug", "body"))
+	}
+	return
+}
+
+// ValidateCreateSlackAppRequestBody runs the validations defined on
+// CreateSlackAppRequestBody
+func ValidateCreateSlackAppRequestBody(body *CreateSlackAppRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ToolsetIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_ids", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 60, false))
+		}
+	}
+	if body.IconAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_asset_id", *body.IconAssetID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateConfigureSlackAppRequestBody runs the validations defined on
+// ConfigureSlackAppRequestBody
+func ValidateConfigureSlackAppRequestBody(body *ConfigureSlackAppRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.SlackClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slack_client_id", "body"))
+	}
+	if body.SlackClientSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slack_client_secret", "body"))
+	}
+	if body.SlackSigningSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slack_signing_secret", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateUpdateSlackAppRequestBody runs the validations defined on
+// UpdateSlackAppRequestBody
+func ValidateUpdateSlackAppRequestBody(body *UpdateSlackAppRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 60, false))
+		}
+	}
+	if body.IconAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_asset_id", *body.IconAssetID, goa.FormatUUID))
 	}
 	return
 }

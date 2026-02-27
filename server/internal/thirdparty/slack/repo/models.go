@@ -9,13 +9,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type SlackAppConnection struct {
-	SlackTeamID        string
-	OrganizationID     string
-	ProjectID          uuid.UUID
-	AccessToken        string
-	SlackTeamName      string
-	DefaultToolsetSlug pgtype.Text
+type SlackApp struct {
 	CreatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+	SlackTeamName      pgtype.Text
+	SlackBotUserID     pgtype.Text
+	SlackClientSecret  pgtype.Text
+	SlackSigningSecret pgtype.Text
+	SlackTeamID        pgtype.Text
+	OrganizationID     string
+	SlackBotToken      pgtype.Text
+	SlackClientID      pgtype.Text
+	SystemPrompt       pgtype.Text
+	Name               string
+	Status             string
+	IconAssetID        uuid.NullUUID
+	ProjectID          uuid.UUID
+	ID                 uuid.UUID
+	Deleted            bool
+}
+
+type SlackAppToolset struct {
+	ID         uuid.UUID
+	SlackAppID uuid.UUID
+	ToolsetID  uuid.UUID
+	CreatedAt  pgtype.Timestamptz
 }

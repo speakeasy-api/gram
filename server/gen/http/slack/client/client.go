@@ -36,6 +36,30 @@ type Client struct {
 	// deleteSlackConnection endpoint.
 	DeleteSlackConnectionDoer goahttp.Doer
 
+	// CreateSlackApp Doer is the HTTP client used to make requests to the
+	// createSlackApp endpoint.
+	CreateSlackAppDoer goahttp.Doer
+
+	// ListSlackApps Doer is the HTTP client used to make requests to the
+	// listSlackApps endpoint.
+	ListSlackAppsDoer goahttp.Doer
+
+	// GetSlackApp Doer is the HTTP client used to make requests to the getSlackApp
+	// endpoint.
+	GetSlackAppDoer goahttp.Doer
+
+	// ConfigureSlackApp Doer is the HTTP client used to make requests to the
+	// configureSlackApp endpoint.
+	ConfigureSlackAppDoer goahttp.Doer
+
+	// UpdateSlackApp Doer is the HTTP client used to make requests to the
+	// updateSlackApp endpoint.
+	UpdateSlackAppDoer goahttp.Doer
+
+	// DeleteSlackApp Doer is the HTTP client used to make requests to the
+	// deleteSlackApp endpoint.
+	DeleteSlackAppDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -61,6 +85,12 @@ func NewClient(
 		GetSlackConnectionDoer:    doer,
 		UpdateSlackConnectionDoer: doer,
 		DeleteSlackConnectionDoer: doer,
+		CreateSlackAppDoer:        doer,
+		ListSlackAppsDoer:         doer,
+		GetSlackAppDoer:           doer,
+		ConfigureSlackAppDoer:     doer,
+		UpdateSlackAppDoer:        doer,
+		DeleteSlackAppDoer:        doer,
 		RestoreResponseBody:       restoreBody,
 		scheme:                    scheme,
 		host:                      host,
@@ -184,6 +214,150 @@ func (c *Client) DeleteSlackConnection() goa.Endpoint {
 		resp, err := c.DeleteSlackConnectionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("slack", "deleteSlackConnection", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateSlackApp returns an endpoint that makes HTTP requests to the slack
+// service createSlackApp server.
+func (c *Client) CreateSlackApp() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateSlackAppRequest(c.encoder)
+		decodeResponse = DecodeCreateSlackAppResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateSlackAppRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateSlackAppDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slack", "createSlackApp", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSlackApps returns an endpoint that makes HTTP requests to the slack
+// service listSlackApps server.
+func (c *Client) ListSlackApps() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSlackAppsRequest(c.encoder)
+		decodeResponse = DecodeListSlackAppsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSlackAppsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSlackAppsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slack", "listSlackApps", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSlackApp returns an endpoint that makes HTTP requests to the slack
+// service getSlackApp server.
+func (c *Client) GetSlackApp() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSlackAppRequest(c.encoder)
+		decodeResponse = DecodeGetSlackAppResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSlackAppRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSlackAppDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slack", "getSlackApp", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ConfigureSlackApp returns an endpoint that makes HTTP requests to the slack
+// service configureSlackApp server.
+func (c *Client) ConfigureSlackApp() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeConfigureSlackAppRequest(c.encoder)
+		decodeResponse = DecodeConfigureSlackAppResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildConfigureSlackAppRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ConfigureSlackAppDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slack", "configureSlackApp", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateSlackApp returns an endpoint that makes HTTP requests to the slack
+// service updateSlackApp server.
+func (c *Client) UpdateSlackApp() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateSlackAppRequest(c.encoder)
+		decodeResponse = DecodeUpdateSlackAppResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateSlackAppRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateSlackAppDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slack", "updateSlackApp", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteSlackApp returns an endpoint that makes HTTP requests to the slack
+// service deleteSlackApp server.
+func (c *Client) DeleteSlackApp() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteSlackAppRequest(c.encoder)
+		decodeResponse = DecodeDeleteSlackAppResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteSlackAppRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteSlackAppDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slack", "deleteSlackApp", err)
 		}
 		return decodeResponse(resp)
 	}

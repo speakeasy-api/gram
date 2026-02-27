@@ -35,3 +35,33 @@ func UpdateSlackConnectionSlackPath() string {
 func DeleteSlackConnectionSlackPath() string {
 	return "/rpc/slack.deleteConnection"
 }
+
+// CreateSlackAppSlackPath returns the URL path to the slack service createSlackApp HTTP endpoint.
+func CreateSlackAppSlackPath() string {
+	return "/rpc/slack-apps.create"
+}
+
+// ListSlackAppsSlackPath returns the URL path to the slack service listSlackApps HTTP endpoint.
+func ListSlackAppsSlackPath() string {
+	return "/rpc/slack-apps.list"
+}
+
+// GetSlackAppSlackPath returns the URL path to the slack service getSlackApp HTTP endpoint.
+func GetSlackAppSlackPath() string {
+	return "/rpc/slack-apps.get"
+}
+
+// ConfigureSlackAppSlackPath returns the URL path to the slack service configureSlackApp HTTP endpoint.
+func ConfigureSlackAppSlackPath() string {
+	return "/rpc/slack-apps.configure"
+}
+
+// UpdateSlackAppSlackPath returns the URL path to the slack service updateSlackApp HTTP endpoint.
+func UpdateSlackAppSlackPath() string {
+	return "/rpc/slack-apps.update"
+}
+
+// DeleteSlackAppSlackPath returns the URL path to the slack service deleteSlackApp HTTP endpoint.
+func DeleteSlackAppSlackPath() string {
+	return "/rpc/slack-apps.delete"
+}

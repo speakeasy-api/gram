@@ -20,16 +20,28 @@ type Client struct {
 	GetSlackConnectionEndpoint    goa.Endpoint
 	UpdateSlackConnectionEndpoint goa.Endpoint
 	DeleteSlackConnectionEndpoint goa.Endpoint
+	CreateSlackAppEndpoint        goa.Endpoint
+	ListSlackAppsEndpoint         goa.Endpoint
+	GetSlackAppEndpoint           goa.Endpoint
+	ConfigureSlackAppEndpoint     goa.Endpoint
+	UpdateSlackAppEndpoint        goa.Endpoint
+	DeleteSlackAppEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "slack" service client given the endpoints.
-func NewClient(callback, login, getSlackConnection, updateSlackConnection, deleteSlackConnection goa.Endpoint) *Client {
+func NewClient(callback, login, getSlackConnection, updateSlackConnection, deleteSlackConnection, createSlackApp, listSlackApps, getSlackApp, configureSlackApp, updateSlackApp, deleteSlackApp goa.Endpoint) *Client {
 	return &Client{
 		CallbackEndpoint:              callback,
 		LoginEndpoint:                 login,
 		GetSlackConnectionEndpoint:    getSlackConnection,
 		UpdateSlackConnectionEndpoint: updateSlackConnection,
 		DeleteSlackConnectionEndpoint: deleteSlackConnection,
+		CreateSlackAppEndpoint:        createSlackApp,
+		ListSlackAppsEndpoint:         listSlackApps,
+		GetSlackAppEndpoint:           getSlackApp,
+		ConfigureSlackAppEndpoint:     configureSlackApp,
+		UpdateSlackAppEndpoint:        updateSlackApp,
+		DeleteSlackAppEndpoint:        deleteSlackApp,
 	}
 }
 
@@ -139,5 +151,134 @@ func (c *Client) UpdateSlackConnection(ctx context.Context, p *UpdateSlackConnec
 //   - error: internal error
 func (c *Client) DeleteSlackConnection(ctx context.Context, p *DeleteSlackConnectionPayload) (err error) {
 	_, err = c.DeleteSlackConnectionEndpoint(ctx, p)
+	return
+}
+
+// CreateSlackApp calls the "createSlackApp" endpoint of the "slack" service.
+// CreateSlackApp may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateSlackApp(ctx context.Context, p *CreateSlackAppPayload) (res *CreateSlackAppResult, err error) {
+	var ires any
+	ires, err = c.CreateSlackAppEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CreateSlackAppResult), nil
+}
+
+// ListSlackApps calls the "listSlackApps" endpoint of the "slack" service.
+// ListSlackApps may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSlackApps(ctx context.Context, p *ListSlackAppsPayload) (res *ListSlackAppsResult, err error) {
+	var ires any
+	ires, err = c.ListSlackAppsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSlackAppsResult), nil
+}
+
+// GetSlackApp calls the "getSlackApp" endpoint of the "slack" service.
+// GetSlackApp may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetSlackApp(ctx context.Context, p *GetSlackAppPayload) (res *SlackAppResult, err error) {
+	var ires any
+	ires, err = c.GetSlackAppEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SlackAppResult), nil
+}
+
+// ConfigureSlackApp calls the "configureSlackApp" endpoint of the "slack"
+// service.
+// ConfigureSlackApp may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ConfigureSlackApp(ctx context.Context, p *ConfigureSlackAppPayload) (res *SlackAppResult, err error) {
+	var ires any
+	ires, err = c.ConfigureSlackAppEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SlackAppResult), nil
+}
+
+// UpdateSlackApp calls the "updateSlackApp" endpoint of the "slack" service.
+// UpdateSlackApp may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateSlackApp(ctx context.Context, p *UpdateSlackAppPayload) (res *SlackAppResult, err error) {
+	var ires any
+	ires, err = c.UpdateSlackAppEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SlackAppResult), nil
+}
+
+// DeleteSlackApp calls the "deleteSlackApp" endpoint of the "slack" service.
+// DeleteSlackApp may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteSlackApp(ctx context.Context, p *DeleteSlackAppPayload) (err error) {
+	_, err = c.DeleteSlackAppEndpoint(ctx, p)
 	return
 }

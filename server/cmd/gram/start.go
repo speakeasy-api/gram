@@ -680,16 +680,15 @@ func newStartCommand() *cli.Command {
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
-			if slackClient.Enabled() {
-				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
-					GramServerURL:      c.String("server-url"),
-					SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
-					SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
-					SlackSigningSecret: c.String("slack-signing-secret"),
-				}))
-			} else {
-				logger.WarnContext(ctx, "slack client is not enabled")
+			if !slackClient.Enabled() {
+				logger.WarnContext(ctx, "slack client is not enabled, legacy slack endpoints will not work")
 			}
+			slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
+				GramServerURL:      c.String("server-url"),
+				SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
+				SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
+				SlackSigningSecret: c.String("slack-signing-secret"),
+			}))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
