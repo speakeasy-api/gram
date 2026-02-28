@@ -239,6 +239,11 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				Usage: "Skip polling for deployment completion and return immediately",
 				Value: false,
 			},
+			&cli.BoolFlag{
+				Name:  "no-open",
+				Usage: "Do not open the dashboard in the browser after deployment",
+				Value: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
@@ -279,12 +284,16 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			case "completed":
 				logger.InfoContext(ctx, "Deployment succeeded", slogID, slog.String("logs_url", logsURL))
 				fmt.Printf("\nView deployment: %s\n", logsURL)
-				openDeploymentURL(logger, ctx, logsURL)
+				if !c.Bool("no-open") {
+					openDeploymentURL(logger, ctx, logsURL)
+				}
 				return nil
 			case "failed":
 				logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", logsURL))
 				fmt.Printf("\nView deployment logs: %s\n", logsURL)
-				openDeploymentURL(logger, ctx, logsURL)
+				if !c.Bool("no-open") {
+					openDeploymentURL(logger, ctx, logsURL)
+				}
 				return fmt.Errorf("deployment failed")
 			default:
 				logger.InfoContext(
