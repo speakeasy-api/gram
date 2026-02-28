@@ -103,7 +103,6 @@ export default function Sources() {
   const deployment = deploymentResult?.deployment;
 
   const assetsCausingFailure = useUnusedAssetIds();
-  const failedDeployment = useFailedDeploymentSources();
   const {
     dialogState,
     openRemoveSource,
