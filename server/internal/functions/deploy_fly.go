@@ -744,7 +744,7 @@ func (f *FlyRunner) launchWithRetry(ctx context.Context, appName string, flapsc 
 		lastErr = err
 
 		if !isFlyAppNotReady(err) {
-			return nil, err
+			return nil, fmt.Errorf("launch machine: %w", err)
 		}
 
 		if attempt == maxAttempts-1 {
@@ -752,21 +752,21 @@ func (f *FlyRunner) launchWithRetry(ctx context.Context, appName string, flapsc 
 		}
 
 		f.logger.WarnContext(ctx, "fly app not yet visible to machines API, retrying",
-			slog.Int("attempt", attempt+1),
-			slog.Duration("backoff", backoff),
+			attr.SlogRetryAttempt(attempt+1),
+			attr.SlogRetryWait(backoff),
 			attr.SlogFlyAppName(appName),
 		)
 
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("waiting for fly app propagation: %w", ctx.Err())
 		case <-time.After(backoff):
 		}
 
 		backoff = min(backoff*2, 16*time.Second)
 	}
 
-	return nil, lastErr
+	return nil, fmt.Errorf("launch machine after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func (f *FlyRunner) setSecrets(ctx context.Context, logger *slog.Logger, appName string, secrets map[string]string) (*uint64, error) {
