@@ -19,6 +19,8 @@ type PreToolUseRequestBody struct {
 	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
 	// The input to the tool
 	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
+	// The Claude Code session ID
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 }
 
 // PostToolUseRequestBody is the type of the "hooks" service "postToolUse"
@@ -30,6 +32,8 @@ type PostToolUseRequestBody struct {
 	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
 	// The response from the tool
 	ToolResponse any `form:"tool_response,omitempty" json:"tool_response,omitempty" xml:"tool_response,omitempty"`
+	// The Claude Code session ID
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 }
 
 // PostToolUseFailureRequestBody is the type of the "hooks" service
@@ -41,6 +45,8 @@ type PostToolUseFailureRequestBody struct {
 	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
 	// The error from the tool
 	ToolError any `form:"tool_error,omitempty" json:"tool_error,omitempty" xml:"tool_error,omitempty"`
+	// The Claude Code session ID
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 }
 
 // PreToolUseResponseBody is the type of the "hooks" service "preToolUse"
@@ -615,6 +621,7 @@ func NewPreToolUseRequestBody(p *hooks.PreToolUsePayload) *PreToolUseRequestBody
 	body := &PreToolUseRequestBody{
 		ToolName:  p.ToolName,
 		ToolInput: p.ToolInput,
+		SessionID: p.SessionID,
 	}
 	return body
 }
@@ -626,6 +633,7 @@ func NewPostToolUseRequestBody(p *hooks.PostToolUsePayload) *PostToolUseRequestB
 		ToolName:     p.ToolName,
 		ToolInput:    p.ToolInput,
 		ToolResponse: p.ToolResponse,
+		SessionID:    p.SessionID,
 	}
 	return body
 }
@@ -637,6 +645,7 @@ func NewPostToolUseFailureRequestBody(p *hooks.PostToolUseFailurePayload) *PostT
 		ToolName:  p.ToolName,
 		ToolInput: p.ToolInput,
 		ToolError: p.ToolError,
+		SessionID: p.SessionID,
 	}
 	return body
 }

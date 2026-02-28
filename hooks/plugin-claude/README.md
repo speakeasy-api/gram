@@ -46,36 +46,62 @@ The plugin requires the following environment variables:
 
 - `GRAM_PROJECT`: Project name for organizing hooks (defaults to "default")
 
-### Setting Environment Variables
+### First-Time Setup
 
-Add these to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
+After installing the plugin, run:
+
+```
+/gram login
+```
+
+This will:
+1. Open https://app.getgram.ai/settings/api-keys in your browser
+2. Show you how to configure your `GRAM_API_KEY` environment variable
+3. Provide instructions for persisting the key across sessions
+
+**To persist your API key**, add these to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
 
 ```bash
 export GRAM_API_KEY="your-api-key-here"
 export GRAM_PROJECT="my-project"  # optional
 ```
 
-Then reload your shell or run:
+Then reload your shell:
 
 ```bash
 source ~/.zshrc  # or ~/.bashrc
 ```
 
+And restart Claude Code.
+
 ## How It Works
 
-This plugin registers handlers for three Claude Code hook events:
+This plugin provides:
 
-1. **PreToolUse**: Called before a tool executes (can approve/deny)
-2. **PostToolUse**: Called after successful tool execution
-3. **PostToolUseFailure**: Called when a tool execution fails
+### Slash Commands
 
-Each hook forwards the event data to your Gram server at `http://localhost:8080/rpc/hooks.*`.
+- **`/gram login`**: Set up your Gram API key (opens browser to get key)
+
+### Hook Handlers
+
+The plugin registers handlers for four Claude Code hook events:
+
+1. **SessionStart**: Notifies you if GRAM_API_KEY is not configured
+2. **PreToolUse**: Called before a tool executes (can approve/deny)
+3. **PostToolUse**: Called after successful tool execution
+4. **PostToolUseFailure**: Called when a tool execution fails
+
+Hook events are forwarded to your Gram server at `https://app.getgram.ai/rpc/hooks.*` (or your custom `GRAM_SERVER_URL`).
 
 ## Troubleshooting
 
 ### Missing GRAM_API_KEY
 
-If `GRAM_API_KEY` is not set, the hooks will block with an error message. Set the environment variable and restart Claude Code.
+If `GRAM_API_KEY` is not set:
+1. You'll see a notification on session start
+2. Run `/gram login` to get your API key
+3. Follow the instructions to configure it in your shell profile
+4. Restart Claude Code
 
 ### API Connection Issues
 

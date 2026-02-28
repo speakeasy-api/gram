@@ -1,1 +1,8 @@
-../../core/post_tool_use_failure.sh
+#!/usr/bin/env bash
+# Claude Code plugin wrapper for post_tool_use_failure hook
+
+# Set GRAM_PLUGIN_ROOT from Claude's plugin root
+export GRAM_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+
+# Call the core hook implementation
+exec bash "${GRAM_PLUGIN_ROOT}/scripts/core/post_tool_use_failure.sh"

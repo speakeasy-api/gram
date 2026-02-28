@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Claude Code plugin wrapper for session_start hook
+# This script is Claude-specific and sets up the environment for Gram hooks
+
+# Set GRAM_PLUGIN_ROOT from Claude's plugin root
+export GRAM_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+
+# Call the core session_start implementation
+exec bash "${GRAM_PLUGIN_ROOT}/scripts/core/session_start.sh"

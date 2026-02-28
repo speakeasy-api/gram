@@ -3464,7 +3464,7 @@ func hooksPreToolUseUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks pre-tool-use --body '{\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks pre-tool-use --body '{\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksPostToolUseUsage() {
@@ -3486,7 +3486,7 @@ func hooksPostToolUseUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks post-tool-use --body '{\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks post-tool-use --body '{\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksPostToolUseFailureUsage() {
@@ -3508,7 +3508,7 @@ func hooksPostToolUseFailureUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks post-tool-use-failure --body '{\n      \"tool_error\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks post-tool-use-failure --body '{\n      \"session_id\": \"abc123\",\n      \"tool_error\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its

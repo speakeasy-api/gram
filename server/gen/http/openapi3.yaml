@@ -15320,6 +15320,9 @@ components:
         PostToolUseFailurePayload:
             type: object
             properties:
+                session_id:
+                    type: string
+                    description: The Claude Code session ID
                 tool_error:
                     description: The error from the tool
                 tool_input:
@@ -15332,6 +15335,9 @@ components:
         PostToolUsePayload:
             type: object
             properties:
+                session_id:
+                    type: string
+                    description: The Claude Code session ID
                 tool_input:
                     description: The input to the tool
                 tool_name:
@@ -15344,6 +15350,9 @@ components:
         PreToolUsePayload:
             type: object
             properties:
+                session_id:
+                    type: string
+                    description: The Claude Code session ID
                 tool_input:
                     description: The input to the tool
                 tool_name:

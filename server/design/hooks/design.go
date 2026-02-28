@@ -15,6 +15,7 @@ var PreToolUsePayload = Type("PreToolUsePayload", func() {
 	Required("tool_name")
 	Attribute("tool_name", String, "The name of the tool being invoked")
 	Attribute("tool_input", Any, "The input to the tool")
+	Attribute("session_id", String, "The Claude Code session ID")
 })
 
 var PostToolUsePayload = Type("PostToolUsePayload", func() {
@@ -22,6 +23,7 @@ var PostToolUsePayload = Type("PostToolUsePayload", func() {
 	Attribute("tool_name", String, "The name of the tool that was invoked")
 	Attribute("tool_input", Any, "The input to the tool")
 	Attribute("tool_response", Any, "The response from the tool")
+	Attribute("session_id", String, "The Claude Code session ID")
 })
 
 var PostToolUseFailurePayload = Type("PostToolUseFailurePayload", func() {
@@ -29,6 +31,7 @@ var PostToolUseFailurePayload = Type("PostToolUseFailurePayload", func() {
 	Attribute("tool_name", String, "The name of the tool that failed")
 	Attribute("tool_input", Any, "The input to the tool")
 	Attribute("tool_error", Any, "The error from the tool")
+	Attribute("session_id", String, "The Claude Code session ID")
 })
 
 var _ = Service("hooks", func() {

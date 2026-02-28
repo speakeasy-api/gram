@@ -85,6 +85,9 @@ func (s *Service) PreToolUse(ctx context.Context, payload *gen.PreToolUsePayload
 	attrs[attr.LogBodyKey] = fmt.Sprintf("Pre-tool use hook: %s", payload.ToolName)
 	attrs[attr.TraceIDKey] = traceID
 	attrs[attr.SpanIDKey] = spanID
+	if payload.SessionID != nil {
+		attrs[attr.SessionIDKey] = *payload.SessionID
+	}
 
 	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, payload.ToolName, attrs)
 
@@ -118,6 +121,9 @@ func (s *Service) PostToolUse(ctx context.Context, payload *gen.PostToolUsePaylo
 	}
 	attrs[attr.TraceIDKey] = traceID
 	attrs[attr.SpanIDKey] = spanID
+	if payload.SessionID != nil {
+		attrs[attr.SessionIDKey] = *payload.SessionID
+	}
 
 	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, payload.ToolName, attrs)
 
@@ -151,6 +157,9 @@ func (s *Service) PostToolUseFailure(ctx context.Context, payload *gen.PostToolU
 	}
 	attrs[attr.TraceIDKey] = traceID
 	attrs[attr.SpanIDKey] = spanID
+	if payload.SessionID != nil {
+		attrs[attr.SessionIDKey] = *payload.SessionID
+	}
 
 	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, payload.ToolName, attrs)
 

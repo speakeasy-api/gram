@@ -22,7 +22,7 @@ func BuildPreToolUsePayload(hooksPreToolUseBody string, hooksPreToolUseApikeyTok
 	{
 		err = json.Unmarshal([]byte(hooksPreToolUseBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -40,6 +40,7 @@ func BuildPreToolUsePayload(hooksPreToolUseBody string, hooksPreToolUseApikeyTok
 	v := &hooks.PreToolUsePayload{
 		ToolName:  body.ToolName,
 		ToolInput: body.ToolInput,
+		SessionID: body.SessionID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -55,7 +56,7 @@ func BuildPostToolUsePayload(hooksPostToolUseBody string, hooksPostToolUseApikey
 	{
 		err = json.Unmarshal([]byte(hooksPostToolUseBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -74,6 +75,7 @@ func BuildPostToolUsePayload(hooksPostToolUseBody string, hooksPostToolUseApikey
 		ToolName:     body.ToolName,
 		ToolInput:    body.ToolInput,
 		ToolResponse: body.ToolResponse,
+		SessionID:    body.SessionID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -89,7 +91,7 @@ func BuildPostToolUseFailurePayload(hooksPostToolUseFailureBody string, hooksPos
 	{
 		err = json.Unmarshal([]byte(hooksPostToolUseFailureBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"tool_error\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"session_id\": \"abc123\",\n      \"tool_error\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -108,6 +110,7 @@ func BuildPostToolUseFailurePayload(hooksPostToolUseFailureBody string, hooksPos
 		ToolName:  body.ToolName,
 		ToolInput: body.ToolInput,
 		ToolError: body.ToolError,
+		SessionID: body.SessionID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

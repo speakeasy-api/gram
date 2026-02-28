@@ -63,6 +63,8 @@ type PostToolUseFailurePayload struct {
 	ToolInput any
 	// The error from the tool
 	ToolError any
+	// The Claude Code session ID
+	SessionID *string
 }
 
 // PostToolUsePayload is the payload type of the hooks service postToolUse
@@ -76,6 +78,8 @@ type PostToolUsePayload struct {
 	ToolInput any
 	// The response from the tool
 	ToolResponse any
+	// The Claude Code session ID
+	SessionID *string
 }
 
 // PreToolUsePayload is the payload type of the hooks service preToolUse method.
@@ -86,6 +90,8 @@ type PreToolUsePayload struct {
 	ToolName string
 	// The input to the tool
 	ToolInput any
+	// The Claude Code session ID
+	SessionID *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

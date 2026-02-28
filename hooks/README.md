@@ -57,6 +57,7 @@ hooks/
 The `core/` directory contains the shared implementation that powers all packaging methods:
 
 - **common.sh**: Environment validation, JSON formatting, Gram API client
+- **session_start.sh**: Handler for SessionStart events (interactive setup)
 - **pre_tool_use.sh**: Handler for PreToolUse events
 - **post_tool_use.sh**: Handler for PostToolUse events
 - **post_tool_use_failure.sh**: Handler for PostToolUseFailure events
@@ -75,6 +76,21 @@ All packaging methods require:
 
 **Optional:**
 - `GRAM_PROJECT`: Project name (defaults to "default")
+- `GRAM_SERVER_URL`: Server URL (defaults to "https://app.getgram.ai")
+
+### First-Time Setup
+
+**Claude Code Plugin:**
+1. Run `/gram login` after installation
+2. Follow the instructions to get your API key
+3. Add the key to your shell profile and restart Claude Code
+
+**Standalone Installation:**
+Set these environment variables in your shell profile before use:
+```bash
+export GRAM_API_KEY="your-api-key-here"
+export GRAM_PROJECT="default"  # optional
+```
 
 ## Adding Support for New Editors
 

@@ -1,11 +1,38 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "matchers": [
+          {
+            "matcher": "startup"
+          }
+        ],
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/session_start",
+            "async": false
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/pre_tool_use",
+            "async": true
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/post_tool_use",
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/post_tool_use",
             "async": true
           }
         ]
@@ -16,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/post_tool_use_failure",
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/post_tool_use_failure",
             "async": true
           }
         ]

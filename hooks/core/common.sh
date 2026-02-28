@@ -9,10 +9,11 @@ export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 # Usage: validate_env_vars "HookEventName"
 validate_env_vars() {
   local hook_event_name="$1"
-
-  echo "RUNNING HOOK $hook_event_name"
+  
+  echo "validating env vars for $hook_event_name" >> /tmp/gram-hooks-debug.log
 
   if [ -z "$GRAM_API_KEY" ]; then
+    echo "GRAM_API_KEY is not set" >> /tmp/gram-hooks-debug.log
     output_block_json "$hook_event_name" "GRAM_API_KEY environment variable is not set. Please set it to enable Gram hooks."
     exit 0
   fi
@@ -82,9 +83,15 @@ EOF
 call_gram_api() {
   local endpoint="$1"
   local hook_event_name="$2"
+  local server_url="$GRAM_SERVER_URL"
+  if [ -z "$server_url" ]; then
+    server_url="http://localhost:8080" # TODO https://app.getgram.ai"
+  fi
+
+  echo "Calling Gram API $server_url/rpc/hooks.$endpoint" >> /tmp/gram-hooks-debug.log
 
   INPUT=$(cat)
-  HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/gram_hook_response.json -X POST "http://localhost:8080/rpc/hooks.$endpoint" \
+  HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/gram_hook_response.json -X POST "$server_url/rpc/hooks.$endpoint" \
     -H "Content-Type: application/json" \
     -H "Gram-Key: $GRAM_API_KEY" \
     -H "Gram-Project: $GRAM_PROJECT" \
