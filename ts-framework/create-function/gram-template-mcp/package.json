@@ -28,7 +28,7 @@
   "dependencies": {
     "@gram-ai/functions": "workspace:",
     "@modelcontextprotocol/sdk": "catalog:",
-    "zod": "^3"
+    "zod": "^4"
   },
   "devDependencies": {
     "@modelcontextprotocol/inspector": "^0.17.1",
