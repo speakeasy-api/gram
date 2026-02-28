@@ -988,6 +988,7 @@ jobs:
           tags: |
             type=ref,event=branch,prefix=,suffix=-${{ matrix.runtime }}
             type=ref,event=tag,prefix=,suffix=-${{ matrix.runtime }}
+            type=ref,event=pr,suffix=-${{ matrix.runtime }}
             type=schedule,pattern=nightly,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
@@ -1116,6 +1117,7 @@ jobs:
           tags: |
             type=ref,event=branch,prefix=,suffix=-${{ matrix.runtime }}
             type=ref,event=tag,prefix=,suffix=-${{ matrix.runtime }}
+            type=ref,event=pr,suffix=-${{ matrix.runtime }}
             type=schedule,pattern=nightly,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
