@@ -1000,7 +1000,7 @@ jobs:
           set -x
           fly auth docker
 
-          SOURCE_IMAGE="${{ steps.flyCreateDevRetag.outputs.flyAppRegistry }}:sha-${{ steps.source.outputs.sha_short }}-${{ matrix.runtime }}"
+          SOURCE_IMAGE="${{ steps.flyCreateDevRetag.outputs.flyAppRegistry }}:${{ steps.source.outputs.sha_short }}-${{ matrix.runtime }}"
           echo "Pulling source image: $SOURCE_IMAGE"
           docker pull "$SOURCE_IMAGE"
 
