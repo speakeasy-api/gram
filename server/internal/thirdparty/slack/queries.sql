@@ -111,3 +111,41 @@ WHERE sat.slack_app_id = @slack_app_id
   AND sa.project_id = @project_id
   AND sa.deleted IS FALSE
 ORDER BY sat.created_at ASC;
+
+-- name: ListSlackAppToolsetNames :many
+SELECT t.name, t.slug
+FROM slack_app_toolsets sat
+JOIN toolsets t ON t.id = sat.toolset_id
+JOIN slack_apps sa ON sa.id = sat.slack_app_id
+WHERE sat.slack_app_id = @slack_app_id
+  AND sa.deleted IS FALSE
+  AND t.deleted IS FALSE
+ORDER BY t.name ASC;
+
+-- name: GetSlackUserMapping :one
+SELECT *
+FROM slack_user_mappings
+WHERE slack_app_id = @slack_app_id
+  AND slack_user_id = @slack_user_id;
+
+-- name: CreateSlackUserMapping :one
+INSERT INTO slack_user_mappings (slack_app_id, slack_user_id, gram_user_id)
+VALUES (@slack_app_id, @slack_user_id, @gram_user_id)
+ON CONFLICT (slack_app_id, slack_user_id) DO UPDATE SET gram_user_id = @gram_user_id
+RETURNING *;
+
+-- name: CreatePendingAuth :one
+INSERT INTO slack_pending_auths (slack_app_id, slack_user_id, token, channel_id)
+VALUES (@slack_app_id, @slack_user_id, @token, @channel_id)
+RETURNING *;
+
+-- name: GetPendingAuthByToken :one
+SELECT *
+FROM slack_pending_auths
+WHERE token = @token
+  AND status = 'pending';
+
+-- name: CompletePendingAuth :exec
+UPDATE slack_pending_auths
+SET status = 'completed', completed_at = clock_timestamp()
+WHERE id = @id;

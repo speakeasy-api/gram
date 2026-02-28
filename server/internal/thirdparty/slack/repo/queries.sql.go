@@ -40,6 +40,17 @@ func (q *Queries) AddSlackAppToolset(ctx context.Context, arg AddSlackAppToolset
 	return i, err
 }
 
+const completePendingAuth = `-- name: CompletePendingAuth :exec
+UPDATE slack_pending_auths
+SET status = 'completed', completed_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) CompletePendingAuth(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, completePendingAuth, id)
+	return err
+}
+
 const configureSlackApp = `-- name: ConfigureSlackApp :one
 UPDATE slack_apps
 SET
@@ -90,6 +101,40 @@ func (q *Queries) ConfigureSlackApp(ctx context.Context, arg ConfigureSlackAppPa
 		&i.ProjectID,
 		&i.ID,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const createPendingAuth = `-- name: CreatePendingAuth :one
+INSERT INTO slack_pending_auths (slack_app_id, slack_user_id, token, channel_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id, slack_app_id, slack_user_id, token, channel_id, status, created_at, completed_at
+`
+
+type CreatePendingAuthParams struct {
+	SlackAppID  uuid.UUID
+	SlackUserID string
+	Token       string
+	ChannelID   string
+}
+
+func (q *Queries) CreatePendingAuth(ctx context.Context, arg CreatePendingAuthParams) (SlackPendingAuth, error) {
+	row := q.db.QueryRow(ctx, createPendingAuth,
+		arg.SlackAppID,
+		arg.SlackUserID,
+		arg.Token,
+		arg.ChannelID,
+	)
+	var i SlackPendingAuth
+	err := row.Scan(
+		&i.ID,
+		&i.SlackAppID,
+		&i.SlackUserID,
+		&i.Token,
+		&i.ChannelID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
@@ -149,6 +194,55 @@ func (q *Queries) CreateSlackApp(ctx context.Context, arg CreateSlackAppParams) 
 		&i.ProjectID,
 		&i.ID,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const createSlackUserMapping = `-- name: CreateSlackUserMapping :one
+INSERT INTO slack_user_mappings (slack_app_id, slack_user_id, gram_user_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (slack_app_id, slack_user_id) DO UPDATE SET gram_user_id = $3
+RETURNING id, slack_app_id, slack_user_id, gram_user_id, created_at
+`
+
+type CreateSlackUserMappingParams struct {
+	SlackAppID  uuid.UUID
+	SlackUserID string
+	GramUserID  uuid.UUID
+}
+
+func (q *Queries) CreateSlackUserMapping(ctx context.Context, arg CreateSlackUserMappingParams) (SlackUserMapping, error) {
+	row := q.db.QueryRow(ctx, createSlackUserMapping, arg.SlackAppID, arg.SlackUserID, arg.GramUserID)
+	var i SlackUserMapping
+	err := row.Scan(
+		&i.ID,
+		&i.SlackAppID,
+		&i.SlackUserID,
+		&i.GramUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPendingAuthByToken = `-- name: GetPendingAuthByToken :one
+SELECT id, slack_app_id, slack_user_id, token, channel_id, status, created_at, completed_at
+FROM slack_pending_auths
+WHERE token = $1
+  AND status = 'pending'
+`
+
+func (q *Queries) GetPendingAuthByToken(ctx context.Context, token string) (SlackPendingAuth, error) {
+	row := q.db.QueryRow(ctx, getPendingAuthByToken, token)
+	var i SlackPendingAuth
+	err := row.Scan(
+		&i.ID,
+		&i.SlackAppID,
+		&i.SlackUserID,
+		&i.Token,
+		&i.ChannelID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
@@ -258,6 +352,31 @@ func (q *Queries) GetSlackAppByTeamID(ctx context.Context, slackTeamID pgtype.Te
 	return i, err
 }
 
+const getSlackUserMapping = `-- name: GetSlackUserMapping :one
+SELECT id, slack_app_id, slack_user_id, gram_user_id, created_at
+FROM slack_user_mappings
+WHERE slack_app_id = $1
+  AND slack_user_id = $2
+`
+
+type GetSlackUserMappingParams struct {
+	SlackAppID  uuid.UUID
+	SlackUserID string
+}
+
+func (q *Queries) GetSlackUserMapping(ctx context.Context, arg GetSlackUserMappingParams) (SlackUserMapping, error) {
+	row := q.db.QueryRow(ctx, getSlackUserMapping, arg.SlackAppID, arg.SlackUserID)
+	var i SlackUserMapping
+	err := row.Scan(
+		&i.ID,
+		&i.SlackAppID,
+		&i.SlackUserID,
+		&i.GramUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const installSlackApp = `-- name: InstallSlackApp :one
 UPDATE slack_apps
 SET
@@ -309,6 +428,42 @@ func (q *Queries) InstallSlackApp(ctx context.Context, arg InstallSlackAppParams
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const listSlackAppToolsetNames = `-- name: ListSlackAppToolsetNames :many
+SELECT t.name, t.slug
+FROM slack_app_toolsets sat
+JOIN toolsets t ON t.id = sat.toolset_id
+JOIN slack_apps sa ON sa.id = sat.slack_app_id
+WHERE sat.slack_app_id = $1
+  AND sa.deleted IS FALSE
+  AND t.deleted IS FALSE
+ORDER BY t.name ASC
+`
+
+type ListSlackAppToolsetNamesRow struct {
+	Name string
+	Slug string
+}
+
+func (q *Queries) ListSlackAppToolsetNames(ctx context.Context, slackAppID uuid.UUID) ([]ListSlackAppToolsetNamesRow, error) {
+	rows, err := q.db.Query(ctx, listSlackAppToolsetNames, slackAppID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSlackAppToolsetNamesRow
+	for rows.Next() {
+		var i ListSlackAppToolsetNamesRow
+		if err := rows.Scan(&i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSlackAppToolsets = `-- name: ListSlackAppToolsets :many
