@@ -47,7 +47,8 @@ type slackOAuthResponse struct {
 		Name string `json:"name"`
 		ID   string `json:"id"`
 	} `json:"team"`
-	Error string `json:"error"`
+	BotUserID string `json:"bot_user_id"`
+	Error     string `json:"error"`
 }
 
 type SlackAppAuthInfoResponse struct {
@@ -278,6 +279,53 @@ func (s *SlackClient) OAuthV2Access(ctx context.Context, code, initialRedirectUI
 
 	if err := json.Unmarshal(body, &oauthResponse); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if oauthResponse.Error != "" {
+		return nil, fmt.Errorf("slack oauth failed with: %s", oauthResponse.Error)
+	}
+
+	return &oauthResponse, nil
+}
+
+func (s *SlackClient) OAuthV2AccessWithCredentials(ctx context.Context, code, redirectURI, clientID, clientSecret string) (*slackOAuthResponse, error) {
+	tokenURL := slackServer + "/oauth.v2.access"
+	data := url.Values{}
+	data.Set("client_id", clientID)
+	data.Set("client_secret", clientSecret)
+	data.Set("code", code)
+	data.Set("grant_type", "authorization_code")
+	data.Set("redirect_uri", redirectURI)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create oauth request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.URL.RawQuery = data.Encode()
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send slack oauth request: %w", err)
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			fmt.Printf("failed to close response body: %v\n", cerr)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("slack oauth non-200 response: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read oauth response body: %w", err)
+	}
+
+	var oauthResponse slackOAuthResponse
+	if err := json.Unmarshal(body, &oauthResponse); err != nil {
+		return nil, fmt.Errorf("unmarshal oauth response: %w", err)
 	}
 
 	if oauthResponse.Error != "" {

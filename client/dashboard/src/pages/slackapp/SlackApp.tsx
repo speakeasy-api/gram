@@ -24,15 +24,17 @@ export function StatusBadge({
   installCount,
 }: {
   status: string;
-  installCount?: number;
+  installCount: number;
 }) {
-  if (status === "active") {
-    const n = installCount ?? 0;
+  if (status === "active" && installCount > 0) {
     return (
       <Badge variant="default">
-        {n} installation{n !== 1 ? "s" : ""} 🦞
+        {installCount} installation{installCount !== 1 ? "s" : ""}
       </Badge>
     );
+  }
+  if (status === "active") {
+    return <Badge variant="secondary">Ready</Badge>;
   }
   if (status === "unconfigured") {
     return <Badge variant="secondary">Unconfigured</Badge>;
@@ -104,7 +106,10 @@ function SlackAppCard({ app }: { app: SlackAppResult }) {
       <div className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50">
         <div className="flex items-start justify-between mb-2">
           <Type className="font-semibold truncate">{app.name}</Type>
-          <StatusBadge status={app.status} />
+          <StatusBadge
+            status={app.status}
+            installCount={app.slackTeamId ? 1 : 0}
+          />
         </div>
         <div className="space-y-1">
           <Type muted small>

@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,8 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
@@ -48,10 +47,9 @@ import (
 )
 
 type Configurations struct {
-	GramServerURL      string
-	SignInRedirectURL  string
-	SlackAppInstallURL string
-	SlackSigningSecret string
+	GramServerURL     string
+	GramSiteURL       string
+	SignInRedirectURL string
 }
 
 // Service for gram dashboard authentication endpoints
@@ -63,29 +61,11 @@ type Service struct {
 	enc                 *encryption.Client
 	repo                *repo.Queries
 	auth                *auth.Auth
-	toolset             *toolset_repo.Queries
+	toolsetRepo         *toolset_repo.Queries
 	cfg                 *Configurations
 	client              *slack_client.SlackClient
 	temporal            *temporal.Environment
 	watchedThreadsCache cache.TypedCacheObject[types.AppMentionedThreads]
-}
-
-func SlackInstallURL(env string) string {
-	switch env {
-	case "prod":
-		return "https://slack.com/oauth/v2/authorize?client_id=2519256324743.8891175217264&scope=app_mentions:read,channels:history,channels:join,channels:manage,channels:read,channels:write.invites,chat:write,chat:write.customize,chat:write.public,groups:history,groups:read,groups:write,groups:write.invites,im:history,im:read,im:write,mpim:history,mpim:read,mpim:write,reminders:read,reminders:write,usergroups:read,usergroups:write,users.profile:read,users:read,users:read.email,users:write,reactions:read,reactions:write,groups:write.topic,channels:write.topic&user_scope="
-	default:
-		return "https://slack.com/oauth/v2/authorize?client_id=2519256324743.8884952287878&scope=app_mentions:read,channels:history,channels:join,channels:manage,channels:read,channels:write.invites,chat:write,chat:write.customize,chat:write.public,groups:history,groups:read,groups:write,groups:write.invites,im:history,im:read,im:write,mpim:history,mpim:read,mpim:write,reminders:read,reminders:write,usergroups:read,usergroups:write,users.profile:read,users:read,users:read.email,users:write,reactions:read,reactions:write,groups:write.topic,channels:write.topic&user_scope="
-	}
-}
-
-func SlackClientID(env string) string {
-	switch env {
-	case "prod":
-		return "2519256324743.8891175217264"
-	default:
-		return "2519256324743.8884952287878"
-	}
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -101,7 +81,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		enc:                 enc,
 		repo:                repo.New(db),
 		auth:                auth.New(logger, db, sessions),
-		toolset:             toolset_repo.New(db),
+		toolsetRepo:         toolset_repo.New(db),
 		cfg:                 &cfg,
 		client:              client,
 		temporal:            temporal,
@@ -117,201 +97,109 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
-	// payloads may end up being polymorphic defining this outside of goa
-	o11y.AttachHandler(mux, "POST", "/rpc/slack.events", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.SlackEventHandler).ServeHTTP(w, r)
+
+	o11y.AttachHandler(mux, "GET", "/rpc/slack-apps/{id}/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.SlackAppOAuthCallback).ServeHTTP(w, r)
+	})
+	o11y.AttachHandler(mux, "POST", "/rpc/slack-apps/{id}/events", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.SlackAppEventHandler).ServeHTTP(w, r)
 	})
 }
 
-// --- Legacy methods (backward compat for old single-app model) ---
+// --- Per-app OAuth callback ---
 
-func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
-	returnURL := s.cfg.SignInRedirectURL
-	redirectWithError := func(returnURL string, err error) (*gen.CallbackResult, error) {
-		s.logger.ErrorContext(ctx, "slack auth error", attr.SlogError(err))
-		return &gen.CallbackResult{
-			Location: fmt.Sprintf("%s?slack_error=%s", returnURL, err.Error()),
-		}, nil
-	}
-	stateValues, err := url.ParseQuery(payload.State)
+func (s *Service) SlackAppOAuthCallback(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		return redirectWithError(returnURL, err)
+		return oops.E(oops.CodeBadRequest, err, "invalid app ID").Log(ctx, s.logger)
 	}
 
-	projectID := stateValues.Get("project_id")
-	organizationID := stateValues.Get("organization_id")
-	returnURL = stateValues.Get("return_url")
-	if returnURL == "" {
-		returnURL = s.cfg.SignInRedirectURL
+	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
+	if code == "" {
+		return oops.E(oops.CodeBadRequest, fmt.Errorf("missing code parameter"), "missing code parameter").Log(ctx, s.logger)
 	}
 
-	initialRedirectURI := fmt.Sprintf("%s/rpc/slack.callback", s.cfg.GramServerURL)
-
-	response, err := s.client.OAuthV2Access(ctx, payload.Code, initialRedirectURI)
+	app, err := s.repo.GetSlackAppByID(ctx, appID)
 	if err != nil {
-		return redirectWithError(returnURL, err)
+		return oops.E(oops.CodeNotFound, err, "slack app not found").Log(ctx, s.logger)
 	}
 
-	encryptedSlackToken, err := s.enc.Encrypt([]byte(response.AccessToken))
+	if !app.SlackClientID.Valid || !app.SlackClientSecret.Valid {
+		return oops.E(oops.CodeBadRequest, fmt.Errorf("slack app not configured"), "slack app missing client credentials").Log(ctx, s.logger)
+	}
+
+	decryptedSecret, err := s.enc.Decrypt(app.SlackClientSecret.String)
 	if err != nil {
-		return redirectWithError(returnURL, err)
+		return oops.E(oops.CodeUnexpected, err, "decrypt client secret").Log(ctx, s.logger)
 	}
 
-	// Create a slack app in installed state for backward compatibility
-	app, err := s.repo.CreateSlackApp(ctx, repo.CreateSlackAppParams{
-		OrganizationID: organizationID,
-		ProjectID:      uuid.MustParse(projectID),
-		Name:           response.Team.Name,
-		SystemPrompt:   pgtype.Text{String: "", Valid: false},
-		IconAssetID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	response, err := s.client.OAuthV2AccessWithCredentials(ctx, code, s.oauthCallbackURL(appID), app.SlackClientID.String, decryptedSecret)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "slack oauth exchange failed").Log(ctx, s.logger)
+	}
+
+	encryptedToken, err := s.enc.Encrypt([]byte(response.AccessToken))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "encrypt bot token").Log(ctx, s.logger)
+	}
+
+	_, err = s.repo.InstallSlackApp(ctx, repo.InstallSlackAppParams{
+		ID:             appID,
+		SlackBotToken:  conv.ToPGText(encryptedToken),
+		SlackTeamID:    conv.ToPGText(response.Team.ID),
+		SlackTeamName:  conv.ToPGText(response.Team.Name),
+		SlackBotUserID: conv.ToPGText(response.BotUserID),
 	})
 	if err != nil {
-		return redirectWithError(returnURL, errors.New("this slack workspace is already linked to a gram project"))
+		return oops.E(oops.CodeUnexpected, err, "install slack app").Log(ctx, s.logger)
 	}
 
-	// Configure with credentials and set configured status via direct update
-	_, err = s.repo.ConfigureSlackApp(ctx, repo.ConfigureSlackAppParams{
-		ID:                 app.ID,
-		ProjectID:          app.ProjectID,
-		SlackClientID:      conv.ToPGTextEmpty(""),
-		SlackClientSecret:  conv.ToPGTextEmpty(""),
-		SlackSigningSecret: conv.ToPGTextEmpty(""),
-	})
-	if err != nil {
-		return redirectWithError(returnURL, err)
+	redirectURL := s.cfg.SignInRedirectURL
+	if state != "" {
+		if parsed, err := url.Parse(state); err == nil && isTrustedRedirect(parsed, s.cfg.GramSiteURL) {
+			redirectURL = state
+		}
 	}
-
-	// Set bot token and team info directly since we have them from OAuth
-	_, err = s.db.Exec(ctx,
-		`UPDATE slack_apps SET slack_bot_token = $1, slack_team_id = $2, slack_team_name = $3, status = 'active', updated_at = clock_timestamp() WHERE id = $4`,
-		encryptedSlackToken, response.Team.ID, response.Team.Name, app.ID,
-	)
-	if err != nil {
-		return redirectWithError(returnURL, err)
-	}
-
-	// Attach first toolset if available
-	toolsets, err := s.toolset.ListToolsetsByProject(ctx, uuid.MustParse(projectID))
-	if err == nil && len(toolsets) > 0 {
-		_, _ = s.repo.AddSlackAppToolset(ctx, repo.AddSlackAppToolsetParams{
-			SlackAppID: app.ID,
-			ToolsetID:  toolsets[0].ID,
-		})
-	}
-
-	return &gen.CallbackResult{
-		Location: returnURL,
-	}, nil
-}
-
-func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
-	redirectURI := fmt.Sprintf("%s/rpc/slack.callback", s.cfg.GramServerURL)
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if authCtx.AccountType != "enterprise" {
-		return nil, oops.E(oops.CodeUnauthorized, fmt.Errorf("only available for enterprise accounts"), "only available for enterprise accounts").Log(ctx, s.logger)
-	}
-
-	state := url.Values{}
-	state.Set("project_id", authCtx.ProjectID.String())
-	state.Set("organization_id", authCtx.ActiveOrganizationID)
-	if payload.ReturnURL != nil {
-		state.Set("return_url", *payload.ReturnURL)
-	}
-
-	installURL, err := url.Parse(s.cfg.SlackAppInstallURL)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "parse slack install URL").Log(ctx, s.logger)
-	}
-
-	query := installURL.Query()
-	query.Set("redirect_uri", redirectURI)
-	query.Set("state", state.Encode())
-	installURL.RawQuery = query.Encode()
-
-	return &gen.LoginResult{
-		Location: installURL.String(),
-	}, nil
-}
-
-func (s *Service) GetSlackConnection(ctx context.Context, payload *gen.GetSlackConnectionPayload) (res *gen.GetSlackConnectionResult, err error) {
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	apps, err := s.repo.ListSlackApps(ctx, *authCtx.ProjectID)
-	if err != nil || len(apps) == 0 {
-		return nil, oops.E(oops.CodeNotFound, fmt.Errorf("no slack app found"), "no Slack connection found").Log(ctx, s.logger)
-	}
-
-	app := apps[0]
-	return &gen.GetSlackConnectionResult{
-		SlackTeamName:      conv.PtrValOr(conv.FromPGText[string](app.SlackTeamName), ""),
-		SlackTeamID:        conv.PtrValOr(conv.FromPGText[string](app.SlackTeamID), ""),
-		DefaultToolsetSlug: "",
-		CreatedAt:          app.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:          app.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
-}
-
-func (s *Service) DeleteSlackConnection(ctx context.Context, payload *gen.DeleteSlackConnectionPayload) (err error) {
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.ProjectID == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	apps, err := s.repo.ListSlackApps(ctx, *authCtx.ProjectID)
-	if err != nil || len(apps) == 0 {
-		return oops.E(oops.CodeNotFound, fmt.Errorf("no slack app found"), "no Slack connection found").Log(ctx, s.logger)
-	}
-
-	err = s.repo.SoftDeleteSlackApp(ctx, repo.SoftDeleteSlackAppParams{
-		ID:        apps[0].ID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "soft delete slack app").Log(ctx, s.logger)
-	}
-
+	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 	return nil
 }
 
-func (s *Service) UpdateSlackConnection(ctx context.Context, payload *gen.UpdateSlackConnectionPayload) (res *gen.GetSlackConnectionResult, err error) {
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
+// --- Per-app event handler ---
 
-	apps, err := s.repo.ListSlackApps(ctx, *authCtx.ProjectID)
-	if err != nil || len(apps) == 0 {
-		return nil, oops.E(oops.CodeNotFound, fmt.Errorf("no slack app found"), "no Slack connection found").Log(ctx, s.logger)
-	}
-
-	app := apps[0]
-	return &gen.GetSlackConnectionResult{
-		SlackTeamName:      conv.PtrValOr(conv.FromPGText[string](app.SlackTeamName), ""),
-		SlackTeamID:        conv.PtrValOr(conv.FromPGText[string](app.SlackTeamID), ""),
-		DefaultToolsetSlug: "",
-		CreatedAt:          app.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:          app.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
-}
-
-// --- Legacy event handler (kept for backward compat) ---
-
-func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) SlackAppEventHandler(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	if err := validateSlackEvent(r, s.cfg.SlackSigningSecret); err != nil {
+	// Buffer body so we can use it for both signature validation and JSON decode
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "read request body").Log(ctx, s.logger)
+	}
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid app ID").Log(ctx, s.logger)
+	}
+
+	app, err := s.repo.GetSlackAppByID(ctx, appID)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "slack app not found").Log(ctx, s.logger)
+	}
+
+	decryptedSigningSecret, err := s.enc.Decrypt(app.SlackSigningSecret.String)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "decrypt signing secret").Log(ctx, s.logger)
+	}
+
+	// Restore body for validateSlackEvent which reads r.Body
+	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	if err := validateSlackEvent(r, decryptedSigningSecret); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "request payload failed validation").Log(ctx, s.logger)
 	}
 
 	var event types.SlackEvent
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+	if err := json.Unmarshal(bodyBytes, &event); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid request payload").Log(ctx, s.logger)
 	}
 
@@ -322,13 +210,6 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "write slack challenge response").Log(ctx, s.logger)
 		}
-		return nil
-	}
-
-	_, err := s.repo.GetSlackAppByTeamID(ctx, conv.ToPGText(event.TeamID))
-	if err != nil {
-		s.logger.InfoContext(ctx, "skipping an event with no slack app connection", attr.SlogSlackTeamID(event.TeamID))
-		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
@@ -348,7 +229,7 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 			Channel:  event.Event.Channel,
 			ThreadTs: threadTs,
 		}); err != nil {
-			s.logger.ErrorContext(ctx, "failed to store user info in cache", attr.SlogError(err))
+			s.logger.ErrorContext(ctx, "failed to store watched thread in cache", attr.SlogError(err))
 		}
 		processEvent = true
 
@@ -356,8 +237,7 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 		if event.Event.Text == "" {
 			break
 		}
-		// Ignore messages from the bot itself
-		if event.Event.User == event.Authorizations[0].UserID {
+		if len(event.Authorizations) > 0 && event.Event.User == event.Authorizations[0].UserID {
 			break
 		}
 
@@ -366,8 +246,7 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 			break
 		}
 
-		// This will be processed by app_mention, slack sends duplicate event
-		if strings.HasPrefix(event.Event.Text, fmt.Sprintf("<@%s>", event.Authorizations[0].UserID)) {
+		if len(event.Authorizations) > 0 && strings.HasPrefix(event.Event.Text, fmt.Sprintf("<@%s>", event.Authorizations[0].UserID)) {
 			processEvent = false
 			break
 		}
@@ -395,7 +274,7 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-// --- New Slack Apps CRUD ---
+// --- Slack Apps CRUD ---
 
 func (s *Service) requireEnterprise(ctx context.Context) (*contextvalues.AuthContext, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -436,7 +315,7 @@ func (s *Service) CreateSlackApp(ctx context.Context, payload *gen.CreateSlackAp
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset ID").Log(ctx, s.logger)
 		}
-		ts, err := s.toolset.GetToolsetByID(ctx, parsed)
+		ts, err := s.toolsetRepo.GetToolsetByID(ctx, parsed)
 		if err != nil {
 			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
 		}
@@ -750,6 +629,19 @@ func (s *Service) DeleteSlackApp(ctx context.Context, payload *gen.DeleteSlackAp
 	}
 
 	return nil
+}
+
+// isTrustedRedirect checks that a redirect URL points to the same host as the
+// Gram site, or to localhost (for local development).
+func isTrustedRedirect(u *url.URL, gramSiteURL string) bool {
+	host := u.Hostname()
+	if host == "localhost" || host == "127.0.0.1" {
+		return true
+	}
+	if server, err := url.Parse(gramSiteURL); err == nil {
+		return u.Hostname() == server.Hostname()
+	}
+	return false
 }
 
 func (s *Service) oauthCallbackURL(appID uuid.UUID) string {

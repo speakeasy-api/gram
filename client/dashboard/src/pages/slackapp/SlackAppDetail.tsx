@@ -74,7 +74,10 @@ export default function SlackAppDetailPage() {
                 />
               )}
               {app.name}
-              <StatusBadge status={app.status} />
+              <StatusBadge
+                status={app.status}
+                installCount={app.slackTeamId ? 1 : 0}
+              />
             </span>
           </Page.Section.Title>
           <Page.Section.MoreActions
@@ -245,7 +248,11 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allToolsets = useToolsets();
 
-  const inviteUrl = buildInviteUrl(app, app.slackClientId ?? "");
+  const inviteUrl = buildInviteUrl(
+    app,
+    app.slackClientId ?? "",
+    window.location.href,
+  );
 
   const handleCopyInviteLink = async () => {
     await navigator.clipboard.writeText(inviteUrl);
@@ -364,19 +371,47 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
         <Type variant="body" className="font-medium">
           Installations
         </Type>
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 px-6">
-          <Icon name="slack" className="w-6 h-6 text-muted-foreground mb-3" />
-          <Type muted small className="text-center mb-3">
-            No installs yet. Share the invite link to get your first workspace
-            connected.
-          </Type>
-          <Button variant="secondary" size="sm" onClick={handleCopyInviteLink}>
-            <Button.LeftIcon>
-              <Icon name={copied ? "check" : "copy"} className="w-3.5 h-3.5" />
-            </Button.LeftIcon>
-            <Button.Text>{copied ? "Copied!" : "Copy Invite Link"}</Button.Text>
-          </Button>
-        </div>
+        {app.slackTeamId ? (
+          <div className="flex items-center justify-between rounded-lg border bg-card p-3">
+            <div className="min-w-0">
+              <Type className="font-medium truncate block">
+                {app.slackTeamName || app.slackTeamId}
+              </Type>
+              <Type muted small className="truncate block">
+                {app.slackTeamId}
+              </Type>
+            </div>
+            <Button variant="tertiary" size="sm" onClick={() => {}}>
+              <Button.LeftIcon>
+                <Icon name="scroll-text" className="w-3.5 h-3.5" />
+              </Button.LeftIcon>
+              <Button.Text>Logs</Button.Text>
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 px-6">
+            <Icon name="slack" className="w-6 h-6 text-muted-foreground mb-3" />
+            <Type muted small className="text-center mb-3">
+              No installs yet. Share the invite link to get your first workspace
+              connected.
+            </Type>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleCopyInviteLink}
+            >
+              <Button.LeftIcon>
+                <Icon
+                  name={copied ? "check" : "copy"}
+                  className="w-3.5 h-3.5"
+                />
+              </Button.LeftIcon>
+              <Button.Text>
+                {copied ? "Copied!" : "Copy Invite Link"}
+              </Button.Text>
+            </Button>
+          </div>
+        )}
       </Stack>
 
       {/* System Prompt */}

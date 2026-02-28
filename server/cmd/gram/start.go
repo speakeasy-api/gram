@@ -593,7 +593,7 @@ func newStartCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
-			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
+			slackClient := slack_client.NewSlackClient("", "", db, encryptionClient)
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
@@ -680,14 +680,10 @@ func newStartCommand() *cli.Command {
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
-			if !slackClient.Enabled() {
-				logger.WarnContext(ctx, "slack client is not enabled, legacy slack endpoints will not work")
-			}
 			slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
-				GramServerURL:      c.String("server-url"),
-				SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
-				SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
-				SlackSigningSecret: c.String("slack-signing-secret"),
+				GramServerURL:     c.String("server-url"),
+				GramSiteURL:       c.String("site-url"),
+				SignInRedirectURL: auth.FormSignInRedirectURL(c.String("site-url")),
 			}))
 
 			srv := &http.Server{
