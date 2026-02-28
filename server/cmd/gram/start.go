@@ -681,7 +681,8 @@ func newStartCommand() *cli.Command {
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
 			slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
-				GramServerURL:    c.String("server-url"),
+				GramServerURL:     c.String("server-url"),
+				GramSiteURL:       c.String("site-url"),
 				SignInRedirectURL: auth.FormSignInRedirectURL(c.String("site-url")),
 			}))
 

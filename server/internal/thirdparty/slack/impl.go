@@ -48,6 +48,7 @@ import (
 
 type Configurations struct {
 	GramServerURL     string
+	GramSiteURL       string
 	SignInRedirectURL string
 }
 
@@ -125,6 +126,10 @@ func (s *Service) SlackAppOAuthCallback(w http.ResponseWriter, r *http.Request) 
 		return oops.E(oops.CodeNotFound, err, "slack app not found").Log(ctx, s.logger)
 	}
 
+	if !app.SlackClientID.Valid || !app.SlackClientSecret.Valid {
+		return oops.E(oops.CodeBadRequest, fmt.Errorf("slack app not configured"), "slack app missing client credentials").Log(ctx, s.logger)
+	}
+
 	decryptedSecret, err := s.enc.Decrypt(app.SlackClientSecret.String)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "decrypt client secret").Log(ctx, s.logger)
@@ -153,7 +158,7 @@ func (s *Service) SlackAppOAuthCallback(w http.ResponseWriter, r *http.Request) 
 
 	redirectURL := s.cfg.SignInRedirectURL
 	if state != "" {
-		if parsed, err := url.Parse(state); err == nil && isTrustedRedirect(parsed, s.cfg.GramServerURL) {
+		if parsed, err := url.Parse(state); err == nil && isTrustedRedirect(parsed, s.cfg.GramSiteURL) {
 			redirectURL = state
 		}
 	}
@@ -627,13 +632,13 @@ func (s *Service) DeleteSlackApp(ctx context.Context, payload *gen.DeleteSlackAp
 }
 
 // isTrustedRedirect checks that a redirect URL points to the same host as the
-// Gram server, or to localhost (for local development).
-func isTrustedRedirect(u *url.URL, gramServerURL string) bool {
+// Gram site, or to localhost (for local development).
+func isTrustedRedirect(u *url.URL, gramSiteURL string) bool {
 	host := u.Hostname()
 	if host == "localhost" || host == "127.0.0.1" {
 		return true
 	}
-	if server, err := url.Parse(gramServerURL); err == nil {
+	if server, err := url.Parse(gramSiteURL); err == nil {
 		return u.Hostname() == server.Hostname()
 	}
 	return false
