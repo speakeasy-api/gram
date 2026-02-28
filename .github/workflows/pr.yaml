@@ -936,6 +936,13 @@ jobs:
         if: ${{ needs.changes.outputs.functions != 'true' && github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: echo "No functions changes detected — skipping functions-image (${{ matrix.runtime }})."
 
+      - name: Generate preview tag
+        id: preview
+        if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
+        run: |
+          SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
+          echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+
       # --- Re-tag path: no functions changes, tag existing main image with PR tags (DEV only) ---
 
       - name: Checkout (re-tag)
@@ -988,7 +995,7 @@ jobs:
           tags: |
             type=ref,event=branch,prefix=,suffix=-${{ matrix.runtime }}
             type=ref,event=tag,prefix=,suffix=-${{ matrix.runtime }}
-            type=ref,event=pr,suffix=-${{ matrix.runtime }}
+            type=raw,value=${{ steps.preview.outputs.tag }},suffix=-${{ matrix.runtime }}
             type=schedule,pattern=nightly,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
@@ -1117,7 +1124,7 @@ jobs:
           tags: |
             type=ref,event=branch,prefix=,suffix=-${{ matrix.runtime }}
             type=ref,event=tag,prefix=,suffix=-${{ matrix.runtime }}
-            type=ref,event=pr,suffix=-${{ matrix.runtime }}
+            type=raw,value=${{ steps.preview.outputs.tag }},suffix=-${{ matrix.runtime }}
             type=schedule,pattern=nightly,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
