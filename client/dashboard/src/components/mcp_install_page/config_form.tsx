@@ -50,6 +50,8 @@ type ValidationResult =
 export interface UseMcpMetadataMetadataFormResult {
   valid: ValidationResult;
   dirty: boolean;
+  brandingDirty: boolean;
+  instructionsDirty: boolean;
   isLoading: boolean;
   metadataParams: MetadataParams;
   logoUploadHandlers: {
@@ -76,6 +78,8 @@ export interface UseMcpMetadataMetadataFormResult {
     onChange: ChangeEventHandler<HTMLInputElement>;
   };
   reset: () => void;
+  resetBranding: () => void;
+  resetInstructions: () => void;
   save: () => void;
 }
 
@@ -177,6 +181,28 @@ export function useMcpMetadataMetadataForm(
     return false;
   }, [currentMetadata, metadataParams]);
 
+  const brandingDirty = useMemo(() => {
+    const brandingKeys = [
+      "logoAssetId",
+      "externalDocumentationUrl",
+      "externalDocumentationText",
+      "installationOverrideUrl",
+    ] as const;
+    if (!currentMetadata) {
+      return brandingKeys.some((key) => metadataParams[key] !== undefined);
+    }
+    return brandingKeys.some(
+      (key) => metadataParams[key] !== currentMetadata[key],
+    );
+  }, [currentMetadata, metadataParams]);
+
+  const instructionsDirty = useMemo(() => {
+    if (!currentMetadata) {
+      return metadataParams.instructions !== undefined;
+    }
+    return metadataParams.instructions !== currentMetadata.instructions;
+  }, [currentMetadata, metadataParams.instructions]);
+
   const handleUpload = useAssetImageUploadHandler((assetResult) => {
     setMetadataParams((prev) => ({
       ...prev,
@@ -194,6 +220,23 @@ export function useMcpMetadataMetadataForm(
     });
   }, [currentMetadata]);
 
+  const resetBranding = useCallback(() => {
+    setMetadataParams((prev) => ({
+      ...prev,
+      logoAssetId: currentMetadata?.logoAssetId,
+      externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
+      externalDocumentationText: currentMetadata?.externalDocumentationText,
+      installationOverrideUrl: currentMetadata?.installationOverrideUrl,
+    }));
+  }, [currentMetadata]);
+
+  const resetInstructions = useCallback(() => {
+    setMetadataParams((prev) => ({
+      ...prev,
+      instructions: currentMetadata?.instructions,
+    }));
+  }, [currentMetadata]);
+
   const save = useCallback(() => {
     mutation.mutate({
       request: {
@@ -208,6 +251,8 @@ export function useMcpMetadataMetadataForm(
   return {
     valid: urlValid,
     dirty,
+    brandingDirty,
+    instructionsDirty,
     isLoading: mutation.isPending,
     metadataParams,
     logoUploadHandlers: {
@@ -261,11 +306,17 @@ export function useMcpMetadataMetadataForm(
         })),
     },
     reset,
+    resetBranding,
+    resetInstructions,
     save,
   };
 }
 
-export function InstallPageConfigForm({ toolset, form, isLoading }: ConfigFormProps) {
+export function InstallPageConfigForm({
+  toolset,
+  form,
+  isLoading,
+}: ConfigFormProps) {
   const { installPageUrl } = useMcpUrl(toolset);
   const [open, setOpen] = useState(false);
 
@@ -304,85 +355,85 @@ export function InstallPageConfigForm({ toolset, form, isLoading }: ConfigFormPr
             <Dialog.Title>Install Page Configuration</Dialog.Title>
           </Dialog.Header>
           <Stack className={cn("gap-4", isLoading && "animate-pulse")}>
-              <div>
-                <Heading> MCP Logo </Heading>
-                <Type muted small className="max-w-2xl">
-                  The logo presented on this page
-                </Type>
-              </div>
-              <div className="inline-block">
-                <CompactUpload
-                  allowedExtensions={["png", "jpg", "jpeg"]}
-                  onUpload={form.logoUploadHandlers.onUpload}
-                  renderFilePreview={form.logoUploadHandlers.renderFilePreview}
-                  className="w-full max-h-[200px]"
-                />
-              </div>
-              <div>
-                <Heading> Documentation Link </Heading>
-                <Type muted small className="max-w-2xl">
-                  A link to your own MCP documentation that will be featured at
-                  the top of the page
-                </Type>
-              </div>
-              <div className="relative">
-                <Input
-                  type="text"
-                  placeholder="https://my-documentation.link"
-                  className="w-full"
-                  {...form.urlInputHandlers}
-                />
-                {form.valid.message && (
-                  <span className="absolute -bottom-4 left-0 text-xs text-destructive">
-                    {form.valid.message}
-                  </span>
-                )}
-              </div>
-              <div>
-                <Heading> Documentation Text </Heading>
-                <Type muted small className="max-w-2xl">
-                  What your custom link will say on the MCP page
-                </Type>
-              </div>
-              <div className="relative">
-                <Input
-                  type="text"
-                  placeholder="View Docs"
-                  className="w-full"
-                  {...form.docsTextInputHandlers}
-                />
-                {form.valid.message && (
-                  <span className="absolute -bottom-4 left-0 text-xs text-destructive">
-                    {form.valid.message}
-                  </span>
-                )}
-              </div>
-              <div>
-                <Heading> Installation Override URL </Heading>
-                <Type muted small className="max-w-2xl">
-                  A URL to redirect to instead of the default installation page
-                  when someone navigates to your MCP URL in their browser.
-                </Type>
-              </div>
-              <div className="relative">
-                <Input
-                  type="text"
-                  placeholder="Leave unset to use the default installation page"
-                  className="w-full"
-                  {...form.installationOverrideUrlInputHandlers}
-                />
-                {form.valid.message && (
-                  <span className="absolute -bottom-4 left-0 text-xs text-destructive">
-                    {form.valid.message}
-                  </span>
-                )}
-              </div>
+            <div>
+              <Heading> MCP Logo </Heading>
+              <Type muted small className="max-w-2xl">
+                The logo presented on this page
+              </Type>
+            </div>
+            <div className="inline-block">
+              <CompactUpload
+                allowedExtensions={["png", "jpg", "jpeg"]}
+                onUpload={form.logoUploadHandlers.onUpload}
+                renderFilePreview={form.logoUploadHandlers.renderFilePreview}
+                className="w-full max-h-[200px]"
+              />
+            </div>
+            <div>
+              <Heading> Documentation Link </Heading>
+              <Type muted small className="max-w-2xl">
+                A link to your own MCP documentation that will be featured at
+                the top of the page
+              </Type>
+            </div>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="https://my-documentation.link"
+                className="w-full"
+                {...form.urlInputHandlers}
+              />
+              {form.valid.message && (
+                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                  {form.valid.message}
+                </span>
+              )}
+            </div>
+            <div>
+              <Heading> Documentation Text </Heading>
+              <Type muted small className="max-w-2xl">
+                What your custom link will say on the MCP page
+              </Type>
+            </div>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="View Docs"
+                className="w-full"
+                {...form.docsTextInputHandlers}
+              />
+              {form.valid.message && (
+                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                  {form.valid.message}
+                </span>
+              )}
+            </div>
+            <div>
+              <Heading> Installation Override URL </Heading>
+              <Type muted small className="max-w-2xl">
+                A URL to redirect to instead of the default installation page
+                when someone navigates to your MCP URL in their browser.
+              </Type>
+            </div>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Leave unset to use the default installation page"
+                className="w-full"
+                {...form.installationOverrideUrlInputHandlers}
+              />
+              {form.valid.message && (
+                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                  {form.valid.message}
+                </span>
+              )}
+            </div>
           </Stack>
           <Dialog.Footer>
             <Button
               variant="tertiary"
-              disabled={!form.dirty}
-              onClick={form.reset}
+              disabled={!form.brandingDirty}
+              onClick={form.resetBranding}
             >
               <Button.Text>Discard</Button.Text>
             </Button>
@@ -391,7 +442,7 @@ export function InstallPageConfigForm({ toolset, form, isLoading }: ConfigFormPr
                 form.save();
                 setOpen(false);
               }}
-              disabled={isLoading || !form.valid.valid || !form.dirty}
+              disabled={isLoading || !form.valid.valid || !form.brandingDirty}
             >
               <Button.Text>Save</Button.Text>
             </Button>

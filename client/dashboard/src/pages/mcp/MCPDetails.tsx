@@ -1,7 +1,11 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { InstallPageConfigForm, useMcpMetadataMetadataForm, type UseMcpMetadataMetadataFormResult } from "@/components/mcp_install_page/config_form";
+import {
+  InstallPageConfigForm,
+  useMcpMetadataMetadataForm,
+  type UseMcpMetadataMetadataFormResult,
+} from "@/components/mcp_install_page/config_form";
 import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
@@ -498,7 +502,11 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
-          <InstallPageConfigForm toolset={toolset} form={form} isLoading={isLoading} />
+          <InstallPageConfigForm
+            toolset={toolset}
+            form={form}
+            isLoading={isLoading}
+          />
         </Stack>
       </PageSection>
 
@@ -506,7 +514,11 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         heading="Server Instructions"
         description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
       >
-        <ServerInstructionsSection toolset={toolset} form={form} isLoading={isLoading} />
+        <ServerInstructionsSection
+          toolset={toolset}
+          form={form}
+          isLoading={isLoading}
+        />
       </PageSection>
     </Stack>
   );
@@ -536,7 +548,7 @@ function ServerInstructionsSection({
         <GenerateInstructionsButton toolset={toolset} form={form} />
         <Button
           onClick={form.save}
-          disabled={isLoading || !form.valid.valid || !form.dirty}
+          disabled={isLoading || !form.valid.valid || !form.instructionsDirty}
           size="sm"
         >
           <Button.Text>Save</Button.Text>
@@ -571,6 +583,7 @@ function GenerateInstructionsButton({
     setGenerating(true);
     try {
       const res = await generateObject({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         model: model as any,
         mode: "json",
         prompt: `Write server instructions for the MCP server described below. Server instructions are returned to LLMs when they connect — they serve as a "user manual" independent of individual tool descriptions.
@@ -609,7 +622,9 @@ Return a JSON object with a single "instructions" field containing the server in
       <Button.LeftIcon>
         <Icon name="wand-sparkles" className="w-4 h-4" />
       </Button.LeftIcon>
-      <Button.Text>{generating ? "Generating..." : "Generate with AI"}</Button.Text>
+      <Button.Text>
+        {generating ? "Generating..." : "Generate with AI"}
+      </Button.Text>
     </Button>
   );
 }
