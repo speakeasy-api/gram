@@ -571,7 +571,7 @@ function GenerateInstructionsButton({
 }) {
   const [generating, setGenerating] = useState(false);
   const { data: fullToolset } = useToolset(toolset.slug);
-  const model = useModel("anthropic/claude-sonnet-4-6");
+  const model = useModel("anthropic/claude-sonnet-4.6");
 
   const tools = fullToolset?.tools ?? [];
 
