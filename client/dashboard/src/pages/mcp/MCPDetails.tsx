@@ -548,7 +548,7 @@ function ServerInstructionsSection({
         <GenerateInstructionsButton toolset={toolset} form={form} />
         <Button
           onClick={form.save}
-          disabled={isLoading || !form.valid.valid || !form.instructionsDirty}
+          disabled={isLoading || !form.instructionsDirty}
           size="sm"
         >
           <Button.Text>Save</Button.Text>
