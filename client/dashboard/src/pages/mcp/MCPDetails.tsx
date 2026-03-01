@@ -564,9 +564,13 @@ function ServerInstructionsSection({
       <Stack direction="horizontal" gap={2} justify="end">
         <GenerateInstructionsButton toolset={toolset} form={form} />
         <Button
-          onClick={() => {
-            form.save();
-            toast.success("Server instructions saved.");
+          onClick={async () => {
+            try {
+              await form.saveAsync();
+              toast.success("Server instructions saved.");
+            } catch {
+              toast.error("Failed to save instructions.");
+            }
           }}
           disabled={isLoading || !form.instructionsDirty}
           size="sm"

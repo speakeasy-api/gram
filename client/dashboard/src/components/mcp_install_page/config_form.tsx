@@ -81,6 +81,7 @@ export interface UseMcpMetadataMetadataFormResult {
   resetBranding: () => void;
   resetInstructions: () => void;
   save: () => void;
+  saveAsync: () => Promise<void>;
 }
 
 /*This is better implemented by taking a slice of the server state and running
@@ -248,6 +249,17 @@ export function useMcpMetadataMetadataForm(
     });
   }, [toolsetSlug, metadataParams, mutation]);
 
+  const saveAsync = useCallback(async () => {
+    await mutation.mutateAsync({
+      request: {
+        setMcpMetadataRequestBody: {
+          toolsetSlug,
+          ...metadataParams,
+        },
+      },
+    });
+  }, [toolsetSlug, metadataParams, mutation]);
+
   return {
     valid: urlValid,
     dirty,
@@ -309,6 +321,7 @@ export function useMcpMetadataMetadataForm(
     resetBranding,
     resetInstructions,
     save,
+    saveAsync,
   };
 }
 
