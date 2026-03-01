@@ -564,7 +564,10 @@ function ServerInstructionsSection({
       <Stack direction="horizontal" gap={2} justify="end">
         <GenerateInstructionsButton toolset={toolset} form={form} />
         <Button
-          onClick={form.save}
+          onClick={() => {
+            form.save();
+            toast.success("Server instructions saved.");
+          }}
           disabled={isLoading || !form.instructionsDirty}
           size="sm"
         >
