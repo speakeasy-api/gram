@@ -65,9 +65,8 @@ import {
   Trash2,
   XCircleIcon,
 } from "lucide-react";
-import { generateObject } from "ai";
+import { generateText } from "ai";
 import React, { useCallback, useEffect, useState } from "react";
-import { z } from "zod";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
@@ -558,10 +557,6 @@ function ServerInstructionsSection({
   );
 }
 
-const InstructionsSchema = z.object({
-  instructions: z.string(),
-});
-
 function GenerateInstructionsButton({
   toolset,
   form,
@@ -571,7 +566,7 @@ function GenerateInstructionsButton({
 }) {
   const [generating, setGenerating] = useState(false);
   const { data: fullToolset } = useToolset(toolset.slug);
-  const model = useModel("anthropic/claude-sonnet-4.6");
+  const model = useModel("anthropic/claude-sonnet-4.5");
 
   const tools = fullToolset?.tools ?? [];
 
@@ -582,10 +577,9 @@ function GenerateInstructionsButton({
 
     setGenerating(true);
     try {
-      const res = await generateObject({
+      const res = await generateText({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         model: model as any,
-        mode: "json",
         prompt: `Write server instructions for the MCP server described below. Server instructions are returned to LLMs when they connect — they serve as a "user manual" independent of individual tool descriptions.
 
 Best practices:
@@ -595,13 +589,12 @@ DO NOT: Duplicate individual tool descriptions, include marketing claims, try to
 Server details:
 ${JSON.stringify({ name: toolset.name, tools: tools.map((t) => ({ name: t.name, description: t.description })) }, null, 2)}
 
-Return a JSON object with a single "instructions" field containing the server instructions as a plain text string.`,
-        schema: InstructionsSchema,
+Respond with ONLY the server instructions as plain text. Do not wrap in JSON or code fences.`,
       });
 
       // Populate the textarea via a synthetic change event
       const syntheticEvent = {
-        target: { value: res.object.instructions },
+        target: { value: res.text.trim() },
       } as React.ChangeEvent<HTMLTextAreaElement>;
       form.instructionsHandlers.onChange(syntheticEvent);
     } catch (err) {
