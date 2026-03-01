@@ -1,7 +1,8 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { InstallPageConfigForm, useMcpMetadataMetadataForm } from "@/components/mcp_install_page/config_form";
+import { InstallPageConfigForm, useMcpMetadataMetadataForm, type UseMcpMetadataMetadataFormResult } from "@/components/mcp_install_page/config_form";
+import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
@@ -60,10 +61,13 @@ import {
   Trash2,
   XCircleIcon,
 } from "lucide-react";
+import { generateObject } from "ai";
 import React, { useCallback, useEffect, useState } from "react";
+import { z } from "zod";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
+import { useModel } from "../playground/Openrouter";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
@@ -497,7 +501,127 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
           <InstallPageConfigForm toolset={toolset} form={form} isLoading={isLoading} />
         </Stack>
       </PageSection>
+
+      <PageSection
+        heading="Server Instructions"
+        description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
+      >
+        <ServerInstructionsSection toolset={toolset} form={form} isLoading={isLoading} />
+      </PageSection>
     </Stack>
+  );
+}
+
+/**
+ * Server Instructions Section - textarea + generate + save
+ */
+function ServerInstructionsSection({
+  toolset,
+  form,
+  isLoading,
+}: {
+  toolset: Toolset;
+  form: UseMcpMetadataMetadataFormResult;
+  isLoading: boolean;
+}) {
+  return (
+    <Stack gap={3}>
+      <Textarea
+        placeholder={`Describe how your tools work together, required workflows,\nand any constraints (rate limits, auth requirements, etc.).\n\nKeep it concise — don't repeat individual tool descriptions.`}
+        className="w-full min-h-[150px]"
+        value={form.instructionsHandlers.value ?? ""}
+        onChange={form.instructionsHandlers.onChange}
+      />
+      <Stack direction="horizontal" gap={2} justify="end">
+        <GenerateInstructionsButton toolset={toolset} form={form} />
+        <Button
+          onClick={form.save}
+          disabled={isLoading || !form.valid.valid || !form.dirty}
+          size="sm"
+        >
+          <Button.Text>Save</Button.Text>
+        </Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+const InstructionsSchema = z.object({
+  instructions: z.string(),
+});
+
+function GenerateInstructionsButton({
+  toolset,
+  form,
+}: {
+  toolset: Toolset;
+  form: UseMcpMetadataMetadataFormResult;
+}) {
+  const [generating, setGenerating] = useState(false);
+  const { data: fullToolset } = useToolset(toolset.slug);
+  const model = useModel("anthropic/claude-sonnet-4-6");
+
+  const tools = fullToolset?.tools ?? [];
+
+  const handleGenerate = async () => {
+    if (tools.length === 0) {
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const res = await generateObject({
+        model: model as any,
+        mode: "json",
+        prompt: `You are writing server instructions for an MCP (Model Context Protocol) server named "${toolset.name}".
+
+Server instructions are returned to LLMs when they connect to the server. They serve as a "user manual" for the server — independent of individual tool descriptions.
+
+Write concise, actionable server instructions following these best practices:
+
+DO:
+- Focus on cross-feature relationships: how tools work together, required sequences (e.g. "call authenticate before any fetch_* tools")
+- Document operational patterns and workflows (optimal sequences, batch vs single operations)
+- Be explicit about constraints and limitations (rate limits, required preconditions, data formats)
+- Keep it short — more like a quick-reference card than a manual
+
+DO NOT:
+- Duplicate individual tool descriptions (the LLM already sees those via MCP)
+- Include marketing claims or superiority statements
+- Try to change model personality or behavior
+- Write lengthy prose — every sentence should be actionable
+
+The server has these tools:
+${JSON.stringify(tools.map((t) => ({ name: t.name, description: t.description })), null, 2)}
+
+Return a JSON object with a single "instructions" field containing the server instructions as a plain text string.`,
+        schema: InstructionsSchema,
+      });
+
+      // Populate the textarea via a synthetic change event
+      const syntheticEvent = {
+        target: { value: res.object.instructions },
+      } as React.ChangeEvent<HTMLTextAreaElement>;
+      form.instructionsHandlers.onChange(syntheticEvent);
+    } catch (err) {
+      console.error("Failed to generate instructions:", err);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={handleGenerate}
+      disabled={generating || tools.length === 0}
+    >
+      <Button.LeftIcon>
+        <Icon name="wand-sparkles" className="w-4 h-4" />
+      </Button.LeftIcon>
+      <Button.Text>{generating ? "Generating..." : "Generate with AI"}</Button.Text>
+    </Button>
   );
 }
 
