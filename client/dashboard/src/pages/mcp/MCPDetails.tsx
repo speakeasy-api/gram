@@ -573,26 +573,14 @@ function GenerateInstructionsButton({
       const res = await generateObject({
         model: model as any,
         mode: "json",
-        prompt: `You are writing server instructions for an MCP (Model Context Protocol) server named "${toolset.name}".
+        prompt: `Write server instructions for the MCP server described below. Server instructions are returned to LLMs when they connect — they serve as a "user manual" independent of individual tool descriptions.
 
-Server instructions are returned to LLMs when they connect to the server. They serve as a "user manual" for the server — independent of individual tool descriptions.
+Best practices:
+DO: Focus on cross-feature relationships (how tools work together, required sequences), document operational patterns and workflows, be explicit about constraints and limitations, keep it short like a quick-reference card.
+DO NOT: Duplicate individual tool descriptions, include marketing claims, try to change model personality, write lengthy prose.
 
-Write concise, actionable server instructions following these best practices:
-
-DO:
-- Focus on cross-feature relationships: how tools work together, required sequences (e.g. "call authenticate before any fetch_* tools")
-- Document operational patterns and workflows (optimal sequences, batch vs single operations)
-- Be explicit about constraints and limitations (rate limits, required preconditions, data formats)
-- Keep it short — more like a quick-reference card than a manual
-
-DO NOT:
-- Duplicate individual tool descriptions (the LLM already sees those via MCP)
-- Include marketing claims or superiority statements
-- Try to change model personality or behavior
-- Write lengthy prose — every sentence should be actionable
-
-The server has these tools:
-${JSON.stringify(tools.map((t) => ({ name: t.name, description: t.description })), null, 2)}
+Server details:
+${JSON.stringify({ name: toolset.name, tools: tools.map((t) => ({ name: t.name, description: t.description })) }, null, 2)}
 
 Return a JSON object with a single "instructions" field containing the server instructions as a plain text string.`,
         schema: InstructionsSchema,
@@ -605,6 +593,7 @@ Return a JSON object with a single "instructions" field containing the server in
       form.instructionsHandlers.onChange(syntheticEvent);
     } catch (err) {
       console.error("Failed to generate instructions:", err);
+      toast.error("Failed to generate instructions. Please try again.");
     } finally {
       setGenerating(false);
     }
