@@ -526,6 +526,8 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
 /**
  * Server Instructions Section - textarea + generate + save
  */
+const INSTRUCTIONS_SOFT_LIMIT = 2000;
+
 function ServerInstructionsSection({
   toolset,
   form,
@@ -535,14 +537,30 @@ function ServerInstructionsSection({
   form: UseMcpMetadataMetadataFormResult;
   isLoading: boolean;
 }) {
+  const charCount = form.instructionsHandlers.value?.length ?? 0;
+  const overLimit = charCount > INSTRUCTIONS_SOFT_LIMIT;
+
   return (
     <Stack gap={3}>
-      <Textarea
-        placeholder={`Describe how your tools work together, required workflows,\nand any constraints (rate limits, auth requirements, etc.).\n\nKeep it concise — don't repeat individual tool descriptions.`}
-        className="w-full min-h-[150px]"
-        value={form.instructionsHandlers.value ?? ""}
-        onChange={form.instructionsHandlers.onChange}
-      />
+      <div className="relative">
+        <Textarea
+          placeholder={`Describe how your tools work together, required workflows,\nand any constraints (rate limits, auth requirements, etc.).\n\nKeep it concise — don't repeat individual tool descriptions.`}
+          className="w-full min-h-[150px]"
+          value={form.instructionsHandlers.value ?? ""}
+          onChange={form.instructionsHandlers.onChange}
+        />
+        {charCount > 0 && (
+          <span
+            className={cn(
+              "absolute bottom-2 right-3 text-xs",
+              overLimit ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {charCount.toLocaleString()} /{" "}
+            {INSTRUCTIONS_SOFT_LIMIT.toLocaleString()}
+          </span>
+        )}
+      </div>
       <Stack direction="horizontal" gap={2} justify="end">
         <GenerateInstructionsButton toolset={toolset} form={form} />
         <Button
