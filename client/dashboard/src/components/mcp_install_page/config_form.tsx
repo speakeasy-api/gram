@@ -341,7 +341,15 @@ export function InstallPageConfigForm({
           </Button.RightIcon>
         </Button>
       </Link>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            form.resetBranding();
+          }
+          setOpen(nextOpen);
+        }}
+      >
         <Dialog.Trigger asChild>
           <Button variant="secondary">
             <Button.Text>Branding</Button.Text>
