@@ -1,7 +1,7 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
+import { InstallPageConfigForm, useMcpMetadataMetadataForm } from "@/components/mcp_install_page/config_form";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
@@ -34,6 +34,7 @@ import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
 import { Confirm, ToolsetEntry } from "@gram/client/models/components";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
@@ -460,6 +461,19 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
 function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
+  const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
+    retry: (_, err) => {
+      if (err instanceof GramError && err.statusCode === 404) {
+        return false;
+      }
+      return true;
+    },
+    throwOnError: false,
+  });
+
+  const form = useMcpMetadataMetadataForm(toolset.slug, result.data?.metadata);
+  const isLoading = result.isLoading || form.isLoading;
+
   return (
     <Stack className="mb-4">
       <PageSection
@@ -480,7 +494,7 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
-          <InstallPageConfigForm toolset={toolset} />
+          <InstallPageConfigForm toolset={toolset} form={form} isLoading={isLoading} />
         </Stack>
       </PageSection>
     </Stack>

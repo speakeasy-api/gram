@@ -6,10 +6,8 @@ import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Toolset } from "@/lib/toolTypes";
 import type { McpMetadata } from "@gram/client/models/components";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateGetMcpMetadata,
-  useGetMcpMetadata,
   useMcpMetadataSetMutation,
 } from "@gram/client/react-query";
 import { Button, cn, Icon, Input, Stack } from "@speakeasy-api/moonshine";
@@ -27,6 +25,8 @@ import { CompactUpload, useAssetImageUploadHandler } from "../upload";
 
 interface ConfigFormProps {
   toolset: Toolset;
+  form: UseMcpMetadataMetadataFormResult;
+  isLoading: boolean;
 }
 
 interface MetadataParams {
@@ -47,7 +47,7 @@ type ValidationResult =
       message: string;
     };
 
-interface UseMcpMetadataMetadataFormResult {
+export interface UseMcpMetadataMetadataFormResult {
   valid: ValidationResult;
   dirty: boolean;
   isLoading: boolean;
@@ -91,7 +91,7 @@ function equalsServerState(
   });
 }
 
-function useMcpMetadataMetadataForm(
+export function useMcpMetadataMetadataForm(
   toolsetSlug: string,
   currentMetadata?: McpMetadata,
 ): UseMcpMetadataMetadataFormResult {
@@ -265,22 +265,9 @@ function useMcpMetadataMetadataForm(
   };
 }
 
-export function InstallPageConfigForm({ toolset }: ConfigFormProps) {
+export function InstallPageConfigForm({ toolset, form, isLoading }: ConfigFormProps) {
   const { installPageUrl } = useMcpUrl(toolset);
   const [open, setOpen] = useState(false);
-
-  const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
-    retry: (_, err) => {
-      if (err instanceof GramError && err.statusCode === 404) {
-        return false;
-      }
-      return true;
-    },
-    throwOnError: false,
-  });
-
-  const form = useMcpMetadataMetadataForm(toolset.slug, result.data?.metadata);
-  const isLoading = result.isLoading || form.isLoading;
 
   if (!installPageUrl) {
     return null;
