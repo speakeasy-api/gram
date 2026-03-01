@@ -1,5 +1,4 @@
 import { CodeBlock } from "@/components/code";
-import { Textarea } from "@/components/moon/textarea";
 import { Dialog } from "@/components/ui/dialog";
 import { Label as Heading } from "@/components/ui/label";
 import { Link } from "@/components/ui/link";
@@ -307,121 +306,90 @@ export function InstallPageConfigForm({ toolset }: ConfigFormProps) {
       <Dialog open={open} onOpenChange={setOpen}>
         <Dialog.Trigger asChild>
           <Button variant="secondary">
-            <Button.Text>Edit</Button.Text>
+            <Button.Text>Branding</Button.Text>
             <Button.RightIcon>
               <Icon name="settings" />
             </Button.RightIcon>
           </Button>
         </Dialog.Trigger>
-        <Dialog.Content className="min-w-2xl max-w-3xl">
+        <Dialog.Content className="sm:max-w-3xl">
           <Dialog.Header>
             <Dialog.Title>Install Page Configuration</Dialog.Title>
           </Dialog.Header>
           <Stack className={cn("gap-4", isLoading && "animate-pulse")}>
-            <div>
-              <Heading> MCP Logo </Heading>
-              <Type muted small className="max-w-2xl">
-                The logo presented on this page
-              </Type>
-            </div>
-            <div className="inline-block">
-              <CompactUpload
-                allowedExtensions={["png", "jpg", "jpeg"]}
-                onUpload={form.logoUploadHandlers.onUpload}
-                renderFilePreview={form.logoUploadHandlers.renderFilePreview}
-                className="w-full max-h-[200px]"
-              />
-            </div>
-            <div>
-              <Heading> Documentation Link </Heading>
-              <Type muted small className="max-w-2xl">
-                A link to your own MCP documentation that will be featured at
-                the top of the page
-              </Type>
-            </div>
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="https://my-documentation.link"
-                className="w-full"
-                {...form.urlInputHandlers}
-              />
-              {form.valid.message && (
-                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
-                  {form.valid.message}
-                </span>
-              )}
-            </div>
-            <div>
-              <Heading> Documentation Text </Heading>
-              <Type muted small className="max-w-2xl">
-                What your custom link will say on the MCP page
-              </Type>
-            </div>
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="View Docs"
-                className="w-full"
-                {...form.docsTextInputHandlers}
-              />
-              {form.valid.message && (
-                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
-                  {form.valid.message}
-                </span>
-              )}
-            </div>
-            <div>
-              <Heading> Installation Override URL </Heading>
-              <Type muted small className="max-w-2xl">
-                A URL to redirect to instead of the default installation page
-                when someone navigates to your MCP URL in their browser.
-              </Type>
-            </div>
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="Leave unset to use the default installation page"
-                className="w-full"
-                {...form.installationOverrideUrlInputHandlers}
-              />
-              {form.valid.message && (
-                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
-                  {form.valid.message}
-                </span>
-              )}
-            </div>
-            <div>
-              <Heading> Server Instructions </Heading>
-              <Type muted small className="max-w-2xl">
-                Instructions returned to LLMs when they connect to your MCP
-                server. Use this to provide context about your tools, usage
-                patterns, and any important constraints.
-              </Type>
-            </div>
-            <div>
-              <Textarea
-                placeholder={`[Server Name] - [One-line purpose]
-
-## Key Capabilities
-
-[Brief list of main features]
-
-## Usage Patterns
-
-[How tools/resources work together]
-
-## Important Notes
-
-[Critical constraints or requirements]
-
-## Performance
-
-[Expected behavior, timing, limits]`}
-                className="w-full min-h-[120px] max-h-[200px]"
-                {...form.instructionsHandlers}
-              />
-            </div>
+              <div>
+                <Heading> MCP Logo </Heading>
+                <Type muted small className="max-w-2xl">
+                  The logo presented on this page
+                </Type>
+              </div>
+              <div className="inline-block">
+                <CompactUpload
+                  allowedExtensions={["png", "jpg", "jpeg"]}
+                  onUpload={form.logoUploadHandlers.onUpload}
+                  renderFilePreview={form.logoUploadHandlers.renderFilePreview}
+                  className="w-full max-h-[200px]"
+                />
+              </div>
+              <div>
+                <Heading> Documentation Link </Heading>
+                <Type muted small className="max-w-2xl">
+                  A link to your own MCP documentation that will be featured at
+                  the top of the page
+                </Type>
+              </div>
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="https://my-documentation.link"
+                  className="w-full"
+                  {...form.urlInputHandlers}
+                />
+                {form.valid.message && (
+                  <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                    {form.valid.message}
+                  </span>
+                )}
+              </div>
+              <div>
+                <Heading> Documentation Text </Heading>
+                <Type muted small className="max-w-2xl">
+                  What your custom link will say on the MCP page
+                </Type>
+              </div>
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="View Docs"
+                  className="w-full"
+                  {...form.docsTextInputHandlers}
+                />
+                {form.valid.message && (
+                  <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                    {form.valid.message}
+                  </span>
+                )}
+              </div>
+              <div>
+                <Heading> Installation Override URL </Heading>
+                <Type muted small className="max-w-2xl">
+                  A URL to redirect to instead of the default installation page
+                  when someone navigates to your MCP URL in their browser.
+                </Type>
+              </div>
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="Leave unset to use the default installation page"
+                  className="w-full"
+                  {...form.installationOverrideUrlInputHandlers}
+                />
+                {form.valid.message && (
+                  <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                    {form.valid.message}
+                  </span>
+                )}
+              </div>
           </Stack>
           <Dialog.Footer>
             <Button
