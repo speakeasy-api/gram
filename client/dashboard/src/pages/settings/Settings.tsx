@@ -320,36 +320,37 @@ export default function Settings() {
             className="w-64"
           />
         </Stack>
-        <Table
-          columns={apiKeyColumns}
-          data={filteredKeys}
-          rowKey={(row) => row.id}
-          className="max-h-[500px] overflow-y-auto"
-          noResultsMessage={
-            <Stack
-              gap={2}
-              className="h-full p-4 bg-background"
-              align="center"
-              justify="center"
-            >
-              <Type variant="body">
-                {apiKeySearch ? "No matching API keys" : "No API keys yet"}
-              </Type>
-              {!apiKeySearch && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  <Button.LeftIcon>
-                    <Icon name="key-round" className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Create Key</Button.Text>
-                </Button>
-              )}
-            </Stack>
-          }
-        />
+        <div className="max-h-[500px] overflow-y-auto rounded-lg border border-border">
+          <Table
+            columns={apiKeyColumns}
+            data={filteredKeys}
+            rowKey={(row) => row.id}
+            noResultsMessage={
+              <Stack
+                gap={2}
+                className="h-full p-4 bg-background"
+                align="center"
+                justify="center"
+              >
+                <Type variant="body">
+                  {apiKeySearch ? "No matching API keys" : "No API keys yet"}
+                </Type>
+                {!apiKeySearch && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setIsCreateDialogOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Icon name="key-round" className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Create Key</Button.Text>
+                  </Button>
+                )}
+              </Stack>
+            }
+          />
+        </div>
 
         <Dialog
           open={isCreateDialogOpen}
