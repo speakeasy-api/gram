@@ -299,7 +299,7 @@ export function InstallPageConfigForm({ toolset, form, isLoading }: ConfigFormPr
             </Button.RightIcon>
           </Button>
         </Dialog.Trigger>
-        <Dialog.Content className="sm:max-w-3xl">
+        <Dialog.Content>
           <Dialog.Header>
             <Dialog.Title>Install Page Configuration</Dialog.Title>
           </Dialog.Header>
