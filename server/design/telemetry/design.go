@@ -406,8 +406,8 @@ var TelemetryLogRecord = Type("TelemetryLogRecord", func() {
 	Attribute("id", String, "Log record ID", func() {
 		Format(FormatUUID)
 	})
-	Attribute("time_unix_nano", Int64, "Unix time in nanoseconds when event occurred")
-	Attribute("observed_time_unix_nano", Int64, "Unix time in nanoseconds when event was observed")
+	Attribute("time_unix_nano", String, "Unix time in nanoseconds when event occurred (string for JS int64 precision)")
+	Attribute("observed_time_unix_nano", String, "Unix time in nanoseconds when event was observed (string for JS int64 precision)")
 	Attribute("severity_text", String, "Text representation of severity")
 	Attribute("body", String, "The primary log message")
 	Attribute("trace_id", String, "W3C trace ID (32 hex characters)")
@@ -475,7 +475,7 @@ var ToolCallSummary = Type("ToolCallSummary", func() {
 	Attribute("trace_id", String, "Trace ID (32 hex characters)", func() {
 		Pattern("^[a-f0-9]{32}$")
 	})
-	Attribute("start_time_unix_nano", Int64, "Earliest log timestamp in Unix nanoseconds")
+	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("log_count", UInt64, "Total number of logs in this tool call")
 	Attribute("http_status_code", Int32, "HTTP status code (if applicable)")
 	Attribute("gram_urn", String, "Gram URN associated with this tool call")
@@ -537,8 +537,8 @@ var ChatSummaryType = Type("ChatSummary", func() {
 	Description("Summary information for a chat session")
 
 	Attribute("gram_chat_id", String, "Chat session ID")
-	Attribute("start_time_unix_nano", Int64, "Earliest log timestamp in Unix nanoseconds")
-	Attribute("end_time_unix_nano", Int64, "Latest log timestamp in Unix nanoseconds")
+	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("end_time_unix_nano", String, "Latest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("log_count", UInt64, "Total number of logs in this chat session")
 	Attribute("tool_call_count", UInt64, "Number of tool calls in this chat session")
 	Attribute("message_count", UInt64, "Number of LLM completion messages in this chat session")

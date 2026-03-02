@@ -47,8 +47,8 @@ function getSeverityVariant(
   }
 }
 
-function formatTimestamp(timeUnixNano: number): string {
-  return new Date(timeUnixNano / 1_000_000).toLocaleTimeString();
+function formatTimestamp(timeUnixNano: string): string {
+  return new Date(Number(BigInt(timeUnixNano) / 1_000_000n)).toLocaleTimeString();
 }
 
 function isSuccessLog(log: TelemetryLogRecord): boolean {
@@ -270,7 +270,7 @@ export function PlaygroundLogsPanel({
                     </span>
                     <span className="font-mono text-right">
                       {new Date(
-                        selectedLog.timeUnixNano / 1_000_000,
+                        Number(BigInt(selectedLog.timeUnixNano) / 1_000_000n),
                       ).toISOString()}
                     </span>
                   </div>

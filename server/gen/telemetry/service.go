@@ -102,10 +102,10 @@ type CaptureEventResult struct {
 type ChatSummary struct {
 	// Chat session ID
 	GramChatID string
-	// Earliest log timestamp in Unix nanoseconds
-	StartTimeUnixNano int64
-	// Latest log timestamp in Unix nanoseconds
-	EndTimeUnixNano int64
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string
+	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	EndTimeUnixNano string
 	// Total number of logs in this chat session
 	LogCount uint64
 	// Number of tool calls in this chat session
@@ -545,10 +545,11 @@ type ServiceInfo struct {
 type TelemetryLogRecord struct {
 	// Log record ID
 	ID string
-	// Unix time in nanoseconds when event occurred
-	TimeUnixNano int64
-	// Unix time in nanoseconds when event was observed
-	ObservedTimeUnixNano int64
+	// Unix time in nanoseconds when event occurred (string for JS int64 precision)
+	TimeUnixNano string
+	// Unix time in nanoseconds when event was observed (string for JS int64
+	// precision)
+	ObservedTimeUnixNano string
 	// Text representation of severity
 	SeverityText *string
 	// The primary log message
@@ -593,8 +594,8 @@ type TimeSeriesBucket struct {
 type ToolCallSummary struct {
 	// Trace ID (32 hex characters)
 	TraceID string
-	// Earliest log timestamp in Unix nanoseconds
-	StartTimeUnixNano int64
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string
 	// Total number of logs in this tool call
 	LogCount uint64
 	// HTTP status code (if applicable)

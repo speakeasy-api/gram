@@ -273,7 +273,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	for i, item := range items {
 		toolCalls[i] = &telem_gen.ToolCallSummary{
 			TraceID:           item.TraceID,
-			StartTimeUnixNano: item.StartTimeUnixNano,
+			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
 			LogCount:          item.LogCount,
 			HTTPStatusCode:    item.HTTPStatusCode,
 			GramUrn:           item.GramURN,
@@ -338,8 +338,8 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 	for i, item := range items {
 		chats[i] = &telem_gen.ChatSummary{
 			GramChatID:        item.GramChatID,
-			StartTimeUnixNano: item.StartTimeUnixNano,
-			EndTimeUnixNano:   item.EndTimeUnixNano,
+			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
+			EndTimeUnixNano:   strconv.FormatInt(item.EndTimeUnixNano, 10),
 			LogCount:          item.LogCount,
 			ToolCallCount:     item.ToolCallCount,
 			MessageCount:      item.MessageCount,
@@ -690,8 +690,8 @@ func toTelemetryLogPayload(log repo.TelemetryLog) (*telem_gen.TelemetryLogRecord
 
 	return &telem_gen.TelemetryLogRecord{
 		ID:                   log.ID,
-		TimeUnixNano:         log.TimeUnixNano,
-		ObservedTimeUnixNano: log.ObservedTimeUnixNano,
+		TimeUnixNano:         strconv.FormatInt(log.TimeUnixNano, 10),
+		ObservedTimeUnixNano: strconv.FormatInt(log.ObservedTimeUnixNano, 10),
 		SeverityText:         log.SeverityText,
 		Body:                 log.Body,
 		TraceID:              log.TraceID,
