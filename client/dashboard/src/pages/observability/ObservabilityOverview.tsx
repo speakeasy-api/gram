@@ -277,7 +277,7 @@ function FilterBar({
         Filter by
       </span>
       {/* Integrated segmented control with dropdown */}
-      <div className="flex items-center h-[42px] bg-muted/50 rounded-md p-1 border border-border">
+      <div className="flex items-center h-[42px] rounded-md p-1 border border-border">
         {(["all", "api_key", "user"] as const).map((value) => {
           const isSelected = dimension === value;
           const label =
@@ -406,7 +406,7 @@ function MCPServerFilter({
       <span className="text-sm text-muted-foreground font-medium hidden 2xl:inline">
         Filter by
       </span>
-      <div className="flex items-center h-[42px] bg-muted/50 rounded-md p-1 border border-border">
+      <div className="flex items-center h-[42px] rounded-md p-1 border border-border">
         <div className="flex items-center gap-1.5 h-8 px-3">
           <McpIcon className="size-3.5 text-muted-foreground" />
           <span className="text-sm font-medium text-foreground">Server</span>

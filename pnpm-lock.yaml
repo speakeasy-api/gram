@@ -403,7 +403,7 @@ importers:
         specifier: ^18 || ^19
         version: 19.2.3(react@19.2.3)
       zod:
-        specifier: ^4
+        specifier: ^3.25.65 || ^4.0.0
         version: 4.3.6
     devDependencies:
       '@eslint/js':

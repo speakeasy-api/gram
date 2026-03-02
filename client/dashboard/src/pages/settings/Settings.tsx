@@ -16,7 +16,9 @@ import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert, cn, getCustomDomainCNAME } from "@/lib/utils";
-import { Key } from "@gram/client/models/components";
+import { FeatureName, Key } from "@gram/client/models/components";
+import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
+import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
@@ -28,10 +30,13 @@ import { useRegisterDomainMutation } from "@gram/client/react-query/registerDoma
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { Switch } from "@/components/ui/switch";
 import {
   Check,
   CheckCircle2,
   Copy,
+  Eye,
+  FileText,
   Globe,
   Loader2,
   ShieldAlert,
@@ -39,7 +44,30 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  PageTabsTrigger,
+} from "@/components/ui/tabs";
 import { SettingsDangerZone } from "./SettingsDangerZone";
+
+// Map URL segments to tab values
+const tabFromPath: Record<string, string> = {
+  general: "general",
+  "api-keys": "api-keys",
+  logs: "logs",
+  domains: "domains",
+};
+
+// Map tab values to display names for breadcrumbs
+const tabDisplayNames: Record<string, string> = {
+  general: "General",
+  "api-keys": "API Keys",
+  logs: "Logging & Telemetry",
+  domains: "Custom Domain",
+};
 
 export default function Settings() {
   const organization = useOrganization();
@@ -47,6 +75,23 @@ export default function Settings() {
   const isAdmin = useIsAdmin();
   const client = useSdkClient();
   const project = useProject();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Extract tab from URL path
+  const pathSegments = location.pathname.split("/");
+  const lastSegment = pathSegments[pathSegments.length - 1];
+  const currentTab = tabFromPath[lastSegment] || "general";
+  const shouldRedirect = lastSegment === "settings";
+
+  // Build base path for settings (everything before the tab segment)
+  const settingsBasePath = pathSegments
+    .slice(0, lastSegment === "settings" ? pathSegments.length : -1)
+    .join("/");
+
+  const handleTabChange = (value: string) => {
+    navigate(`${settingsBasePath}/${value}`);
+  };
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
@@ -160,6 +205,81 @@ export default function Settings() {
       await invalidateAllGetDomain(queryClient);
     },
   });
+
+  // Logs settings - fetch current state from API
+  const { data: featuresData, isLoading: featuresLoading } = useFeaturesGet();
+  const [logsEnabled, setLogsEnabled] = useState<boolean | undefined>(
+    undefined,
+  );
+  const [toolIoLogsEnabled, setToolIoLogsEnabled] = useState<
+    boolean | undefined
+  >(undefined);
+
+  // Initialize local state from fetched data
+  useEffect(() => {
+    if (featuresData) {
+      setLogsEnabled(featuresData.logsEnabled);
+      setToolIoLogsEnabled(featuresData.toolIoLogsEnabled);
+    }
+  }, [featuresData]);
+
+  const { mutate: setLogsFeature, status: logsMutationStatus } =
+    useFeaturesSetMutation({
+      onSuccess: (_, variables) => {
+        // Update local state based on which feature was changed
+        if (
+          variables.request.setProductFeatureRequestBody.featureName ===
+          FeatureName.Logs
+        ) {
+          setLogsEnabled(
+            variables.request.setProductFeatureRequestBody.enabled,
+          );
+        } else if (
+          variables.request.setProductFeatureRequestBody.featureName ===
+          FeatureName.ToolIoLogs
+        ) {
+          setToolIoLogsEnabled(
+            variables.request.setProductFeatureRequestBody.enabled,
+          );
+        }
+      },
+    });
+
+  const isMutatingLogs = logsMutationStatus === "pending";
+
+  const handleSetLogs = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.Logs,
+          enabled,
+        },
+      },
+    });
+
+    // When disabling logs, also disable tool I/O logs
+    if (!enabled && toolIoLogsEnabled) {
+      setLogsFeature({
+        request: {
+          setProductFeatureRequestBody: {
+            featureName: FeatureName.ToolIoLogs,
+            enabled: false,
+          },
+        },
+      });
+    }
+  };
+
+  const handleSetToolIoLogs = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.ToolIoLogs,
+          enabled,
+        },
+      },
+    });
+  };
 
   const handleCreateKey: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
@@ -300,497 +420,632 @@ export default function Settings() {
     return () => clearInterval(interval);
   }, [domain?.isUpdating, domainRefetch]);
 
+  // Redirect to /settings/general if on /settings directly
+  if (shouldRedirect) {
+    return <Navigate to="general" replace />;
+  }
+
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs substitutions={tabDisplayNames} />
       </Page.Header>
       <Page.Body>
-        <Stack direction="horizontal" justify="space-between" align="center">
-          <Heading variant="h4">API Keys</Heading>
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
-            New API Key
-          </Button>
-        </Stack>
-        <Stack direction="horizontal" gap={2} className="mb-2">
-          <SearchBar
-            value={apiKeySearch}
-            onChange={setApiKeySearch}
-            placeholder="Search by key name"
-            className="w-64"
-          />
-        </Stack>
-        <Table
-          columns={apiKeyColumns}
-          data={filteredKeys}
-          rowKey={(row) => row.id}
-          className="max-h-[500px] overflow-y-auto"
-          noResultsMessage={
-            <Stack
-              gap={2}
-              className="h-full p-4 bg-background"
-              align="center"
-              justify="center"
-            >
-              <Type variant="body">
-                {apiKeySearch ? "No matching API keys" : "No API keys yet"}
-              </Type>
-              {!apiKeySearch && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  <Button.LeftIcon>
-                    <Icon name="key-round" className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Create Key</Button.Text>
-                </Button>
-              )}
-            </Stack>
-          }
-        />
-
-        <Dialog
-          open={isCreateDialogOpen}
-          onOpenChange={handleCloseCreateDialog}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>
-                {newlyCreatedKey ? "API Key Created" : "Create New API Key"}
-              </Dialog.Title>
-            </Dialog.Header>
-            {newlyCreatedKey ? (
-              <div className="space-y-4 py-4">
-                <div className="rounded-lg border border-yellow-500/50 bg-yellow-600/50 text-foreground p-4 text-sm">
-                  You will not be able to see this token value again once you
-                  close this dialog. Copy it now and store it securely.
-                </div>
-                <div className="flex items-center space-x-2 bg-muted p-3 rounded-md">
-                  <code className="flex-1 break-all">
-                    {newlyCreatedKey.key}
-                  </code>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={handleCopyToken}
-                    className="shrink-0"
-                  >
-                    {isCopied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                <div className="flex justify-end">
-                  <Button onClick={handleCloseCreateDialog}>Close</Button>
-                </div>
-              </div>
-            ) : (
-              <form className="space-y-4 py-4" onSubmit={handleCreateKey}>
-                <InputField
-                  label="Key name"
-                  name="name"
-                  required
-                  autoFocus
-                  autoCapitalize="off"
-                  autoComplete="off"
-                  autoCorrect="off"
-                />
-
-                <AnyField
-                  label="Scope"
-                  optionality="hidden"
-                  render={() => {
-                    return (
-                      <RadioGroup name="scope" defaultValue="consumer">
-                        <div className="flex items-center gap-3">
-                          <RadioGroupItem value="consumer" id="r1" />
-                          <Label className="leading-normal" htmlFor="r1">
-                            Consumer: can query/modify toolsets, read data and
-                            access MCP servers.
-                          </Label>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <RadioGroupItem value="producer" id="r2" />
-                          <Label className="leading-normal" htmlFor="r2">
-                            Producer: can upload OpenAPI documents, trigger
-                            deployments, query/modify toolsets, read data and
-                            access MCP servers.
-                          </Label>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <RadioGroupItem value="chat" id="r3" />
-                          <Label className="leading-normal" htmlFor="r3">
-                            Chat: can use the chat API to interact with models.
-                          </Label>
-                        </div>
-                      </RadioGroup>
-                    );
-                  }}
-                />
-                <div className="flex justify-end space-x-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handleCloseCreateDialog}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={createKeyMutation.isPending}>
-                    Create
-                  </Button>
-                </div>
-              </form>
-            )}
-          </Dialog.Content>
-        </Dialog>
-
-        <Dialog
-          open={!!keyToRevoke}
-          onOpenChange={(open) => !open && setKeyToRevoke(null)}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Revoke API Key</Dialog.Title>
-            </Dialog.Header>
-            <div className="space-y-4 py-4">
-              <Type variant="body">
-                Are you sure you want to revoke the API key{" "}
-                <span className="italic font-bold">{keyToRevoke?.name}</span>?
-                This action cannot be undone.
-              </Type>
-              <div className="flex justify-end space-x-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => setKeyToRevoke(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive-primary"
-                  onClick={handleRevokeKey}
-                  disabled={revokeKeyMutation.isPending}
-                >
-                  Revoke Key
-                </Button>
-              </div>
-            </div>
-          </Dialog.Content>
-        </Dialog>
-
-        <Heading variant="h4" className="mt-8">
-          Custom Domain
-        </Heading>
-        {domain?.domain ? (
-          <div className="rounded-lg border border-border bg-card p-4">
-            <Stack direction="horizontal" justify="space-between" align="start">
-              <Stack gap={1}>
-                <Stack direction="horizontal" align="center" gap={2}>
-                  <Globe className="h-4 w-4 text-muted-foreground" />
-                  <Type variant="body" className="font-mono font-medium">
-                    {domain.domain}
-                  </Type>
-                  {domain.isUpdating ? (
-                    <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                    </SimpleTooltip>
-                  ) : domain.verified ? (
-                    <SimpleTooltip tooltip="Domain verified and active">
-                      <Check className="w-4 h-4 stroke-3 text-green-500" />
-                    </SimpleTooltip>
-                  ) : (
-                    <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
-                      <X className="w-4 h-4 stroke-3 text-red-500" />
-                    </SimpleTooltip>
-                  )}
-                </Stack>
-                <Type
-                  variant="body"
-                  className="text-muted-foreground text-sm ml-6"
-                >
-                  Linked <HumanizeDateTime date={domain.createdAt} />
-                </Type>
-              </Stack>
-              <Stack direction="horizontal" gap={2}>
-                {!domain.verified && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setIsAddDomainDialogOpen(true)}
-                    disabled={domain.isUpdating}
-                  >
-                    Reverify
-                  </Button>
-                )}
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setIsDeleteDomainDialogOpen(true)}
-                  className="hover:text-destructive"
-                  disabled={deleteDomainMutation.isPending}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </Stack>
-            </Stack>
+        <Tabs value={currentTab} onValueChange={handleTabChange}>
+          <div className="border-b border-border -mx-8 px-8 -mt-8 bg-muted/15">
+            <TabsList className="bg-transparent p-0 h-auto rounded-none justify-start gap-4 text-sm">
+              <PageTabsTrigger value="general">General</PageTabsTrigger>
+              <PageTabsTrigger value="api-keys">API Keys</PageTabsTrigger>
+              <PageTabsTrigger value="logs">
+                Logging & Telemetry
+              </PageTabsTrigger>
+              <PageTabsTrigger value="domains">Custom Domain</PageTabsTrigger>
+            </TabsList>
           </div>
-        ) : (
-          !domainIsLoading && (
-            <div className="rounded-lg border border-dashed border-border p-6">
-              <Stack gap={2} align="center" justify="center">
-                <Type variant="body" className="text-muted-foreground">
-                  No custom domain configured
-                </Type>
-                <Type variant="body" className="text-muted-foreground text-sm">
-                  You can connect one custom domain per organization for your
-                  MCP servers.
-                </Type>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="mt-2"
-                  onClick={() => {
-                    if (productTier.includes("base")) {
-                      setIsCustomDomainUpgradeModalOpen(true);
-                    } else {
-                      setIsAddDomainDialogOpen(true);
-                    }
-                  }}
-                >
-                  <Button.LeftIcon>
-                    <Globe className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Add Domain</Button.Text>
-                </Button>
-              </Stack>
-            </div>
-          )
-        )}
 
-        <Dialog
-          open={isDeleteDomainDialogOpen}
-          onOpenChange={setIsDeleteDomainDialogOpen}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Remove Custom Domain</Dialog.Title>
-            </Dialog.Header>
-            <div className="space-y-4 py-4">
-              <Type variant="body">
-                Are you sure you want to remove{" "}
-                <span className="italic font-bold">{domain?.domain}</span>? This
-                will delete the associated ingress and TLS certificate.
-              </Type>
-              <div className="flex justify-end space-x-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsDeleteDomainDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive-primary"
-                  onClick={() =>
-                    deleteDomainMutation.mutate({
-                      security: { sessionHeaderGramSession: "" },
-                    })
-                  }
-                  disabled={deleteDomainMutation.isPending}
-                >
-                  {deleteDomainMutation.isPending ? "Removing..." : "Remove"}
-                </Button>
-              </div>
-            </div>
-          </Dialog.Content>
-        </Dialog>
-
-        <Dialog
-          open={isAddDomainDialogOpen}
-          onOpenChange={setIsAddDomainDialogOpen}
-        >
-          <Dialog.Content className="max-w-lg">
-            <Dialog.Header>
-              <Dialog.Title>Connect a Custom Domain</Dialog.Title>
-            </Dialog.Header>
-            <div className="space-y-6 py-4 min-h-[420px]">
-              <div>
-                <Type
-                  variant="body"
-                  className="font-extrabold text-lg mb-2 block"
-                >
-                  Step 1
-                </Type>
-                <Type variant="body" className="text-muted-foreground mb-2">
-                  Enter your custom domain:
-                </Type>
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Enter your domain (chat.yourdomain.com)"
-                    value={domainInput}
-                    onChange={handleDomainInputChange}
-                    className={cn(
-                      domainError && "border-red-500",
-                      domain?.domain &&
-                        "bg-muted text-muted-foreground cursor-not-allowed",
-                    )}
-                    readOnly={!!domain?.domain}
-                  />
-                  {domainError && (
-                    <Type variant="body" className="text-red-500 text-sm">
-                      {domainError}
-                    </Type>
-                  )}
-                </div>
-              </div>
-              <div>
-                <Type
-                  variant="body"
-                  className="font-extrabold text-lg mb-2 block"
-                >
-                  Step 2
-                </Type>
-                <Type variant="body" className="text-muted-foreground mb-2">
-                  Create a CNAME record for{" "}
-                  <span className="font-mono break-all">{subdomain}</span>{" "}
-                  pointing to the following:
-                </Type>
-                <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
-                  <code className="flex-1 break-all">{CNAME_VALUE}</code>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={handleCopyCname}
-                    className="shrink-0"
-                  >
-                    {isCnameCopied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <div>
-                <Type
-                  variant="body"
-                  className="font-extrabold text-lg mb-2 block"
-                >
-                  Step 3
-                </Type>
-                <Type variant="body" className="text-muted-foreground mb-2">
-                  Create a TXT record at{" "}
-                  <span className="font-mono break-all">{txtName}</span> with
-                  the following value:
-                </Type>
-                <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
-                  <code className="flex-1 break-all">{txtValue}</code>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={handleCopyTxt}
-                    className="shrink-0"
-                  >
-                    {isTxtCopied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <div className="flex justify-end mt-4">
-                <Button
-                  onClick={handleRegisterDomain}
-                  disabled={
-                    !domainInput.trim() ||
-                    !!domainError ||
-                    registerDomainMutation.isPending
-                  }
-                >
-                  {registerDomainMutation.isPending
-                    ? "Registering..."
-                    : domain?.domain
-                      ? "Reverify"
-                      : "Register"}
-                </Button>
-              </div>
-            </div>
-          </Dialog.Content>
-        </Dialog>
-        <FeatureRequestModal
-          isOpen={isCustomDomainModalOpen}
-          onClose={() => setIsCustomDomainUpgradeModalOpen(false)}
-          title="Custom Domains"
-          description="Custom domains require upgrading to an enterprise plan. Someone should be in touch shortly, or feel free to book a meeting directly."
-          actionType="custom_domain"
-          icon={Globe}
-          accountUpgrade
-        />
-
-        <SettingsDangerZone />
-
-        {isAdmin && (
-          <div className="mt-12 p-4 rounded-lg bg-red-500/5 border border-red-500/20">
+          <TabsContent value="api-keys" className="mt-6">
+            <Heading variant="h4" className="mb-2">
+              API Keys
+            </Heading>
+            <Type muted small className="mb-6">
+              Create and manage API keys to authenticate programmatic access to
+              Gram services, including deployments, toolset management, and MCP
+              server connections.
+            </Type>
             <Stack
               direction="horizontal"
+              justify="space-between"
               align="center"
-              gap={2}
-              className="mb-3"
+              className="mb-4"
             >
-              <ShieldAlert className="w-5 h-5 text-red-500" />
-              <Heading variant="h4" className="text-red-600 dark:text-red-400">
-                Admin Only
-              </Heading>
-            </Stack>
-            <dl className="grid grid-cols-[max-content_auto] gap-x-6 gap-y-2 mb-8">
-              <dt className="text-end">Organization ID</dt>
-              <dd className="font-mono">{organization.id}</dd>
-              <dt className="text-end">Project ID</dt>
-              <dd className="font-mono">{project.id}</dd>
-            </dl>
-
-            <Type variant="body" className="text-muted-foreground mb-4">
-              Override to a different organization by entering its slug below.
-            </Type>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                const val = formData.get("gram_admin_override");
-                if (typeof val !== "string" || !val.trim()) {
-                  return;
-                }
-
-                document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
-                await client.auth.logout();
-                window.location.href = "/login";
-              }}
-              className="flex gap-2 max-w-md"
-            >
-              <Input
-                placeholder="organization-slug"
-                name="gram_admin_override"
-                className="flex-1"
-                required
+              <SearchBar
+                value={apiKeySearch}
+                onChange={setApiKeySearch}
+                placeholder="Search by key name"
+                className="w-64"
               />
-              <Button type="submit">Go to Org</Button>
-              <Button
-                variant="secondary"
-                type="button"
-                onClick={async () => {
-                  document.cookie = `gram_admin_override=; path=/; max-age=0;`;
-                  await client.auth.logout();
-                  window.location.href = "/login";
-                }}
-              >
-                Clear override
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
+                New API Key
               </Button>
-            </form>
-          </div>
-        )}
+            </Stack>
+            <Table
+              columns={apiKeyColumns}
+              data={filteredKeys}
+              rowKey={(row) => row.id}
+              className="max-h-[500px] overflow-y-auto"
+              noResultsMessage={
+                <Stack
+                  gap={2}
+                  className="h-full p-4 bg-background"
+                  align="center"
+                  justify="center"
+                >
+                  <Type variant="body">
+                    {apiKeySearch ? "No matching API keys" : "No API keys yet"}
+                  </Type>
+                  {!apiKeySearch && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setIsCreateDialogOpen(true)}
+                    >
+                      <Button.LeftIcon>
+                        <Icon name="key-round" className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Create Key</Button.Text>
+                    </Button>
+                  )}
+                </Stack>
+              }
+            />
+
+            <Dialog
+              open={isCreateDialogOpen}
+              onOpenChange={handleCloseCreateDialog}
+            >
+              <Dialog.Content>
+                <Dialog.Header>
+                  <Dialog.Title>
+                    {newlyCreatedKey ? "API Key Created" : "Create New API Key"}
+                  </Dialog.Title>
+                </Dialog.Header>
+                {newlyCreatedKey ? (
+                  <div className="space-y-4 py-4">
+                    <div className="rounded-lg border border-yellow-500/50 bg-yellow-600/50 text-foreground p-4 text-sm">
+                      You will not be able to see this token value again once
+                      you close this dialog. Copy it now and store it securely.
+                    </div>
+                    <div className="flex items-center space-x-2 bg-muted p-3 rounded-md">
+                      <code className="flex-1 break-all">
+                        {newlyCreatedKey.key}
+                      </code>
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={handleCopyToken}
+                        className="shrink-0"
+                      >
+                        {isCopied ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button onClick={handleCloseCreateDialog}>Close</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <form className="space-y-4 py-4" onSubmit={handleCreateKey}>
+                    <InputField
+                      label="Key name"
+                      name="name"
+                      required
+                      autoFocus
+                      autoCapitalize="off"
+                      autoComplete="off"
+                      autoCorrect="off"
+                    />
+
+                    <AnyField
+                      label="Scope"
+                      optionality="hidden"
+                      render={() => {
+                        return (
+                          <RadioGroup name="scope" defaultValue="consumer">
+                            <div className="flex items-center gap-3">
+                              <RadioGroupItem value="consumer" id="r1" />
+                              <Label className="leading-normal" htmlFor="r1">
+                                Consumer: can query/modify toolsets, read data
+                                and access MCP servers.
+                              </Label>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <RadioGroupItem value="producer" id="r2" />
+                              <Label className="leading-normal" htmlFor="r2">
+                                Producer: can upload OpenAPI documents, trigger
+                                deployments, query/modify toolsets, read data
+                                and access MCP servers.
+                              </Label>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <RadioGroupItem value="chat" id="r3" />
+                              <Label className="leading-normal" htmlFor="r3">
+                                Chat: can use the chat API to interact with
+                                models.
+                              </Label>
+                            </div>
+                          </RadioGroup>
+                        );
+                      }}
+                    />
+                    <div className="flex justify-end space-x-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleCloseCreateDialog}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={createKeyMutation.isPending}
+                      >
+                        Create
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </Dialog.Content>
+            </Dialog>
+
+            <Dialog
+              open={!!keyToRevoke}
+              onOpenChange={(open) => !open && setKeyToRevoke(null)}
+            >
+              <Dialog.Content>
+                <Dialog.Header>
+                  <Dialog.Title>Revoke API Key</Dialog.Title>
+                </Dialog.Header>
+                <div className="space-y-4 py-4">
+                  <Type variant="body">
+                    Are you sure you want to revoke the API key{" "}
+                    <span className="italic font-bold">
+                      {keyToRevoke?.name}
+                    </span>
+                    ? This action cannot be undone.
+                  </Type>
+                  <div className="flex justify-end space-x-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setKeyToRevoke(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive-primary"
+                      onClick={handleRevokeKey}
+                      disabled={revokeKeyMutation.isPending}
+                    >
+                      Revoke Key
+                    </Button>
+                  </div>
+                </div>
+              </Dialog.Content>
+            </Dialog>
+          </TabsContent>
+
+          <TabsContent value="domains" className="mt-6">
+            <Heading variant="h4" className="mb-2">
+              Custom Domain
+            </Heading>
+            <Type muted small className="mb-6">
+              Connect a custom domain to serve your MCP servers from your own
+              branded URL instead of the default Gram domain.
+            </Type>
+            {domain?.domain ? (
+              <div className="rounded-lg border border-border bg-card p-4">
+                <Stack
+                  direction="horizontal"
+                  justify="space-between"
+                  align="start"
+                >
+                  <Stack gap={1}>
+                    <Stack direction="horizontal" align="center" gap={2}>
+                      <Globe className="h-4 w-4 text-muted-foreground" />
+                      <Type variant="body" className="font-mono font-medium">
+                        {domain.domain}
+                      </Type>
+                      {domain.isUpdating ? (
+                        <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
+                          <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                        </SimpleTooltip>
+                      ) : domain.verified ? (
+                        <SimpleTooltip tooltip="Domain verified and active">
+                          <Check className="w-4 h-4 stroke-3 text-green-500" />
+                        </SimpleTooltip>
+                      ) : (
+                        <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
+                          <X className="w-4 h-4 stroke-3 text-red-500" />
+                        </SimpleTooltip>
+                      )}
+                    </Stack>
+                    <Type
+                      variant="body"
+                      className="text-muted-foreground text-sm ml-6"
+                    >
+                      Linked <HumanizeDateTime date={domain.createdAt} />
+                    </Type>
+                  </Stack>
+                  <Stack direction="horizontal" gap={2}>
+                    {!domain.verified && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setIsAddDomainDialogOpen(true)}
+                        disabled={domain.isUpdating}
+                      >
+                        Reverify
+                      </Button>
+                    )}
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      onClick={() => setIsDeleteDomainDialogOpen(true)}
+                      className="hover:text-destructive"
+                      disabled={deleteDomainMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </Stack>
+                </Stack>
+              </div>
+            ) : (
+              !domainIsLoading && (
+                <div className="rounded-lg border border-dashed border-border p-6">
+                  <Stack gap={2} align="center" justify="center">
+                    <Type variant="body" className="text-muted-foreground">
+                      No custom domain configured
+                    </Type>
+                    <Type
+                      variant="body"
+                      className="text-muted-foreground text-sm"
+                    >
+                      You can connect one custom domain per organization for
+                      your MCP servers.
+                    </Type>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="mt-2"
+                      onClick={() => {
+                        if (productTier.includes("base")) {
+                          setIsCustomDomainUpgradeModalOpen(true);
+                        } else {
+                          setIsAddDomainDialogOpen(true);
+                        }
+                      }}
+                    >
+                      <Button.LeftIcon>
+                        <Globe className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Add Domain</Button.Text>
+                    </Button>
+                  </Stack>
+                </div>
+              )
+            )}
+
+            <Dialog
+              open={isDeleteDomainDialogOpen}
+              onOpenChange={setIsDeleteDomainDialogOpen}
+            >
+              <Dialog.Content>
+                <Dialog.Header>
+                  <Dialog.Title>Remove Custom Domain</Dialog.Title>
+                </Dialog.Header>
+                <div className="space-y-4 py-4">
+                  <Type variant="body">
+                    Are you sure you want to remove{" "}
+                    <span className="italic font-bold">{domain?.domain}</span>?
+                    This will delete the associated ingress and TLS certificate.
+                  </Type>
+                  <div className="flex justify-end space-x-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setIsDeleteDomainDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive-primary"
+                      onClick={() =>
+                        deleteDomainMutation.mutate({
+                          security: { sessionHeaderGramSession: "" },
+                        })
+                      }
+                      disabled={deleteDomainMutation.isPending}
+                    >
+                      {deleteDomainMutation.isPending
+                        ? "Removing..."
+                        : "Remove"}
+                    </Button>
+                  </div>
+                </div>
+              </Dialog.Content>
+            </Dialog>
+
+            <Dialog
+              open={isAddDomainDialogOpen}
+              onOpenChange={setIsAddDomainDialogOpen}
+            >
+              <Dialog.Content className="max-w-lg">
+                <Dialog.Header>
+                  <Dialog.Title>Connect a Custom Domain</Dialog.Title>
+                </Dialog.Header>
+                <div className="space-y-6 py-4 min-h-[420px]">
+                  <div>
+                    <Type
+                      variant="body"
+                      className="font-extrabold text-lg mb-2 block"
+                    >
+                      Step 1
+                    </Type>
+                    <Type variant="body" className="text-muted-foreground mb-2">
+                      Enter your custom domain:
+                    </Type>
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="Enter your domain (chat.yourdomain.com)"
+                        value={domainInput}
+                        onChange={handleDomainInputChange}
+                        className={cn(
+                          domainError && "border-red-500",
+                          domain?.domain &&
+                            "bg-muted text-muted-foreground cursor-not-allowed",
+                        )}
+                        readOnly={!!domain?.domain}
+                      />
+                      {domainError && (
+                        <Type variant="body" className="text-red-500 text-sm">
+                          {domainError}
+                        </Type>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <Type
+                      variant="body"
+                      className="font-extrabold text-lg mb-2 block"
+                    >
+                      Step 2
+                    </Type>
+                    <Type variant="body" className="text-muted-foreground mb-2">
+                      Create a CNAME record for{" "}
+                      <span className="font-mono break-all">{subdomain}</span>{" "}
+                      pointing to the following:
+                    </Type>
+                    <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
+                      <code className="flex-1 break-all">{CNAME_VALUE}</code>
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={handleCopyCname}
+                        className="shrink-0"
+                      >
+                        {isCnameCopied ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <Type
+                      variant="body"
+                      className="font-extrabold text-lg mb-2 block"
+                    >
+                      Step 3
+                    </Type>
+                    <Type variant="body" className="text-muted-foreground mb-2">
+                      Create a TXT record at{" "}
+                      <span className="font-mono break-all">{txtName}</span>{" "}
+                      with the following value:
+                    </Type>
+                    <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
+                      <code className="flex-1 break-all">{txtValue}</code>
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={handleCopyTxt}
+                        className="shrink-0"
+                      >
+                        {isTxtCopied ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex justify-end mt-4">
+                    <Button
+                      onClick={handleRegisterDomain}
+                      disabled={
+                        !domainInput.trim() ||
+                        !!domainError ||
+                        registerDomainMutation.isPending
+                      }
+                    >
+                      {registerDomainMutation.isPending
+                        ? "Registering..."
+                        : domain?.domain
+                          ? "Reverify"
+                          : "Register"}
+                    </Button>
+                  </div>
+                </div>
+              </Dialog.Content>
+            </Dialog>
+            <FeatureRequestModal
+              isOpen={isCustomDomainModalOpen}
+              onClose={() => setIsCustomDomainUpgradeModalOpen(false)}
+              title="Custom Domains"
+              description="Custom domains require upgrading to an enterprise plan. Someone should be in touch shortly, or feel free to book a meeting directly."
+              actionType="custom_domain"
+              icon={Globe}
+              accountUpgrade
+            />
+          </TabsContent>
+
+          <TabsContent value="logs" className="mt-6">
+            <Heading variant="h4" className="mb-2">
+              Logs
+            </Heading>
+            <Type muted small className="mb-6">
+              Configure logging and telemetry settings for your MCP servers.
+              When enabled, tool calls and traces are recorded for debugging and
+              analytics.
+            </Type>
+            <div className="rounded-lg border border-border bg-card p-4">
+              <Stack gap={4}>
+                <Stack
+                  direction="horizontal"
+                  justify="space-between"
+                  align="center"
+                >
+                  <Stack gap={1}>
+                    <Stack direction="horizontal" align="center" gap={2}>
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <Type variant="body" className="font-medium">
+                        Enable Logs
+                      </Type>
+                    </Stack>
+                    <Type
+                      variant="body"
+                      className="text-muted-foreground text-sm ml-6"
+                    >
+                      Record tool call traces and telemetry data
+                    </Type>
+                  </Stack>
+                  <Switch
+                    checked={logsEnabled ?? false}
+                    onCheckedChange={handleSetLogs}
+                    disabled={isMutatingLogs || featuresLoading}
+                    aria-label="Enable logs"
+                  />
+                </Stack>
+
+                <div className="border-t border-border" />
+
+                <Stack
+                  direction="horizontal"
+                  justify="space-between"
+                  align="center"
+                >
+                  <Stack gap={1}>
+                    <Stack direction="horizontal" align="center" gap={2}>
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                      <Type variant="body" className="font-medium">
+                        Record Tool I/O
+                      </Type>
+                    </Stack>
+                    <Type
+                      variant="body"
+                      className="text-muted-foreground text-sm ml-6"
+                    >
+                      Store tool inputs and outputs. May expose sensitive data
+                      in logs.
+                    </Type>
+                  </Stack>
+                  <Switch
+                    checked={toolIoLogsEnabled ?? false}
+                    onCheckedChange={handleSetToolIoLogs}
+                    disabled={isMutatingLogs || featuresLoading || !logsEnabled}
+                    aria-label="Record tool inputs and outputs"
+                  />
+                </Stack>
+              </Stack>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="general" className="mt-6">
+            <Heading variant="h4" className="mb-2">
+              Project Settings
+            </Heading>
+            <Type muted small className="mb-6">
+              Manage your project configuration and perform administrative
+              actions.
+            </Type>
+            <SettingsDangerZone />
+
+            {isAdmin && (
+              <div className="mt-8 p-4 rounded-lg bg-red-500/5 border border-red-500/20">
+                <Stack
+                  direction="horizontal"
+                  align="center"
+                  gap={2}
+                  className="mb-3"
+                >
+                  <ShieldAlert className="w-5 h-5 text-red-500" />
+                  <Heading
+                    variant="h4"
+                    className="text-red-600 dark:text-red-400"
+                  >
+                    Admin Only
+                  </Heading>
+                </Stack>
+                <dl className="grid grid-cols-[max-content_auto] gap-x-6 gap-y-2 mb-8">
+                  <dt className="text-end">Organization ID</dt>
+                  <dd className="font-mono">{organization.id}</dd>
+                  <dt className="text-end">Project ID</dt>
+                  <dd className="font-mono">{project.id}</dd>
+                </dl>
+
+                <Type variant="body" className="text-muted-foreground mb-4">
+                  Override to a different organization by entering its slug
+                  below.
+                </Type>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.currentTarget);
+                    const val = formData.get("gram_admin_override");
+                    if (typeof val !== "string" || !val.trim()) {
+                      return;
+                    }
+
+                    document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
+                    await client.auth.logout();
+                    window.location.href = "/login";
+                  }}
+                  className="flex gap-2 max-w-md"
+                >
+                  <Input
+                    placeholder="organization-slug"
+                    name="gram_admin_override"
+                    className="flex-1"
+                    required
+                  />
+                  <Button type="submit">Go to Org</Button>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={async () => {
+                      document.cookie = `gram_admin_override=; path=/; max-age=0;`;
+                      await client.auth.logout();
+                      window.location.href = "/login";
+                    }}
+                  >
+                    Clear override
+                  </Button>
+                </form>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </Page.Body>
     </Page>
   );

@@ -326,6 +326,8 @@ export interface TimeRangePickerProps {
   apiUrl?: string
   /** Project slug for API authentication */
   projectSlug?: string
+  /** Additional class name for the trigger */
+  className?: string
 }
 
 function TimeRangePicker({
@@ -342,6 +344,7 @@ function TimeRangePicker({
   timezone,
   apiUrl,
   projectSlug,
+  className,
 }: TimeRangePickerProps) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [showCalendar, setShowCalendar] = React.useState(false)
@@ -501,10 +504,11 @@ function TimeRangePicker({
       <PopoverTrigger asChild disabled={disabled}>
         <div
           className={cn(
-            'bg-background relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all outline-none',
+            'relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all outline-none',
             'border-border hover:border-border/80',
             disabled && 'cursor-not-allowed opacity-50',
-            timezone && 'pt-4'
+            timezone && 'pt-4',
+            className
           )}
         >
           {/* Floating timezone legend */}

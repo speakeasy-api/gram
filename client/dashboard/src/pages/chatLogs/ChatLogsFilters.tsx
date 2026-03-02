@@ -6,7 +6,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Stack } from "@speakeasy-api/moonshine";
 import { useState, useEffect } from "react";
 
 const resolutionStatusOptions = [
@@ -77,12 +76,12 @@ export function ChatLogsFilters({
   };
 
   return (
-    <Stack direction="horizontal" gap={3} align="center">
+    <div className="flex items-center gap-3 flex-1">
       <SearchBar
         value={localSearch}
         onChange={setLocalSearch}
         placeholder="Search by chat ID, user ID, or title..."
-        className="flex-1"
+        className="flex-1 !h-10"
         disabled={disabled}
       />
 
@@ -91,7 +90,10 @@ export function ChatLogsFilters({
         onValueChange={handleStatusChange}
         disabled={disabled}
       >
-        <SelectTrigger className="w-[180px]" disabled={disabled}>
+        <SelectTrigger
+          className="w-[150px] !h-10 border-border"
+          disabled={disabled}
+        >
           <SelectValue placeholder="All Statuses" />
         </SelectTrigger>
         <SelectContent className="w-[280px]">
@@ -106,6 +108,6 @@ export function ChatLogsFilters({
           ))}
         </SelectContent>
       </Select>
-    </Stack>
+    </div>
   );
 }

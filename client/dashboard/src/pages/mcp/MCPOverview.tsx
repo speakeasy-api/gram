@@ -105,8 +105,8 @@ export function MCPOverview() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          {builtInSection}
           <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
+          {builtInSection}
           {newMcpServerDialog}
         </Page.Body>
       </Page>
@@ -119,7 +119,6 @@ export function MCPOverview() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        {builtInSection}
         <Page.Section>
           <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
           <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
@@ -136,6 +135,7 @@ export function MCPOverview() {
             </div>
           </Page.Section.Body>
         </Page.Section>
+        {builtInSection}
         {newMcpServerDialog}
       </Page.Body>
     </Page>
