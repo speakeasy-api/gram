@@ -10,12 +10,15 @@ package features
 import (
 	"context"
 
+	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
 
 // Manage product level feature controls.
 type Service interface {
+	// Get the current state of all product feature flags.
+	GetProductFeatures(context.Context, *GetProductFeaturesPayload) (res *GramProductFeatures, err error)
 	// Enable or disable an organization feature flag.
 	SetProductFeature(context.Context, *SetProductFeaturePayload) (err error)
 }
@@ -40,7 +43,23 @@ const ServiceName = "features"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"setProductFeature"}
+var MethodNames = [2]string{"getProductFeatures", "setProductFeature"}
+
+// GetProductFeaturesPayload is the payload type of the features service
+// getProductFeatures method.
+type GetProductFeaturesPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GramProductFeatures is the result type of the features service
+// getProductFeatures method.
+type GramProductFeatures struct {
+	// Whether logging is enabled
+	LogsEnabled bool
+	// Whether tool I/O logging is enabled
+	ToolIoLogsEnabled bool
+}
 
 // SetProductFeaturePayload is the payload type of the features service
 // setProductFeature method.
@@ -101,4 +120,41 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// NewGramProductFeatures initializes result type GramProductFeatures from
+// viewed result type GramProductFeatures.
+func NewGramProductFeatures(vres *featuresviews.GramProductFeatures) *GramProductFeatures {
+	return newGramProductFeatures(vres.Projected)
+}
+
+// NewViewedGramProductFeatures initializes viewed result type
+// GramProductFeatures from result type GramProductFeatures using the given
+// view.
+func NewViewedGramProductFeatures(res *GramProductFeatures, view string) *featuresviews.GramProductFeatures {
+	p := newGramProductFeaturesView(res)
+	return &featuresviews.GramProductFeatures{Projected: p, View: "default"}
+}
+
+// newGramProductFeatures converts projected type GramProductFeatures to
+// service type GramProductFeatures.
+func newGramProductFeatures(vres *featuresviews.GramProductFeaturesView) *GramProductFeatures {
+	res := &GramProductFeatures{}
+	if vres.LogsEnabled != nil {
+		res.LogsEnabled = *vres.LogsEnabled
+	}
+	if vres.ToolIoLogsEnabled != nil {
+		res.ToolIoLogsEnabled = *vres.ToolIoLogsEnabled
+	}
+	return res
+}
+
+// newGramProductFeaturesView projects result type GramProductFeatures to
+// projected type GramProductFeaturesView using the "default" view.
+func newGramProductFeaturesView(res *GramProductFeatures) *featuresviews.GramProductFeaturesView {
+	vres := &featuresviews.GramProductFeaturesView{
+		LogsEnabled:       &res.LogsEnabled,
+		ToolIoLogsEnabled: &res.ToolIoLogsEnabled,
+	}
+	return vres
 }

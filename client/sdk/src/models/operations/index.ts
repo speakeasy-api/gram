@@ -47,6 +47,7 @@ export * from "./getlatestdeployment.js";
 export * from "./getmcpmetadata.js";
 export * from "./getobservabilityoverview.js";
 export * from "./getperiodusage.js";
+export * from "./getproductfeatures.js";
 export * from "./getproject.js";
 export * from "./getprojectmetricssummary.js";
 export * from "./getresponse.js";

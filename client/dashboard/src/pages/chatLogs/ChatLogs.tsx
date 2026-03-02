@@ -1,7 +1,4 @@
-import {
-  InsightsSidebar,
-  useInsightsState,
-} from "@/components/insights-sidebar";
+import { InsightsSidebar } from "@/components/insights-sidebar";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
@@ -34,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
 
 type SortField = "chronological" | "messageCount" | "score";
@@ -362,7 +360,7 @@ export default function ChatLogs() {
   );
 }
 
-// Separate component to use useInsightsState inside InsightsSidebar context
+// Separate component to render inside InsightsSidebar context
 function ChatLogsContent({
   dateRange,
   setDateRangeParam,
@@ -416,8 +414,6 @@ function ChatLogsContent({
   limit: number;
   total: number;
 }) {
-  const { isExpanded: isInsightsOpen } = useInsightsState();
-
   if (isLogsDisabled) {
     return (
       <div className="h-full overflow-hidden flex flex-col">
@@ -457,22 +453,73 @@ function ChatLogsContent({
           <Page.Body fullWidth noPadding overflowHidden>
             <div className="flex flex-col flex-1 min-h-0 w-full">
               {/* Header section */}
-              <div className="px-8 py-4 shrink-0">
-                <div
-                  className={cn(
-                    "flex gap-4 mb-4 transition-all duration-300",
-                    isInsightsOpen
-                      ? "flex-col items-stretch"
-                      : "flex-row items-center justify-between",
-                  )}
-                >
-                  <div className="flex flex-col gap-1 min-w-0">
-                    <h1 className="text-xl font-semibold">Chat Sessions</h1>
-                    <p className="text-sm text-muted-foreground">
-                      View and debug individual chat conversations
-                    </p>
-                  </div>
-                  <div className="flex-shrink-0">
+              <div className="px-8 py-4 shrink-0 space-y-4">
+                <div className="flex flex-col gap-1 min-w-0">
+                  <h1 className="text-xl font-semibold">Chat Sessions</h1>
+                  <p className="text-sm text-muted-foreground">
+                    View and debug individual chat conversations
+                  </p>
+                </div>
+                {/* Filter row - all controls on one line */}
+                <div className="flex items-center gap-3">
+                  <ChatLogsFilters
+                    searchQuery={searchQuery}
+                    onSearchQueryChange={setSearchQuery}
+                    resolutionStatus={resolutionStatus}
+                    onResolutionStatusChange={setResolutionStatus}
+                  />
+                  <div className="flex items-center gap-3 ml-auto shrink-0">
+                    {/* Sort segmented control: label + dropdown + direction button */}
+                    <div className="flex items-center h-10 rounded-md border border-border">
+                      <span className="px-3 text-sm font-medium text-muted-foreground">
+                        Sort
+                      </span>
+                      <div className="w-px h-5 bg-border" />
+                      <Select
+                        value={sortField}
+                        onValueChange={(v) => setSortField(v as SortField)}
+                      >
+                        <SelectTrigger className="h-full border-0 shadow-none rounded-none min-w-[100px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="w-[280px]">
+                          <SelectItem
+                            value="chronological"
+                            description="Sort by when the chat was created"
+                          >
+                            Date
+                          </SelectItem>
+                          <SelectItem
+                            value="messageCount"
+                            description="Sort by number of messages in the chat"
+                          >
+                            Messages
+                          </SelectItem>
+                          <SelectItem
+                            value="score"
+                            description="Sort by resolution score"
+                          >
+                            Score
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="w-px h-5 bg-border" />
+                      <div className="flex items-center px-1.5">
+                        <SimpleTooltip tooltip="Sort direction">
+                          <button
+                            type="button"
+                            onClick={toggleSortOrder}
+                            className="size-7 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                          >
+                            {sortOrder === "desc" ? (
+                              <ArrowDownIcon className="size-4" />
+                            ) : (
+                              <ArrowUpIcon className="size-4" />
+                            )}
+                          </button>
+                        </SimpleTooltip>
+                      </div>
+                    </div>
                     <TimeRangePicker
                       preset={customRange ? null : dateRange}
                       customRange={customRange}
@@ -480,45 +527,6 @@ function ChatLogsContent({
                       onCustomRangeChange={setCustomRangeParam}
                       onClearCustomRange={clearCustomRange}
                     />
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <ChatLogsFilters
-                    searchQuery={searchQuery}
-                    onSearchQueryChange={setSearchQuery}
-                    resolutionStatus={resolutionStatus}
-                    onResolutionStatusChange={setResolutionStatus}
-                  />
-                  <div className="flex items-center gap-2 ml-auto">
-                    <Select
-                      value={sortField}
-                      onValueChange={(v) => setSortField(v as SortField)}
-                    >
-                      <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="Sort by" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="chronological">
-                          Chronological
-                        </SelectItem>
-                        <SelectItem value="messageCount">
-                          Message Count
-                        </SelectItem>
-                        <SelectItem value="score">Score</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <button
-                      type="button"
-                      onClick={toggleSortOrder}
-                      className="shrink-0 inline-flex items-center justify-center size-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
-                      title={sortOrder === "desc" ? "Descending" : "Ascending"}
-                    >
-                      {sortOrder === "desc" ? (
-                        <ArrowDownIcon className="size-4" />
-                      ) : (
-                        <ArrowUpIcon className="size-4" />
-                      )}
-                    </button>
                   </div>
                 </div>
               </div>

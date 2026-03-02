@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	features "github.com/speakeasy-api/gram/server/gen/features"
+	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -21,6 +22,202 @@ type SetProductFeatureRequestBody struct {
 	FeatureName *string `form:"feature_name,omitempty" json:"feature_name,omitempty" xml:"feature_name,omitempty"`
 	// Whether the feature should be enabled
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
+// GetProductFeaturesResponseBody is the type of the "features" service
+// "getProductFeatures" endpoint HTTP response body.
+type GetProductFeaturesResponseBody struct {
+	// Whether logging is enabled
+	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
+	// Whether tool I/O logging is enabled
+	ToolIoLogsEnabled bool `form:"tool_io_logs_enabled" json:"tool_io_logs_enabled" xml:"tool_io_logs_enabled"`
+}
+
+// GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
+// service "getProductFeatures" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetProductFeaturesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProductFeaturesForbiddenResponseBody is the type of the "features"
+// service "getProductFeatures" endpoint HTTP response body for the "forbidden"
+// error.
+type GetProductFeaturesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProductFeaturesBadRequestResponseBody is the type of the "features"
+// service "getProductFeatures" endpoint HTTP response body for the
+// "bad_request" error.
+type GetProductFeaturesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProductFeaturesNotFoundResponseBody is the type of the "features" service
+// "getProductFeatures" endpoint HTTP response body for the "not_found" error.
+type GetProductFeaturesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProductFeaturesConflictResponseBody is the type of the "features" service
+// "getProductFeatures" endpoint HTTP response body for the "conflict" error.
+type GetProductFeaturesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProductFeaturesUnsupportedMediaResponseBody is the type of the "features"
+// service "getProductFeatures" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetProductFeaturesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProductFeaturesInvalidResponseBody is the type of the "features" service
+// "getProductFeatures" endpoint HTTP response body for the "invalid" error.
+type GetProductFeaturesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProductFeaturesInvariantViolationResponseBody is the type of the
+// "features" service "getProductFeatures" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetProductFeaturesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProductFeaturesUnexpectedResponseBody is the type of the "features"
+// service "getProductFeatures" endpoint HTTP response body for the
+// "unexpected" error.
+type GetProductFeaturesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProductFeaturesGatewayErrorResponseBody is the type of the "features"
+// service "getProductFeatures" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetProductFeaturesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // SetProductFeatureUnauthorizedResponseBody is the type of the "features"
@@ -209,6 +406,163 @@ type SetProductFeatureGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// NewGetProductFeaturesResponseBody builds the HTTP response body from the
+// result of the "getProductFeatures" endpoint of the "features" service.
+func NewGetProductFeaturesResponseBody(res *featuresviews.GramProductFeaturesView) *GetProductFeaturesResponseBody {
+	body := &GetProductFeaturesResponseBody{
+		LogsEnabled:       *res.LogsEnabled,
+		ToolIoLogsEnabled: *res.ToolIoLogsEnabled,
+	}
+	return body
+}
+
+// NewGetProductFeaturesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getProductFeatures" endpoint of the "features"
+// service.
+func NewGetProductFeaturesUnauthorizedResponseBody(res *goa.ServiceError) *GetProductFeaturesUnauthorizedResponseBody {
+	body := &GetProductFeaturesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProductFeaturesForbiddenResponseBody builds the HTTP response body
+// from the result of the "getProductFeatures" endpoint of the "features"
+// service.
+func NewGetProductFeaturesForbiddenResponseBody(res *goa.ServiceError) *GetProductFeaturesForbiddenResponseBody {
+	body := &GetProductFeaturesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProductFeaturesBadRequestResponseBody builds the HTTP response body
+// from the result of the "getProductFeatures" endpoint of the "features"
+// service.
+func NewGetProductFeaturesBadRequestResponseBody(res *goa.ServiceError) *GetProductFeaturesBadRequestResponseBody {
+	body := &GetProductFeaturesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProductFeaturesNotFoundResponseBody builds the HTTP response body from
+// the result of the "getProductFeatures" endpoint of the "features" service.
+func NewGetProductFeaturesNotFoundResponseBody(res *goa.ServiceError) *GetProductFeaturesNotFoundResponseBody {
+	body := &GetProductFeaturesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProductFeaturesConflictResponseBody builds the HTTP response body from
+// the result of the "getProductFeatures" endpoint of the "features" service.
+func NewGetProductFeaturesConflictResponseBody(res *goa.ServiceError) *GetProductFeaturesConflictResponseBody {
+	body := &GetProductFeaturesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProductFeaturesUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getProductFeatures" endpoint of the "features"
+// service.
+func NewGetProductFeaturesUnsupportedMediaResponseBody(res *goa.ServiceError) *GetProductFeaturesUnsupportedMediaResponseBody {
+	body := &GetProductFeaturesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProductFeaturesInvalidResponseBody builds the HTTP response body from
+// the result of the "getProductFeatures" endpoint of the "features" service.
+func NewGetProductFeaturesInvalidResponseBody(res *goa.ServiceError) *GetProductFeaturesInvalidResponseBody {
+	body := &GetProductFeaturesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProductFeaturesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getProductFeatures" endpoint of the "features"
+// service.
+func NewGetProductFeaturesInvariantViolationResponseBody(res *goa.ServiceError) *GetProductFeaturesInvariantViolationResponseBody {
+	body := &GetProductFeaturesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProductFeaturesUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getProductFeatures" endpoint of the "features"
+// service.
+func NewGetProductFeaturesUnexpectedResponseBody(res *goa.ServiceError) *GetProductFeaturesUnexpectedResponseBody {
+	body := &GetProductFeaturesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProductFeaturesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getProductFeatures" endpoint of the "features"
+// service.
+func NewGetProductFeaturesGatewayErrorResponseBody(res *goa.ServiceError) *GetProductFeaturesGatewayErrorResponseBody {
+	body := &GetProductFeaturesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSetProductFeatureUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "setProductFeature" endpoint of the "features"
 // service.
@@ -353,6 +707,16 @@ func NewSetProductFeatureGatewayErrorResponseBody(res *goa.ServiceError) *SetPro
 		Fault:     res.Fault,
 	}
 	return body
+}
+
+// NewGetProductFeaturesPayload builds a features service getProductFeatures
+// endpoint payload.
+func NewGetProductFeaturesPayload(sessionToken *string, projectSlugInput *string) *features.GetProductFeaturesPayload {
+	v := &features.GetProductFeaturesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
 }
 
 // NewSetProductFeaturePayload builds a features service setProductFeature

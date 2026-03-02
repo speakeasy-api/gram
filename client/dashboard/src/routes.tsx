@@ -320,6 +320,28 @@ const ROUTE_STRUCTURE = {
     url: "settings",
     icon: "settings",
     component: Settings,
+    subPages: {
+      general: {
+        title: "General",
+        url: "general",
+        component: Settings,
+      },
+      apiKeys: {
+        title: "API Keys",
+        url: "api-keys",
+        component: Settings,
+      },
+      logs: {
+        title: "Logging & Telemetry",
+        url: "logs",
+        component: Settings,
+      },
+      domains: {
+        title: "Custom Domain",
+        url: "domains",
+        component: Settings,
+      },
+    },
   },
   billing: {
     title: "Billing",

@@ -7,6 +7,11 @@
 
 package server
 
+// GetProductFeaturesFeaturesPath returns the URL path to the features service getProductFeatures HTTP endpoint.
+func GetProductFeaturesFeaturesPath() string {
+	return "/rpc/productFeatures.get"
+}
+
 // SetProductFeatureFeaturesPath returns the URL path to the features service setProductFeature HTTP endpoint.
 func SetProductFeatureFeaturesPath() string {
 	return "/rpc/productFeatures.set"

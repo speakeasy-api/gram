@@ -64,7 +64,7 @@ func UsageCommands() []string {
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"features set-product-feature",
+		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
 		"resources list-resources",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
@@ -504,6 +504,10 @@ func ParseEndpoint(
 
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
+		featuresGetProductFeaturesFlags                = flag.NewFlagSet("get-product-features", flag.ExitOnError)
+		featuresGetProductFeaturesSessionTokenFlag     = featuresGetProductFeaturesFlags.String("session-token", "", "")
+		featuresGetProductFeaturesProjectSlugInputFlag = featuresGetProductFeaturesFlags.String("project-slug-input", "", "")
+
 		featuresSetProductFeatureFlags                = flag.NewFlagSet("set-product-feature", flag.ExitOnError)
 		featuresSetProductFeatureBodyFlag             = featuresSetProductFeatureFlags.String("body", "REQUIRED", "")
 		featuresSetProductFeatureSessionTokenFlag     = featuresSetProductFeatureFlags.String("session-token", "", "")
@@ -907,6 +911,7 @@ func ParseEndpoint(
 	packagesPublishFlags.Usage = packagesPublishUsage
 
 	featuresFlags.Usage = featuresUsage
+	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
 	featuresSetProductFeatureFlags.Usage = featuresSetProductFeatureUsage
 
 	projectsFlags.Usage = projectsUsage
@@ -1328,6 +1333,9 @@ func ParseEndpoint(
 
 		case "features":
 			switch epn {
+			case "get-product-features":
+				epf = featuresGetProductFeaturesFlags
+
 			case "set-product-feature":
 				epf = featuresSetProductFeatureFlags
 
@@ -1818,6 +1826,9 @@ func ParseEndpoint(
 		case "features":
 			c := featuresc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "get-product-features":
+				endpoint = c.GetProductFeatures()
+				data, err = featuresc.BuildGetProductFeaturesPayload(*featuresGetProductFeaturesSessionTokenFlag, *featuresGetProductFeaturesProjectSlugInputFlag)
 			case "set-product-feature":
 				endpoint = c.SetProductFeature()
 				data, err = featuresc.BuildSetProductFeaturePayload(*featuresSetProductFeatureBodyFlag, *featuresSetProductFeatureSessionTokenFlag, *featuresSetProductFeatureProjectSlugInputFlag)
@@ -3801,11 +3812,32 @@ func featuresUsage() {
 	fmt.Fprintln(os.Stderr, `Manage product level feature controls.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] features COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-product-features: Get the current state of all product feature flags.`)
 	fmt.Fprintln(os.Stderr, `    set-product-feature: Enable or disable an organization feature flag.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s features COMMAND --help\n", os.Args[0])
 }
+func featuresGetProductFeaturesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] features get-product-features", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the current state of all product feature flags.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features get-product-features --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func featuresSetProductFeatureUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] features set-product-feature", os.Args[0])
