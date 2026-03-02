@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -179,6 +180,63 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 			"display_name": user.DisplayName,
 		}); err != nil {
 			s.logger.ErrorContext(ctx, "failed to capture is_first_time_user_signup event", attr.SlogError(err))
+		}
+	}
+
+	shouldSyncWorkOSIDs := user.WasCreated && s.workos != nil
+	if shouldSyncWorkOSIDs {
+		workosUser, err := s.workos.GetUserByEmail(ctx, user.Email)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to get workos user by email", attr.SlogError(err))
+		} else if workosUser != nil {
+			if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
+				ID:       user.ID,
+				WorkosID: conv.ToPGText(workosUser.ID),
+			}); err != nil {
+				s.logger.ErrorContext(ctx, "failed to set user workos ID", attr.SlogError(err))
+			}
+
+			for _, org := range validateResp.Organizations {
+
+				if org.SSOConnectionID == nil {
+					continue
+				}
+
+				// ensure user-org relationship exists
+				_, err = s.orgRepo.UpsertOrganizationUserRelationship(
+					ctx,
+					orgRepo.UpsertOrganizationUserRelationshipParams{
+						OrganizationID: org.ID,
+						UserID:         validateResp.User.ID,
+					},
+				)
+				if err != nil {
+					s.logger.ErrorContext(ctx, "failed to upsert organization user relationship", attr.SlogError(err))
+					continue
+				}
+
+				orgMembership, err := s.workos.GetOrgMembership(ctx, workosUser.ID, org.ID)
+				if err != nil {
+					s.logger.ErrorContext(ctx, "failed to get workos org membership", attr.SlogError(err))
+					continue
+				}
+				if orgMembership == nil {
+					s.logger.ErrorContext(ctx, "org membership not found in workos")
+					continue
+				}
+
+				if err := s.orgRepo.SetOrganizationUserRelationshipWorkosMembershipID(
+					ctx,
+					orgRepo.SetOrganizationUserRelationshipWorkosMembershipIDParams{
+						OrganizationID:     org.ID,
+						UserID:             validateResp.User.ID,
+						WorkosMembershipID: conv.ToPGText(orgMembership.ID),
+					},
+				); err != nil {
+					s.logger.ErrorContext(ctx, "failed to set organization user relationship workos membership ID", attr.SlogError(err))
+					continue
+				}
+			}
 		}
 	}
 

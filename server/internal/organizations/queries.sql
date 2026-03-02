@@ -53,10 +53,20 @@ SELECT EXISTS(
 SELECT *
 FROM organization_user_relationships
 WHERE organization_id = @organization_id
-  AND deleted_at IS NULL;    
+  AND deleted_at IS NULL;
 
 -- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND user_id = @user_id;
+
+-- name: SetOrganizationUserRelationshipWorkosMembershipID :exec
+UPDATE organization_user_relationships
+SET workos_membership_id = @workos_membership_id, 
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id 
+    AND user_id = @user_id
+    AND workos_membership_id IS NULL 
+    AND deleted_at IS NULL;
+

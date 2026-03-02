@@ -55,6 +55,24 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	return i, err
 }
 
+const setUserWorkosID = `-- name: SetUserWorkosID :exec
+UPDATE users 
+SET workos_id = $1, 
+  updated_at = clock_timestamp()
+WHERE id = $2 AND 
+  workos_id IS NULL
+`
+
+type SetUserWorkosIDParams struct {
+	WorkosID pgtype.Text
+	ID       string
+}
+
+func (q *Queries) SetUserWorkosID(ctx context.Context, arg SetUserWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, setUserWorkosID, arg.WorkosID, arg.ID)
+	return err
+}
+
 const upsertUser = `-- name: UpsertUser :one
 INSERT INTO users (id, email, display_name, photo_url, admin)
 VALUES ($1, $2, $3, $4, $5)

@@ -125,6 +125,27 @@ func (q *Queries) SetAccountType(ctx context.Context, arg SetAccountTypeParams) 
 	return err
 }
 
+const setOrganizationUserRelationshipWorkosMembershipID = `-- name: SetOrganizationUserRelationshipWorkosMembershipID :exec
+UPDATE organization_user_relationships
+SET workos_membership_id = $1, 
+    updated_at = clock_timestamp()
+WHERE organization_id = $2 
+    AND user_id = $3
+    AND workos_membership_id IS NULL 
+    AND deleted_at IS NULL
+`
+
+type SetOrganizationUserRelationshipWorkosMembershipIDParams struct {
+	WorkosMembershipID pgtype.Text
+	OrganizationID     string
+	UserID             string
+}
+
+func (q *Queries) SetOrganizationUserRelationshipWorkosMembershipID(ctx context.Context, arg SetOrganizationUserRelationshipWorkosMembershipIDParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationUserRelationshipWorkosMembershipID, arg.WorkosMembershipID, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one
 INSERT INTO organization_metadata (
     id,
