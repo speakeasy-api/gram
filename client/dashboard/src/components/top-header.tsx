@@ -122,23 +122,25 @@ export function TopHeader() {
                 <CommandList className="max-h-[250px] !p-1">
                   <CommandEmpty>No projects found.</CommandEmpty>
                   <CommandGroup heading="Projects">
-                    {organization.projects.map((p) => (
-                      <CommandItem
-                        key={p.id}
-                        value={p.slug}
-                        onSelect={() => handleProjectSelect(p.slug)}
-                        className="flex items-center gap-2 cursor-pointer"
-                      >
-                        <ProjectAvatar
-                          project={p}
-                          className="h-5 w-5 rounded shrink-0"
-                        />
-                        <span className="flex-1 truncate">{p.slug}</span>
-                        {p.id === project.id && (
-                          <CheckIcon className="w-4 h-4 shrink-0" />
-                        )}
-                      </CommandItem>
-                    ))}
+                    {[...organization.projects]
+                      .sort((a, b) => a.slug.localeCompare(b.slug))
+                      .map((p) => (
+                        <CommandItem
+                          key={p.id}
+                          value={p.slug}
+                          onSelect={() => handleProjectSelect(p.slug)}
+                          className="flex items-center gap-2 cursor-pointer"
+                        >
+                          <ProjectAvatar
+                            project={p}
+                            className="h-5 w-5 rounded shrink-0"
+                          />
+                          <span className="flex-1 truncate">{p.slug}</span>
+                          {p.id === project.id && (
+                            <CheckIcon className="w-4 h-4 shrink-0" />
+                          )}
+                        </CommandItem>
+                      ))}
                   </CommandGroup>
                 </CommandList>
               </Command>
