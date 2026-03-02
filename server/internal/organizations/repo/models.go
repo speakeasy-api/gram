@@ -20,11 +20,12 @@ type OrganizationMetadatum struct {
 }
 
 type OrganizationUserRelationship struct {
-	ID             int64
-	OrganizationID string
-	UserID         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                 int64
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
 }

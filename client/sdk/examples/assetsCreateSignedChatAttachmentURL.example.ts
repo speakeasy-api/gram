@@ -8,7 +8,7 @@ dotenv.config();
  * Example usage of the @gram/client SDK
  *
  * To run this example from the examples directory:
- * npm run build && npx tsx slackSlackLogin.example.ts
+ * npm run build && npx tsx assetsCreateSignedChatAttachmentURL.example.ts
  */
 
 import { Gram } from "@gram/client";
@@ -16,8 +16,11 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function main() {
-  const result = await gram.slack.slackLogin({
-    projectSlug: "<value>",
+  const result = await gram.assets.createSignedChatAttachmentURL({
+    createSignedChatAttachmentURLForm2: {
+      id: "<id>",
+      projectId: "<id>",
+    },
   });
 
   console.log(result);

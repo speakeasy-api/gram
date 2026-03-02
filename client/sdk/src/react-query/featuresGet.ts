@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildGetSlackConnectionQuery,
-  GetSlackConnectionQueryData,
-  prefetchGetSlackConnection,
-  queryKeyGetSlackConnection,
-} from "./getSlackConnection.core.js";
+  buildFeaturesGetQuery,
+  FeaturesGetQueryData,
+  prefetchFeaturesGet,
+  queryKeyFeaturesGet,
+} from "./featuresGet.core.js";
 export {
-  buildGetSlackConnectionQuery,
-  type GetSlackConnectionQueryData,
-  prefetchGetSlackConnection,
-  queryKeyGetSlackConnection,
+  buildFeaturesGetQuery,
+  type FeaturesGetQueryData,
+  prefetchFeaturesGet,
+  queryKeyFeaturesGet,
 };
 
-export type GetSlackConnectionQueryError =
+export type FeaturesGetQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,22 +53,19 @@ export type GetSlackConnectionQueryError =
   | SDKValidationError;
 
 /**
- * getSlackConnection slack
+ * getProductFeatures features
  *
  * @remarks
- * get slack connection for an organization and project.
+ * Get the current state of all product feature flags.
  */
-export function useGetSlackConnection(
-  request?: operations.GetSlackConnectionRequest | undefined,
-  security?: operations.GetSlackConnectionSecurity | undefined,
-  options?: QueryHookOptions<
-    GetSlackConnectionQueryData,
-    GetSlackConnectionQueryError
-  >,
-): UseQueryResult<GetSlackConnectionQueryData, GetSlackConnectionQueryError> {
+export function useFeaturesGet(
+  request?: operations.GetProductFeaturesRequest | undefined,
+  security?: operations.GetProductFeaturesSecurity | undefined,
+  options?: QueryHookOptions<FeaturesGetQueryData, FeaturesGetQueryError>,
+): UseQueryResult<FeaturesGetQueryData, FeaturesGetQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildGetSlackConnectionQuery(
+    ...buildFeaturesGetQuery(
       client,
       request,
       security,
@@ -79,25 +76,22 @@ export function useGetSlackConnection(
 }
 
 /**
- * getSlackConnection slack
+ * getProductFeatures features
  *
  * @remarks
- * get slack connection for an organization and project.
+ * Get the current state of all product feature flags.
  */
-export function useGetSlackConnectionSuspense(
-  request?: operations.GetSlackConnectionRequest | undefined,
-  security?: operations.GetSlackConnectionSecurity | undefined,
+export function useFeaturesGetSuspense(
+  request?: operations.GetProductFeaturesRequest | undefined,
+  security?: operations.GetProductFeaturesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    GetSlackConnectionQueryData,
-    GetSlackConnectionQueryError
+    FeaturesGetQueryData,
+    FeaturesGetQueryError
   >,
-): UseSuspenseQueryResult<
-  GetSlackConnectionQueryData,
-  GetSlackConnectionQueryError
-> {
+): UseSuspenseQueryResult<FeaturesGetQueryData, FeaturesGetQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildGetSlackConnectionQuery(
+    ...buildFeaturesGetQuery(
       client,
       request,
       security,
@@ -107,7 +101,7 @@ export function useGetSlackConnectionSuspense(
   });
 }
 
-export function setGetSlackConnectionData(
+export function setFeaturesGetData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -115,14 +109,14 @@ export function setGetSlackConnectionData(
       gramProject?: string | undefined;
     },
   ],
-  data: GetSlackConnectionQueryData,
-): GetSlackConnectionQueryData | undefined {
-  const key = queryKeyGetSlackConnection(...queryKeyBase);
+  data: FeaturesGetQueryData,
+): FeaturesGetQueryData | undefined {
+  const key = queryKeyFeaturesGet(...queryKeyBase);
 
-  return client.setQueryData<GetSlackConnectionQueryData>(key, data);
+  return client.setQueryData<FeaturesGetQueryData>(key, data);
 }
 
-export function invalidateGetSlackConnection(
+export function invalidateFeaturesGet(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -134,16 +128,16 @@ export function invalidateGetSlackConnection(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "slack", "getSlackConnection", ...queryKeyBase],
+    queryKey: ["@gram/client", "features", "get", ...queryKeyBase],
   });
 }
 
-export function invalidateAllGetSlackConnection(
+export function invalidateAllFeaturesGet(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "slack", "getSlackConnection"],
+    queryKey: ["@gram/client", "features", "get"],
   });
 }

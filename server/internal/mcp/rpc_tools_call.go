@@ -32,6 +32,7 @@ import (
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -267,8 +268,13 @@ func handleToolsCall(
 		if payload.userID != "" {
 			logAttrs[attr.UserIDKey] = payload.userID
 		}
-		if payload.externalUserID != "" {
+		switch {
+		case payload.externalUserID != "":
 			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
+		case oauthToken != "":
+			if sub := jwtclaims.UnsafeExtractSubject(oauthToken); sub != "" {
+				logAttrs[attr.ExternalUserIDKey] = sub
+			}
 		}
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID

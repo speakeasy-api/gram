@@ -1,7 +1,12 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
+import {
+  InstallPageConfigForm,
+  useMcpMetadataMetadataForm,
+  type UseMcpMetadataMetadataFormResult,
+} from "@/components/mcp_install_page/config_form";
+import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { MCPHeroIllustration } from "@/components/sources/SourceCardIllustrations";
@@ -34,6 +39,7 @@ import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
 import { Confirm, ToolsetEntry } from "@gram/client/models/components";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
@@ -59,10 +65,12 @@ import {
   Trash2,
   XCircleIcon,
 } from "lucide-react";
+import { generateText } from "ai";
 import React, { useCallback, useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
+import { useModel } from "../playground/Openrouter";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
@@ -460,6 +468,19 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
 function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
+  const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
+    retry: (_, err) => {
+      if (err instanceof GramError && err.statusCode === 404) {
+        return false;
+      }
+      return true;
+    },
+    throwOnError: false,
+  });
+
+  const form = useMcpMetadataMetadataForm(toolset.slug, result.data?.metadata);
+  const isLoading = result.isLoading || form.isLoading;
+
   return (
     <Stack className="mb-4">
       <PageSection
@@ -480,10 +501,149 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
-          <InstallPageConfigForm toolset={toolset} />
+          <InstallPageConfigForm
+            toolset={toolset}
+            form={form}
+            isLoading={isLoading}
+          />
         </Stack>
       </PageSection>
+
+      <PageSection
+        heading="Server Instructions"
+        description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
+      >
+        <ServerInstructionsSection
+          toolset={toolset}
+          form={form}
+          isLoading={isLoading}
+        />
+      </PageSection>
     </Stack>
+  );
+}
+
+/**
+ * Server Instructions Section - textarea + generate + save
+ */
+const INSTRUCTIONS_SOFT_LIMIT = 2000;
+
+function ServerInstructionsSection({
+  toolset,
+  form,
+  isLoading,
+}: {
+  toolset: Toolset;
+  form: UseMcpMetadataMetadataFormResult;
+  isLoading: boolean;
+}) {
+  const charCount = form.instructionsHandlers.value?.length ?? 0;
+  const overLimit = charCount > INSTRUCTIONS_SOFT_LIMIT;
+
+  return (
+    <Stack gap={3}>
+      <div className="relative">
+        <Textarea
+          placeholder={`Describe how your tools work together, required workflows,\nand any constraints (rate limits, auth requirements, etc.).\n\nKeep it concise — don't repeat individual tool descriptions.`}
+          className="w-full min-h-[150px]"
+          value={form.instructionsHandlers.value ?? ""}
+          onChange={form.instructionsHandlers.onChange}
+        />
+        {charCount > 0 && (
+          <span
+            className={cn(
+              "absolute bottom-2 right-3 text-xs",
+              overLimit ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {charCount.toLocaleString()} /{" "}
+            {INSTRUCTIONS_SOFT_LIMIT.toLocaleString()}
+          </span>
+        )}
+      </div>
+      <Stack direction="horizontal" gap={2} justify="end">
+        <GenerateInstructionsButton toolset={toolset} form={form} />
+        <Button
+          onClick={async () => {
+            try {
+              await form.saveAsync();
+              toast.success("Server instructions saved.");
+            } catch {
+              toast.error("Failed to save instructions.");
+            }
+          }}
+          disabled={isLoading || !form.instructionsDirty}
+          size="sm"
+        >
+          <Button.Text>Save</Button.Text>
+        </Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+function GenerateInstructionsButton({
+  toolset,
+  form,
+}: {
+  toolset: Toolset;
+  form: UseMcpMetadataMetadataFormResult;
+}) {
+  const [generating, setGenerating] = useState(false);
+  const { data: fullToolset } = useToolset(toolset.slug);
+  const model = useModel("anthropic/claude-sonnet-4.5");
+
+  const tools = fullToolset?.tools ?? [];
+
+  const handleGenerate = async () => {
+    if (tools.length === 0) {
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const res = await generateText({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        model: model as any,
+        prompt: `Write server instructions for the MCP server described below. Server instructions are returned to LLMs when they connect — they serve as a "user manual" independent of individual tool descriptions.
+
+Best practices:
+DO: Focus on cross-feature relationships (how tools work together, required sequences), document operational patterns and workflows, be explicit about constraints and limitations, keep it short like a quick-reference card.
+DO NOT: Duplicate individual tool descriptions, include marketing claims, try to change model personality, write lengthy prose.
+
+Server details:
+${JSON.stringify({ name: toolset.name, tools: tools.map((t) => ({ name: t.name, description: t.description })) }, null, 2)}
+
+Respond with ONLY the server instructions as plain text. Do not wrap in JSON or code fences.`,
+      });
+
+      // Populate the textarea via a synthetic change event
+      const syntheticEvent = {
+        target: { value: res.text.trim() },
+      } as React.ChangeEvent<HTMLTextAreaElement>;
+      form.instructionsHandlers.onChange(syntheticEvent);
+    } catch (err) {
+      console.error("Failed to generate instructions:", err);
+      toast.error("Failed to generate instructions. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={handleGenerate}
+      disabled={generating || tools.length === 0}
+    >
+      <Button.LeftIcon>
+        <Icon name="wand-sparkles" className="w-4 h-4" />
+      </Button.LeftIcon>
+      <Button.Text>
+        {generating ? "Generating..." : "Generate with AI"}
+      </Button.Text>
+    </Button>
   );
 }
 

@@ -1,30 +1,16 @@
-import {
-  InsightsSidebar,
-  useInsightsState,
-} from "@/components/insights-sidebar";
+import { InsightsSidebar } from "@/components/insights-sidebar";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@speakeasy-api/moonshine";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import { cn } from "@/lib/utils";
 import { useSlugs } from "@/contexts/Sdk";
 import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls";
 import {
-  FeatureName,
   TelemetryLogRecord,
   ToolCallSummary,
 } from "@gram/client/models/components";
 import {
-  useFeaturesSetMutation,
   useGramContext,
   useListAttributeKeys,
   useListToolsets,
@@ -35,9 +21,9 @@ import {
   type DateRangePreset,
   getPresetRange,
 } from "@gram-ai/elements";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, MoreHorizontal, XIcon } from "lucide-react";
+import { Check, ChevronDown, Settings, XIcon } from "lucide-react";
 import { McpIcon } from "@/components/ui/mcp-icon";
 import {
   Popover,
@@ -53,7 +39,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { Button } from "@/components/ui/button";
 import type { ActiveAttributeFilter } from "./attribute-filter-types";
 import { parseFilters, serializeFilters } from "./attribute-filter-url";
 import { AttributeFilterBar } from "./AttributeFilterBar";
@@ -131,7 +118,7 @@ function MCPServerFilter({
     <div
       className={`flex items-center gap-2 ${disabled ? "opacity-50 pointer-events-none" : ""}`}
     >
-      <div className="flex items-center h-[42px] bg-muted/50 rounded-md p-1 border border-border">
+      <div className="flex items-center h-[42px] rounded-md p-1 border border-border">
         <div className="flex items-center gap-1.5 h-8 px-3">
           <McpIcon className="size-3.5 text-muted-foreground" />
           <span className="text-sm font-medium text-foreground">Server</span>
@@ -457,39 +444,6 @@ function LogsContent() {
       (a, b) => b.startTimeUnixNano - a.startTimeUnixNano,
     );
   }, [data?.pages, hasAttributeFilters]);
-  const toolIoLogsEnabled =
-    (!hasAttributeFilters && data?.pages[0]?.toolIoLogsEnabled) ?? false;
-
-  const { mutate: setLogsFeature, status: logsMutationStatus } =
-    useFeaturesSetMutation({
-      onSuccess: () => {
-        refetch();
-      },
-    });
-
-  const isMutatingLogs = logsMutationStatus === "pending";
-
-  const handleSetLogs = (enabled: boolean) => {
-    setLogsFeature({
-      request: {
-        setProductFeatureRequestBody: {
-          featureName: FeatureName.Logs,
-          enabled,
-        },
-      },
-    });
-  };
-
-  const handleSetToolIoLogs = (enabled: boolean) => {
-    setLogsFeature({
-      request: {
-        setProductFeatureRequestBody: {
-          featureName: FeatureName.ToolIoLogs,
-          enabled,
-        },
-      },
-    });
-  };
 
   // Handler for server filter change
   const handleServerChange = useCallback(
@@ -606,10 +560,6 @@ function LogsContent() {
         handleScroll={handleScroll}
         hasNextPage={hasNextPage}
         isFetchingNextPage={isFetchingNextPage}
-        isMutatingLogs={isMutatingLogs}
-        handleSetLogs={handleSetLogs}
-        toolIoLogsEnabled={toolIoLogsEnabled}
-        handleSetToolIoLogs={handleSetToolIoLogs}
         refetch={refetch}
         // Time range props
         dateRange={dateRange}
@@ -652,10 +602,6 @@ function LogsInnerContent({
   handleScroll,
   hasNextPage,
   isFetchingNextPage,
-  isMutatingLogs,
-  handleSetLogs,
-  toolIoLogsEnabled,
-  handleSetToolIoLogs,
   refetch,
   // Time range props
   dateRange,
@@ -693,10 +639,6 @@ function LogsInnerContent({
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
-  isMutatingLogs: boolean;
-  handleSetLogs: (enabled: boolean) => void;
-  toolIoLogsEnabled: boolean;
-  handleSetToolIoLogs: (enabled: boolean) => void;
   refetch: () => void;
   // Time range props
   dateRange: DateRangePreset;
@@ -712,8 +654,6 @@ function LogsInnerContent({
   attributeKeys: string[];
   isLoadingAttributeKeys?: boolean;
 }) {
-  const { isExpanded: isInsightsOpen } = useInsightsState();
-
   if (isLogsDisabled) {
     return (
       <div className="h-full overflow-hidden flex flex-col">
@@ -754,76 +694,22 @@ function LogsInnerContent({
             <div className="flex flex-col flex-1 min-h-0 w-full">
               {/* Header section */}
               <div className="px-8 py-4 shrink-0">
-                <div
-                  className={cn(
-                    "flex gap-4 mb-4 transition-all duration-300",
-                    isInsightsOpen
-                      ? "flex-col items-stretch"
-                      : "flex-row items-center justify-between",
-                  )}
-                >
+                <div className="flex items-start justify-between gap-4 mb-4">
                   <div className="flex flex-col gap-1 min-w-0">
                     <h1 className="text-xl font-semibold">Logs</h1>
                     <p className="text-sm text-muted-foreground">
                       Browse raw tool call traces and telemetry data
                     </p>
                   </div>
-                  <div
-                    className={cn(
-                      "flex items-center gap-3",
-                      isInsightsOpen ? "justify-start" : "flex-shrink-0",
-                    )}
-                  >
-                    <TimeRangePicker
-                      preset={customRange ? null : dateRange}
-                      customRange={customRange}
-                      customRangeLabel={customRangeLabel}
-                      onPresetChange={onDateRangeChange}
-                      onCustomRangeChange={onCustomRangeChange}
-                      onClearCustomRange={onClearCustomRange}
-                      projectSlug={projectSlug}
-                    />
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="tertiary" size="sm">
-                          <MoreHorizontal className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <SimpleTooltip tooltip="Enabling this may expose sensitive data in logs.">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleSetToolIoLogs(!toolIoLogsEnabled);
-                            }}
-                            disabled={isMutatingLogs}
-                          >
-                            <div className="flex items-center justify-between w-full gap-3">
-                              <span>Record tool I/O</span>
-                              <span onClick={(e) => e.stopPropagation()}>
-                                <Switch
-                                  checked={toolIoLogsEnabled}
-                                  onCheckedChange={handleSetToolIoLogs}
-                                  disabled={isMutatingLogs}
-                                  aria-label="Record tool inputs & outputs"
-                                />
-                              </span>
-                            </div>
-                          </DropdownMenuItem>
-                        </SimpleTooltip>
-                        <DropdownMenuItem
-                          onClick={() => handleSetLogs(false)}
-                          disabled={isMutatingLogs}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          {isMutatingLogs ? "Updating..." : "Disable Logs"}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to="../settings/logs">
+                      <Settings className="h-4 w-4" />
+                      Configure settings
+                    </Link>
+                  </Button>
                 </div>
                 {/* Filter and Search Row */}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
                   <MCPServerFilter
                     selectedServer={selectedServer}
                     onServerChange={onServerChange}
@@ -839,6 +725,17 @@ function LogsInnerContent({
                       searchInput={searchInput}
                       onSearchInputChange={setSearchInput}
                       onSearchSubmit={onSearchSubmit}
+                    />
+                  </div>
+                  <div className="ml-auto">
+                    <TimeRangePicker
+                      preset={customRange ? null : dateRange}
+                      customRange={customRange}
+                      customRangeLabel={customRangeLabel}
+                      onPresetChange={onDateRangeChange}
+                      onCustomRangeChange={onCustomRangeChange}
+                      onClearCustomRange={onClearCustomRange}
+                      projectSlug={projectSlug}
                     />
                   </div>
                 </div>

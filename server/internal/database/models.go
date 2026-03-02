@@ -549,13 +549,14 @@ type OrganizationMetadatum struct {
 }
 
 type OrganizationUserRelationship struct {
-	ID             int64
-	OrganizationID string
-	UserID         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                 int64
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
 }
 
 type Package struct {
@@ -642,6 +643,27 @@ type PromptTemplate struct {
 	Deleted       bool
 }
 
+type SlackApp struct {
+	CreatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	SlackTeamName      pgtype.Text
+	SlackBotUserID     pgtype.Text
+	SlackClientSecret  pgtype.Text
+	SlackSigningSecret pgtype.Text
+	SlackTeamID        pgtype.Text
+	OrganizationID     string
+	SlackBotToken      pgtype.Text
+	SlackClientID      pgtype.Text
+	SystemPrompt       pgtype.Text
+	Name               string
+	Status             string
+	IconAssetID        uuid.NullUUID
+	ProjectID          uuid.UUID
+	ID                 uuid.UUID
+	Deleted            bool
+}
+
 type SlackAppConnection struct {
 	SlackTeamID        string
 	OrganizationID     string
@@ -651,6 +673,13 @@ type SlackAppConnection struct {
 	DefaultToolsetSlug pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+}
+
+type SlackAppToolset struct {
+	ID         uuid.UUID
+	SlackAppID uuid.UUID
+	ToolsetID  uuid.UUID
+	CreatedAt  pgtype.Timestamptz
 }
 
 type SourceEnvironment struct {
@@ -786,6 +815,7 @@ type User struct {
 	PhotoUrl    pgtype.Text
 	Admin       bool
 	LastLogin   pgtype.Timestamptz
+	WorkosID    pgtype.Text
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }
