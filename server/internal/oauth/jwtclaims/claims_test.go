@@ -17,34 +17,34 @@ func buildUnsignedJWT(claims map[string]any) string {
 	return encode(header) + "." + encode(payload) + "."
 }
 
-func TestExtractSubjectValidJWT(t *testing.T) {
+func TestUnsafeExtractSubjectValidJWT(t *testing.T) {
 	t.Parallel()
 	token := buildUnsignedJWT(map[string]any{"sub": "user-123", "iss": "https://example.com"})
-	got := ExtractSubject(token)
+	got := UnsafeExtractSubject(token)
 	require.Equal(t, "user-123", got)
 }
 
-func TestExtractSubjectMissingSub(t *testing.T) {
+func TestUnsafeExtractSubjectMissingSub(t *testing.T) {
 	t.Parallel()
 	token := buildUnsignedJWT(map[string]any{"iss": "https://example.com"})
-	got := ExtractSubject(token)
+	got := UnsafeExtractSubject(token)
 	require.Empty(t, got)
 }
 
-func TestExtractSubjectEmptyString(t *testing.T) {
+func TestUnsafeExtractSubjectEmptyString(t *testing.T) {
 	t.Parallel()
-	got := ExtractSubject("")
+	got := UnsafeExtractSubject("")
 	require.Empty(t, got)
 }
 
-func TestExtractSubjectNotAJWT(t *testing.T) {
+func TestUnsafeExtractSubjectNotAJWT(t *testing.T) {
 	t.Parallel()
-	got := ExtractSubject("not-a-jwt-token")
+	got := UnsafeExtractSubject("not-a-jwt-token")
 	require.Empty(t, got)
 }
 
-func TestExtractSubjectOpaqueToken(t *testing.T) {
+func TestUnsafeExtractSubjectOpaqueToken(t *testing.T) {
 	t.Parallel()
-	got := ExtractSubject("eyJhbGciOiJSUzI1NiJ9.notvalidbase64.sig")
+	got := UnsafeExtractSubject("eyJhbGciOiJSUzI1NiJ9.notvalidbase64.sig")
 	require.Empty(t, got)
 }
