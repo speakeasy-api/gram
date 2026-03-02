@@ -678,15 +678,15 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 	}
 }
 
-// isFlyAppNotReady reports whether the error is a transient Fly.io
-// propagation failure where the Machines API hasn't seen the
-// newly-created app yet.
-func isFlyAppNotReady(err error) bool {
+// isFlyAppReady reports whether the error does NOT indicate a transient Fly.io
+// propagation failure where the Machines API hasn't seen the newly-created app
+// yet. Returns true when err is nil or is an unrelated error.
+func isFlyAppReady(err error) bool {
 	if err == nil {
-		return false
+		return true
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "no rows in result set") || strings.Contains(msg, "failed to get app")
+	return !strings.Contains(msg, "no rows in result set") && !strings.Contains(msg, "failed to get app")
 }
 
 func (f *FlyRunner) launchN(ctx context.Context, appName string, flapsc *flaps.Client, region string, config *fly.MachineConfig, minSecretVersion *uint64, n uint8) ([]*fly.Machine, error) {
@@ -743,7 +743,7 @@ func (f *FlyRunner) launchWithRetry(ctx context.Context, appName string, flapsc 
 		if err == nil {
 			return m, nil
 		}
-		if !isFlyAppNotReady(err) {
+		if isFlyAppReady(err) {
 			return nil, backoff.Permanent(fmt.Errorf("launch machine: %w", err))
 		}
 		return nil, fmt.Errorf("launch machine: %w", err)
