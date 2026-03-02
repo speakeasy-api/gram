@@ -4,39 +4,38 @@ on:
     types: [opened, synchronize, reopened, edited]
     branches:
       - main
-  push:
 
 jobs:
   lint-pr:
     name: Lint PR Title and Changesets
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      # - name: Validate PR title format
-      #   shell: bash
-      #   run: |
-      #     if [[ "${{ github.ref }}" ==  "refs/heads/main" ]]; then
-      #       echo "Skipping PR title validation on main."
-      #       exit 0
-      #     fi
+      - name: Validate PR title format
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+            echo "Skipping PR title validation on main."
+            exit 0
+          fi
 
-      #     if [[ "${{ github.event.pull_request.title }}" =~ ^(chore|fix|feat|mig)(\([a-zA-Z0-9_-]+\))?!?:\ [a-z] ]]; then
-      #       echo "PR title format is valid."
-      #     else
-      #       echo "PR title must:"
-      #       echo '- Start with one of: "chore", "fix", "feat", "mig"'
-      #       echo "- ... optionally followed by a scope in parentheses - alphanumeric, dashes, and underscores only"
-      #       echo "- ... optionally followed by an exclamation mark (!) to indicate a breaking change"
-      #       echo "- ... followed by a colon and a space"
-      #       echo "- ... followed by a space"
-      #       echo "- ... followed by a short description of the change _starting with a lowercase letter_"
-      #       echo
-      #       echo 'Example: "feat: added user avatars to the dashboard"'
-      #       echo 'Example: "chore(deps): updated dependency xyz to v2"'
-      #       echo 'Example: "fix(auth)!: changed password hashing algorithm"'
-      #       echo
-      #       echo "Got: '${{ github.event.pull_request.title }}'"
-      #       exit 1
-      #     fi
+          if [[ "${{ github.event.pull_request.title }}" =~ ^(chore|fix|feat|mig)(\([a-zA-Z0-9_-]+\))?!?:\ [a-z] ]]; then
+            echo "PR title format is valid."
+          else
+            echo "PR title must:"
+            echo '- Start with one of: "chore", "fix", "feat", "mig"'
+            echo "- ... optionally followed by a scope in parentheses - alphanumeric, dashes, and underscores only"
+            echo "- ... optionally followed by an exclamation mark (!) to indicate a breaking change"
+            echo "- ... followed by a colon and a space"
+            echo "- ... followed by a space"
+            echo "- ... followed by a short description of the change _starting with a lowercase letter_"
+            echo
+            echo 'Example: "feat: added user avatars to the dashboard"'
+            echo 'Example: "chore(deps): updated dependency xyz to v2"'
+            echo 'Example: "fix(auth)!: changed password hashing algorithm"'
+            echo
+            echo "Got: '${{ github.event.pull_request.title }}'"
+            exit 1
+          fi
 
       - name: Check for significant changes
         id: check
@@ -46,10 +45,10 @@ jobs:
             exit 0
           fi
 
-          # if [[ "${{ github.event.pull_request.title }}" =~ ^(chore|mig)(\([a-zA-Z0-9_-]+\))?: ]]; then
-          #   echo "Skipping changesets-lint job for chore/mig PR."
-          #   exit 0
-          # fi
+          if [[ "${{ github.event.pull_request.title }}" =~ ^(chore|mig)(\([a-zA-Z0-9_-]+\))?: ]]; then
+            echo "Skipping changesets-lint job for chore/mig PR."
+            exit 0
+          fi
 
           echo "lint=true" >> $GITHUB_OUTPUT
 
