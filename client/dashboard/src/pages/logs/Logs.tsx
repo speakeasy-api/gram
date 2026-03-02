@@ -420,8 +420,30 @@ function LogsContent() {
     isLogsDisabled,
   } = hasAttributeFilters ? attrLogsQuery : toolCallsQuery;
 
-  // Flatten all pages into a single array of traces
-  const allTraces = data?.pages.flatMap((page) => page.toolCalls) ?? [];
+  // Flatten all pages into a single array of traces, merging duplicates that
+  // span page boundaries (attribute-filtered logs are grouped per-page, so the
+  // same traceId can appear in multiple pages with partial counts).
+  const allTraces = useMemo(() => {
+    const raw = data?.pages.flatMap((page) => page.toolCalls) ?? [];
+    if (!hasAttributeFilters) return raw;
+
+    const merged = new Map<string, ToolCallSummary>();
+    for (const trace of raw) {
+      const existing = merged.get(trace.traceId);
+      if (existing) {
+        existing.logCount += trace.logCount;
+        existing.startTimeUnixNano = Math.min(
+          existing.startTimeUnixNano,
+          trace.startTimeUnixNano,
+        );
+      } else {
+        merged.set(trace.traceId, { ...trace });
+      }
+    }
+    return Array.from(merged.values()).sort(
+      (a, b) => b.startTimeUnixNano - a.startTimeUnixNano,
+    );
+  }, [data?.pages, hasAttributeFilters]);
 
   // Handler for server filter change
   const handleServerChange = useCallback(
