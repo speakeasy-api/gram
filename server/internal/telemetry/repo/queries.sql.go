@@ -208,12 +208,18 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		if !validJSONPath.MatchString(f.Path) {
 			continue // skip invalid paths to prevent injection
 		}
-		// @prefix → user attribute (app.<path>), bare → system attribute (as-is)
+		// @prefix → user attribute (app.<path>), always via JSON accessor.
+		// Bare paths → check for a materialized column first (bloom-filter indexed),
+		// then fall back to the JSON accessor.
+		var col string
 		path := f.Path
 		if strings.HasPrefix(path, "@") {
-			path = "app." + path[1:]
+			col = fmt.Sprintf("toString(attributes.app.%s)", path[1:])
+		} else if matCol, ok := materializedColumns[path]; ok {
+			col = matCol
+		} else {
+			col = fmt.Sprintf("toString(attributes.%s)", path)
 		}
-		col := fmt.Sprintf("toString(attributes.%s)", path)
 		switch f.Op {
 		case "eq":
 			sb = sb.Where(fmt.Sprintf("%s = ?", col), f.Value)
