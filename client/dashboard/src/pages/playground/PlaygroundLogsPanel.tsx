@@ -48,7 +48,9 @@ function getSeverityVariant(
 }
 
 function formatTimestamp(timeUnixNano: string): string {
-  return new Date(Number(BigInt(timeUnixNano) / 1_000_000n)).toLocaleTimeString();
+  return new Date(
+    Number(BigInt(timeUnixNano) / 1_000_000n),
+  ).toLocaleTimeString();
 }
 
 function isSuccessLog(log: TelemetryLogRecord): boolean {
