@@ -1366,7 +1366,6 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 // ptr returns a pointer to the given value
 //
 //go:fix inline
-//go:fix inline
 func ptr[T any](v T) *T {
 	return new(v)
 }
