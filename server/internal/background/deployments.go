@@ -35,7 +35,7 @@ func ExecuteProcessDeploymentWorkflow(ctx context.Context, env *tenv.Environment
 		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		WorkflowRunTimeout:       time.Minute * 2,
+		WorkflowRunTimeout:       15 * time.Minute,
 	}, ProcessDeploymentWorkflow, params)
 }
 
