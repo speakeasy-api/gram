@@ -26,9 +26,9 @@ export type TelemetryLogRecord = {
    */
   id: string;
   /**
-   * Unix time in nanoseconds when event was observed
+   * Unix time in nanoseconds when event was observed (string for JS int64 precision)
    */
-  observedTimeUnixNano: number;
+  observedTimeUnixNano: string;
   /**
    * Resource attributes as JSON object
    */
@@ -46,9 +46,9 @@ export type TelemetryLogRecord = {
    */
   spanId?: string | undefined;
   /**
-   * Unix time in nanoseconds when event occurred
+   * Unix time in nanoseconds when event occurred (string for JS int64 precision)
    */
-  timeUnixNano: number;
+  timeUnixNano: string;
   /**
    * W3C trace ID (32 hex characters)
    */
@@ -64,12 +64,12 @@ export const TelemetryLogRecord$inboundSchema: z.ZodMiniType<
     attributes: z.any(),
     body: z.string(),
     id: z.string(),
-    observed_time_unix_nano: z.int(),
+    observed_time_unix_nano: z.string(),
     resource_attributes: z.any(),
     service: ServiceInfo$inboundSchema,
     severity_text: z.optional(z.string()),
     span_id: z.optional(z.string()),
-    time_unix_nano: z.int(),
+    time_unix_nano: z.string(),
     trace_id: z.optional(z.string()),
   }),
   z.transform((v) => {

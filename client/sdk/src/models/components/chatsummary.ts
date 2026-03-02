@@ -30,9 +30,9 @@ export type ChatSummary = {
    */
   durationSeconds: number;
   /**
-   * Latest log timestamp in Unix nanoseconds
+   * Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
    */
-  endTimeUnixNano: number;
+  endTimeUnixNano: string;
   /**
    * Chat session ID
    */
@@ -50,9 +50,9 @@ export type ChatSummary = {
    */
   model?: string | undefined;
   /**
-   * Earliest log timestamp in Unix nanoseconds
+   * Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
    */
-  startTimeUnixNano: number;
+  startTimeUnixNano: string;
   /**
    * Chat session status
    */
@@ -89,12 +89,12 @@ export const ChatSummary$inboundSchema: z.ZodMiniType<ChatSummary, unknown> = z
   .pipe(
     z.object({
       duration_seconds: z.number(),
-      end_time_unix_nano: z.int(),
+      end_time_unix_nano: z.string(),
       gram_chat_id: z.string(),
       log_count: z.int(),
       message_count: z.int(),
       model: z.optional(z.string()),
-      start_time_unix_nano: z.int(),
+      start_time_unix_nano: z.string(),
       status: ChatSummaryStatus$inboundSchema,
       tool_call_count: z.int(),
       total_input_tokens: z.int(),
