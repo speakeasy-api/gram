@@ -458,6 +458,10 @@ func newWorkerCommand() *cli.Command {
 
 			telemetryService := telemetry.NewService(logger, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient)
 
+			/**
+			 * BEGIN -- MCP service setup for agent client
+			 */
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				openRouter,
@@ -552,6 +556,10 @@ func newWorkerCommand() *cli.Command {
 				openRouter,
 				chatClient,
 			)
+
+			/**
+			 * END -- Agent client
+			 */
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				DB:                  db,
