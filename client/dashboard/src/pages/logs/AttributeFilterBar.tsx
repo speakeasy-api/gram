@@ -93,7 +93,11 @@ export function AttributeFilterBar({
 
   const addFilter = useCallback(
     (path: string, op: Op, value?: string) => {
-      onChange([...filters, { id: crypto.randomUUID(), path, op, value }]);
+      const newFilter = { id: crypto.randomUUID(), path, op, value };
+      // Replace any existing filter on the same path+op to avoid impossible
+      // AND conditions (e.g. status_code = 404 AND status_code = 500).
+      const rest = filters.filter((f) => !(f.path === path && f.op === op));
+      onChange([...rest, newFilter]);
       onSearchInputChange("");
       resetFlow();
     },
@@ -129,44 +133,35 @@ export function AttributeFilterBar({
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    // Never let Tab leave the search bar
-    if (e.key === "Tab") {
-      e.preventDefault();
-    }
-
-    if (e.key === "Escape" && popoverOpen) {
-      e.preventDefault();
-      onSearchInputChange("");
-      resetFlow();
-    }
-
-    // Tab acts like Enter: select highlighted item when popover is open
-    if (e.key === "Tab" && popoverOpen) {
-      // PopoverContent renders in a portal, so query the document
-      const selected = document.querySelector<HTMLElement>(
-        "[cmdk-item][aria-selected='true']",
-      );
-      selected?.click();
-      return;
-    }
-
-    // Submit text search when no popover is open
-    if (
-      (e.key === "Enter" || e.key === "Tab") &&
-      step === "key" &&
-      !popoverOpen &&
-      searchInput.trim()
-    ) {
-      onSearchSubmit(searchInput.trim());
-    }
-
-    if (
-      e.key === "Backspace" &&
-      searchInput === "" &&
-      step === "key" &&
-      filters.length > 0
-    ) {
-      removeFilter(filters[filters.length - 1].id);
+    switch (e.key) {
+      case "Tab":
+        e.preventDefault();
+        if (popoverOpen) {
+          // Select the highlighted item in the popover (rendered in a portal)
+          document
+            .querySelector<HTMLElement>("[cmdk-item][aria-selected='true']")
+            ?.click();
+        } else if (step === "key" && searchInput.trim()) {
+          onSearchSubmit(searchInput.trim());
+        }
+        break;
+      case "Enter":
+        if (step === "key" && !popoverOpen && searchInput.trim()) {
+          onSearchSubmit(searchInput.trim());
+        }
+        break;
+      case "Escape":
+        if (popoverOpen) {
+          e.preventDefault();
+          onSearchInputChange("");
+          resetFlow();
+        }
+        break;
+      case "Backspace":
+        if (searchInput === "" && step === "key" && filters.length > 0) {
+          removeFilter(filters[filters.length - 1].id);
+        }
+        break;
     }
   };
 
@@ -203,23 +198,26 @@ export function AttributeFilterBar({
               </span>
             )}
             {step === "value" ? (
-              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md border border-ring bg-accent text-accent-foreground text-xs font-mono shrink-0">
-                <span>{selectedKey} {selectedOp && OP_LABELS[selectedOp]}</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md border border-ring bg-accent text-accent-foreground text-xs font-mono shrink-0">
+                <span>{selectedKey} {selectedOp && OP_LABELS[selectedOp]}{"\u00A0"}</span>
                 <input
                   type="text"
                   value={filterValue}
                   onChange={(e) => setFilterValue(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === "Tab") {
-                      e.preventDefault();
-                      handleValueSubmit();
-                    }
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      resetFlow();
-                    }
-                    if (e.key === "Backspace" && filterValue === "") {
-                      resetFlow();
+                    switch (e.key) {
+                      case "Enter":
+                      case "Tab":
+                        e.preventDefault();
+                        handleValueSubmit();
+                        break;
+                      case "Escape":
+                        e.preventDefault();
+                        resetFlow();
+                        break;
+                      case "Backspace":
+                        if (filterValue === "") resetFlow();
+                        break;
                     }
                   }}
                   placeholder="value"

@@ -4,6 +4,7 @@ import type { ActiveAttributeFilter } from "./attribute-filter-types";
 /**
  * Serialize active filters to a URL param value.
  * Format: `@user.region:eq:us-east-1,@env:exists`
+ * Path and value are URI-encoded so commas/colons inside them survive the round-trip.
  * Returns null when there are no filters.
  */
 export function serializeFilters(
@@ -12,8 +13,8 @@ export function serializeFilters(
   if (filters.length === 0) return null;
   return filters
     .map((f) => {
-      const parts = [f.path, f.op];
-      if (f.value !== undefined) parts.push(f.value);
+      const parts = [encodeURIComponent(f.path), f.op];
+      if (f.value !== undefined) parts.push(encodeURIComponent(f.value));
       return parts.join(":");
     })
     .join(",");
@@ -35,7 +36,7 @@ export function parseFilters(param: string | null): ActiveAttributeFilter[] {
       const firstColon = segment.indexOf(":");
       if (firstColon === -1) return null;
 
-      const path = segment.slice(0, firstColon);
+      const path = decodeURIComponent(segment.slice(0, firstColon));
       const rest = segment.slice(firstColon + 1);
 
       const secondColon = rest.indexOf(":");
@@ -46,7 +47,7 @@ export function parseFilters(param: string | null): ActiveAttributeFilter[] {
         op = rest;
       } else {
         op = rest.slice(0, secondColon);
-        value = rest.slice(secondColon + 1);
+        value = decodeURIComponent(rest.slice(secondColon + 1));
       }
 
       if (!path || !VALID_OPS.has(op)) return null;
@@ -58,5 +59,5 @@ export function parseFilters(param: string | null): ActiveAttributeFilter[] {
         value,
       };
     })
-    .filter((f): f is ActiveAttributeFilter => f !== null);
+    .filter((f) => f !== null);
 }
