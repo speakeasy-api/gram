@@ -151,3 +151,11 @@ API URL for AI parsing (defaults to window.location.origin)
 > `optional` **projectSlug**: `string`
 
 Project slug for API authentication
+
+***
+
+### className?
+
+> `optional` **className**: `string`
+
+Additional class name for the trigger
