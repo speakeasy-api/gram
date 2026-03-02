@@ -153,6 +153,7 @@ const RouteProvider = () => {
         icon: "home",
         onSelect: () => routes.home.goTo(),
         group: "Navigation",
+        keywords: ["dashboard", "overview"],
       },
       {
         id: "go-sources",
@@ -160,6 +161,7 @@ const RouteProvider = () => {
         icon: "file-code",
         onSelect: () => routes.sources.goTo(),
         group: "Navigation",
+        keywords: ["openapi", "functions", "api"],
       },
       {
         id: "go-mcp-servers",
@@ -167,6 +169,7 @@ const RouteProvider = () => {
         icon: "network",
         onSelect: () => routes.mcp.goTo(),
         group: "Navigation",
+        keywords: ["toolsets", "tools", "servers"],
       },
       {
         id: "go-playground",
@@ -174,6 +177,7 @@ const RouteProvider = () => {
         icon: "message-square",
         onSelect: () => routes.playground.goTo(),
         group: "Navigation",
+        keywords: ["chat", "test", "try"],
       },
       {
         id: "go-insights",
@@ -181,6 +185,7 @@ const RouteProvider = () => {
         icon: "layout-dashboard",
         onSelect: () => routes.observability.goTo(),
         group: "Navigation",
+        keywords: ["analytics", "observability", "metrics"],
       },
     ];
 
