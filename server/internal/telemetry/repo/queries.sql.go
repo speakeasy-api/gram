@@ -308,14 +308,24 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
 	}
 
-	// URN and tool_name filters must use HAVING because they are aggregate functions in SELECT,
-	// and ClickHouse resolves aliases in WHERE, which would create an invalid aggregate-in-WHERE.
+	// Build HAVING clause for tool filtering.
+	// IMPORTANT: We must construct a single HAVING clause with explicit AND logic to ensure
+	// correct boolean precedence. Multiple .Having() calls would create separate conditions
+	// that interact incorrectly with the OR in the tool_name check, causing the gram_urn
+	// filter to be bypassed when startsWith(gram_urn, 'tools:') is true.
+	havingParts := []string{"((tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:'))"}
+	havingArgs := []any{}
+
+	// URN filter must use HAVING because it's an aggregate function in SELECT
 	if arg.GramURN != "" {
-		sb = sb.Having("position(gram_urn, ?) > 0", arg.GramURN)
+		havingParts = append(havingParts, "position(gram_urn, ?) > 0")
+		havingArgs = append(havingArgs, arg.GramURN)
 	}
-	// Only include traces with tool_name set OR gram_urn starting with "tools:"
-	// The urn check is mainly for backwards compatibility with old data.
-	sb = sb.Having("(tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:')")
+
+	// Combine all HAVING conditions with explicit AND to ensure proper filtering
+	if len(havingParts) > 0 {
+		sb = sb.Having(strings.Join(havingParts, " AND "), havingArgs...)
+	}
 
 	// Exclude chat completion logs (urn:uuid:...) which are not tool calls.
 	// The trace_summaries_mv filters these at insert time via a WHERE clause,
