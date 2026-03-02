@@ -268,9 +268,10 @@ func handleToolsCall(
 		if payload.userID != "" {
 			logAttrs[attr.UserIDKey] = payload.userID
 		}
-		if payload.externalUserID != "" {
+		switch {
+		case payload.externalUserID != "":
 			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
-		} else if oauthToken != "" {
+		case oauthToken != "":
 			if sub := jwtclaims.ExtractSubject(oauthToken); sub != "" {
 				logAttrs[attr.ExternalUserIDKey] = sub
 			}
