@@ -48,7 +48,6 @@ export function SlackAppsRoot() {
 
 function EnterpriseGate({ children }: { children: React.ReactNode }) {
   const productTier = useProductTier();
-  const routes = useRoutes();
 
   if (productTier === "enterprise") {
     return <>{children}</>;
@@ -63,12 +62,18 @@ function EnterpriseGate({ children }: { children: React.ReactNode }) {
         Enterprise Feature
       </Type>
       <Type small muted className="text-center mb-4 max-w-md">
-        Slack apps are available on the Enterprise plan. Contact our sales team
-        to get started.
+        Slack apps are available on the Enterprise plan. Book a time to
+        get&nbsp;started.
       </Type>
-      <routes.billing.Link>
-        <Button variant="brand">Talk to Sales</Button>
-      </routes.billing.Link>
+      <Button variant="brand" asChild>
+        <a
+          href="https://www.speakeasy.com/book-demo"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Talk to our team
+        </a>
+      </Button>
     </div>
   );
 }
