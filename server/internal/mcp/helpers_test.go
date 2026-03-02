@@ -434,3 +434,87 @@ func TestMsgID_UnmarshalJSON_Null(t *testing.T) {
 		require.Equal(t, int64(0), id.Number)
 	})
 }
+
+func TestRpcError_MarshalJSON_ZeroID(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zero_value_id_serializes_as_null", func(t *testing.T) {
+		t.Parallel()
+		rpcErr := &rpcError{
+			ID:      msgID{format: 0, String: "", Number: 0},
+			Code:    internalError,
+			Message: "something went wrong",
+			Data:    nil,
+		}
+		data, err := json.Marshal(rpcErr)
+		require.NoError(t, err)
+
+		var parsed map[string]any
+		err = json.Unmarshal(data, &parsed)
+		require.NoError(t, err)
+		require.Nil(t, parsed["id"], "id must be null when request ID is unknown")
+		require.Equal(t, "2.0", parsed["jsonrpc"])
+		require.NotNil(t, parsed["error"])
+	})
+
+	t.Run("zero_int_id_serializes_as_null", func(t *testing.T) {
+		t.Parallel()
+		rpcErr := &rpcError{
+			ID:      msgID{format: 1, Number: 0},
+			Code:    parseError,
+			Message: "parse error",
+			Data:    nil,
+		}
+		data, err := json.Marshal(rpcErr)
+		require.NoError(t, err)
+
+		var parsed map[string]any
+		err = json.Unmarshal(data, &parsed)
+		require.NoError(t, err)
+		require.Nil(t, parsed["id"], "id must be null when request ID is zero")
+	})
+
+	t.Run("nonzero_int_id_serializes_normally", func(t *testing.T) {
+		t.Parallel()
+		rpcErr := &rpcError{
+			ID:      msgID{format: 1, Number: 42},
+			Code:    methodNotFound,
+			Message: "not found",
+			Data:    nil,
+		}
+		data, err := json.Marshal(rpcErr)
+		require.NoError(t, err)
+
+		var parsed map[string]any
+		err = json.Unmarshal(data, &parsed)
+		require.NoError(t, err)
+		require.Equal(t, float64(42), parsed["id"])
+	})
+}
+
+func TestBatchContainsMethod(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns_true_when_method_present", func(t *testing.T) {
+		t.Parallel()
+		batch := batchedRawRequest{
+			{Method: "initialize"},
+			{Method: "tools/list"},
+		}
+		require.True(t, batchContainsMethod(batch, "initialize"))
+	})
+
+	t.Run("returns_false_when_method_absent", func(t *testing.T) {
+		t.Parallel()
+		batch := batchedRawRequest{
+			{Method: "tools/list"},
+			{Method: "ping"},
+		}
+		require.False(t, batchContainsMethod(batch, "initialize"))
+	})
+
+	t.Run("returns_false_for_empty_batch", func(t *testing.T) {
+		t.Parallel()
+		require.False(t, batchContainsMethod(batchedRawRequest{}, "initialize"))
+	})
+}
