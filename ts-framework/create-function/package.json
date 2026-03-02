@@ -43,6 +43,6 @@
     "@types/node": "22.x",
     "prettier": "^3.6.2",
     "typescript": "catalog:",
-    "zod": "^3.25.76"
+    "zod": "^4"
   }
 }

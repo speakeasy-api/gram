@@ -63,8 +63,8 @@ function getSeverityBadgeVariant(
   }
 }
 
-function formatTimestamp(nanos: number): string {
-  const ms = nanos / 1_000_000;
+function formatTimestamp(nanos: string): string {
+  const ms = Number(BigInt(nanos) / 1_000_000n);
   return format(new Date(ms), "HH:mm:ss.SSS");
 }
 

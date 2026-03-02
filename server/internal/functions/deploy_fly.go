@@ -13,8 +13,10 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	backoff "github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -676,11 +678,22 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 	}
 }
 
+// isFlyAppReady reports whether the error does NOT indicate a transient Fly.io
+// propagation failure where the Machines API hasn't seen the newly-created app
+// yet. Returns true when err is nil or is an unrelated error.
+func isFlyAppReady(err error) bool {
+	if err == nil {
+		return true
+	}
+	msg := err.Error()
+	return !strings.Contains(msg, "no rows in result set") && !strings.Contains(msg, "failed to get app")
+}
+
 func (f *FlyRunner) launchN(ctx context.Context, appName string, flapsc *flaps.Client, region string, config *fly.MachineConfig, minSecretVersion *uint64, n uint8) ([]*fly.Machine, error) {
 	ms := make([]*fly.Machine, 0, n)
 
 	for i := range n {
-		m, err := flapsc.Launch(ctx, appName, fly.LaunchMachineInput{
+		input := fly.LaunchMachineInput{
 			Region:                  region,
 			Timeout:                 0,
 			RequiresReplacement:     true,
@@ -690,7 +703,20 @@ func (f *FlyRunner) launchN(ctx context.Context, appName string, flapsc *flaps.C
 			LeaseTTL:                0,
 			Config:                  config,
 			MinSecretsVersion:       minSecretVersion,
-		})
+		}
+
+		var m *fly.Machine
+		var err error
+
+		// The first machine launch can hit a Fly.io propagation delay
+		// where the Machines API hasn't registered the app created via
+		// the GraphQL API yet. Retry with backoff for these transient
+		// errors only.
+		if i == 0 {
+			m, err = f.launchWithRetry(ctx, appName, flapsc, input)
+		} else {
+			m, err = flapsc.Launch(ctx, appName, input)
+		}
 		if err != nil {
 			return ms, fmt.Errorf("failed to launch machine %d: %w", i, err)
 		}
@@ -702,6 +728,39 @@ func (f *FlyRunner) launchN(ctx context.Context, appName string, flapsc *flaps.C
 	}
 
 	return ms, nil
+}
+
+// launchWithRetry retries a machine launch with exponential backoff when the
+// error indicates the app hasn't propagated to the Fly Machines API yet.
+func (f *FlyRunner) launchWithRetry(ctx context.Context, appName string, flapsc *flaps.Client, input fly.LaunchMachineInput) (*fly.Machine, error) {
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = 1 * time.Second
+	bo.MaxInterval = 16 * time.Second
+	bo.Multiplier = 2
+
+	m, err := backoff.Retry(ctx, func() (*fly.Machine, error) {
+		m, err := flapsc.Launch(ctx, appName, input)
+		if err == nil {
+			return m, nil
+		}
+		if isFlyAppReady(err) {
+			return nil, backoff.Permanent(fmt.Errorf("launch machine: %w", err))
+		}
+		return nil, fmt.Errorf("launch machine: %w", err)
+	},
+		backoff.WithBackOff(bo),
+		backoff.WithMaxTries(6),
+		backoff.WithNotify(func(err error, d time.Duration) {
+			f.logger.WarnContext(ctx, "fly app not yet visible to machines API, retrying",
+				attr.SlogRetryWait(d),
+				attr.SlogFlyAppName(appName),
+			)
+		}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("launch machine with retry: %w", err)
+	}
+	return m, nil
 }
 
 func (f *FlyRunner) setSecrets(ctx context.Context, logger *slog.Logger, appName string, secrets map[string]string) (*uint64, error) {

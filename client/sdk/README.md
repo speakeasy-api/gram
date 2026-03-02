@@ -105,8 +105,11 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.slack.slackLogin({
-    projectSlug: "<value>",
+  const result = await gram.assets.createSignedChatAttachmentURL({
+    createSignedChatAttachmentURLForm2: {
+      id: "<id>",
+      projectId: "<id>",
+    },
   });
 
   console.log(result);
@@ -199,6 +202,7 @@ run();
 
 ### [Features](docs/sdks/features/README.md)
 
+* [get](docs/sdks/features/README.md#get) - getProductFeatures features
 * [set](docs/sdks/features/README.md#set) - setProductFeature features
 
 ### [Instances](docs/sdks/instances/README.md)
@@ -251,11 +255,12 @@ run();
 
 ### [Slack](docs/sdks/slack/README.md)
 
-* [slackLogin](docs/sdks/slack/README.md#slacklogin) - login slack
-* [slackCallback](docs/sdks/slack/README.md#slackcallback) - callback slack
-* [deleteSlackConnection](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
-* [getSlackConnection](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
-* [updateSlackConnection](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
+* [configureSlackApp](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
+* [createSlackApp](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
+* [deleteSlackApp](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
+* [getSlackApp](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
+* [listSlackApps](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
+* [updateSlackApp](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
@@ -378,6 +383,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsSetSourceLink`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`environmentsSetToolsetLink`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`instancesGetBySlug`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`integrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
@@ -403,11 +409,12 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`projectsUpsertAllowedOrigin`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
-- [`slackDeleteSlackConnection`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
-- [`slackGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
-- [`slackSlackCallback`](docs/sdks/slack/README.md#slackcallback) - callback slack
-- [`slackSlackLogin`](docs/sdks/slack/README.md#slacklogin) - login slack
-- [`slackUpdateSlackConnection`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
+- [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
+- [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
+- [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
+- [`slackGetSlackApp`](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
+- [`slackListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
+- [`slackUpdateSlackApp`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`telemetryGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`telemetryGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
@@ -481,6 +488,7 @@ To learn about this feature and how to get started, check
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
+- [`useConfigureSlackAppMutation`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
@@ -489,13 +497,14 @@ To learn about this feature and how to get started, check
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
+- [`useCreateSlackAppMutation`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
-- [`useDeleteSlackConnectionMutation`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
+- [`useDeleteSlackAppMutation`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
 - [`useDeleteSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
 - [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
@@ -504,6 +513,7 @@ To learn about this feature and how to get started, check
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useExportMcpMetadataMutation`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
+- [`useFeaturesGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
@@ -512,7 +522,7 @@ To learn about this feature and how to get started, check
 - [`useGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`useGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 - [`useGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
-- [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
+- [`useGetSlackApp`](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
 - [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
@@ -535,6 +545,7 @@ To learn about this feature and how to get started, check
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
+- [`useListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -570,7 +581,7 @@ To learn about this feature and how to get started, check
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
-- [`useUpdateSlackConnectionMutation`](docs/sdks/slack/README.md#updateslackconnection) - updateSlackConnection slack
+- [`useUpdateSlackAppMutation`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUploadChatAttachmentMutation`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
@@ -630,8 +641,11 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.slack.slackLogin({
-    projectSlug: "<value>",
+  const result = await gram.assets.createSignedChatAttachmentURL({
+    createSignedChatAttachmentURLForm2: {
+      id: "<id>",
+      projectId: "<id>",
+    },
   }, {
     retries: {
       strategy: "backoff",
@@ -670,8 +684,11 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.slack.slackLogin({
-    projectSlug: "<value>",
+  const result = await gram.assets.createSignedChatAttachmentURL({
+    createSignedChatAttachmentURLForm2: {
+      id: "<id>",
+      projectId: "<id>",
+    },
   });
 
   console.log(result);
@@ -705,8 +722,11 @@ const gram = new Gram();
 
 async function run() {
   try {
-    const result = await gram.slack.slackLogin({
-      projectSlug: "<value>",
+    const result = await gram.assets.createSignedChatAttachmentURL({
+      createSignedChatAttachmentURLForm2: {
+        id: "<id>",
+        projectId: "<id>",
+      },
     });
 
     console.log(result);
@@ -771,8 +791,11 @@ const gram = new Gram({
 });
 
 async function run() {
-  const result = await gram.slack.slackLogin({
-    projectSlug: "<value>",
+  const result = await gram.assets.createSignedChatAttachmentURL({
+    createSignedChatAttachmentURLForm2: {
+      id: "<id>",
+      projectId: "<id>",
+    },
   });
 
   console.log(result);

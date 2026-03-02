@@ -35,6 +35,7 @@ func newApp() *cli.App {
 			newStageCommand(),
 			newInstallCommand(),
 			newUpdateCommand(),
+			newRedeployCommand(),
 		},
 		Flags: []cli.Flag{
 			flags.APIKey(),

@@ -2153,10 +2153,11 @@ type AttributeFilterRequestBody struct {
 type TelemetryLogRecordResponseBody struct {
 	// Log record ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Unix time in nanoseconds when event occurred
-	TimeUnixNano *int64 `form:"time_unix_nano,omitempty" json:"time_unix_nano,omitempty" xml:"time_unix_nano,omitempty"`
-	// Unix time in nanoseconds when event was observed
-	ObservedTimeUnixNano *int64 `form:"observed_time_unix_nano,omitempty" json:"observed_time_unix_nano,omitempty" xml:"observed_time_unix_nano,omitempty"`
+	// Unix time in nanoseconds when event occurred (string for JS int64 precision)
+	TimeUnixNano *string `form:"time_unix_nano,omitempty" json:"time_unix_nano,omitempty" xml:"time_unix_nano,omitempty"`
+	// Unix time in nanoseconds when event was observed (string for JS int64
+	// precision)
+	ObservedTimeUnixNano *string `form:"observed_time_unix_nano,omitempty" json:"observed_time_unix_nano,omitempty" xml:"observed_time_unix_nano,omitempty"`
 	// Text representation of severity
 	SeverityText *string `form:"severity_text,omitempty" json:"severity_text,omitempty" xml:"severity_text,omitempty"`
 	// The primary log message
@@ -2200,8 +2201,8 @@ type SearchToolCallsFilterRequestBody struct {
 type ToolCallSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
 	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
-	// Earliest log timestamp in Unix nanoseconds
-	StartTimeUnixNano *int64 `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano *string `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
 	// Total number of logs in this tool call
 	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
 	// HTTP status code (if applicable)
@@ -2236,10 +2237,10 @@ type SearchChatsFilterRequestBody struct {
 type ChatSummaryResponseBody struct {
 	// Chat session ID
 	GramChatID *string `form:"gram_chat_id,omitempty" json:"gram_chat_id,omitempty" xml:"gram_chat_id,omitempty"`
-	// Earliest log timestamp in Unix nanoseconds
-	StartTimeUnixNano *int64 `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
-	// Latest log timestamp in Unix nanoseconds
-	EndTimeUnixNano *int64 `form:"end_time_unix_nano,omitempty" json:"end_time_unix_nano,omitempty" xml:"end_time_unix_nano,omitempty"`
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano *string `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
+	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	EndTimeUnixNano *string `form:"end_time_unix_nano,omitempty" json:"end_time_unix_nano,omitempty" xml:"end_time_unix_nano,omitempty"`
 	// Total number of logs in this chat session
 	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
 	// Number of tool calls in this chat session

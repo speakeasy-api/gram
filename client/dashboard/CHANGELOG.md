@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.30.0
+
+### Minor Changes
+
+- 125d6c9: adds the ability to install slack apps through the Gram UI
+
+### Patch Changes
+
+- 823e7ab: feat(cli): add `gram redeploy` command to clone and redeploy existing deployments
+
+  fix(dashboard): show redeploy button on every deployment detail page and add visible Deployments navigation to sources page
+
+- f293092: fix: tool call logs count shown but empty state
+
 ## 0.29.4
 
 ### Patch Changes

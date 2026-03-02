@@ -590,7 +590,7 @@ func sniffMimeType(params sniffMimeTypeParams) (mtype string, ext string, err er
 	}
 
 	if !slices.Contains(params.allowedTypes, params.inputMimeType) {
-		return "", "", oops.E(oops.CodeUnsupportedMedia, nil, "unsupported content type: %s (allowed: %s)", params.inputMimeType, strings.Join(params.allowedTypes, ", "))
+		return "", "", oops.E(oops.CodeUnsupportedMedia, nil, "unsupported content type: %q with content_length=%d (allowed: %s)", params.inputMimeType, params.contentLength, strings.Join(params.allowedTypes, ", "))
 	}
 
 	var exts []string

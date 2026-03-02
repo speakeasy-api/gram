@@ -7,31 +7,32 @@
 
 package client
 
-import (
-	"fmt"
-)
-
-// CallbackSlackPath returns the URL path to the slack service callback HTTP endpoint.
-func CallbackSlackPath() string {
-	return "/rpc/slack.callback"
+// CreateSlackAppSlackPath returns the URL path to the slack service createSlackApp HTTP endpoint.
+func CreateSlackAppSlackPath() string {
+	return "/rpc/slack-apps.create"
 }
 
-// LoginSlackPath returns the URL path to the slack service login HTTP endpoint.
-func LoginSlackPath(projectSlug string) string {
-	return fmt.Sprintf("/rpc/%v/slack.login", projectSlug)
+// ListSlackAppsSlackPath returns the URL path to the slack service listSlackApps HTTP endpoint.
+func ListSlackAppsSlackPath() string {
+	return "/rpc/slack-apps.list"
 }
 
-// GetSlackConnectionSlackPath returns the URL path to the slack service getSlackConnection HTTP endpoint.
-func GetSlackConnectionSlackPath() string {
-	return "/rpc/slack.getConnection"
+// GetSlackAppSlackPath returns the URL path to the slack service getSlackApp HTTP endpoint.
+func GetSlackAppSlackPath() string {
+	return "/rpc/slack-apps.get"
 }
 
-// UpdateSlackConnectionSlackPath returns the URL path to the slack service updateSlackConnection HTTP endpoint.
-func UpdateSlackConnectionSlackPath() string {
-	return "/rpc/slack.updateConnection"
+// ConfigureSlackAppSlackPath returns the URL path to the slack service configureSlackApp HTTP endpoint.
+func ConfigureSlackAppSlackPath() string {
+	return "/rpc/slack-apps.configure"
 }
 
-// DeleteSlackConnectionSlackPath returns the URL path to the slack service deleteSlackConnection HTTP endpoint.
-func DeleteSlackConnectionSlackPath() string {
-	return "/rpc/slack.deleteConnection"
+// UpdateSlackAppSlackPath returns the URL path to the slack service updateSlackApp HTTP endpoint.
+func UpdateSlackAppSlackPath() string {
+	return "/rpc/slack-apps.update"
+}
+
+// DeleteSlackAppSlackPath returns the URL path to the slack service deleteSlackApp HTTP endpoint.
+func DeleteSlackAppSlackPath() string {
+	return "/rpc/slack-apps.delete"
 }

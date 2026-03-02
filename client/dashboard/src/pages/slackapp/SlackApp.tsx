@@ -1,78 +1,318 @@
+import { AssetImage } from "@/components/asset-image";
 import { Page } from "@/components/page-layout";
-import { Button } from "@speakeasy-api/moonshine";
+import { CompactUpload, useAssetImageUploadHandler } from "@/components/upload";
+import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
-import { useGetSlackConnection } from "@gram/client/react-query";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSdkClient } from "@/contexts/Sdk";
-import { useState } from "react";
-import { getServerURL } from "@/lib/utils";
-import { useToolsets } from "../toolsets/Toolsets";
-import { Card } from "@/components/ui/card";
-import { Stack, Icon } from "@speakeasy-api/moonshine";
+import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
+import { useProductTier } from "@/hooks/useProductTier";
 import { HumanizeDateTime } from "@/lib/dates";
+import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
+import { useToolsets } from "@/pages/toolsets/Toolsets";
 import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip";
-import { InfoIcon } from "lucide-react";
-import { useSearchParams } from "react-router";
-import { useProject } from "@/contexts/Auth";
+  useListSlackApps,
+  useCreateSlackAppMutation,
+} from "@gram/client/react-query";
+import { SlackAppResult } from "@gram/client/models/components/slackappresult.js";
+import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Outlet } from "react-router";
+import React, { useState } from "react";
 
-export default function SlackApp() {
-  const client = useSdkClient();
-  const queryClient = useQueryClient();
-  const { data, isLoading } = useGetSlackConnection(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
-  const [modalOpen, setModalOpen] = useState(false);
-  const [toolset, setToolset] = useState("");
-  const [connectionDeleted, setConnectionDeleted] = useState(false);
-
-  const toolsets = useToolsets();
-  const project = useProject();
-
-  const [searchParams] = useSearchParams();
-  const slackError = searchParams.get("slack_error");
-
-  const updateMutation = useMutation({
-    mutationFn: async (newToolset: string) => {
-      return client.slack.updateSlackConnection({
-        updateSlackConnectionRequestBody: { defaultToolsetSlug: newToolset },
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["@gram/client", "slack", "getSlackConnection"],
-      });
-      setModalOpen(false);
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      return client.slack.deleteSlackConnection();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["@gram/client", "slack", "getSlackConnection"],
-      });
-      setConnectionDeleted(true);
-    },
-  });
-
-  if (isLoading) {
+export function StatusBadge({
+  status,
+  installCount,
+}: {
+  status: string;
+  installCount: number;
+}) {
+  if (status === "active" && installCount > 0) {
     return (
-      <Page>
-        <Page.Body>Loading...</Page.Body>
-      </Page>
+      <Badge variant="default">
+        {installCount} installation{installCount !== 1 ? "s" : ""}
+      </Badge>
     );
   }
-  // If there is any error, just fall through and show the install button (treat as not installed)
+  if (status === "active") {
+    return <Badge variant="secondary">Ready</Badge>;
+  }
+  if (status === "unconfigured") {
+    return <Badge variant="secondary">Unconfigured</Badge>;
+  }
+  return <Badge variant="secondary">{status}</Badge>;
+}
 
-  const installed = !!data && !connectionDeleted;
+export function SlackAppsRoot() {
+  return <Outlet />;
+}
+
+function EnterpriseGate({ children }: { children: React.ReactNode }) {
+  const productTier = useProductTier();
+
+  if (productTier === "enterprise") {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center py-24 px-8 rounded-xl border border-dashed bg-muted/20">
+      <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+        <Icon name="slack" className="w-6 h-6 text-muted-foreground" />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        Enterprise Feature
+      </Type>
+      <Type small muted className="text-center mb-4 max-w-md">
+        Slack apps are available on the Enterprise plan. Book a time to
+        get&nbsp;started.
+      </Type>
+      <Button variant="brand" asChild>
+        <a
+          href="https://www.speakeasy.com/book-demo"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Talk to our team
+        </a>
+      </Button>
+    </div>
+  );
+}
+
+function SlackAppsEmptyState({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-8 rounded-xl border border-dashed bg-muted/20">
+      <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+        <Icon name="slack" className="w-6 h-6 text-muted-foreground" />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        No Slack apps yet
+      </Type>
+      <Type small muted className="text-center mb-4 max-w-md">
+        Create a Slack app to let your team interact with Gram toolsets directly
+        from Slack.
+      </Type>
+      <Button onClick={onCreate}>
+        <Button.LeftIcon>
+          <Icon name="plus" className="w-4 h-4" />
+        </Button.LeftIcon>
+        <Button.Text>Create new Slack App</Button.Text>
+      </Button>
+    </div>
+  );
+}
+
+function SlackAppCard({ app }: { app: SlackAppResult }) {
+  const routes = useRoutes();
+  return (
+    <routes.slackApps.detail.Link
+      params={[app.id]}
+      className="no-underline hover:no-underline"
+    >
+      <div className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50">
+        <div className="flex items-start justify-between mb-2">
+          <Type className="font-semibold truncate">{app.name}</Type>
+          <StatusBadge
+            status={app.status}
+            installCount={app.slackTeamId ? 1 : 0}
+          />
+        </div>
+        <div className="space-y-1">
+          <Type muted small>
+            {app.slackTeamName || "\u2014"}
+          </Type>
+          <div className="flex items-center justify-between">
+            <Type muted small>
+              {app.toolsetIds.length} toolset
+              {app.toolsetIds.length !== 1 ? "s" : ""}
+            </Type>
+            <Type muted small>
+              <HumanizeDateTime date={new Date(app.createdAt)} />
+            </Type>
+          </div>
+        </div>
+      </div>
+    </routes.slackApps.detail.Link>
+  );
+}
+
+function CreateSlackAppDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const routes = useRoutes();
+  const toolsets = useToolsets();
+  const createMutation = useCreateSlackAppMutation();
+
+  const [name, setName] = useState("");
+  const [iconAssetId, setIconAssetId] = useState<string | null>(null);
+  const [selectedToolsetIds, setSelectedToolsetIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const handleIconUpload = useAssetImageUploadHandler((res) => {
+    setIconAssetId(res.asset.id);
+  });
+
+  const isValid = name.trim().length > 0 && selectedToolsetIds.size > 0;
+
+  const reset = () => {
+    setName("");
+    setIconAssetId(null);
+    setSelectedToolsetIds(new Set());
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) reset();
+    onOpenChange(next);
+  };
+
+  const toggleToolset = (id: string) => {
+    setSelectedToolsetIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleCreate = async () => {
+    const result = await createMutation.mutateAsync({
+      request: {
+        createSlackAppRequestBody: {
+          name,
+          toolsetIds: Array.from(selectedToolsetIds),
+          ...(iconAssetId && { iconAssetId }),
+        },
+      },
+    });
+    handleOpenChange(false);
+    routes.slackApps.detail.goTo(result.app.id);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog.Content className="sm:max-w-xl">
+        <Dialog.Header>
+          <Dialog.Title>Create Slack App</Dialog.Title>
+          <Dialog.Description>
+            Name your app and choose which MCP toolsets it can access.
+          </Dialog.Description>
+        </Dialog.Header>
+
+        <Stack gap={4}>
+          <div>
+            <Type variant="body" className="mb-1 font-medium">
+              App Name
+            </Type>
+            <Input
+              value={name}
+              onChange={setName}
+              placeholder="My Slack App"
+              maxLength={36}
+              validate={(v) =>
+                v.length > 36 ? "Name must be 36 characters or fewer" : true
+              }
+            />
+          </div>
+
+          <div>
+            <Type variant="body" className="mb-2 font-medium">
+              Icon
+            </Type>
+            <CompactUpload
+              onUpload={handleIconUpload}
+              className="w-24 h-24"
+              renderFilePreview={() =>
+                iconAssetId ? (
+                  <AssetImage
+                    assetId={iconAssetId}
+                    className="w-16 h-16 rounded-lg"
+                  />
+                ) : undefined
+              }
+            />
+          </div>
+
+          <div>
+            <Type variant="body" className="mb-2 font-medium">
+              Toolsets
+            </Type>
+            {toolsets.length === 0 ? (
+              <Type muted small>
+                No toolsets available. Create a toolset first.
+              </Type>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                {toolsets.map((ts) => {
+                  const selected = selectedToolsetIds.has(ts.id);
+                  return (
+                    <button
+                      key={ts.id}
+                      type="button"
+                      onClick={() => toggleToolset(ts.id)}
+                      className={cn(
+                        "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-muted-foreground/30",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border",
+                          selected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-muted-foreground/40",
+                        )}
+                      >
+                        {selected && <Icon name="check" className="h-3 w-3" />}
+                      </div>
+                      <div className="min-w-0">
+                        <Type className="font-medium truncate block">
+                          {ts.name || ts.slug}
+                        </Type>
+                        <Type muted small className="truncate block">
+                          {ts.slug}
+                          {ts.tools
+                            ? ` \u00B7 ${ts.tools.length} tool${ts.tools.length !== 1 ? "s" : ""}`
+                            : ""}
+                        </Type>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Stack>
+
+        <Dialog.Footer>
+          <Button variant="tertiary" onClick={() => handleOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreate}
+            disabled={!isValid || createMutation.isPending}
+          >
+            {createMutation.isPending ? "Creating..." : "Create App"}
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
+export default function SlackAppsIndex() {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const { data, isLoading } = useListSlackApps(undefined, undefined, {
+    retry: false,
+    throwOnError: false,
+  });
+
+  const apps = data?.items ?? [];
 
   return (
     <Page>
@@ -80,135 +320,48 @@ export default function SlackApp() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <div className="flex items-start justify-between mb-1">
-          <h2>
-            Perform agent tasks with Gram toolsets using the Gram Slack App
-            {installed && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span tabIndex={0} className="cursor-pointer">
-                    <InfoIcon className="w-4 h-4 text-muted-foreground" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-xs">
-                  <div className="text-muted-foreground text-sm whitespace-pre whitespace-nowrap overflow-x-auto">
-                    {`- Invoke @Gram in a DM, channel, or thread
-- @Gram list to see a list of available toolsets
-- @Gram (toolset-slug) ... to invoke a specific toolset`}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </h2>
-          {!installed && (
-            <Button
-              onClick={() => {
-                window.location.href = `${getServerURL()}/rpc/${project.slug}/slack.login?return_url=${encodeURIComponent(
-                  window.location.href,
-                )}`;
-              }}
-              variant="secondary"
-              size="md"
-              className="px-6 py-2 rounded-lg"
-            >
-              Connect Slack
-            </Button>
-          )}
-        </div>
-        {slackError && (
-          <p className="text-red-600 text-left">
-            Error: {decodeURIComponent(slackError)}
-          </p>
-        )}
-        {!installed && (
-          <div className="bg-muted border border-border rounded-md p-4 mb-4">
-            <div className="text-muted-foreground mb-2">
-              How to use the Gram slack app in your workspace
-            </div>
-            <ul className="list-disc pl-6 text-muted-foreground text-sm">
-              <li>Message with Gram directly in a DM</li>
-              <li>Mention @Gram in any channel or thread to start chatting</li>
-              <li>@Gram list to see a list of available toolsets</li>
-              <li>@Gram (toolset-slug) ... to invoke a specific toolset</li>
-            </ul>
-          </div>
-        )}
-        {installed && (
-          <Card>
-            <Card.Header>
-              <Stack direction="horizontal" gap={2} align="center">
-                <span className="w-8 h-8 rounded-md bg-green-500 flex items-center justify-center">
-                  <Icon name="slack" className="w-8 h-8 text-white" />
-                </span>
-                <Card.Title>Slack Workspace ({data.slackTeamName})</Card.Title>
-              </Stack>
-              <Stack direction="horizontal" gap={3} justify="space-between">
-                <Card.Description className="max-w-2/3">
-                  Default toolset: {data.defaultToolsetSlug || "not set"}
-                </Card.Description>
-                <Type variant="body" muted className="text-sm italic">
-                  {"Created "}
-                  <HumanizeDateTime date={new Date(data.createdAt)} />
-                </Type>
-              </Stack>
-            </Card.Header>
-            <Card.Footer>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setToolset(data.defaultToolsetSlug || "");
-                  setModalOpen(true);
-                }}
-              >
-                Change Default Toolset
-              </Button>
-              <Button
-                variant="destructive-secondary"
-                onClick={() => deleteMutation.mutate()}
-                disabled={deleteMutation.isPending}
-              >
-                DELETE
-              </Button>
-            </Card.Footer>
-            <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-              <Dialog.Content>
-                <Dialog.Header>
-                  <Dialog.Title>Change Default Toolset</Dialog.Title>
-                </Dialog.Header>
-                <div className="flex flex-col gap-4 mt-4">
-                  <select
-                    className="border rounded px-2 py-1"
-                    value={toolset}
-                    onChange={(e) => setToolset(e.target.value)}
-                  >
-                    <option value="" disabled>
-                      Select a toolset
-                    </option>
-                    {toolsets.map((ts) => (
-                      <option key={ts.slug} value={ts.slug}>
-                        {ts.slug}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex gap-2 justify-end">
-                    <Button
-                      variant="tertiary"
-                      onClick={() => setModalOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={() => updateMutation.mutate(toolset)}
-                      disabled={updateMutation.isPending || !toolset}
-                    >
-                      Save
-                    </Button>
-                  </div>
+        <EnterpriseGate>
+          <Page.Section>
+            <Page.Section.Title>Slack Apps</Page.Section.Title>
+            <Page.Section.Description>
+              Create and manage Slack apps that connect your team to Gram
+              toolsets.
+            </Page.Section.Description>
+            <Page.Section.CTA>
+              {apps.length > 0 && (
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Button.LeftIcon>
+                    <Icon name="plus" className="w-4 h-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Create new Slack App</Button.Text>
+                </Button>
+              )}
+            </Page.Section.CTA>
+            <Page.Section.Body>
+              {isLoading ? (
+                <Stack align="center" justify="center" className="py-16">
+                  <Icon
+                    name="loader-circle"
+                    className="w-6 h-6 animate-spin text-muted-foreground"
+                  />
+                </Stack>
+              ) : apps.length === 0 ? (
+                <SlackAppsEmptyState onCreate={() => setDialogOpen(true)} />
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {apps.map((app) => (
+                    <SlackAppCard key={app.id} app={app} />
+                  ))}
                 </div>
-              </Dialog.Content>
-            </Dialog>
-          </Card>
-        )}
+              )}
+            </Page.Section.Body>
+          </Page.Section>
+
+          <CreateSlackAppDialog
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
+          />
+        </EnterpriseGate>
       </Page.Body>
     </Page>
   );

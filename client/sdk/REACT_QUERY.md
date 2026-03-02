@@ -48,12 +48,10 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useSlackSlackLogin } from "@gram/client/react-query/slackSlackLogin.js";
+import { useListAssets } from "@gram/client/react-query/assetsListAssets.js";
 
 export function Example() {
-  const { data, error, status } = useSlackSlackLogin({
-    projectSlug: "<value>",
-  });
+  const { data, error, status } = useListAssets();
 
   // Render the UI here...
 }
@@ -66,14 +64,11 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useSlackSlackLogin } from "@gram/client/react-query/slackSlackLogin.js";
+import { useListAssets } from "@gram/client/react-query/assetsListAssets.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useSlackSlackLogin(
-    {
-      projectSlug: "<value>",
-    },
+  const { data, error, status } = useListAssets(
     {
       // TanStack Query options:
       enabled,
@@ -110,10 +105,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useUpdateSlackConnectionMutation } from "@gram/client/react-query/slackUpdateSlackConnection.js";
+import { useCreateSignedChatAttachmentURLMutation } from "@gram/client/react-query/assetsCreateSignedChatAttachmentURL.js";
 
 export function Example() {
-  const { mutate, status } = useUpdateSlackConnectionMutation();
+  const { mutate, status } = useCreateSignedChatAttachmentURLMutation();
 
   return (
     <form
@@ -123,8 +118,9 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          updateSlackConnectionRequestBody: {
-            defaultToolsetSlug: "<value>",
+          createSignedChatAttachmentURLForm2: {
+            id: "<id>",
+            projectId: "<id>",
           },
         });
       }}
@@ -142,10 +138,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useUpdateSlackConnectionMutation } from "@gram/client/react-query/slackUpdateSlackConnection.js";
+import { useCreateSignedChatAttachmentURLMutation } from "@gram/client/react-query/assetsCreateSignedChatAttachmentURL.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useUpdateSlackConnectionMutation({
+  const { mutate, status } = useCreateSignedChatAttachmentURLMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes
@@ -177,7 +173,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateSlackSlackLogin, invalidateAllSlackSlackLogin } from "@gram/client/react-query/slackSlackLogin.js";
+import { invalidateListAssets, invalidateAllListAssets } from "@gram/client/react-query/assetsListAssets.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/client/react-query/example.js";
 
@@ -195,9 +191,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateSlackSlackLogin(queryClient, /* ... arguments ... */);
+            invalidateListAssets(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllSlackSlackLogin(queryClient);
+            invalidateAllListAssets(queryClient);
           },
         });
       }}
@@ -225,7 +221,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/client";
 import { GramProvider } from "@gram/client/react-query";
-import { useSlackSlackLoginSuspense } from "@gram/client/react-query/slackSlackLogin.js";
+import { useListAssetsSuspense } from "@gram/client/react-query/assetsListAssets.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore();
@@ -258,9 +254,7 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useSlackSlackLoginSuspense({
-    projectSlug: "<value>",
-  });
+  const { data } = useListAssetsSuspense();
 
   // Render the UI here...
 }
@@ -280,15 +274,13 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/client";
-import { prefetchSlackSlackLogin } from "@gram/client/react-query/slackSlackLogin.js";
+import { prefetchListAssets } from "@gram/client/react-query/assetsListAssets.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
   const gram = new GramCore();
 
-  await prefetchSlackSlackLogin(queryClient, gram, {
-    projectSlug: "<value>",
-  });
+  await prefetchListAssets(gram);
 
   return (
     // HydrationBoundary is a Client Component, so hydration will happen there.

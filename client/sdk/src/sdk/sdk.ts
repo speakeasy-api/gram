@@ -29,11 +29,6 @@ import { Usage } from "./usage.js";
 import { Variations } from "./variations.js";
 
 export class Gram extends ClientSDK {
-  private _slack?: Slack;
-  get slack(): Slack {
-    return (this._slack ??= new Slack(this._options));
-  }
-
   private _assets?: Assets;
   get assets(): Assets {
     return (this._assets ??= new Assets(this._options));
@@ -112,6 +107,11 @@ export class Gram extends ClientSDK {
   private _resources?: Resources;
   get resources(): Resources {
     return (this._resources ??= new Resources(this._options));
+  }
+
+  private _slack?: Slack;
+  get slack(): Slack {
+    return (this._slack ??= new Slack(this._options));
   }
 
   private _telemetry?: Telemetry;

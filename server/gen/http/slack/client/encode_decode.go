@@ -16,728 +16,15 @@ import (
 
 	slack "github.com/speakeasy-api/gram/server/gen/slack"
 	goahttp "goa.design/goa/v3/http"
-	goa "goa.design/goa/v3/pkg"
 )
 
-// BuildCallbackRequest instantiates a HTTP request object with method and path
-// set to call the "slack" service "callback" endpoint
-func (c *Client) BuildCallbackRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CallbackSlackPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("slack", "callback", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeCallbackRequest returns an encoder for requests sent to the slack
-// callback server.
-func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*slack.CallbackPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("slack", "callback", "*slack.CallbackPayload", v)
-		}
-		values := req.URL.Query()
-		values.Add("state", p.State)
-		values.Add("code", p.Code)
-		req.URL.RawQuery = values.Encode()
-		return nil
-	}
-}
-
-// DecodeCallbackResponse returns a decoder for responses returned by the slack
-// callback endpoint. restoreBody controls whether the response body should be
-// restored after having been read.
-// DecodeCallbackResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusTemporaryRedirect:
-			var (
-				location string
-				err      error
-			)
-			locationRaw := resp.Header.Get("Location")
-			if locationRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("location", "header"))
-			}
-			location = locationRaw
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "callback", err)
-			}
-			res := NewCallbackResultTemporaryRedirect(location)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body CallbackUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "callback", err)
-			}
-			err = ValidateCallbackUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "callback", err)
-			}
-			return nil, NewCallbackUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body CallbackForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "callback", err)
-			}
-			err = ValidateCallbackForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "callback", err)
-			}
-			return nil, NewCallbackForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body CallbackBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "callback", err)
-			}
-			err = ValidateCallbackBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "callback", err)
-			}
-			return nil, NewCallbackBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body CallbackNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "callback", err)
-			}
-			err = ValidateCallbackNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "callback", err)
-			}
-			return nil, NewCallbackNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body CallbackConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "callback", err)
-			}
-			err = ValidateCallbackConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "callback", err)
-			}
-			return nil, NewCallbackConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body CallbackUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "callback", err)
-			}
-			err = ValidateCallbackUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "callback", err)
-			}
-			return nil, NewCallbackUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body CallbackInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "callback", err)
-			}
-			err = ValidateCallbackInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "callback", err)
-			}
-			return nil, NewCallbackInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body CallbackInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("slack", "callback", err)
-				}
-				err = ValidateCallbackInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("slack", "callback", err)
-				}
-				return nil, NewCallbackInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body CallbackUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("slack", "callback", err)
-				}
-				err = ValidateCallbackUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("slack", "callback", err)
-				}
-				return nil, NewCallbackUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("slack", "callback", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body CallbackGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "callback", err)
-			}
-			err = ValidateCallbackGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "callback", err)
-			}
-			return nil, NewCallbackGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("slack", "callback", resp.StatusCode, string(body))
-		}
-	}
-}
-
-// BuildLoginRequest instantiates a HTTP request object with method and path
-// set to call the "slack" service "login" endpoint
-func (c *Client) BuildLoginRequest(ctx context.Context, v any) (*http.Request, error) {
-	var (
-		projectSlug string
-	)
-	{
-		p, ok := v.(*slack.LoginPayload)
-		if !ok {
-			return nil, goahttp.ErrInvalidType("slack", "login", "*slack.LoginPayload", v)
-		}
-		if p.ProjectSlug != nil {
-			projectSlug = *p.ProjectSlug
-		}
-	}
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: LoginSlackPath(projectSlug)}
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("slack", "login", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeLoginRequest returns an encoder for requests sent to the slack login
-// server.
-func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*slack.LoginPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("slack", "login", "*slack.LoginPayload", v)
-		}
-		if p.SessionToken != nil {
-			head := *p.SessionToken
-			req.Header.Set("Gram-Session", head)
-		}
-		values := req.URL.Query()
-		if p.ReturnURL != nil {
-			values.Add("return_url", *p.ReturnURL)
-		}
-		req.URL.RawQuery = values.Encode()
-		return nil
-	}
-}
-
-// DecodeLoginResponse returns a decoder for responses returned by the slack
-// login endpoint. restoreBody controls whether the response body should be
-// restored after having been read.
-// DecodeLoginResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusTemporaryRedirect:
-			var (
-				location string
-				err      error
-			)
-			locationRaw := resp.Header.Get("Location")
-			if locationRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("location", "header"))
-			}
-			location = locationRaw
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "login", err)
-			}
-			res := NewLoginResultTemporaryRedirect(location)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body LoginUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "login", err)
-			}
-			err = ValidateLoginUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "login", err)
-			}
-			return nil, NewLoginUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body LoginForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "login", err)
-			}
-			err = ValidateLoginForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "login", err)
-			}
-			return nil, NewLoginForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body LoginBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "login", err)
-			}
-			err = ValidateLoginBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "login", err)
-			}
-			return nil, NewLoginBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body LoginNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "login", err)
-			}
-			err = ValidateLoginNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "login", err)
-			}
-			return nil, NewLoginNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body LoginConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "login", err)
-			}
-			err = ValidateLoginConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "login", err)
-			}
-			return nil, NewLoginConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body LoginUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "login", err)
-			}
-			err = ValidateLoginUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "login", err)
-			}
-			return nil, NewLoginUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body LoginInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "login", err)
-			}
-			err = ValidateLoginInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "login", err)
-			}
-			return nil, NewLoginInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body LoginInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("slack", "login", err)
-				}
-				err = ValidateLoginInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("slack", "login", err)
-				}
-				return nil, NewLoginInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body LoginUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("slack", "login", err)
-				}
-				err = ValidateLoginUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("slack", "login", err)
-				}
-				return nil, NewLoginUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("slack", "login", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body LoginGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "login", err)
-			}
-			err = ValidateLoginGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "login", err)
-			}
-			return nil, NewLoginGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("slack", "login", resp.StatusCode, string(body))
-		}
-	}
-}
-
-// BuildGetSlackConnectionRequest instantiates a HTTP request object with
-// method and path set to call the "slack" service "getSlackConnection" endpoint
-func (c *Client) BuildGetSlackConnectionRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSlackConnectionSlackPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("slack", "getSlackConnection", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeGetSlackConnectionRequest returns an encoder for requests sent to the
-// slack getSlackConnection server.
-func EncodeGetSlackConnectionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*slack.GetSlackConnectionPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("slack", "getSlackConnection", "*slack.GetSlackConnectionPayload", v)
-		}
-		if p.SessionToken != nil {
-			head := *p.SessionToken
-			req.Header.Set("Gram-Session", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
-		return nil
-	}
-}
-
-// DecodeGetSlackConnectionResponse returns a decoder for responses returned by
-// the slack getSlackConnection endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-// DecodeGetSlackConnectionResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeGetSlackConnectionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body GetSlackConnectionResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-			}
-			err = ValidateGetSlackConnectionResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-			}
-			res := NewGetSlackConnectionResultOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body GetSlackConnectionUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-			}
-			err = ValidateGetSlackConnectionUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-			}
-			return nil, NewGetSlackConnectionUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body GetSlackConnectionForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-			}
-			err = ValidateGetSlackConnectionForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-			}
-			return nil, NewGetSlackConnectionForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body GetSlackConnectionBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-			}
-			err = ValidateGetSlackConnectionBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-			}
-			return nil, NewGetSlackConnectionBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body GetSlackConnectionNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-			}
-			err = ValidateGetSlackConnectionNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-			}
-			return nil, NewGetSlackConnectionNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body GetSlackConnectionConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-			}
-			err = ValidateGetSlackConnectionConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-			}
-			return nil, NewGetSlackConnectionConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body GetSlackConnectionUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-			}
-			err = ValidateGetSlackConnectionUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-			}
-			return nil, NewGetSlackConnectionUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body GetSlackConnectionInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-			}
-			err = ValidateGetSlackConnectionInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-			}
-			return nil, NewGetSlackConnectionInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body GetSlackConnectionInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-				}
-				err = ValidateGetSlackConnectionInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-				}
-				return nil, NewGetSlackConnectionInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body GetSlackConnectionUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-				}
-				err = ValidateGetSlackConnectionUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-				}
-				return nil, NewGetSlackConnectionUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("slack", "getSlackConnection", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body GetSlackConnectionGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "getSlackConnection", err)
-			}
-			err = ValidateGetSlackConnectionGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "getSlackConnection", err)
-			}
-			return nil, NewGetSlackConnectionGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("slack", "getSlackConnection", resp.StatusCode, string(body))
-		}
-	}
-}
-
-// BuildUpdateSlackConnectionRequest instantiates a HTTP request object with
-// method and path set to call the "slack" service "updateSlackConnection"
-// endpoint
-func (c *Client) BuildUpdateSlackConnectionRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateSlackConnectionSlackPath()}
+// BuildCreateSlackAppRequest instantiates a HTTP request object with method
+// and path set to call the "slack" service "createSlackApp" endpoint
+func (c *Client) BuildCreateSlackAppRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateSlackAppSlackPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("slack", "updateSlackConnection", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("slack", "createSlackApp", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -746,13 +33,13 @@ func (c *Client) BuildUpdateSlackConnectionRequest(ctx context.Context, v any) (
 	return req, nil
 }
 
-// EncodeUpdateSlackConnectionRequest returns an encoder for requests sent to
-// the slack updateSlackConnection server.
-func EncodeUpdateSlackConnectionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeCreateSlackAppRequest returns an encoder for requests sent to the
+// slack createSlackApp server.
+func EncodeCreateSlackAppRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*slack.UpdateSlackConnectionPayload)
+		p, ok := v.(*slack.CreateSlackAppPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("slack", "updateSlackConnection", "*slack.UpdateSlackConnectionPayload", v)
+			return goahttp.ErrInvalidType("slack", "createSlackApp", "*slack.CreateSlackAppPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -762,18 +49,18 @@ func EncodeUpdateSlackConnectionRequest(encoder func(*http.Request) goahttp.Enco
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewUpdateSlackConnectionRequestBody(p)
+		body := NewCreateSlackAppRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("slack", "updateSlackConnection", err)
+			return goahttp.ErrEncodingError("slack", "createSlackApp", err)
 		}
 		return nil
 	}
 }
 
-// DecodeUpdateSlackConnectionResponse returns a decoder for responses returned
-// by the slack updateSlackConnection endpoint. restoreBody controls whether
-// the response body should be restored after having been read.
-// DecodeUpdateSlackConnectionResponse may return the following errors:
+// DecodeCreateSlackAppResponse returns a decoder for responses returned by the
+// slack createSlackApp endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeCreateSlackAppResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -785,7 +72,7 @@ func EncodeUpdateSlackConnectionRequest(encoder func(*http.Request) goahttp.Enco
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeUpdateSlackConnectionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeCreateSlackAppResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -802,181 +89,180 @@ func DecodeUpdateSlackConnectionResponse(decoder func(*http.Response) goahttp.De
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body UpdateSlackConnectionResponseBody
+				body CreateSlackAppResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 			}
-			err = ValidateUpdateSlackConnectionResponseBody(&body)
+			err = ValidateCreateSlackAppResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 			}
-			res := NewUpdateSlackConnectionGetSlackConnectionResultOK(&body)
+			res := NewCreateSlackAppResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body UpdateSlackConnectionUnauthorizedResponseBody
+				body CreateSlackAppUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 			}
-			err = ValidateUpdateSlackConnectionUnauthorizedResponseBody(&body)
+			err = ValidateCreateSlackAppUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 			}
-			return nil, NewUpdateSlackConnectionUnauthorized(&body)
+			return nil, NewCreateSlackAppUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body UpdateSlackConnectionForbiddenResponseBody
+				body CreateSlackAppForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 			}
-			err = ValidateUpdateSlackConnectionForbiddenResponseBody(&body)
+			err = ValidateCreateSlackAppForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 			}
-			return nil, NewUpdateSlackConnectionForbidden(&body)
+			return nil, NewCreateSlackAppForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body UpdateSlackConnectionBadRequestResponseBody
+				body CreateSlackAppBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 			}
-			err = ValidateUpdateSlackConnectionBadRequestResponseBody(&body)
+			err = ValidateCreateSlackAppBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 			}
-			return nil, NewUpdateSlackConnectionBadRequest(&body)
+			return nil, NewCreateSlackAppBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body UpdateSlackConnectionNotFoundResponseBody
+				body CreateSlackAppNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 			}
-			err = ValidateUpdateSlackConnectionNotFoundResponseBody(&body)
+			err = ValidateCreateSlackAppNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 			}
-			return nil, NewUpdateSlackConnectionNotFound(&body)
+			return nil, NewCreateSlackAppNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body UpdateSlackConnectionConflictResponseBody
+				body CreateSlackAppConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 			}
-			err = ValidateUpdateSlackConnectionConflictResponseBody(&body)
+			err = ValidateCreateSlackAppConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 			}
-			return nil, NewUpdateSlackConnectionConflict(&body)
+			return nil, NewCreateSlackAppConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body UpdateSlackConnectionUnsupportedMediaResponseBody
+				body CreateSlackAppUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 			}
-			err = ValidateUpdateSlackConnectionUnsupportedMediaResponseBody(&body)
+			err = ValidateCreateSlackAppUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 			}
-			return nil, NewUpdateSlackConnectionUnsupportedMedia(&body)
+			return nil, NewCreateSlackAppUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body UpdateSlackConnectionInvalidResponseBody
+				body CreateSlackAppInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 			}
-			err = ValidateUpdateSlackConnectionInvalidResponseBody(&body)
+			err = ValidateCreateSlackAppInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 			}
-			return nil, NewUpdateSlackConnectionInvalid(&body)
+			return nil, NewCreateSlackAppInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body UpdateSlackConnectionInvariantViolationResponseBody
+					body CreateSlackAppInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+					return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 				}
-				err = ValidateUpdateSlackConnectionInvariantViolationResponseBody(&body)
+				err = ValidateCreateSlackAppInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+					return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 				}
-				return nil, NewUpdateSlackConnectionInvariantViolation(&body)
+				return nil, NewCreateSlackAppInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body UpdateSlackConnectionUnexpectedResponseBody
+					body CreateSlackAppUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+					return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 				}
-				err = ValidateUpdateSlackConnectionUnexpectedResponseBody(&body)
+				err = ValidateCreateSlackAppUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+					return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 				}
-				return nil, NewUpdateSlackConnectionUnexpected(&body)
+				return nil, NewCreateSlackAppUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("slack", "updateSlackConnection", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("slack", "createSlackApp", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body UpdateSlackConnectionGatewayErrorResponseBody
+				body CreateSlackAppGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "createSlackApp", err)
 			}
-			err = ValidateUpdateSlackConnectionGatewayErrorResponseBody(&body)
+			err = ValidateCreateSlackAppGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "updateSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "createSlackApp", err)
 			}
-			return nil, NewUpdateSlackConnectionGatewayError(&body)
+			return nil, NewCreateSlackAppGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("slack", "updateSlackConnection", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("slack", "createSlackApp", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildDeleteSlackConnectionRequest instantiates a HTTP request object with
-// method and path set to call the "slack" service "deleteSlackConnection"
-// endpoint
-func (c *Client) BuildDeleteSlackConnectionRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteSlackConnectionSlackPath()}
-	req, err := http.NewRequest("DELETE", u.String(), nil)
+// BuildListSlackAppsRequest instantiates a HTTP request object with method and
+// path set to call the "slack" service "listSlackApps" endpoint
+func (c *Client) BuildListSlackAppsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListSlackAppsSlackPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("slack", "deleteSlackConnection", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("slack", "listSlackApps", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -985,13 +271,13 @@ func (c *Client) BuildDeleteSlackConnectionRequest(ctx context.Context, v any) (
 	return req, nil
 }
 
-// EncodeDeleteSlackConnectionRequest returns an encoder for requests sent to
-// the slack deleteSlackConnection server.
-func EncodeDeleteSlackConnectionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListSlackAppsRequest returns an encoder for requests sent to the slack
+// listSlackApps server.
+func EncodeListSlackAppsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*slack.DeleteSlackConnectionPayload)
+		p, ok := v.(*slack.ListSlackAppsPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("slack", "deleteSlackConnection", "*slack.DeleteSlackConnectionPayload", v)
+			return goahttp.ErrInvalidType("slack", "listSlackApps", "*slack.ListSlackAppsPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -1005,10 +291,10 @@ func EncodeDeleteSlackConnectionRequest(encoder func(*http.Request) goahttp.Enco
 	}
 }
 
-// DecodeDeleteSlackConnectionResponse returns a decoder for responses returned
-// by the slack deleteSlackConnection endpoint. restoreBody controls whether
-// the response body should be restored after having been read.
-// DecodeDeleteSlackConnectionResponse may return the following errors:
+// DecodeListSlackAppsResponse returns a decoder for responses returned by the
+// slack listSlackApps endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListSlackAppsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1020,7 +306,957 @@ func EncodeDeleteSlackConnectionRequest(encoder func(*http.Request) goahttp.Enco
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeDeleteSlackConnectionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeListSlackAppsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListSlackAppsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+			}
+			err = ValidateListSlackAppsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+			}
+			res := NewListSlackAppsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListSlackAppsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+			}
+			err = ValidateListSlackAppsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+			}
+			return nil, NewListSlackAppsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListSlackAppsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+			}
+			err = ValidateListSlackAppsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+			}
+			return nil, NewListSlackAppsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListSlackAppsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+			}
+			err = ValidateListSlackAppsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+			}
+			return nil, NewListSlackAppsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListSlackAppsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+			}
+			err = ValidateListSlackAppsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+			}
+			return nil, NewListSlackAppsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListSlackAppsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+			}
+			err = ValidateListSlackAppsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+			}
+			return nil, NewListSlackAppsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListSlackAppsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+			}
+			err = ValidateListSlackAppsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+			}
+			return nil, NewListSlackAppsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListSlackAppsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+			}
+			err = ValidateListSlackAppsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+			}
+			return nil, NewListSlackAppsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListSlackAppsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+				}
+				err = ValidateListSlackAppsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+				}
+				return nil, NewListSlackAppsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListSlackAppsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+				}
+				err = ValidateListSlackAppsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+				}
+				return nil, NewListSlackAppsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slack", "listSlackApps", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListSlackAppsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "listSlackApps", err)
+			}
+			err = ValidateListSlackAppsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "listSlackApps", err)
+			}
+			return nil, NewListSlackAppsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("slack", "listSlackApps", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetSlackAppRequest instantiates a HTTP request object with method and
+// path set to call the "slack" service "getSlackApp" endpoint
+func (c *Client) BuildGetSlackAppRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSlackAppSlackPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("slack", "getSlackApp", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetSlackAppRequest returns an encoder for requests sent to the slack
+// getSlackApp server.
+func EncodeGetSlackAppRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*slack.GetSlackAppPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("slack", "getSlackApp", "*slack.GetSlackAppPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetSlackAppResponse returns a decoder for responses returned by the
+// slack getSlackApp endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetSlackAppResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetSlackAppResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetSlackAppResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+			}
+			err = ValidateGetSlackAppResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+			}
+			res := NewGetSlackAppSlackAppResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetSlackAppUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+			}
+			err = ValidateGetSlackAppUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+			}
+			return nil, NewGetSlackAppUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetSlackAppForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+			}
+			err = ValidateGetSlackAppForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+			}
+			return nil, NewGetSlackAppForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetSlackAppBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+			}
+			err = ValidateGetSlackAppBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+			}
+			return nil, NewGetSlackAppBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetSlackAppNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+			}
+			err = ValidateGetSlackAppNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+			}
+			return nil, NewGetSlackAppNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetSlackAppConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+			}
+			err = ValidateGetSlackAppConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+			}
+			return nil, NewGetSlackAppConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetSlackAppUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+			}
+			err = ValidateGetSlackAppUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+			}
+			return nil, NewGetSlackAppUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetSlackAppInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+			}
+			err = ValidateGetSlackAppInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+			}
+			return nil, NewGetSlackAppInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetSlackAppInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+				}
+				err = ValidateGetSlackAppInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+				}
+				return nil, NewGetSlackAppInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetSlackAppUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+				}
+				err = ValidateGetSlackAppUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+				}
+				return nil, NewGetSlackAppUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slack", "getSlackApp", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetSlackAppGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "getSlackApp", err)
+			}
+			err = ValidateGetSlackAppGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "getSlackApp", err)
+			}
+			return nil, NewGetSlackAppGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("slack", "getSlackApp", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildConfigureSlackAppRequest instantiates a HTTP request object with method
+// and path set to call the "slack" service "configureSlackApp" endpoint
+func (c *Client) BuildConfigureSlackAppRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ConfigureSlackAppSlackPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("slack", "configureSlackApp", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeConfigureSlackAppRequest returns an encoder for requests sent to the
+// slack configureSlackApp server.
+func EncodeConfigureSlackAppRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*slack.ConfigureSlackAppPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("slack", "configureSlackApp", "*slack.ConfigureSlackAppPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewConfigureSlackAppRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("slack", "configureSlackApp", err)
+		}
+		return nil
+	}
+}
+
+// DecodeConfigureSlackAppResponse returns a decoder for responses returned by
+// the slack configureSlackApp endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeConfigureSlackAppResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeConfigureSlackAppResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ConfigureSlackAppResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+			}
+			err = ValidateConfigureSlackAppResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+			}
+			res := NewConfigureSlackAppSlackAppResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ConfigureSlackAppUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+			}
+			err = ValidateConfigureSlackAppUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+			}
+			return nil, NewConfigureSlackAppUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ConfigureSlackAppForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+			}
+			err = ValidateConfigureSlackAppForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+			}
+			return nil, NewConfigureSlackAppForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ConfigureSlackAppBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+			}
+			err = ValidateConfigureSlackAppBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+			}
+			return nil, NewConfigureSlackAppBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ConfigureSlackAppNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+			}
+			err = ValidateConfigureSlackAppNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+			}
+			return nil, NewConfigureSlackAppNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ConfigureSlackAppConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+			}
+			err = ValidateConfigureSlackAppConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+			}
+			return nil, NewConfigureSlackAppConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ConfigureSlackAppUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+			}
+			err = ValidateConfigureSlackAppUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+			}
+			return nil, NewConfigureSlackAppUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ConfigureSlackAppInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+			}
+			err = ValidateConfigureSlackAppInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+			}
+			return nil, NewConfigureSlackAppInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ConfigureSlackAppInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+				}
+				err = ValidateConfigureSlackAppInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+				}
+				return nil, NewConfigureSlackAppInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ConfigureSlackAppUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+				}
+				err = ValidateConfigureSlackAppUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+				}
+				return nil, NewConfigureSlackAppUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slack", "configureSlackApp", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ConfigureSlackAppGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "configureSlackApp", err)
+			}
+			err = ValidateConfigureSlackAppGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "configureSlackApp", err)
+			}
+			return nil, NewConfigureSlackAppGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("slack", "configureSlackApp", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateSlackAppRequest instantiates a HTTP request object with method
+// and path set to call the "slack" service "updateSlackApp" endpoint
+func (c *Client) BuildUpdateSlackAppRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateSlackAppSlackPath()}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("slack", "updateSlackApp", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateSlackAppRequest returns an encoder for requests sent to the
+// slack updateSlackApp server.
+func EncodeUpdateSlackAppRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*slack.UpdateSlackAppPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("slack", "updateSlackApp", "*slack.UpdateSlackAppPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateSlackAppRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("slack", "updateSlackApp", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateSlackAppResponse returns a decoder for responses returned by the
+// slack updateSlackApp endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeUpdateSlackAppResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateSlackAppResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateSlackAppResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+			}
+			err = ValidateUpdateSlackAppResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+			}
+			res := NewUpdateSlackAppSlackAppResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateSlackAppUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+			}
+			err = ValidateUpdateSlackAppUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+			}
+			return nil, NewUpdateSlackAppUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateSlackAppForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+			}
+			err = ValidateUpdateSlackAppForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+			}
+			return nil, NewUpdateSlackAppForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateSlackAppBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+			}
+			err = ValidateUpdateSlackAppBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+			}
+			return nil, NewUpdateSlackAppBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateSlackAppNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+			}
+			err = ValidateUpdateSlackAppNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+			}
+			return nil, NewUpdateSlackAppNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateSlackAppConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+			}
+			err = ValidateUpdateSlackAppConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+			}
+			return nil, NewUpdateSlackAppConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateSlackAppUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+			}
+			err = ValidateUpdateSlackAppUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+			}
+			return nil, NewUpdateSlackAppUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateSlackAppInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+			}
+			err = ValidateUpdateSlackAppInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+			}
+			return nil, NewUpdateSlackAppInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateSlackAppInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+				}
+				err = ValidateUpdateSlackAppInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+				}
+				return nil, NewUpdateSlackAppInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateSlackAppUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+				}
+				err = ValidateUpdateSlackAppUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+				}
+				return nil, NewUpdateSlackAppUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slack", "updateSlackApp", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateSlackAppGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slack", "updateSlackApp", err)
+			}
+			err = ValidateUpdateSlackAppGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slack", "updateSlackApp", err)
+			}
+			return nil, NewUpdateSlackAppGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("slack", "updateSlackApp", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteSlackAppRequest instantiates a HTTP request object with method
+// and path set to call the "slack" service "deleteSlackApp" endpoint
+func (c *Client) BuildDeleteSlackAppRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteSlackAppSlackPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("slack", "deleteSlackApp", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteSlackAppRequest returns an encoder for requests sent to the
+// slack deleteSlackApp server.
+func EncodeDeleteSlackAppRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*slack.DeleteSlackAppPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("slack", "deleteSlackApp", "*slack.DeleteSlackAppPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteSlackAppResponse returns a decoder for responses returned by the
+// slack deleteSlackApp endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeDeleteSlackAppResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteSlackAppResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -1039,154 +1275,179 @@ func DecodeDeleteSlackConnectionResponse(decoder func(*http.Response) goahttp.De
 			return nil, nil
 		case http.StatusUnauthorized:
 			var (
-				body DeleteSlackConnectionUnauthorizedResponseBody
+				body DeleteSlackAppUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "deleteSlackApp", err)
 			}
-			err = ValidateDeleteSlackConnectionUnauthorizedResponseBody(&body)
+			err = ValidateDeleteSlackAppUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "deleteSlackApp", err)
 			}
-			return nil, NewDeleteSlackConnectionUnauthorized(&body)
+			return nil, NewDeleteSlackAppUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body DeleteSlackConnectionForbiddenResponseBody
+				body DeleteSlackAppForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "deleteSlackApp", err)
 			}
-			err = ValidateDeleteSlackConnectionForbiddenResponseBody(&body)
+			err = ValidateDeleteSlackAppForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "deleteSlackApp", err)
 			}
-			return nil, NewDeleteSlackConnectionForbidden(&body)
+			return nil, NewDeleteSlackAppForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body DeleteSlackConnectionBadRequestResponseBody
+				body DeleteSlackAppBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "deleteSlackApp", err)
 			}
-			err = ValidateDeleteSlackConnectionBadRequestResponseBody(&body)
+			err = ValidateDeleteSlackAppBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "deleteSlackApp", err)
 			}
-			return nil, NewDeleteSlackConnectionBadRequest(&body)
+			return nil, NewDeleteSlackAppBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body DeleteSlackConnectionNotFoundResponseBody
+				body DeleteSlackAppNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "deleteSlackApp", err)
 			}
-			err = ValidateDeleteSlackConnectionNotFoundResponseBody(&body)
+			err = ValidateDeleteSlackAppNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "deleteSlackApp", err)
 			}
-			return nil, NewDeleteSlackConnectionNotFound(&body)
+			return nil, NewDeleteSlackAppNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body DeleteSlackConnectionConflictResponseBody
+				body DeleteSlackAppConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "deleteSlackApp", err)
 			}
-			err = ValidateDeleteSlackConnectionConflictResponseBody(&body)
+			err = ValidateDeleteSlackAppConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "deleteSlackApp", err)
 			}
-			return nil, NewDeleteSlackConnectionConflict(&body)
+			return nil, NewDeleteSlackAppConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body DeleteSlackConnectionUnsupportedMediaResponseBody
+				body DeleteSlackAppUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "deleteSlackApp", err)
 			}
-			err = ValidateDeleteSlackConnectionUnsupportedMediaResponseBody(&body)
+			err = ValidateDeleteSlackAppUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "deleteSlackApp", err)
 			}
-			return nil, NewDeleteSlackConnectionUnsupportedMedia(&body)
+			return nil, NewDeleteSlackAppUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body DeleteSlackConnectionInvalidResponseBody
+				body DeleteSlackAppInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "deleteSlackApp", err)
 			}
-			err = ValidateDeleteSlackConnectionInvalidResponseBody(&body)
+			err = ValidateDeleteSlackAppInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "deleteSlackApp", err)
 			}
-			return nil, NewDeleteSlackConnectionInvalid(&body)
+			return nil, NewDeleteSlackAppInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body DeleteSlackConnectionInvariantViolationResponseBody
+					body DeleteSlackAppInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+					return nil, goahttp.ErrDecodingError("slack", "deleteSlackApp", err)
 				}
-				err = ValidateDeleteSlackConnectionInvariantViolationResponseBody(&body)
+				err = ValidateDeleteSlackAppInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+					return nil, goahttp.ErrValidationError("slack", "deleteSlackApp", err)
 				}
-				return nil, NewDeleteSlackConnectionInvariantViolation(&body)
+				return nil, NewDeleteSlackAppInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body DeleteSlackConnectionUnexpectedResponseBody
+					body DeleteSlackAppUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+					return nil, goahttp.ErrDecodingError("slack", "deleteSlackApp", err)
 				}
-				err = ValidateDeleteSlackConnectionUnexpectedResponseBody(&body)
+				err = ValidateDeleteSlackAppUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+					return nil, goahttp.ErrValidationError("slack", "deleteSlackApp", err)
 				}
-				return nil, NewDeleteSlackConnectionUnexpected(&body)
+				return nil, NewDeleteSlackAppUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("slack", "deleteSlackConnection", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("slack", "deleteSlackApp", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body DeleteSlackConnectionGatewayErrorResponseBody
+				body DeleteSlackAppGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrDecodingError("slack", "deleteSlackApp", err)
 			}
-			err = ValidateDeleteSlackConnectionGatewayErrorResponseBody(&body)
+			err = ValidateDeleteSlackAppGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("slack", "deleteSlackConnection", err)
+				return nil, goahttp.ErrValidationError("slack", "deleteSlackApp", err)
 			}
-			return nil, NewDeleteSlackConnectionGatewayError(&body)
+			return nil, NewDeleteSlackAppGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("slack", "deleteSlackConnection", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("slack", "deleteSlackApp", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalSlackAppResultResponseBodyToSlackSlackAppResult builds a value of
+// type *slack.SlackAppResult from a value of type *SlackAppResultResponseBody.
+func unmarshalSlackAppResultResponseBodyToSlackSlackAppResult(v *SlackAppResultResponseBody) *slack.SlackAppResult {
+	res := &slack.SlackAppResult{
+		ID:            *v.ID,
+		Name:          *v.Name,
+		Status:        *v.Status,
+		SlackClientID: v.SlackClientID,
+		SystemPrompt:  v.SystemPrompt,
+		IconAssetID:   v.IconAssetID,
+		SlackTeamID:   v.SlackTeamID,
+		SlackTeamName: v.SlackTeamName,
+		RedirectURL:   v.RedirectURL,
+		RequestURL:    v.RequestURL,
+		CreatedAt:     *v.CreatedAt,
+		UpdatedAt:     *v.UpdatedAt,
+	}
+	res.ToolsetIds = make([]string, len(v.ToolsetIds))
+	for i, val := range v.ToolsetIds {
+		res.ToolsetIds[i] = val
+	}
+
+	return res
 }
