@@ -199,7 +199,10 @@ export function AttributeFilterBar({
             )}
             {step === "value" ? (
               <span className="inline-flex items-center px-2 py-0.5 rounded-md border border-ring bg-accent text-accent-foreground text-xs font-mono shrink-0">
-                <span>{selectedKey} {selectedOp && OP_LABELS[selectedOp]}{"\u00A0"}</span>
+                <span>
+                  {selectedKey} {selectedOp && OP_LABELS[selectedOp]}
+                  {"\u00A0"}
+                </span>
                 <input
                   type="text"
                   value={filterValue}
@@ -324,7 +327,6 @@ export function AttributeFilterBar({
               </CommandGroup>
             </CommandList>
           )}
-
         </PopoverContent>
       </Popover>
     </CmdkRoot>
