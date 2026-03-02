@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	backoff "github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -732,41 +733,34 @@ func (f *FlyRunner) launchN(ctx context.Context, appName string, flapsc *flaps.C
 // launchWithRetry retries a machine launch with exponential backoff when the
 // error indicates the app hasn't propagated to the Fly Machines API yet.
 func (f *FlyRunner) launchWithRetry(ctx context.Context, appName string, flapsc *flaps.Client, input fly.LaunchMachineInput) (*fly.Machine, error) {
-	const maxAttempts = 6
-	backoff := 1 * time.Second
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = 1 * time.Second
+	bo.MaxInterval = 16 * time.Second
+	bo.Multiplier = 2
 
-	var lastErr error
-	for attempt := range maxAttempts {
+	m, err := backoff.Retry(ctx, func() (*fly.Machine, error) {
 		m, err := flapsc.Launch(ctx, appName, input)
 		if err == nil {
 			return m, nil
 		}
-		lastErr = err
-
 		if !isFlyAppNotReady(err) {
-			return nil, fmt.Errorf("launch machine: %w", err)
+			return nil, backoff.Permanent(fmt.Errorf("launch machine: %w", err))
 		}
-
-		if attempt == maxAttempts-1 {
-			break
-		}
-
-		f.logger.WarnContext(ctx, "fly app not yet visible to machines API, retrying",
-			attr.SlogRetryAttempt(attempt+1),
-			attr.SlogRetryWait(backoff),
-			attr.SlogFlyAppName(appName),
-		)
-
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("waiting for fly app propagation: %w", ctx.Err())
-		case <-time.After(backoff):
-		}
-
-		backoff = min(backoff*2, 16*time.Second)
+		return nil, fmt.Errorf("launch machine: %w", err)
+	},
+		backoff.WithBackOff(bo),
+		backoff.WithMaxTries(6),
+		backoff.WithNotify(func(err error, d time.Duration) {
+			f.logger.WarnContext(ctx, "fly app not yet visible to machines API, retrying",
+				attr.SlogRetryWait(d),
+				attr.SlogFlyAppName(appName),
+			)
+		}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("launch machine with retry: %w", err)
 	}
-
-	return nil, fmt.Errorf("launch machine after %d attempts: %w", maxAttempts, lastErr)
+	return m, nil
 }
 
 func (f *FlyRunner) setSecrets(ctx context.Context, logger *slog.Logger, appName string, secrets map[string]string) (*uint64, error) {
