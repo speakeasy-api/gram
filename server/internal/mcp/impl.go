@@ -90,6 +90,7 @@ type Service struct {
 	externalmcpRepo     *externalmcp_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
 	enc                 *encryption.Client
+	sessionStore        *mcpSessionStore
 }
 
 type oauthTokenInputs struct {
@@ -182,6 +183,7 @@ func NewService(
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
 		enc:                 enc,
+		sessionStore:        newMCPSessionStore(cacheImpl),
 	}
 }
 
@@ -192,6 +194,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	}).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP)
+	o11y.AttachHandler(mux, "DELETE", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleDeleteSession).ServeHTTP)
+	o11y.AttachHandler(mux, "DELETE", "/mcp/{project}/{toolset}/{environment}", oops.ErrHandle(service.logger, service.HandleDeleteSession).ServeHTTP)
 
 	// OAuth 2.1 Authorization Server Metadata
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
@@ -231,6 +235,24 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 		return fmt.Errorf("failed to write response body: %w", writeErr)
 	}
 
+	return nil
+}
+
+// HandleDeleteSession handles DELETE requests to terminate an MCP session.
+// Per the MCP spec, clients send DELETE with Mcp-Session-Id to end a session.
+func (s *Service) HandleDeleteSession(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	sessionID := r.Header.Get("Mcp-Session-Id")
+	if sessionID == "" {
+		return oops.E(oops.CodeBadRequest, nil, "Mcp-Session-Id header is required")
+	}
+
+	if err := s.sessionStore.Delete(ctx, sessionID); err != nil {
+		s.logger.WarnContext(ctx, "failed to delete MCP session", attr.SlogError(err))
+	}
+
+	w.WriteHeader(http.StatusOK)
 	return nil
 }
 
@@ -592,6 +614,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	sessionID := parseMcpSessionID(r.Header)
 	w.Header().Set("Mcp-Session-Id", sessionID)
 
+	hasInitialize := batchContainsMethod(batch, "initialize")
+	s.validateMCPSession(ctx, r.Header, hasInitialize)
+
 	// Load header display names for remapping
 	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
 
@@ -624,6 +649,16 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return respondWithNoContent(true, w)
 	case err != nil:
 		return NewErrorFromCause(batch[0].ID, err)
+	}
+
+	if hasInitialize {
+		if createErr := s.sessionStore.Create(ctx, sessionID); createErr != nil {
+			s.logger.WarnContext(ctx, "failed to create MCP session", attr.SlogError(createErr))
+		}
+	} else {
+		if touchErr := s.sessionStore.Touch(ctx, sessionID); touchErr != nil {
+			s.logger.WarnContext(ctx, "failed to touch MCP session", attr.SlogError(touchErr))
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -746,6 +781,9 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 	sessionID := parseMcpSessionID(r.Header)
 	w.Header().Set("Mcp-Session-Id", sessionID)
 
+	hasInitialize := batchContainsMethod(batch, "initialize")
+	s.validateMCPSession(ctx, r.Header, hasInitialize)
+
 	toolset, err := s.toolsetsRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
 		Slug:      toolsetSlug,
 		ProjectID: *authCtx.ProjectID,
@@ -780,6 +818,16 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		return NewErrorFromCause(batch[0].ID, err)
 	}
 
+	if hasInitialize {
+		if createErr := s.sessionStore.Create(ctx, sessionID); createErr != nil {
+			s.logger.WarnContext(ctx, "failed to create MCP session", attr.SlogError(createErr))
+		}
+	} else {
+		if touchErr := s.sessionStore.Touch(ctx, sessionID); touchErr != nil {
+			s.logger.WarnContext(ctx, "failed to touch MCP session", attr.SlogError(touchErr))
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, writeErr := w.Write(body)
@@ -811,7 +859,8 @@ func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch bat
 		result, err := s.handleRequest(ctx, payload, req)
 		switch {
 		case result == nil && err == nil:
-			return nil, nil
+			// Notifications return nil, nil — skip them in the response per JSON-RPC 2.0.
+			continue
 		case err != nil:
 			bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
 			if merr != nil {
@@ -824,16 +873,21 @@ func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch bat
 		results = append(results, result)
 	}
 
+	// If no results (notification-only batch), return nil to signal 202 No Content.
+	if len(results) == 0 {
+		return nil, nil
+	}
+
 	if len(results) == 1 {
 		return results[0], nil
-	} else {
-		m, err := json.Marshal(results)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize results").Log(ctx, s.logger)
-		}
-
-		return m, nil
 	}
+
+	m, err := json.Marshal(results)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize results").Log(ctx, s.logger)
+	}
+
+	return m, nil
 }
 
 // parseMcpEnvVariables: Map potential user provided mcp variables into inputs
@@ -905,6 +959,12 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemetryService)
+	case "completion/complete":
+		return handleCompletionComplete(ctx, s.logger, req.ID)
+	case "logging/setLevel":
+		return handleLoggingSetLevel(ctx, s.logger, req.ID)
+	case "resources/subscribe", "resources/unsubscribe":
+		return handlePing(ctx, s.logger, req.ID) // no-op, return empty result
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,
@@ -921,6 +981,34 @@ func parseMcpSessionID(headers http.Header) string {
 		session = uuid.New().String()
 	}
 	return session
+}
+
+// batchContainsMethod checks whether any request in a batch uses the given method.
+func batchContainsMethod(batch batchedRawRequest, method string) bool {
+	for _, req := range batch {
+		if req.Method == method {
+			return true
+		}
+	}
+	return false
+}
+
+// validateMCPSession logs warnings for missing or unknown session IDs on non-initialize requests.
+// Per backward-compat policy, we warn but still allow the request to proceed.
+func (s *Service) validateMCPSession(ctx context.Context, headers http.Header, hasInitialize bool) {
+	if hasInitialize {
+		return
+	}
+
+	headerVal := headers.Get("Mcp-Session-Id")
+	if headerVal == "" {
+		s.logger.WarnContext(ctx, "MCP request missing Mcp-Session-Id header")
+		return
+	}
+
+	if !s.sessionStore.Validate(ctx, headerVal) {
+		s.logger.WarnContext(ctx, "MCP request with unknown session ID", attr.SlogMcpSessionID(headerVal))
+	}
 }
 
 func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
