@@ -1117,7 +1117,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		TimeEnd:       timeEnd,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, fmt.Sprintf("error getting hooks summary: %w", err))
+		return nil, oops.E(oops.CodeUnexpected, err, fmt.Sprintf("error getting hooks summary: %v", err))
 	}
 
 	// Transform rows into response
