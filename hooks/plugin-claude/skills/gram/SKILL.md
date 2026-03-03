@@ -26,18 +26,7 @@ Opens the Gram API keys page in your browser and provides instructions for setti
 
 **After getting your API key:**
 
-1. Add it to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
-   ```bash
-   export GRAM_API_KEY="your-api-key-here"
-   export GRAM_PROJECT="default"  # optional
-   ```
-
-2. Reload your shell:
-   ```bash
-   source ~/.zshrc  # or ~/.bashrc
-   ```
-
-3. Restart Claude Code to use the new configuration
+The API key will be saved to your Claude Code settings file (`~/.claude/settings.json`) in the `env` section. This makes it available to all Claude Code sessions automatically.
 
 ---
 
@@ -50,11 +39,11 @@ COMMAND="${1:-help}"
 
 case "$COMMAND" in
   login)
-    # Setup Gram directories
-    GRAM_DIR="$HOME/.gram"
-    GRAM_CONFIG_FILE="$GRAM_DIR/config"
+    # Setup Claude settings directory
+    CLAUDE_DIR="$HOME/.claude"
+    CLAUDE_SETTINGS="$CLAUDE_DIR/settings.json"
 
-    mkdir -p "$GRAM_DIR"
+    mkdir -p "$CLAUDE_DIR"
 
     # Open the API keys page
     SETUP_URL="https://app.getgram.ai/settings/api-keys"
@@ -80,9 +69,9 @@ A browser window has been opened to: https://app.getgram.ai/settings/api-keys
 EOF
 
     # Prompt for API key
-    read -p "Enter your Gram API key: " -r GRAM_API_KEY
+    read -p "Enter your Gram API key: " -r GRAM_API_KEY2
 
-    if [ -z "$GRAM_API_KEY" ]; then
+    if [ -z "$GRAM_API_KEY2" ]; then
       echo "❌ No API key provided. Configuration cancelled."
       exit 1
     fi
@@ -93,23 +82,37 @@ EOF
       GRAM_PROJECT="default"
     fi
 
-    # Write configuration file
-    cat > "$GRAM_CONFIG_FILE" << EOF
-# Gram Configuration
-# This file is managed by the Gram plugin
-
-# API Key for authenticating with Gram
-export GRAM_API_KEY=$GRAM_API_KEY
-
-# Project name
-export GRAM_PROJECT=$GRAM_PROJECT
-
-# Optional: Override the Gram server URL
-# export GRAM_SERVER_URL=https://app.getgram.ai
+    # Create or update settings.json with env variables
+    if [ ! -f "$CLAUDE_SETTINGS" ]; then
+      cat > "$CLAUDE_SETTINGS" << EOF
+{
+  "env": {
+    "GRAM_API_KEY2": "$GRAM_API_KEY",
+    "GRAM_PROJECT": "$GRAM_PROJECT"
+  }
+}
 EOF
+    else
+      # Use jq to update existing settings.json if available, otherwise manual update
+      if command -v jq >/dev/null 2>&1; then
+        TMP_FILE=$(mktemp)
+        jq --arg key "$GRAM_API_KEY" --arg project "$GRAM_PROJECT" \
+          '.env.GRAM_API_KEY = $key | .env.GRAM_PROJECT = $project' \
+          "$CLAUDE_SETTINGS" > "$TMP_FILE" && mv "$TMP_FILE" "$CLAUDE_SETTINGS"
+      else
+        echo ""
+        echo "⚠️  Please manually add the following to $CLAUDE_SETTINGS:"
+        echo ""
+        echo '  "env": {'
+        echo '    "GRAM_API_KEY2": "'"$GRAM_API_KEY"'",'
+        echo '    "GRAM_PROJECT": "'"$GRAM_PROJECT"'"'
+        echo '  }'
+        echo ""
+      fi
+    fi
 
     echo ""
-    echo "✅ Configuration saved to $GRAM_CONFIG_FILE"
+    echo "✅ Configuration saved to $CLAUDE_SETTINGS"
     echo ""
     echo "The Gram plugin will now automatically track:"
     echo "- Tool usage patterns"

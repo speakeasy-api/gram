@@ -28,11 +28,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const isSlackAppsEnabled = telemetry.isFeatureEnabled("slack-apps") ?? false;
-
   const teamUrl =
     organization?.userWorkspaceSlugs &&
-    organization.userWorkspaceSlugs.length > 0
+      organization.userWorkspaceSlugs.length > 0
       ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
       : "https://app.speakeasy.com";
 
@@ -41,7 +39,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     build: [
       routes.elements,
       routes.mcp,
-      ...(isSlackAppsEnabled ? [routes.slackApps] : []),
+      routes.slackApps,
     ],
     observe: [
       routes.observability,

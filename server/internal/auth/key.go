@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -125,13 +126,18 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "this organization is disabled, please reach out to support@speakeasy.com for more information")
 	}
 
+	var projectID *uuid.UUID
+	if apiKey.ProjectID.Valid {
+		projectID = &apiKey.ProjectID.UUID
+	}
+
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID:  apiKey.OrganizationID,
 		HasActiveSubscription: org.HasActiveSubscription,
 		UserID:                apiKey.CreatedByUserID,
 		Email:                 &apiKey.Email,
 		APIKeyID:              apiKey.ID.String(),
-		ProjectID:             &apiKey.ProjectID.UUID,
+		ProjectID:             projectID,
 		OrganizationSlug:      org.Slug,
 		AccountType:           org.GramAccountType,
 		APIKeyScopes:          scopes,
