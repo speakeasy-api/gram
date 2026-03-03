@@ -17,7 +17,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type ActiveAttributeFilter,
   OP_LABELS,
-  VALUELESS_OPS,
+  parseOperatorSymbol,
+  tryParseFilterExpression,
 } from "./attribute-filter-types";
 
 type Step = "key" | "operator" | "value";
@@ -30,12 +31,6 @@ const OP_OPTIONS: { value: Op; label: string; description: string }[] = [
     description: "Exclude exact match",
   },
   { value: Op.Contains, label: "contains", description: "Partial match" },
-  { value: Op.Exists, label: "exists", description: "Attribute is present" },
-  {
-    value: Op.NotExists,
-    label: "not exists",
-    description: "Attribute is absent",
-  },
 ];
 
 interface AttributeFilterBarProps {
@@ -129,25 +124,71 @@ export function AttributeFilterBar({
   };
 
   const handleOpSelect = (op: Op) => {
-    if (VALUELESS_OPS.includes(op)) {
-      addFilter(selectedKey, op);
-    } else {
-      setSelectedOp(op);
-      setStep("value");
-      setFilterValue("");
-      // Value input renders inline with autoFocus
-    }
+    setSelectedOp(op);
+    setStep("value");
+    setFilterValue("");
   };
+
+  // Wraps the parent onSearchInputChange. During the operator step, if the
+  // user types a recognised operator followed by a space (e.g. "!= ") we
+  // immediately transition to the value step instead of waiting for Enter.
+  const handleSearchInputChange = useCallback(
+    (value: string) => {
+      if (step === "operator" && value.endsWith(" ")) {
+        const symbol = value.trimEnd();
+        const op = parseOperatorSymbol(symbol);
+        if (op) {
+          handleOpSelect(op);
+          onSearchInputChange("");
+          return;
+        }
+      }
+      onSearchInputChange(value);
+    },
+    [step, onSearchInputChange, handleOpSelect],
+  );
 
   const handleValueSubmit = () => {
     if (!selectedOp || !filterValue.trim()) return;
     addFilter(selectedKey, selectedOp, filterValue.trim());
   };
 
+  const submitOrParse = useCallback(
+    (raw: string) => {
+      const parsed = tryParseFilterExpression(raw);
+      if (parsed) {
+        addFilter(parsed.key, parsed.op, parsed.value);
+      } else {
+        onSearchSubmit(raw);
+      }
+    },
+    [addFilter, onSearchSubmit],
+  );
+
+  // During the operator step the user may type the operator + value directly
+  // (e.g. "!= 200"). We prepend the already-selected key and parse the full
+  // expression so it creates a chip without going through the popover.
+  const trySubmitOperatorInput = useCallback(
+    (raw: string): boolean => {
+      if (!selectedKey || !raw) return false;
+      const parsed = tryParseFilterExpression(`${selectedKey} ${raw}`);
+      if (parsed) {
+        addFilter(parsed.key, parsed.op, parsed.value);
+        return true;
+      }
+      return false;
+    },
+    [selectedKey, addFilter],
+  );
+
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
     switch (e.key) {
       case "Tab":
         e.preventDefault();
+        if (step === "operator" && searchInput.trim()) {
+          // Prefer typed expression over popover selection
+          if (trySubmitOperatorInput(searchInput.trim())) break;
+        }
         if (popoverOpen) {
           // Select the highlighted item in the popover. Scope the query to the
           // popover content element (rendered in a portal) to avoid accidentally
@@ -156,12 +197,22 @@ export function AttributeFilterBar({
             .querySelector<HTMLElement>("[cmdk-item][aria-selected='true']")
             ?.click();
         } else if (step === "key" && searchInput.trim()) {
-          onSearchSubmit(searchInput.trim());
+          submitOrParse(searchInput.trim());
         }
         break;
       case "Enter":
+        if (step === "operator" && searchInput.trim()) {
+          if (trySubmitOperatorInput(searchInput.trim())) {
+            // Stop the event from bubbling to cmdk's root handler, which would
+            // otherwise select the highlighted operator item after we already
+            // created the filter via resetFlow.
+            e.preventDefault();
+            e.stopPropagation();
+            break;
+          }
+        }
         if (step === "key" && !popoverOpen && searchInput.trim()) {
-          onSearchSubmit(searchInput.trim());
+          submitOrParse(searchInput.trim());
         }
         break;
       case "Escape":
@@ -174,6 +225,9 @@ export function AttributeFilterBar({
       case "Backspace":
         if (searchInput === "" && step === "key" && filters.length > 0) {
           removeFilter(filters[filters.length - 1].id);
+        }
+        if (searchInput === "" && step === "operator") {
+          resetFlow();
         }
         break;
     }
@@ -253,7 +307,7 @@ export function AttributeFilterBar({
               <CmdkRoot.Input
                 ref={inputRef}
                 value={searchInput}
-                onValueChange={onSearchInputChange}
+                onValueChange={handleSearchInputChange}
                 onKeyDown={handleInputKeyDown}
                 onFocus={() => setInputFocused(true)}
                 onBlur={() => {
@@ -265,10 +319,10 @@ export function AttributeFilterBar({
                 }}
                 placeholder={
                   step === "operator"
-                    ? "Select operator..."
+                    ? "Type operator + value (e.g. != 200) or select below..."
                     : filters.length > 0
                       ? "Add filter..."
-                      : "Search by tool URN or filter by attribute"
+                      : "Search by URN or filter (e.g. http.status != 200)"
                 }
                 className="flex-1 min-w-[120px] bg-transparent outline-none min-h-[24px] text-sm"
               />
