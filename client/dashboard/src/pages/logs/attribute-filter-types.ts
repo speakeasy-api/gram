@@ -46,6 +46,10 @@ export function tryParseFilterExpression(
     const idx = input.indexOf(symbol);
     if (idx === -1) continue;
 
+    // Skip `=` when it's actually part of a `!=` token to avoid phantom
+    // matches like key="!" from input "!= 200".
+    if (symbol === "=" && idx > 0 && input[idx - 1] === "!") continue;
+
     const key = input.slice(0, idx).trim();
     const value = input.slice(idx + symbol.length).trim();
     if (!key || !value) continue;
