@@ -11,6 +11,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id,
+    workos_membership_id
+) VALUES (
+    $1,
+    $2,
+    $3
+)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    workos_membership_id = COALESCE(organization_user_relationships.workos_membership_id, EXCLUDED.workos_membership_id),
+    updated_at = clock_timestamp()
+WHERE organization_user_relationships.deleted_at IS NULL
+`
+
+type AttachWorkOSUserToOrgParams struct {
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+}
+
+// Attach a WorkOS membership ID to an existing organization-user relationship. This is
+// used to link a WorkOS user to an organization in our system. If the relationship
+// doesn't exist, it will be created. If it does exist, the WorkOS membership ID will be
+// updated if it's not already set.
+func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUserToOrgParams) error {
+	_, err := q.db.Exec(ctx, attachWorkOSUserToOrg, arg.OrganizationID, arg.UserID, arg.WorkosMembershipID)
+	return err
+}
+
 const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()
@@ -122,27 +153,6 @@ type SetAccountTypeParams struct {
 
 func (q *Queries) SetAccountType(ctx context.Context, arg SetAccountTypeParams) error {
 	_, err := q.db.Exec(ctx, setAccountType, arg.GramAccountType, arg.ID)
-	return err
-}
-
-const setOrganizationUserRelationshipWorkosMembershipID = `-- name: SetOrganizationUserRelationshipWorkosMembershipID :exec
-UPDATE organization_user_relationships
-SET workos_membership_id = $1, 
-    updated_at = clock_timestamp()
-WHERE organization_id = $2 
-    AND user_id = $3
-    AND workos_membership_id IS NULL 
-    AND deleted_at IS NULL
-`
-
-type SetOrganizationUserRelationshipWorkosMembershipIDParams struct {
-	WorkosMembershipID pgtype.Text
-	OrganizationID     string
-	UserID             string
-}
-
-func (q *Queries) SetOrganizationUserRelationshipWorkosMembershipID(ctx context.Context, arg SetOrganizationUserRelationshipWorkosMembershipIDParams) error {
-	_, err := q.db.Exec(ctx, setOrganizationUserRelationshipWorkosMembershipID, arg.WorkosMembershipID, arg.OrganizationID, arg.UserID)
 	return err
 }
 

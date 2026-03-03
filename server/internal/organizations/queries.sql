@@ -61,12 +61,21 @@ SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND user_id = @user_id;
 
--- name: SetOrganizationUserRelationshipWorkosMembershipID :exec
-UPDATE organization_user_relationships
-SET workos_membership_id = @workos_membership_id, 
+-- name: AttachWorkOSUserToOrg :exec
+-- Attach a WorkOS membership ID to an existing organization-user relationship. This is
+-- used to link a WorkOS user to an organization in our system. If the relationship
+-- doesn't exist, it will be created. If it does exist, the WorkOS membership ID will be
+-- updated if it's not already set.
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id,
+    workos_membership_id
+) VALUES (
+    @organization_id,
+    @user_id,
+    @workos_membership_id
+)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    workos_membership_id = COALESCE(organization_user_relationships.workos_membership_id, EXCLUDED.workos_membership_id),
     updated_at = clock_timestamp()
-WHERE organization_id = @organization_id 
-    AND user_id = @user_id
-    AND workos_membership_id IS NULL 
-    AND deleted_at IS NULL;
-
+WHERE organization_user_relationships.deleted_at IS NULL;

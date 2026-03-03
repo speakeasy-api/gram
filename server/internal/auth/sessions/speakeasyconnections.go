@@ -183,62 +183,8 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 		}
 	}
 
-	shouldSyncWorkOSIDs := user.WasCreated && s.workos != nil
-	if shouldSyncWorkOSIDs {
-		workosUser, err := s.workos.GetUserByEmail(ctx, user.Email)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to get workos user by email", attr.SlogError(err))
-		} else if workosUser != nil {
-			if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
-				ID:       user.ID,
-				WorkosID: conv.ToPGText(workosUser.ID),
-			}); err != nil {
-				s.logger.ErrorContext(ctx, "failed to set user workos ID", attr.SlogError(err))
-			}
-
-			for _, org := range validateResp.Organizations {
-
-				if org.SSOConnectionID == nil {
-					continue
-				}
-
-				// ensure user-org relationship exists
-				_, err = s.orgRepo.UpsertOrganizationUserRelationship(
-					ctx,
-					orgRepo.UpsertOrganizationUserRelationshipParams{
-						OrganizationID: org.ID,
-						UserID:         validateResp.User.ID,
-					},
-				)
-				if err != nil {
-					s.logger.ErrorContext(ctx, "failed to upsert organization user relationship", attr.SlogError(err))
-					continue
-				}
-
-				orgMembership, err := s.workos.GetOrgMembership(ctx, workosUser.ID, org.ID)
-				if err != nil {
-					s.logger.ErrorContext(ctx, "failed to get workos org membership", attr.SlogError(err))
-					continue
-				}
-				if orgMembership == nil {
-					s.logger.ErrorContext(ctx, "org membership not found in workos")
-					continue
-				}
-
-				if err := s.orgRepo.SetOrganizationUserRelationshipWorkosMembershipID(
-					ctx,
-					orgRepo.SetOrganizationUserRelationshipWorkosMembershipIDParams{
-						OrganizationID:     org.ID,
-						UserID:             validateResp.User.ID,
-						WorkosMembershipID: conv.ToPGText(orgMembership.ID),
-					},
-				); err != nil {
-					s.logger.ErrorContext(ctx, "failed to set organization user relationship workos membership ID", attr.SlogError(err))
-					continue
-				}
-			}
-		}
-	}
+	// Update user and user-org relationships with WorkOS IDs, if applicable
+	s.syncWorkOSIDs(ctx, user, validateResp)
 
 	var adminOverride string
 	if override, _ := contextvalues.GetAdminOverrideFromContext(ctx); override != "" && validateResp.User.Admin {
@@ -433,4 +379,55 @@ func (p *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 	}
 
 	return authURL, nil
+}
+
+func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow, validateResp validateTokenResponse) {
+	// skip if workos client is not configured
+	if s.workos == nil {
+		return
+	}
+
+	workosUser, err := s.workos.GetUserByEmail(ctx, user.Email)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get workos user by email", attr.SlogError(err))
+		return
+	}
+	if workosUser == nil {
+		return
+	}
+
+	if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
+		ID:       user.ID,
+		WorkosID: conv.ToPGText(workosUser.ID),
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to set user workos ID", attr.SlogError(err))
+	}
+
+	for _, org := range validateResp.Organizations {
+		if org.SSOConnectionID == nil {
+			continue
+		}
+
+		orgMembership, err := s.workos.GetOrgMembership(ctx, workosUser.ID, org.ID)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to get workos org membership", attr.SlogError(err))
+			continue
+		}
+		if orgMembership == nil {
+			s.logger.ErrorContext(ctx, "org membership not found in workos")
+			continue
+		}
+
+		if err := s.orgRepo.AttachWorkOSUserToOrg(
+			ctx,
+			orgRepo.AttachWorkOSUserToOrgParams{
+				OrganizationID:     org.ID,
+				UserID:             validateResp.User.ID,
+				WorkosMembershipID: conv.ToPGText(orgMembership.ID),
+			},
+		); err != nil {
+			s.logger.ErrorContext(ctx, "failed to attach workos user to org", attr.SlogError(err))
+			continue
+		}
+	}
 }
