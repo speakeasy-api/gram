@@ -216,7 +216,7 @@ export function AttributeFilterBar({
             break;
           }
         }
-        if (step === "key" && !popoverOpen && searchInput.trim()) {
+        if (step === "key" && !popoverOpen) {
           submitOrParse(searchInput.trim());
         }
         break;
