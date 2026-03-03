@@ -179,6 +179,24 @@ type DeploymentStatus struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type DeploymentTag struct {
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	Name         string
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	DeploymentID uuid.NullUUID
+}
+
+type DeploymentTagHistory struct {
+	ChangedAt            pgtype.Timestamptz
+	ChangedBy            pgtype.Text
+	ID                   uuid.UUID
+	TagID                uuid.UUID
+	PreviousDeploymentID uuid.NullUUID
+	NewDeploymentID      uuid.NullUUID
+}
+
 type DeploymentsFunction struct {
 	ID            uuid.UUID
 	DeploymentID  uuid.UUID

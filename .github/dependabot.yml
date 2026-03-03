@@ -11,6 +11,11 @@ updates:
       - "/.github/workflows/composite/build-push"
     schedule:
       interval: "weekly"
+    groups:
+      artifacts:
+        patterns:
+          - "actions/download-artifact"
+          - "actions/upload-artifact"
   - package-ecosystem: "gomod"
     directories:
       - "/"
@@ -35,6 +40,9 @@ updates:
       redis:
         patterns:
           - "github.com/redis/go-redis/*"
+      aws:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2/*"
   - package-ecosystem: "docker"
     directory: "/server"
     schedule:
