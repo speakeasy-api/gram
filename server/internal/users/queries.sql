@@ -17,3 +17,10 @@ WHERE id = $1;
 -- name: GetUserByEmail :one
 SELECT * FROM users
 WHERE email = $1;
+
+-- name: SetUserWorkosID :exec
+UPDATE users 
+SET workos_id = @workos_id, 
+  updated_at = clock_timestamp()
+WHERE id = @id AND 
+  workos_id IS NULL;

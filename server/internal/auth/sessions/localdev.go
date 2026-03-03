@@ -94,6 +94,7 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 		pylon:                  fakePylon,
 		posthog:                fakePosthog,
 		billingRepo:            billingRepo,
+		workos:                 nil,
 	}, nil
 }
 
