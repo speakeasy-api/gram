@@ -43,7 +43,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       routes.mcp,
       ...(isSlackAppsEnabled ? [routes.slackApps] : []),
     ],
-    observe: [routes.observability, routes.logs, routes.chatSessions],
+    observe: [
+      routes.observability,
+      routes.logs,
+      routes.chatSessions,
+      routes.hooks,
+    ],
     settings: [routes.settings, routes.billing] as AppRoute[],
   };
 

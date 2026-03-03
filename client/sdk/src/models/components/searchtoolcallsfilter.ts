@@ -14,6 +14,10 @@ export type SearchToolCallsFilter = {
    */
   deploymentId?: string | undefined;
   /**
+   * Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
+   */
+  eventSource?: string | undefined;
+  /**
    * Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
    */
   from?: Date | undefined;
@@ -34,6 +38,7 @@ export type SearchToolCallsFilter = {
 /** @internal */
 export type SearchToolCallsFilter$Outbound = {
   deployment_id?: string | undefined;
+  event_source?: string | undefined;
   from?: string | undefined;
   function_id?: string | undefined;
   gram_urn?: string | undefined;
@@ -47,6 +52,7 @@ export const SearchToolCallsFilter$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     deploymentId: z.optional(z.string()),
+    eventSource: z.optional(z.string()),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     functionId: z.optional(z.string()),
     gramUrn: z.optional(z.string()),
@@ -55,6 +61,7 @@ export const SearchToolCallsFilter$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       deploymentId: "deployment_id",
+      eventSource: "event_source",
       functionId: "function_id",
       gramUrn: "gram_urn",
     });

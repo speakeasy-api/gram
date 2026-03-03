@@ -139,6 +139,15 @@ type ListAttributeKeysRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 }
 
+// GetHooksSummaryRequestBody is the type of the "telemetry" service
+// "getHooksSummary" endpoint HTTP request body.
+type GetHooksSummaryRequestBody struct {
+	// Start time in ISO 8601 format
+	From string `form:"from" json:"from" xml:"from"`
+	// End time in ISO 8601 format
+	To string `form:"to" json:"to" xml:"to"`
+}
+
 // SearchLogsResponseBody is the type of the "telemetry" service "searchLogs"
 // endpoint HTTP response body.
 type SearchLogsResponseBody struct {
@@ -243,6 +252,19 @@ type ListFilterOptionsResponseBody struct {
 type ListAttributeKeysResponseBody struct {
 	// Distinct attribute keys. User attributes are prefixed with @
 	Keys []string `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
+}
+
+// GetHooksSummaryResponseBody is the type of the "telemetry" service
+// "getHooksSummary" endpoint HTTP response body.
+type GetHooksSummaryResponseBody struct {
+	// Aggregated metrics grouped by server
+	Servers []*HooksServerSummaryResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Total number of hook events
+	TotalEvents *int64 `form:"total_events,omitempty" json:"total_events,omitempty" xml:"total_events,omitempty"`
+	// Total number of unique sessions
+	TotalSessions *int64 `form:"total_sessions,omitempty" json:"total_sessions,omitempty" xml:"total_sessions,omitempty"`
+	// Whether telemetry is enabled for the organization
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
 // SearchLogsUnauthorizedResponseBody is the type of the "telemetry" service
@@ -2101,6 +2123,190 @@ type ListAttributeKeysGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetHooksSummaryUnauthorizedResponseBody is the type of the "telemetry"
+// service "getHooksSummary" endpoint HTTP response body for the "unauthorized"
+// error.
+type GetHooksSummaryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksSummaryForbiddenResponseBody is the type of the "telemetry" service
+// "getHooksSummary" endpoint HTTP response body for the "forbidden" error.
+type GetHooksSummaryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksSummaryBadRequestResponseBody is the type of the "telemetry" service
+// "getHooksSummary" endpoint HTTP response body for the "bad_request" error.
+type GetHooksSummaryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksSummaryNotFoundResponseBody is the type of the "telemetry" service
+// "getHooksSummary" endpoint HTTP response body for the "not_found" error.
+type GetHooksSummaryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksSummaryConflictResponseBody is the type of the "telemetry" service
+// "getHooksSummary" endpoint HTTP response body for the "conflict" error.
+type GetHooksSummaryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksSummaryUnsupportedMediaResponseBody is the type of the "telemetry"
+// service "getHooksSummary" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetHooksSummaryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksSummaryInvalidResponseBody is the type of the "telemetry" service
+// "getHooksSummary" endpoint HTTP response body for the "invalid" error.
+type GetHooksSummaryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksSummaryInvariantViolationResponseBody is the type of the "telemetry"
+// service "getHooksSummary" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetHooksSummaryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksSummaryUnexpectedResponseBody is the type of the "telemetry" service
+// "getHooksSummary" endpoint HTTP response body for the "unexpected" error.
+type GetHooksSummaryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksSummaryGatewayErrorResponseBody is the type of the "telemetry"
+// service "getHooksSummary" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetHooksSummaryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SearchLogsFilterRequestBody is used to define fields on request body types.
 type SearchLogsFilterRequestBody struct {
 	// Trace ID filter (32 hex characters)
@@ -2123,6 +2329,8 @@ type SearchLogsFilterRequestBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// External user ID filter
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 	// Filters on custom log attributes
 	AttributeFilters []*AttributeFilterRequestBody `form:"attribute_filters,omitempty" json:"attribute_filters,omitempty" xml:"attribute_filters,omitempty"`
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
@@ -2185,6 +2393,8 @@ type ServiceInfoResponseBody struct {
 // SearchToolCallsFilterRequestBody is used to define fields on request body
 // types.
 type SearchToolCallsFilterRequestBody struct {
+	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -2446,6 +2656,23 @@ type FilterOptionResponseBody struct {
 	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
 }
 
+// HooksServerSummaryResponseBody is used to define fields on response body
+// types.
+type HooksServerSummaryResponseBody struct {
+	// Server name (extracted from tool name, or 'local' for non-MCP tools)
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	// Total number of hook events for this server
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of unique tools used for this server
+	UniqueTools *int64 `form:"unique_tools,omitempty" json:"unique_tools,omitempty" xml:"unique_tools,omitempty"`
+	// Number of successful tool completions (PostToolUse events)
+	SuccessCount *int64 `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
+	// Number of failed tool completions (PostToolUseFailure events)
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+	// Failure rate as a decimal (0.0 to 1.0)
+	FailureRate *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
+}
+
 // NewSearchLogsRequestBody builds the HTTP request body from the payload of
 // the "searchLogs" endpoint of the "telemetry" service.
 func NewSearchLogsRequestBody(p *telemetry.SearchLogsPayload) *SearchLogsRequestBody {
@@ -2628,6 +2855,16 @@ func NewListFilterOptionsRequestBody(p *telemetry.ListFilterOptionsPayload) *Lis
 // payload of the "listAttributeKeys" endpoint of the "telemetry" service.
 func NewListAttributeKeysRequestBody(p *telemetry.ListAttributeKeysPayload) *ListAttributeKeysRequestBody {
 	body := &ListAttributeKeysRequestBody{
+		From: p.From,
+		To:   p.To,
+	}
+	return body
+}
+
+// NewGetHooksSummaryRequestBody builds the HTTP request body from the payload
+// of the "getHooksSummary" endpoint of the "telemetry" service.
+func NewGetHooksSummaryRequestBody(p *telemetry.GetHooksSummaryPayload) *GetHooksSummaryRequestBody {
+	body := &GetHooksSummaryRequestBody{
 		From: p.From,
 		To:   p.To,
 	}
@@ -4310,6 +4547,176 @@ func NewListAttributeKeysGatewayError(body *ListAttributeKeysGatewayErrorRespons
 	return v
 }
 
+// NewGetHooksSummaryResultOK builds a "telemetry" service "getHooksSummary"
+// endpoint result from a HTTP "OK" response.
+func NewGetHooksSummaryResultOK(body *GetHooksSummaryResponseBody) *telemetry.GetHooksSummaryResult {
+	v := &telemetry.GetHooksSummaryResult{
+		TotalEvents:   *body.TotalEvents,
+		TotalSessions: *body.TotalSessions,
+		Enabled:       *body.Enabled,
+	}
+	v.Servers = make([]*telemetry.HooksServerSummary, len(body.Servers))
+	for i, val := range body.Servers {
+		if val == nil {
+			v.Servers[i] = nil
+			continue
+		}
+		v.Servers[i] = unmarshalHooksServerSummaryResponseBodyToTelemetryHooksServerSummary(val)
+	}
+
+	return v
+}
+
+// NewGetHooksSummaryUnauthorized builds a telemetry service getHooksSummary
+// endpoint unauthorized error.
+func NewGetHooksSummaryUnauthorized(body *GetHooksSummaryUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksSummaryForbidden builds a telemetry service getHooksSummary
+// endpoint forbidden error.
+func NewGetHooksSummaryForbidden(body *GetHooksSummaryForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksSummaryBadRequest builds a telemetry service getHooksSummary
+// endpoint bad_request error.
+func NewGetHooksSummaryBadRequest(body *GetHooksSummaryBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksSummaryNotFound builds a telemetry service getHooksSummary
+// endpoint not_found error.
+func NewGetHooksSummaryNotFound(body *GetHooksSummaryNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksSummaryConflict builds a telemetry service getHooksSummary
+// endpoint conflict error.
+func NewGetHooksSummaryConflict(body *GetHooksSummaryConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksSummaryUnsupportedMedia builds a telemetry service
+// getHooksSummary endpoint unsupported_media error.
+func NewGetHooksSummaryUnsupportedMedia(body *GetHooksSummaryUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksSummaryInvalid builds a telemetry service getHooksSummary
+// endpoint invalid error.
+func NewGetHooksSummaryInvalid(body *GetHooksSummaryInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksSummaryInvariantViolation builds a telemetry service
+// getHooksSummary endpoint invariant_violation error.
+func NewGetHooksSummaryInvariantViolation(body *GetHooksSummaryInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksSummaryUnexpected builds a telemetry service getHooksSummary
+// endpoint unexpected error.
+func NewGetHooksSummaryUnexpected(body *GetHooksSummaryUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksSummaryGatewayError builds a telemetry service getHooksSummary
+// endpoint gateway_error error.
+func NewGetHooksSummaryGatewayError(body *GetHooksSummaryGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateSearchLogsResponseBody runs the validations defined on
 // SearchLogsResponseBody
 func ValidateSearchLogsResponseBody(body *SearchLogsResponseBody) (err error) {
@@ -4514,6 +4921,31 @@ func ValidateListFilterOptionsResponseBody(body *ListFilterOptionsResponseBody) 
 func ValidateListAttributeKeysResponseBody(body *ListAttributeKeysResponseBody) (err error) {
 	if body.Keys == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("keys", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksSummaryResponseBody runs the validations defined on
+// GetHooksSummaryResponseBody
+func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err error) {
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if body.TotalEvents == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_events", "body"))
+	}
+	if body.TotalSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_sessions", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateHooksServerSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -6923,6 +7355,246 @@ func ValidateListAttributeKeysGatewayErrorResponseBody(body *ListAttributeKeysGa
 	return
 }
 
+// ValidateGetHooksSummaryUnauthorizedResponseBody runs the validations defined
+// on getHooksSummary_unauthorized_response_body
+func ValidateGetHooksSummaryUnauthorizedResponseBody(body *GetHooksSummaryUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksSummaryForbiddenResponseBody runs the validations defined on
+// getHooksSummary_forbidden_response_body
+func ValidateGetHooksSummaryForbiddenResponseBody(body *GetHooksSummaryForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksSummaryBadRequestResponseBody runs the validations defined
+// on getHooksSummary_bad_request_response_body
+func ValidateGetHooksSummaryBadRequestResponseBody(body *GetHooksSummaryBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksSummaryNotFoundResponseBody runs the validations defined on
+// getHooksSummary_not_found_response_body
+func ValidateGetHooksSummaryNotFoundResponseBody(body *GetHooksSummaryNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksSummaryConflictResponseBody runs the validations defined on
+// getHooksSummary_conflict_response_body
+func ValidateGetHooksSummaryConflictResponseBody(body *GetHooksSummaryConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksSummaryUnsupportedMediaResponseBody runs the validations
+// defined on getHooksSummary_unsupported_media_response_body
+func ValidateGetHooksSummaryUnsupportedMediaResponseBody(body *GetHooksSummaryUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksSummaryInvalidResponseBody runs the validations defined on
+// getHooksSummary_invalid_response_body
+func ValidateGetHooksSummaryInvalidResponseBody(body *GetHooksSummaryInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksSummaryInvariantViolationResponseBody runs the validations
+// defined on getHooksSummary_invariant_violation_response_body
+func ValidateGetHooksSummaryInvariantViolationResponseBody(body *GetHooksSummaryInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksSummaryUnexpectedResponseBody runs the validations defined
+// on getHooksSummary_unexpected_response_body
+func ValidateGetHooksSummaryUnexpectedResponseBody(body *GetHooksSummaryUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksSummaryGatewayErrorResponseBody runs the validations defined
+// on getHooksSummary_gateway_error_response_body
+func ValidateGetHooksSummaryGatewayErrorResponseBody(body *GetHooksSummaryGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSearchLogsFilterRequestBody runs the validations defined on
 // SearchLogsFilterRequestBody
 func ValidateSearchLogsFilterRequestBody(body *SearchLogsFilterRequestBody) (err error) {
@@ -7410,6 +8082,30 @@ func ValidateFilterOptionResponseBody(body *FilterOptionResponseBody) (err error
 	}
 	if body.Count == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	return
+}
+
+// ValidateHooksServerSummaryResponseBody runs the validations defined on
+// HooksServerSummaryResponseBody
+func ValidateHooksServerSummaryResponseBody(body *HooksServerSummaryResponseBody) (err error) {
+	if body.ServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_name", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
+	}
+	if body.UniqueTools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unique_tools", "body"))
+	}
+	if body.SuccessCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("success_count", "body"))
+	}
+	if body.FailureCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
+	}
+	if body.FailureRate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failure_rate", "body"))
 	}
 	return
 }

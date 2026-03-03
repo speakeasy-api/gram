@@ -47,6 +47,7 @@ const (
 	URLFullKey                        = semconv.URLFullKey
 	URLOriginalKey                    = semconv.URLOriginalKey
 	UserIDKey                         = semconv.UserIDKey
+	UserEmailKey                      = semconv.UserEmailKey
 
 	ActualKey   = attribute.Key("actual")
 	EventKey    = attribute.Key("event")

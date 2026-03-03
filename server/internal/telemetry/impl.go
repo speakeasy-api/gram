@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
@@ -138,7 +139,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 	}
 
 	// Extract SearchLogs-specific filter fields
-	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID, userID, externalUserID string
+	var traceID, deploymentID, functionID, severityText, httpRoute, httpMethod, serviceName, gramChatID, userID, externalUserID, eventSource string
 	var httpStatusCode int32
 	var gramURNs []string
 	var attributeFilters []repo.AttributeFilter
@@ -156,6 +157,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		gramChatID = conv.PtrValOr(payload.Filter.GramChatID, "")
 		userID = conv.PtrValOr(payload.Filter.UserID, "")
 		externalUserID = conv.PtrValOr(payload.Filter.ExternalUserID, "")
+		eventSource = conv.PtrValOr(payload.Filter.EventSource, "")
 		attributeFilters = toRepoAttributeFilters(payload.Filter.AttributeFilters)
 	}
 
@@ -176,6 +178,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		GramChatID:             gramChatID,
 		UserID:                 userID,
 		ExternalUserID:         externalUserID,
+		EventSource:            eventSource,
 		AttributeFilters:       attributeFilters,
 		SortOrder:              params.sortOrder,
 		Cursor:                 params.cursor,
@@ -238,11 +241,12 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	// Extract SearchToolCalls-specific filter fields
-	var deploymentID, functionID, gramURN string
+	var deploymentID, functionID, gramURN, eventSource string
 	if payload.Filter != nil {
 		deploymentID = conv.PtrValOr(payload.Filter.DeploymentID, "")
 		functionID = conv.PtrValOr(payload.Filter.FunctionID, "")
 		gramURN = conv.PtrValOr(payload.Filter.GramUrn, "")
+		eventSource = conv.PtrValOr(payload.Filter.EventSource, "")
 	}
 
 	// Query with limit+1 to detect if there are more results
@@ -253,6 +257,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 		GramDeploymentID: deploymentID,
 		GramFunctionID:   functionID,
 		GramURN:          gramURN,
+		EventSource:      eventSource,
 		SortOrder:        params.sortOrder,
 		Cursor:           params.cursor,
 		Limit:            params.limit + 1,
@@ -1082,5 +1087,69 @@ func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.List
 
 	return &telem_gen.ListAttributeKeysResult{
 		Keys: keys,
+	}, nil
+}
+
+// GetHooksSummary returns aggregated hooks metrics grouped by server
+func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHooksSummaryPayload) (res *telem_gen.GetHooksSummaryResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.chRepo.GetHooksSummary(ctx, repo.GetHooksSummaryParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, fmt.Sprintf("error getting hooks summary: %w", err))
+	}
+
+	// Transform rows into response
+	servers := make([]*telem_gen.HooksServerSummary, 0, len(rows))
+	var totalEvents, totalSessions int64
+	for _, row := range rows {
+		servers = append(servers, &telem_gen.HooksServerSummary{
+			ServerName:   row.ServerName,
+			EventCount:   int64(row.EventCount),
+			UniqueTools:  int64(row.UniqueTools),
+			SuccessCount: int64(row.SuccessCount),
+			FailureCount: int64(row.FailureCount),
+			FailureRate:  row.FailureRate,
+		})
+		totalEvents += int64(row.EventCount)
+	}
+
+	// Get unique session count
+	sessionCount, err := s.chRepo.GetHooksSessionCount(ctx, repo.GetHooksSessionCountParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, fmt.Sprintf("error getting hooks session count: %w", err))
+	}
+	totalSessions = sessionCount
+
+	return &telem_gen.GetHooksSummaryResult{
+		Servers:       servers,
+		TotalEvents:   totalEvents,
+		TotalSessions: totalSessions,
+		Enabled:       logsEnabled,
 	}, nil
 }

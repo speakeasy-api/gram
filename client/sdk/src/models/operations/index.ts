@@ -42,6 +42,7 @@ export * from "./getactivedeployment.js";
 export * from "./getdeployment.js";
 export * from "./getdeploymentlogs.js";
 export * from "./getdomain.js";
+export * from "./gethookssummary.js";
 export * from "./getinstance.js";
 export * from "./getlatestdeployment.js";
 export * from "./getmcpmetadata.js";

@@ -8092,6 +8092,111 @@ paths:
             tags:
                 - telemetry
             x-speakeasy-name-override: captureEvent
+    /rpc/telemetry.getHooksSummary:
+        post:
+            description: Get aggregated hooks metrics grouped by server
+            operationId: getHooksSummary
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetHooksSummaryResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getHooksSummary telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getHooksSummary
+            x-speakeasy-react-hook:
+                name: GetHooksSummary
+                type: query
     /rpc/telemetry.getObservabilityOverview:
         post:
             description: Get observability overview metrics including time series, tool breakdowns, and summary stats
@@ -14173,6 +14278,48 @@ components:
                 - openapiv3_tool_count
                 - functions_tool_count
                 - external_mcp_tool_count
+        GetHooksSummaryPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+            description: Payload for getting aggregated hooks metrics
+            required:
+                - from
+                - to
+        GetHooksSummaryResult:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether telemetry is enabled for the organization
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HooksServerSummary'
+                    description: Aggregated metrics grouped by server
+                total_events:
+                    type: integer
+                    description: Total number of hook events
+                    format: int64
+                total_sessions:
+                    type: integer
+                    description: Total number of unique sessions
+                    format: int64
+            description: Result of hooks summary query
+            required:
+                - servers
+                - total_events
+                - total_sessions
+                - enabled
         GetInstanceForm:
             type: object
             properties:
@@ -14553,6 +14700,40 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        HooksServerSummary:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Total number of hook events for this server
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool completions (PostToolUseFailure events)
+                    format: int64
+                failure_rate:
+                    type: number
+                    description: Failure rate as a decimal (0.0 to 1.0)
+                    format: double
+                server_name:
+                    type: string
+                    description: Server name (extracted from tool name, or 'local' for non-MCP tools)
+                success_count:
+                    type: integer
+                    description: Number of successful tool completions (PostToolUse events)
+                    format: int64
+                unique_tools:
+                    type: integer
+                    description: Number of unique tools used for this server
+                    format: int64
+            description: Aggregated hooks metrics for a single server
+            required:
+                - server_name
+                - event_count
+                - unique_tools
+                - success_count
+                - failure_count
+                - failure_rate
         InfoResponseBody:
             type: object
             properties:
@@ -16120,6 +16301,9 @@ components:
                     type: string
                     description: Deployment ID filter
                     format: uuid
+                event_source:
+                    type: string
+                    description: Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
                 external_user_id:
                     type: string
                     description: External user ID filter
@@ -16234,6 +16418,9 @@ components:
                     type: string
                     description: Deployment ID filter
                     format: uuid
+                event_source:
+                    type: string
+                    description: Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
                 from:
                     type: string
                     description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
