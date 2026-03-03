@@ -1,11 +1,11 @@
 import { AssetImage } from "@/components/asset-image";
+import { EnterpriseGate } from "@/components/enterprise-gate";
 import { Page } from "@/components/page-layout";
 import { CompactUpload, useAssetImageUploadHandler } from "@/components/upload";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
-import { useProductTier } from "@/hooks/useProductTier";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -44,38 +44,6 @@ export function StatusBadge({
 
 export function SlackAppsRoot() {
   return <Outlet />;
-}
-
-function EnterpriseGate({ children }: { children: React.ReactNode }) {
-  const productTier = useProductTier();
-
-  if (productTier === "enterprise") {
-    return <>{children}</>;
-  }
-
-  return (
-    <div className="flex flex-col items-center justify-center py-24 px-8 rounded-xl border border-dashed bg-muted/20">
-      <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-        <Icon name="slack" className="w-6 h-6 text-muted-foreground" />
-      </div>
-      <Type variant="subheading" className="mb-1">
-        Enterprise Feature
-      </Type>
-      <Type small muted className="text-center mb-4 max-w-md">
-        Slack apps are available on the Enterprise plan. Book a time to
-        get&nbsp;started.
-      </Type>
-      <Button variant="brand" asChild>
-        <a
-          href="https://www.speakeasy.com/book-demo"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Talk to our team
-        </a>
-      </Button>
-    </div>
-  );
 }
 
 function SlackAppsEmptyState({ onCreate }: { onCreate: () => void }) {
@@ -320,7 +288,10 @@ export default function SlackAppsIndex() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <EnterpriseGate>
+        <EnterpriseGate
+          icon="slack"
+          description="Slack apps are available on the Enterprise plan. Book a time to get started."
+        >
           <Page.Section>
             <Page.Section.Title>Slack Apps</Page.Section.Title>
             <Page.Section.Description>

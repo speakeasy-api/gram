@@ -1,4 +1,5 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsSidebar } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
@@ -373,36 +374,41 @@ function HooksContent() {
       subtitle="Ask me about your hooks! Powered by Elements + Gram MCP"
       hideTrigger={isLogsDisabled}
     >
-      <HooksInnerContent
-        isLogsDisabled={isLogsDisabled}
-        isLoading={isLoading}
-        isFetching={isFetching}
-        error={error}
-        summaryData={summaryData}
-        logs={logs}
-        searchQuery={searchQuery}
-        searchInput={searchInput}
-        setSearchInput={setSearchInput}
-        userEmailInput={userEmailInput}
-        setUserEmailInput={setUserEmailInput}
-        selectedServer={selectedServer}
-        onServerChange={handleServerChange}
-        selectedLog={selectedLog}
-        handleLogClick={handleLogClick}
-        setSelectedLog={setSelectedLog}
-        containerRef={containerRef}
-        handleScroll={handleScroll}
-        hasNextPage={hasNextPage}
-        isFetchingNextPage={isFetchingNextPage}
-        refetch={refetch}
-        dateRange={dateRange}
-        customRange={customRange}
-        customRangeLabel={urlLabel}
-        onDateRangeChange={setDateRangeParam}
-        onCustomRangeChange={setCustomRangeParam}
-        onClearCustomRange={clearCustomRange}
-        projectSlug={projectSlug}
-      />
+      <EnterpriseGate
+        icon="workflow"
+        description="Hooks are available on the Enterprise plan. Book a time to get started."
+      >
+        <HooksInnerContent
+          isLogsDisabled={isLogsDisabled}
+          isLoading={isLoading}
+          isFetching={isFetching}
+          error={error}
+          summaryData={summaryData}
+          logs={logs}
+          searchQuery={searchQuery}
+          searchInput={searchInput}
+          setSearchInput={setSearchInput}
+          userEmailInput={userEmailInput}
+          setUserEmailInput={setUserEmailInput}
+          selectedServer={selectedServer}
+          onServerChange={handleServerChange}
+          selectedLog={selectedLog}
+          handleLogClick={handleLogClick}
+          setSelectedLog={setSelectedLog}
+          containerRef={containerRef}
+          handleScroll={handleScroll}
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          refetch={refetch}
+          dateRange={dateRange}
+          customRange={customRange}
+          customRangeLabel={urlLabel}
+          onDateRangeChange={setDateRangeParam}
+          onCustomRangeChange={setCustomRangeParam}
+          onClearCustomRange={clearCustomRange}
+          projectSlug={projectSlug}
+        />
+      </EnterpriseGate>
     </InsightsSidebar>
   );
 }
