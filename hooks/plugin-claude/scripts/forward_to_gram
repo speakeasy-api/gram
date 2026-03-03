@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Unified hook forwarder - forwards all hook events to server
 
+<<<<<<< chase/hooks3
 # Check if GRAM_API_KEY is set
 if [ -z "$GRAM_API_KEY" ]; then
   cat <<EOF
@@ -13,6 +14,9 @@ EOF
 fi
 
 SERVER_URL="app.getgram.ai"
+=======
+SERVER_URL="https://app.getgram.ai"
+>>>>>>> chase/hooks2
 if [ -n "$GRAM_SERVER_URL" ]; then
   SERVER_URL="$GRAM_SERVER_URL"
 fi
