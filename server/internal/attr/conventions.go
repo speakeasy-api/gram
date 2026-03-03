@@ -187,8 +187,9 @@ const (
 	VisibilityKey                  = attribute.Key("gram.visibility")
 
 	// Hooks
-	HookEventKey = attribute.Key("gram.hook.event")
-	HookErrorKey = attribute.Key("gram.hook.error")
+	HookEventKey  = attribute.Key("gram.hook.event")
+	HookErrorKey  = attribute.Key("gram.hook.error")
+	HookSourceKey = attribute.Key("gram.hook.source")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")
