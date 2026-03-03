@@ -97,9 +97,13 @@ export function AttributeFilterBar({
   const addFilter = useCallback(
     (path: string, op: Op, value?: string) => {
       const newFilter = { id: crypto.randomUUID(), path, op, value };
-      // Replace any existing filter on the same path+op to avoid impossible
-      // AND conditions (e.g. status_code = 404 AND status_code = 500).
-      const rest = filters.filter((f) => !(f.path === path && f.op === op));
+      // Replace any existing filter on the same path+op for equality to avoid
+      // impossible AND conditions (e.g. status_code = 404 AND status_code = 500).
+      // For != and ~ multiple filters on the same path are valid.
+      const rest =
+        op === Op.Eq
+          ? filters.filter((f) => !(f.path === path && f.op === op))
+          : filters;
       onChange([...rest, newFilter]);
       onSearchInputChange("");
       resetFlow();

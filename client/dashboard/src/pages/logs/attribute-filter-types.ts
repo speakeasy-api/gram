@@ -14,7 +14,7 @@ export const OP_LABELS: Record<Op, string> = {
   not_eq: "!=",
   contains: "~",
   exists: "exists",
-  not_exists: "not_exists",
+  not_exists: "∄",
 };
 
 // Ordered longest-first so `!=` is checked before `=`.
