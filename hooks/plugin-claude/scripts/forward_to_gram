@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Unified hook forwarder - forwards all hook events to server
 
-SERVER_URL="app.getgram.ai"
+SERVER_URL="https://app.getgram.ai"
 if [ -n "$GRAM_SERVER_URL" ]; then
   SERVER_URL="$GRAM_SERVER_URL"
 fi
