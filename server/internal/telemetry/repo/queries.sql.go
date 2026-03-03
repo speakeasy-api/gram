@@ -212,13 +212,15 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		// Bare paths → check for a materialized column first (bloom-filter indexed),
 		// then fall back to the JSON accessor.
 		var col string
-		path := f.Path
-		if strings.HasPrefix(path, "@") {
+		switch path := f.Path; {
+		case strings.HasPrefix(path, "@"):
 			col = fmt.Sprintf("toString(attributes.app.%s)", path[1:])
-		} else if matCol, ok := materializedColumns[path]; ok {
-			col = matCol
-		} else {
-			col = fmt.Sprintf("toString(attributes.%s)", path)
+		default:
+			if matCol, ok := materializedColumns[path]; ok {
+				col = matCol
+			} else {
+				col = fmt.Sprintf("toString(attributes.%s)", path)
+			}
 		}
 		switch f.Op {
 		case "eq":
