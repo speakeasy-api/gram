@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Unified hook forwarder - forwards all hook events to server
 
-SERVER_URL="https://recent-patrica-unmonastically.ngrok-free.dev"
-# if [ -n "$GRAM_SERVER_URL" ]; then
-#   SERVER_URL="$GRAM_SERVER_URL"
-# fi
+SERVER_URL="app.getgram.ai"
+if [ -n "$GRAM_SERVER_URL" ]; then
+  SERVER_URL="$GRAM_SERVER_URL"
+fi
 
-GRAM_PROJECT="default"
+PROJECT="default"
 if [ -n "$GRAM_PROJECT" ]; then
-  GRAM_PROJECT="$GRAM_PROJECT"
+  PROJECT="$GRAM_PROJECT"
 fi
 
 URL="$SERVER_URL/rpc/hooks.claude"
@@ -20,7 +20,7 @@ INPUT=$(cat)
 curl -s -X POST "$URL" \
   -H "Content-Type: application/json" \
   -H "Gram-Key: ${GRAM_API_KEY}" \
-  -H "Gram-Project: ${GRAM_PROJECT}" \
+  -H "Gram-Project: ${PROJECT}" \
   -d "$INPUT"
 
 # Exit with curl's exit code
