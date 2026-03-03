@@ -2,16 +2,10 @@
   "hooks": {
     "SessionStart": [
       {
-        "matchers": [
-          {
-            "matcher": "startup"
-          }
-        ],
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/session_start",
-            "async": false
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram"
           }
         ]
       }
@@ -21,8 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/pre_tool_use",
-            "async": true
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram"
           }
         ]
       }
@@ -32,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/post_tool_use",
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram",
             "async": true
           }
         ]
@@ -43,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/post_tool_use_failure",
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram",
             "async": true
           }
         ]

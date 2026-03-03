@@ -17,17 +17,8 @@ import (
 
 // Client lists the hooks service endpoint HTTP clients.
 type Client struct {
-	// PreToolUse Doer is the HTTP client used to make requests to the preToolUse
-	// endpoint.
-	PreToolUseDoer goahttp.Doer
-
-	// PostToolUse Doer is the HTTP client used to make requests to the postToolUse
-	// endpoint.
-	PostToolUseDoer goahttp.Doer
-
-	// PostToolUseFailure Doer is the HTTP client used to make requests to the
-	// postToolUseFailure endpoint.
-	PostToolUseFailureDoer goahttp.Doer
+	// Claude Doer is the HTTP client used to make requests to the claude endpoint.
+	ClaudeDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -49,26 +40,24 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		PreToolUseDoer:         doer,
-		PostToolUseDoer:        doer,
-		PostToolUseFailureDoer: doer,
-		RestoreResponseBody:    restoreBody,
-		scheme:                 scheme,
-		host:                   host,
-		decoder:                dec,
-		encoder:                enc,
+		ClaudeDoer:          doer,
+		RestoreResponseBody: restoreBody,
+		scheme:              scheme,
+		host:                host,
+		decoder:             dec,
+		encoder:             enc,
 	}
 }
 
-// PreToolUse returns an endpoint that makes HTTP requests to the hooks service
-// preToolUse server.
-func (c *Client) PreToolUse() goa.Endpoint {
+// Claude returns an endpoint that makes HTTP requests to the hooks service
+// claude server.
+func (c *Client) Claude() goa.Endpoint {
 	var (
-		encodeRequest  = EncodePreToolUseRequest(c.encoder)
-		decodeResponse = DecodePreToolUseResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeClaudeRequest(c.encoder)
+		decodeResponse = DecodeClaudeResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildPreToolUseRequest(ctx, v)
+		req, err := c.BuildClaudeRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -76,57 +65,9 @@ func (c *Client) PreToolUse() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.PreToolUseDoer.Do(req)
+		resp, err := c.ClaudeDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("hooks", "preToolUse", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// PostToolUse returns an endpoint that makes HTTP requests to the hooks
-// service postToolUse server.
-func (c *Client) PostToolUse() goa.Endpoint {
-	var (
-		encodeRequest  = EncodePostToolUseRequest(c.encoder)
-		decodeResponse = DecodePostToolUseResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildPostToolUseRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.PostToolUseDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("hooks", "postToolUse", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// PostToolUseFailure returns an endpoint that makes HTTP requests to the hooks
-// service postToolUseFailure server.
-func (c *Client) PostToolUseFailure() goa.Endpoint {
-	var (
-		encodeRequest  = EncodePostToolUseFailureRequest(c.encoder)
-		decodeResponse = DecodePostToolUseFailureResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildPostToolUseFailureRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.PostToolUseFailureDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("hooks", "postToolUseFailure", err)
+			return nil, goahttp.ErrRequestError("hooks", "claude", err)
 		}
 		return decodeResponse(resp)
 	}

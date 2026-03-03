@@ -1,1 +1,0 @@
-../../../core/pre_tool_use.sh

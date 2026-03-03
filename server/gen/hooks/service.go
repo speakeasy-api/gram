@@ -16,12 +16,9 @@ import (
 
 // Receives Claude Code hook events for tool usage observability.
 type Service interface {
-	// Called before a tool is executed.
-	PreToolUse(context.Context, *PreToolUsePayload) (res *HookResult, err error)
-	// Called after a tool executes successfully.
-	PostToolUse(context.Context, *PostToolUsePayload) (res *HookResult, err error)
-	// Called after a tool execution fails.
-	PostToolUseFailure(context.Context, *PostToolUseFailurePayload) (res *HookResult, err error)
+	// Unified endpoint for all Claude Code hook events. Handles SessionStart,
+	// PreToolUse, PostToolUse, and PostToolUseFailure.
+	Claude(context.Context, *ClaudePayload) (res *ClaudeHookResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -44,54 +41,38 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"preToolUse", "postToolUse", "postToolUseFailure"}
+var MethodNames = [1]string{"claude"}
 
-// HookResult is the result type of the hooks service preToolUse method.
-type HookResult struct {
-	// Whether the hook was received successfully
-	OK bool
+// ClaudeHookResult is the result type of the hooks service claude method.
+type ClaudeHookResult struct {
+	// Whether to continue (SessionStart only)
+	Continue *bool
+	// Reason if blocked (SessionStart only)
+	StopReason *string
+	// Hook-specific output as JSON object
+	HookSpecificOutput any
 }
 
-// PostToolUseFailurePayload is the payload type of the hooks service
-// postToolUseFailure method.
-type PostToolUseFailurePayload struct {
+// ClaudePayload is the payload type of the hooks service claude method.
+type ClaudePayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// The name of the tool that failed
-	ToolName string
+	// The type of hook event
+	HookEventName string
+	// The name of the tool (for tool-related events)
+	ToolName *string
+	// The unique ID for this tool use
+	ToolUseID *string
 	// The input to the tool
 	ToolInput any
-	// The error from the tool
+	// The response from the tool (PostToolUse only)
+	ToolResponse any
+	// The error from the tool (PostToolUseFailure only)
 	ToolError any
 	// The Claude Code session ID
 	SessionID *string
-}
-
-// PostToolUsePayload is the payload type of the hooks service postToolUse
-// method.
-type PostToolUsePayload struct {
-	ApikeyToken      *string
-	ProjectSlugInput *string
-	// The name of the tool that was invoked
-	ToolName string
-	// The input to the tool
-	ToolInput any
-	// The response from the tool
-	ToolResponse any
-	// The Claude Code session ID
-	SessionID *string
-}
-
-// PreToolUsePayload is the payload type of the hooks service preToolUse method.
-type PreToolUsePayload struct {
-	ApikeyToken      *string
-	ProjectSlugInput *string
-	// The name of the tool being invoked
-	ToolName string
-	// The input to the tool
-	ToolInput any
-	// The Claude Code session ID
-	SessionID *string
+	// Additional hook-specific data
+	AdditionalData map[string]any
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

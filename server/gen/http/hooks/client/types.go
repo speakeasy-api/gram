@@ -12,67 +12,41 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// PreToolUseRequestBody is the type of the "hooks" service "preToolUse"
-// endpoint HTTP request body.
-type PreToolUseRequestBody struct {
-	// The name of the tool being invoked
-	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+// ClaudeRequestBody is the type of the "hooks" service "claude" endpoint HTTP
+// request body.
+type ClaudeRequestBody struct {
+	// The type of hook event
+	HookEventName string `form:"hook_event_name" json:"hook_event_name" xml:"hook_event_name"`
+	// The name of the tool (for tool-related events)
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// The unique ID for this tool use
+	ToolUseID *string `form:"tool_use_id,omitempty" json:"tool_use_id,omitempty" xml:"tool_use_id,omitempty"`
 	// The input to the tool
 	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
-	// The Claude Code session ID
-	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
-}
-
-// PostToolUseRequestBody is the type of the "hooks" service "postToolUse"
-// endpoint HTTP request body.
-type PostToolUseRequestBody struct {
-	// The name of the tool that was invoked
-	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
-	// The input to the tool
-	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
-	// The response from the tool
+	// The response from the tool (PostToolUse only)
 	ToolResponse any `form:"tool_response,omitempty" json:"tool_response,omitempty" xml:"tool_response,omitempty"`
-	// The Claude Code session ID
-	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
-}
-
-// PostToolUseFailureRequestBody is the type of the "hooks" service
-// "postToolUseFailure" endpoint HTTP request body.
-type PostToolUseFailureRequestBody struct {
-	// The name of the tool that failed
-	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
-	// The input to the tool
-	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
-	// The error from the tool
+	// The error from the tool (PostToolUseFailure only)
 	ToolError any `form:"tool_error,omitempty" json:"tool_error,omitempty" xml:"tool_error,omitempty"`
 	// The Claude Code session ID
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Additional hook-specific data
+	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
 }
 
-// PreToolUseResponseBody is the type of the "hooks" service "preToolUse"
-// endpoint HTTP response body.
-type PreToolUseResponseBody struct {
-	// Whether the hook was received successfully
-	OK *bool `form:"ok,omitempty" json:"ok,omitempty" xml:"ok,omitempty"`
+// ClaudeResponseBody is the type of the "hooks" service "claude" endpoint HTTP
+// response body.
+type ClaudeResponseBody struct {
+	// Whether to continue (SessionStart only)
+	Continue *bool `form:"continue,omitempty" json:"continue,omitempty" xml:"continue,omitempty"`
+	// Reason if blocked (SessionStart only)
+	StopReason *string `form:"stopReason,omitempty" json:"stopReason,omitempty" xml:"stopReason,omitempty"`
+	// Hook-specific output as JSON object
+	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
 }
 
-// PostToolUseResponseBody is the type of the "hooks" service "postToolUse"
-// endpoint HTTP response body.
-type PostToolUseResponseBody struct {
-	// Whether the hook was received successfully
-	OK *bool `form:"ok,omitempty" json:"ok,omitempty" xml:"ok,omitempty"`
-}
-
-// PostToolUseFailureResponseBody is the type of the "hooks" service
-// "postToolUseFailure" endpoint HTTP response body.
-type PostToolUseFailureResponseBody struct {
-	// Whether the hook was received successfully
-	OK *bool `form:"ok,omitempty" json:"ok,omitempty" xml:"ok,omitempty"`
-}
-
-// PreToolUseUnauthorizedResponseBody is the type of the "hooks" service
-// "preToolUse" endpoint HTTP response body for the "unauthorized" error.
-type PreToolUseUnauthorizedResponseBody struct {
+// ClaudeUnauthorizedResponseBody is the type of the "hooks" service "claude"
+// endpoint HTTP response body for the "unauthorized" error.
+type ClaudeUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -88,9 +62,9 @@ type PreToolUseUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// PreToolUseForbiddenResponseBody is the type of the "hooks" service
-// "preToolUse" endpoint HTTP response body for the "forbidden" error.
-type PreToolUseForbiddenResponseBody struct {
+// ClaudeForbiddenResponseBody is the type of the "hooks" service "claude"
+// endpoint HTTP response body for the "forbidden" error.
+type ClaudeForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -106,9 +80,9 @@ type PreToolUseForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// PreToolUseBadRequestResponseBody is the type of the "hooks" service
-// "preToolUse" endpoint HTTP response body for the "bad_request" error.
-type PreToolUseBadRequestResponseBody struct {
+// ClaudeBadRequestResponseBody is the type of the "hooks" service "claude"
+// endpoint HTTP response body for the "bad_request" error.
+type ClaudeBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -124,9 +98,9 @@ type PreToolUseBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// PreToolUseNotFoundResponseBody is the type of the "hooks" service
-// "preToolUse" endpoint HTTP response body for the "not_found" error.
-type PreToolUseNotFoundResponseBody struct {
+// ClaudeNotFoundResponseBody is the type of the "hooks" service "claude"
+// endpoint HTTP response body for the "not_found" error.
+type ClaudeNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -142,9 +116,9 @@ type PreToolUseNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// PreToolUseConflictResponseBody is the type of the "hooks" service
-// "preToolUse" endpoint HTTP response body for the "conflict" error.
-type PreToolUseConflictResponseBody struct {
+// ClaudeConflictResponseBody is the type of the "hooks" service "claude"
+// endpoint HTTP response body for the "conflict" error.
+type ClaudeConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -160,9 +134,9 @@ type PreToolUseConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// PreToolUseUnsupportedMediaResponseBody is the type of the "hooks" service
-// "preToolUse" endpoint HTTP response body for the "unsupported_media" error.
-type PreToolUseUnsupportedMediaResponseBody struct {
+// ClaudeUnsupportedMediaResponseBody is the type of the "hooks" service
+// "claude" endpoint HTTP response body for the "unsupported_media" error.
+type ClaudeUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -178,9 +152,9 @@ type PreToolUseUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// PreToolUseInvalidResponseBody is the type of the "hooks" service
-// "preToolUse" endpoint HTTP response body for the "invalid" error.
-type PreToolUseInvalidResponseBody struct {
+// ClaudeInvalidResponseBody is the type of the "hooks" service "claude"
+// endpoint HTTP response body for the "invalid" error.
+type ClaudeInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -196,9 +170,9 @@ type PreToolUseInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// PreToolUseInvariantViolationResponseBody is the type of the "hooks" service
-// "preToolUse" endpoint HTTP response body for the "invariant_violation" error.
-type PreToolUseInvariantViolationResponseBody struct {
+// ClaudeInvariantViolationResponseBody is the type of the "hooks" service
+// "claude" endpoint HTTP response body for the "invariant_violation" error.
+type ClaudeInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -214,9 +188,9 @@ type PreToolUseInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// PreToolUseUnexpectedResponseBody is the type of the "hooks" service
-// "preToolUse" endpoint HTTP response body for the "unexpected" error.
-type PreToolUseUnexpectedResponseBody struct {
+// ClaudeUnexpectedResponseBody is the type of the "hooks" service "claude"
+// endpoint HTTP response body for the "unexpected" error.
+type ClaudeUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -232,9 +206,9 @@ type PreToolUseUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// PreToolUseGatewayErrorResponseBody is the type of the "hooks" service
-// "preToolUse" endpoint HTTP response body for the "gateway_error" error.
-type PreToolUseGatewayErrorResponseBody struct {
+// ClaudeGatewayErrorResponseBody is the type of the "hooks" service "claude"
+// endpoint HTTP response body for the "gateway_error" error.
+type ClaudeGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -250,434 +224,44 @@ type PreToolUseGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// PostToolUseUnauthorizedResponseBody is the type of the "hooks" service
-// "postToolUse" endpoint HTTP response body for the "unauthorized" error.
-type PostToolUseUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseForbiddenResponseBody is the type of the "hooks" service
-// "postToolUse" endpoint HTTP response body for the "forbidden" error.
-type PostToolUseForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseBadRequestResponseBody is the type of the "hooks" service
-// "postToolUse" endpoint HTTP response body for the "bad_request" error.
-type PostToolUseBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseNotFoundResponseBody is the type of the "hooks" service
-// "postToolUse" endpoint HTTP response body for the "not_found" error.
-type PostToolUseNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseConflictResponseBody is the type of the "hooks" service
-// "postToolUse" endpoint HTTP response body for the "conflict" error.
-type PostToolUseConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseUnsupportedMediaResponseBody is the type of the "hooks" service
-// "postToolUse" endpoint HTTP response body for the "unsupported_media" error.
-type PostToolUseUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseInvalidResponseBody is the type of the "hooks" service
-// "postToolUse" endpoint HTTP response body for the "invalid" error.
-type PostToolUseInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseInvariantViolationResponseBody is the type of the "hooks" service
-// "postToolUse" endpoint HTTP response body for the "invariant_violation"
-// error.
-type PostToolUseInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseUnexpectedResponseBody is the type of the "hooks" service
-// "postToolUse" endpoint HTTP response body for the "unexpected" error.
-type PostToolUseUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseGatewayErrorResponseBody is the type of the "hooks" service
-// "postToolUse" endpoint HTTP response body for the "gateway_error" error.
-type PostToolUseGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseFailureUnauthorizedResponseBody is the type of the "hooks"
-// service "postToolUseFailure" endpoint HTTP response body for the
-// "unauthorized" error.
-type PostToolUseFailureUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseFailureForbiddenResponseBody is the type of the "hooks" service
-// "postToolUseFailure" endpoint HTTP response body for the "forbidden" error.
-type PostToolUseFailureForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseFailureBadRequestResponseBody is the type of the "hooks" service
-// "postToolUseFailure" endpoint HTTP response body for the "bad_request" error.
-type PostToolUseFailureBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseFailureNotFoundResponseBody is the type of the "hooks" service
-// "postToolUseFailure" endpoint HTTP response body for the "not_found" error.
-type PostToolUseFailureNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseFailureConflictResponseBody is the type of the "hooks" service
-// "postToolUseFailure" endpoint HTTP response body for the "conflict" error.
-type PostToolUseFailureConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseFailureUnsupportedMediaResponseBody is the type of the "hooks"
-// service "postToolUseFailure" endpoint HTTP response body for the
-// "unsupported_media" error.
-type PostToolUseFailureUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseFailureInvalidResponseBody is the type of the "hooks" service
-// "postToolUseFailure" endpoint HTTP response body for the "invalid" error.
-type PostToolUseFailureInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseFailureInvariantViolationResponseBody is the type of the "hooks"
-// service "postToolUseFailure" endpoint HTTP response body for the
-// "invariant_violation" error.
-type PostToolUseFailureInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseFailureUnexpectedResponseBody is the type of the "hooks" service
-// "postToolUseFailure" endpoint HTTP response body for the "unexpected" error.
-type PostToolUseFailureUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PostToolUseFailureGatewayErrorResponseBody is the type of the "hooks"
-// service "postToolUseFailure" endpoint HTTP response body for the
-// "gateway_error" error.
-type PostToolUseFailureGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// NewPreToolUseRequestBody builds the HTTP request body from the payload of
-// the "preToolUse" endpoint of the "hooks" service.
-func NewPreToolUseRequestBody(p *hooks.PreToolUsePayload) *PreToolUseRequestBody {
-	body := &PreToolUseRequestBody{
-		ToolName:  p.ToolName,
-		ToolInput: p.ToolInput,
-		SessionID: p.SessionID,
+// NewClaudeRequestBody builds the HTTP request body from the payload of the
+// "claude" endpoint of the "hooks" service.
+func NewClaudeRequestBody(p *hooks.ClaudePayload) *ClaudeRequestBody {
+	body := &ClaudeRequestBody{
+		HookEventName: p.HookEventName,
+		ToolName:      p.ToolName,
+		ToolUseID:     p.ToolUseID,
+		ToolInput:     p.ToolInput,
+		ToolResponse:  p.ToolResponse,
+		ToolError:     p.ToolError,
+		SessionID:     p.SessionID,
+	}
+	if p.AdditionalData != nil {
+		body.AdditionalData = make(map[string]any, len(p.AdditionalData))
+		for key, val := range p.AdditionalData {
+			tk := key
+			tv := val
+			body.AdditionalData[tk] = tv
+		}
 	}
 	return body
 }
 
-// NewPostToolUseRequestBody builds the HTTP request body from the payload of
-// the "postToolUse" endpoint of the "hooks" service.
-func NewPostToolUseRequestBody(p *hooks.PostToolUsePayload) *PostToolUseRequestBody {
-	body := &PostToolUseRequestBody{
-		ToolName:     p.ToolName,
-		ToolInput:    p.ToolInput,
-		ToolResponse: p.ToolResponse,
-		SessionID:    p.SessionID,
-	}
-	return body
-}
-
-// NewPostToolUseFailureRequestBody builds the HTTP request body from the
-// payload of the "postToolUseFailure" endpoint of the "hooks" service.
-func NewPostToolUseFailureRequestBody(p *hooks.PostToolUseFailurePayload) *PostToolUseFailureRequestBody {
-	body := &PostToolUseFailureRequestBody{
-		ToolName:  p.ToolName,
-		ToolInput: p.ToolInput,
-		ToolError: p.ToolError,
-		SessionID: p.SessionID,
-	}
-	return body
-}
-
-// NewPreToolUseHookResultOK builds a "hooks" service "preToolUse" endpoint
-// result from a HTTP "OK" response.
-func NewPreToolUseHookResultOK(body *PreToolUseResponseBody) *hooks.HookResult {
-	v := &hooks.HookResult{
-		OK: *body.OK,
+// NewClaudeHookResultOK builds a "hooks" service "claude" endpoint result from
+// a HTTP "OK" response.
+func NewClaudeHookResultOK(body *ClaudeResponseBody) *hooks.ClaudeHookResult {
+	v := &hooks.ClaudeHookResult{
+		Continue:           body.Continue,
+		StopReason:         body.StopReason,
+		HookSpecificOutput: body.HookSpecificOutput,
 	}
 
 	return v
 }
 
-// NewPreToolUseUnauthorized builds a hooks service preToolUse endpoint
-// unauthorized error.
-func NewPreToolUseUnauthorized(body *PreToolUseUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPreToolUseForbidden builds a hooks service preToolUse endpoint forbidden
+// NewClaudeUnauthorized builds a hooks service claude endpoint unauthorized
 // error.
-func NewPreToolUseForbidden(body *PreToolUseForbiddenResponseBody) *goa.ServiceError {
+func NewClaudeUnauthorized(body *ClaudeUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -690,9 +274,8 @@ func NewPreToolUseForbidden(body *PreToolUseForbiddenResponseBody) *goa.ServiceE
 	return v
 }
 
-// NewPreToolUseBadRequest builds a hooks service preToolUse endpoint
-// bad_request error.
-func NewPreToolUseBadRequest(body *PreToolUseBadRequestResponseBody) *goa.ServiceError {
+// NewClaudeForbidden builds a hooks service claude endpoint forbidden error.
+func NewClaudeForbidden(body *ClaudeForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -705,9 +288,8 @@ func NewPreToolUseBadRequest(body *PreToolUseBadRequestResponseBody) *goa.Servic
 	return v
 }
 
-// NewPreToolUseNotFound builds a hooks service preToolUse endpoint not_found
-// error.
-func NewPreToolUseNotFound(body *PreToolUseNotFoundResponseBody) *goa.ServiceError {
+// NewClaudeBadRequest builds a hooks service claude endpoint bad_request error.
+func NewClaudeBadRequest(body *ClaudeBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -720,9 +302,8 @@ func NewPreToolUseNotFound(body *PreToolUseNotFoundResponseBody) *goa.ServiceErr
 	return v
 }
 
-// NewPreToolUseConflict builds a hooks service preToolUse endpoint conflict
-// error.
-func NewPreToolUseConflict(body *PreToolUseConflictResponseBody) *goa.ServiceError {
+// NewClaudeNotFound builds a hooks service claude endpoint not_found error.
+func NewClaudeNotFound(body *ClaudeNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -735,9 +316,23 @@ func NewPreToolUseConflict(body *PreToolUseConflictResponseBody) *goa.ServiceErr
 	return v
 }
 
-// NewPreToolUseUnsupportedMedia builds a hooks service preToolUse endpoint
+// NewClaudeConflict builds a hooks service claude endpoint conflict error.
+func NewClaudeConflict(body *ClaudeConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClaudeUnsupportedMedia builds a hooks service claude endpoint
 // unsupported_media error.
-func NewPreToolUseUnsupportedMedia(body *PreToolUseUnsupportedMediaResponseBody) *goa.ServiceError {
+func NewClaudeUnsupportedMedia(body *ClaudeUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -750,9 +345,8 @@ func NewPreToolUseUnsupportedMedia(body *PreToolUseUnsupportedMediaResponseBody)
 	return v
 }
 
-// NewPreToolUseInvalid builds a hooks service preToolUse endpoint invalid
-// error.
-func NewPreToolUseInvalid(body *PreToolUseInvalidResponseBody) *goa.ServiceError {
+// NewClaudeInvalid builds a hooks service claude endpoint invalid error.
+func NewClaudeInvalid(body *ClaudeInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -765,9 +359,9 @@ func NewPreToolUseInvalid(body *PreToolUseInvalidResponseBody) *goa.ServiceError
 	return v
 }
 
-// NewPreToolUseInvariantViolation builds a hooks service preToolUse endpoint
+// NewClaudeInvariantViolation builds a hooks service claude endpoint
 // invariant_violation error.
-func NewPreToolUseInvariantViolation(body *PreToolUseInvariantViolationResponseBody) *goa.ServiceError {
+func NewClaudeInvariantViolation(body *ClaudeInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -780,9 +374,8 @@ func NewPreToolUseInvariantViolation(body *PreToolUseInvariantViolationResponseB
 	return v
 }
 
-// NewPreToolUseUnexpected builds a hooks service preToolUse endpoint
-// unexpected error.
-func NewPreToolUseUnexpected(body *PreToolUseUnexpectedResponseBody) *goa.ServiceError {
+// NewClaudeUnexpected builds a hooks service claude endpoint unexpected error.
+func NewClaudeUnexpected(body *ClaudeUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -795,79 +388,9 @@ func NewPreToolUseUnexpected(body *PreToolUseUnexpectedResponseBody) *goa.Servic
 	return v
 }
 
-// NewPreToolUseGatewayError builds a hooks service preToolUse endpoint
-// gateway_error error.
-func NewPreToolUseGatewayError(body *PreToolUseGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseHookResultOK builds a "hooks" service "postToolUse" endpoint
-// result from a HTTP "OK" response.
-func NewPostToolUseHookResultOK(body *PostToolUseResponseBody) *hooks.HookResult {
-	v := &hooks.HookResult{
-		OK: *body.OK,
-	}
-
-	return v
-}
-
-// NewPostToolUseUnauthorized builds a hooks service postToolUse endpoint
-// unauthorized error.
-func NewPostToolUseUnauthorized(body *PostToolUseUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseForbidden builds a hooks service postToolUse endpoint
-// forbidden error.
-func NewPostToolUseForbidden(body *PostToolUseForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseBadRequest builds a hooks service postToolUse endpoint
-// bad_request error.
-func NewPostToolUseBadRequest(body *PostToolUseBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseNotFound builds a hooks service postToolUse endpoint not_found
+// NewClaudeGatewayError builds a hooks service claude endpoint gateway_error
 // error.
-func NewPostToolUseNotFound(body *PostToolUseNotFoundResponseBody) *goa.ServiceError {
+func NewClaudeGatewayError(body *ClaudeGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -880,286 +403,9 @@ func NewPostToolUseNotFound(body *PostToolUseNotFoundResponseBody) *goa.ServiceE
 	return v
 }
 
-// NewPostToolUseConflict builds a hooks service postToolUse endpoint conflict
-// error.
-func NewPostToolUseConflict(body *PostToolUseConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseUnsupportedMedia builds a hooks service postToolUse endpoint
-// unsupported_media error.
-func NewPostToolUseUnsupportedMedia(body *PostToolUseUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseInvalid builds a hooks service postToolUse endpoint invalid
-// error.
-func NewPostToolUseInvalid(body *PostToolUseInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseInvariantViolation builds a hooks service postToolUse endpoint
-// invariant_violation error.
-func NewPostToolUseInvariantViolation(body *PostToolUseInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseUnexpected builds a hooks service postToolUse endpoint
-// unexpected error.
-func NewPostToolUseUnexpected(body *PostToolUseUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseGatewayError builds a hooks service postToolUse endpoint
-// gateway_error error.
-func NewPostToolUseGatewayError(body *PostToolUseGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureHookResultOK builds a "hooks" service
-// "postToolUseFailure" endpoint result from a HTTP "OK" response.
-func NewPostToolUseFailureHookResultOK(body *PostToolUseFailureResponseBody) *hooks.HookResult {
-	v := &hooks.HookResult{
-		OK: *body.OK,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureUnauthorized builds a hooks service postToolUseFailure
-// endpoint unauthorized error.
-func NewPostToolUseFailureUnauthorized(body *PostToolUseFailureUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureForbidden builds a hooks service postToolUseFailure
-// endpoint forbidden error.
-func NewPostToolUseFailureForbidden(body *PostToolUseFailureForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureBadRequest builds a hooks service postToolUseFailure
-// endpoint bad_request error.
-func NewPostToolUseFailureBadRequest(body *PostToolUseFailureBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureNotFound builds a hooks service postToolUseFailure
-// endpoint not_found error.
-func NewPostToolUseFailureNotFound(body *PostToolUseFailureNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureConflict builds a hooks service postToolUseFailure
-// endpoint conflict error.
-func NewPostToolUseFailureConflict(body *PostToolUseFailureConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureUnsupportedMedia builds a hooks service
-// postToolUseFailure endpoint unsupported_media error.
-func NewPostToolUseFailureUnsupportedMedia(body *PostToolUseFailureUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureInvalid builds a hooks service postToolUseFailure
-// endpoint invalid error.
-func NewPostToolUseFailureInvalid(body *PostToolUseFailureInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureInvariantViolation builds a hooks service
-// postToolUseFailure endpoint invariant_violation error.
-func NewPostToolUseFailureInvariantViolation(body *PostToolUseFailureInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureUnexpected builds a hooks service postToolUseFailure
-// endpoint unexpected error.
-func NewPostToolUseFailureUnexpected(body *PostToolUseFailureUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPostToolUseFailureGatewayError builds a hooks service postToolUseFailure
-// endpoint gateway_error error.
-func NewPostToolUseFailureGatewayError(body *PostToolUseFailureGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// ValidatePreToolUseResponseBody runs the validations defined on
-// PreToolUseResponseBody
-func ValidatePreToolUseResponseBody(body *PreToolUseResponseBody) (err error) {
-	if body.OK == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("ok", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseResponseBody runs the validations defined on
-// PostToolUseResponseBody
-func ValidatePostToolUseResponseBody(body *PostToolUseResponseBody) (err error) {
-	if body.OK == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("ok", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureResponseBody runs the validations defined on
-// PostToolUseFailureResponseBody
-func ValidatePostToolUseFailureResponseBody(body *PostToolUseFailureResponseBody) (err error) {
-	if body.OK == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("ok", "body"))
-	}
-	return
-}
-
-// ValidatePreToolUseUnauthorizedResponseBody runs the validations defined on
-// preToolUse_unauthorized_response_body
-func ValidatePreToolUseUnauthorizedResponseBody(body *PreToolUseUnauthorizedResponseBody) (err error) {
+// ValidateClaudeUnauthorizedResponseBody runs the validations defined on
+// claude_unauthorized_response_body
+func ValidateClaudeUnauthorizedResponseBody(body *ClaudeUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1181,9 +427,9 @@ func ValidatePreToolUseUnauthorizedResponseBody(body *PreToolUseUnauthorizedResp
 	return
 }
 
-// ValidatePreToolUseForbiddenResponseBody runs the validations defined on
-// preToolUse_forbidden_response_body
-func ValidatePreToolUseForbiddenResponseBody(body *PreToolUseForbiddenResponseBody) (err error) {
+// ValidateClaudeForbiddenResponseBody runs the validations defined on
+// claude_forbidden_response_body
+func ValidateClaudeForbiddenResponseBody(body *ClaudeForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1205,9 +451,9 @@ func ValidatePreToolUseForbiddenResponseBody(body *PreToolUseForbiddenResponseBo
 	return
 }
 
-// ValidatePreToolUseBadRequestResponseBody runs the validations defined on
-// preToolUse_bad_request_response_body
-func ValidatePreToolUseBadRequestResponseBody(body *PreToolUseBadRequestResponseBody) (err error) {
+// ValidateClaudeBadRequestResponseBody runs the validations defined on
+// claude_bad_request_response_body
+func ValidateClaudeBadRequestResponseBody(body *ClaudeBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1229,9 +475,9 @@ func ValidatePreToolUseBadRequestResponseBody(body *PreToolUseBadRequestResponse
 	return
 }
 
-// ValidatePreToolUseNotFoundResponseBody runs the validations defined on
-// preToolUse_not_found_response_body
-func ValidatePreToolUseNotFoundResponseBody(body *PreToolUseNotFoundResponseBody) (err error) {
+// ValidateClaudeNotFoundResponseBody runs the validations defined on
+// claude_not_found_response_body
+func ValidateClaudeNotFoundResponseBody(body *ClaudeNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1253,9 +499,9 @@ func ValidatePreToolUseNotFoundResponseBody(body *PreToolUseNotFoundResponseBody
 	return
 }
 
-// ValidatePreToolUseConflictResponseBody runs the validations defined on
-// preToolUse_conflict_response_body
-func ValidatePreToolUseConflictResponseBody(body *PreToolUseConflictResponseBody) (err error) {
+// ValidateClaudeConflictResponseBody runs the validations defined on
+// claude_conflict_response_body
+func ValidateClaudeConflictResponseBody(body *ClaudeConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1277,9 +523,9 @@ func ValidatePreToolUseConflictResponseBody(body *PreToolUseConflictResponseBody
 	return
 }
 
-// ValidatePreToolUseUnsupportedMediaResponseBody runs the validations defined
-// on preToolUse_unsupported_media_response_body
-func ValidatePreToolUseUnsupportedMediaResponseBody(body *PreToolUseUnsupportedMediaResponseBody) (err error) {
+// ValidateClaudeUnsupportedMediaResponseBody runs the validations defined on
+// claude_unsupported_media_response_body
+func ValidateClaudeUnsupportedMediaResponseBody(body *ClaudeUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1301,9 +547,9 @@ func ValidatePreToolUseUnsupportedMediaResponseBody(body *PreToolUseUnsupportedM
 	return
 }
 
-// ValidatePreToolUseInvalidResponseBody runs the validations defined on
-// preToolUse_invalid_response_body
-func ValidatePreToolUseInvalidResponseBody(body *PreToolUseInvalidResponseBody) (err error) {
+// ValidateClaudeInvalidResponseBody runs the validations defined on
+// claude_invalid_response_body
+func ValidateClaudeInvalidResponseBody(body *ClaudeInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1325,9 +571,9 @@ func ValidatePreToolUseInvalidResponseBody(body *PreToolUseInvalidResponseBody) 
 	return
 }
 
-// ValidatePreToolUseInvariantViolationResponseBody runs the validations
-// defined on preToolUse_invariant_violation_response_body
-func ValidatePreToolUseInvariantViolationResponseBody(body *PreToolUseInvariantViolationResponseBody) (err error) {
+// ValidateClaudeInvariantViolationResponseBody runs the validations defined on
+// claude_invariant_violation_response_body
+func ValidateClaudeInvariantViolationResponseBody(body *ClaudeInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1349,9 +595,9 @@ func ValidatePreToolUseInvariantViolationResponseBody(body *PreToolUseInvariantV
 	return
 }
 
-// ValidatePreToolUseUnexpectedResponseBody runs the validations defined on
-// preToolUse_unexpected_response_body
-func ValidatePreToolUseUnexpectedResponseBody(body *PreToolUseUnexpectedResponseBody) (err error) {
+// ValidateClaudeUnexpectedResponseBody runs the validations defined on
+// claude_unexpected_response_body
+func ValidateClaudeUnexpectedResponseBody(body *ClaudeUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1373,489 +619,9 @@ func ValidatePreToolUseUnexpectedResponseBody(body *PreToolUseUnexpectedResponse
 	return
 }
 
-// ValidatePreToolUseGatewayErrorResponseBody runs the validations defined on
-// preToolUse_gateway_error_response_body
-func ValidatePreToolUseGatewayErrorResponseBody(body *PreToolUseGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseUnauthorizedResponseBody runs the validations defined on
-// postToolUse_unauthorized_response_body
-func ValidatePostToolUseUnauthorizedResponseBody(body *PostToolUseUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseForbiddenResponseBody runs the validations defined on
-// postToolUse_forbidden_response_body
-func ValidatePostToolUseForbiddenResponseBody(body *PostToolUseForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseBadRequestResponseBody runs the validations defined on
-// postToolUse_bad_request_response_body
-func ValidatePostToolUseBadRequestResponseBody(body *PostToolUseBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseNotFoundResponseBody runs the validations defined on
-// postToolUse_not_found_response_body
-func ValidatePostToolUseNotFoundResponseBody(body *PostToolUseNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseConflictResponseBody runs the validations defined on
-// postToolUse_conflict_response_body
-func ValidatePostToolUseConflictResponseBody(body *PostToolUseConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseUnsupportedMediaResponseBody runs the validations defined
-// on postToolUse_unsupported_media_response_body
-func ValidatePostToolUseUnsupportedMediaResponseBody(body *PostToolUseUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseInvalidResponseBody runs the validations defined on
-// postToolUse_invalid_response_body
-func ValidatePostToolUseInvalidResponseBody(body *PostToolUseInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseInvariantViolationResponseBody runs the validations
-// defined on postToolUse_invariant_violation_response_body
-func ValidatePostToolUseInvariantViolationResponseBody(body *PostToolUseInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseUnexpectedResponseBody runs the validations defined on
-// postToolUse_unexpected_response_body
-func ValidatePostToolUseUnexpectedResponseBody(body *PostToolUseUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseGatewayErrorResponseBody runs the validations defined on
-// postToolUse_gateway_error_response_body
-func ValidatePostToolUseGatewayErrorResponseBody(body *PostToolUseGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureUnauthorizedResponseBody runs the validations
-// defined on postToolUseFailure_unauthorized_response_body
-func ValidatePostToolUseFailureUnauthorizedResponseBody(body *PostToolUseFailureUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureForbiddenResponseBody runs the validations defined
-// on postToolUseFailure_forbidden_response_body
-func ValidatePostToolUseFailureForbiddenResponseBody(body *PostToolUseFailureForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureBadRequestResponseBody runs the validations
-// defined on postToolUseFailure_bad_request_response_body
-func ValidatePostToolUseFailureBadRequestResponseBody(body *PostToolUseFailureBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureNotFoundResponseBody runs the validations defined
-// on postToolUseFailure_not_found_response_body
-func ValidatePostToolUseFailureNotFoundResponseBody(body *PostToolUseFailureNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureConflictResponseBody runs the validations defined
-// on postToolUseFailure_conflict_response_body
-func ValidatePostToolUseFailureConflictResponseBody(body *PostToolUseFailureConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureUnsupportedMediaResponseBody runs the validations
-// defined on postToolUseFailure_unsupported_media_response_body
-func ValidatePostToolUseFailureUnsupportedMediaResponseBody(body *PostToolUseFailureUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureInvalidResponseBody runs the validations defined
-// on postToolUseFailure_invalid_response_body
-func ValidatePostToolUseFailureInvalidResponseBody(body *PostToolUseFailureInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureInvariantViolationResponseBody runs the
-// validations defined on postToolUseFailure_invariant_violation_response_body
-func ValidatePostToolUseFailureInvariantViolationResponseBody(body *PostToolUseFailureInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureUnexpectedResponseBody runs the validations
-// defined on postToolUseFailure_unexpected_response_body
-func ValidatePostToolUseFailureUnexpectedResponseBody(body *PostToolUseFailureUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePostToolUseFailureGatewayErrorResponseBody runs the validations
-// defined on postToolUseFailure_gateway_error_response_body
-func ValidatePostToolUseFailureGatewayErrorResponseBody(body *PostToolUseFailureGatewayErrorResponseBody) (err error) {
+// ValidateClaudeGatewayErrorResponseBody runs the validations defined on
+// claude_gateway_error_response_body
+func ValidateClaudeGatewayErrorResponseBody(body *ClaudeGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

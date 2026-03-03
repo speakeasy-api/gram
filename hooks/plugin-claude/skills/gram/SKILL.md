@@ -1,7 +1,7 @@
 ---
 name: gram
 description: Manage Gram plugin configuration and authentication
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # Gram Plugin Management
@@ -50,6 +50,12 @@ COMMAND="${1:-help}"
 
 case "$COMMAND" in
   login)
+    # Setup Gram directories
+    GRAM_DIR="$HOME/.gram"
+    GRAM_CONFIG_FILE="$GRAM_DIR/config"
+
+    mkdir -p "$GRAM_DIR"
+
     # Open the API keys page
     SETUP_URL="https://app.getgram.ai/settings/api-keys"
 
@@ -68,28 +74,49 @@ A browser window has been opened to: https://app.getgram.ai/settings/api-keys
 
 **Next Steps:**
 
-1. Create or copy your API key from the Gram dashboard
+1. Copy your API key from the Gram dashboard
+2. Paste it below when prompted
 
-2. Add it to your shell profile (~/.bashrc, ~/.zshrc, etc.):
-   ```bash
-   export GRAM_API_KEY="your-api-key-here"
-   export GRAM_PROJECT="default"  # optional
-   ```
-
-3. Reload your shell configuration:
-   ```bash
-   source ~/.zshrc  # or ~/.bashrc
-   ```
-
-4. Restart Claude Code
-
-Once configured, the Gram plugin will automatically track:
-- Tool usage patterns
-- Performance analytics
-- Compliance and audit logs
-
-Learn more: https://getgram.ai/docs
 EOF
+
+    # Prompt for API key
+    read -p "Enter your Gram API key: " -r GRAM_API_KEY
+
+    if [ -z "$GRAM_API_KEY" ]; then
+      echo "❌ No API key provided. Configuration cancelled."
+      exit 1
+    fi
+
+    # Optional: Prompt for project
+    read -p "Enter your Gram project name (default: default): " -r GRAM_PROJECT
+    if [ -z "$GRAM_PROJECT" ]; then
+      GRAM_PROJECT="default"
+    fi
+
+    # Write configuration file
+    cat > "$GRAM_CONFIG_FILE" << EOF
+# Gram Configuration
+# This file is managed by the Gram plugin
+
+# API Key for authenticating with Gram
+export GRAM_API_KEY=$GRAM_API_KEY
+
+# Project name
+export GRAM_PROJECT=$GRAM_PROJECT
+
+# Optional: Override the Gram server URL
+# export GRAM_SERVER_URL=https://app.getgram.ai
+EOF
+
+    echo ""
+    echo "✅ Configuration saved to $GRAM_CONFIG_FILE"
+    echo ""
+    echo "The Gram plugin will now automatically track:"
+    echo "- Tool usage patterns"
+    echo "- Performance analytics"
+    echo "- Compliance and audit logs"
+    echo ""
+    echo "Learn more: https://getgram.ai/docs"
     ;;
 
   help|*)

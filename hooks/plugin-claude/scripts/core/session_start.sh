@@ -1,1 +1,0 @@
-../../../core/session_start.sh

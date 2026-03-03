@@ -7,17 +7,7 @@
 
 package client
 
-// PreToolUseHooksPath returns the URL path to the hooks service preToolUse HTTP endpoint.
-func PreToolUseHooksPath() string {
-	return "/rpc/hooks.preToolUse"
-}
-
-// PostToolUseHooksPath returns the URL path to the hooks service postToolUse HTTP endpoint.
-func PostToolUseHooksPath() string {
-	return "/rpc/hooks.postToolUse"
-}
-
-// PostToolUseFailureHooksPath returns the URL path to the hooks service postToolUseFailure HTTP endpoint.
-func PostToolUseFailureHooksPath() string {
-	return "/rpc/hooks.postToolUseFailure"
+// ClaudeHooksPath returns the URL path to the hooks service claude HTTP endpoint.
+func ClaudeHooksPath() string {
+	return "/rpc/hooks.claude"
 }

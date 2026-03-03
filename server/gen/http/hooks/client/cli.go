@@ -12,105 +12,54 @@ import (
 	"fmt"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
+	goa "goa.design/goa/v3/pkg"
 )
 
-// BuildPreToolUsePayload builds the payload for the hooks preToolUse endpoint
-// from CLI flags.
-func BuildPreToolUsePayload(hooksPreToolUseBody string, hooksPreToolUseApikeyToken string, hooksPreToolUseProjectSlugInput string) (*hooks.PreToolUsePayload, error) {
+// BuildClaudePayload builds the payload for the hooks claude endpoint from CLI
+// flags.
+func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string) (*hooks.ClaudePayload, error) {
 	var err error
-	var body PreToolUseRequestBody
+	var body ClaudeRequestBody
 	{
-		err = json.Unmarshal([]byte(hooksPreToolUseBody), &body)
+		err = json.Unmarshal([]byte(hooksClaudeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"hook_event_name\": \"PreToolUse\",\n      \"session_id\": \"abc123\",\n      \"tool_error\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\"\n   }'")
+		}
+		if !(body.HookEventName == "SessionStart" || body.HookEventName == "PreToolUse" || body.HookEventName == "PostToolUse" || body.HookEventName == "PostToolUseFailure") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure"}))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var apikeyToken *string
 	{
-		if hooksPreToolUseApikeyToken != "" {
-			apikeyToken = &hooksPreToolUseApikeyToken
+		if hooksClaudeApikeyToken != "" {
+			apikeyToken = &hooksClaudeApikeyToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if hooksPreToolUseProjectSlugInput != "" {
-			projectSlugInput = &hooksPreToolUseProjectSlugInput
+		if hooksClaudeProjectSlugInput != "" {
+			projectSlugInput = &hooksClaudeProjectSlugInput
 		}
 	}
-	v := &hooks.PreToolUsePayload{
-		ToolName:  body.ToolName,
-		ToolInput: body.ToolInput,
-		SessionID: body.SessionID,
+	v := &hooks.ClaudePayload{
+		HookEventName: body.HookEventName,
+		ToolName:      body.ToolName,
+		ToolUseID:     body.ToolUseID,
+		ToolInput:     body.ToolInput,
+		ToolResponse:  body.ToolResponse,
+		ToolError:     body.ToolError,
+		SessionID:     body.SessionID,
 	}
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildPostToolUsePayload builds the payload for the hooks postToolUse
-// endpoint from CLI flags.
-func BuildPostToolUsePayload(hooksPostToolUseBody string, hooksPostToolUseApikeyToken string, hooksPostToolUseProjectSlugInput string) (*hooks.PostToolUsePayload, error) {
-	var err error
-	var body PostToolUseRequestBody
-	{
-		err = json.Unmarshal([]byte(hooksPostToolUseBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\"\n   }'")
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
 		}
-	}
-	var apikeyToken *string
-	{
-		if hooksPostToolUseApikeyToken != "" {
-			apikeyToken = &hooksPostToolUseApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if hooksPostToolUseProjectSlugInput != "" {
-			projectSlugInput = &hooksPostToolUseProjectSlugInput
-		}
-	}
-	v := &hooks.PostToolUsePayload{
-		ToolName:     body.ToolName,
-		ToolInput:    body.ToolInput,
-		ToolResponse: body.ToolResponse,
-		SessionID:    body.SessionID,
-	}
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildPostToolUseFailurePayload builds the payload for the hooks
-// postToolUseFailure endpoint from CLI flags.
-func BuildPostToolUseFailurePayload(hooksPostToolUseFailureBody string, hooksPostToolUseFailureApikeyToken string, hooksPostToolUseFailureProjectSlugInput string) (*hooks.PostToolUseFailurePayload, error) {
-	var err error
-	var body PostToolUseFailureRequestBody
-	{
-		err = json.Unmarshal([]byte(hooksPostToolUseFailureBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"session_id\": \"abc123\",\n      \"tool_error\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }'")
-		}
-	}
-	var apikeyToken *string
-	{
-		if hooksPostToolUseFailureApikeyToken != "" {
-			apikeyToken = &hooksPostToolUseFailureApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if hooksPostToolUseFailureProjectSlugInput != "" {
-			projectSlugInput = &hooksPostToolUseFailureProjectSlugInput
-		}
-	}
-	v := &hooks.PostToolUseFailurePayload{
-		ToolName:  body.ToolName,
-		ToolInput: body.ToolInput,
-		ToolError: body.ToolError,
-		SessionID: body.SessionID,
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

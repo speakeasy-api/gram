@@ -18,13 +18,13 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
-// BuildPreToolUseRequest instantiates a HTTP request object with method and
-// path set to call the "hooks" service "preToolUse" endpoint
-func (c *Client) BuildPreToolUseRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PreToolUseHooksPath()}
+// BuildClaudeRequest instantiates a HTTP request object with method and path
+// set to call the "hooks" service "claude" endpoint
+func (c *Client) BuildClaudeRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ClaudeHooksPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("hooks", "preToolUse", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("hooks", "claude", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -33,13 +33,13 @@ func (c *Client) BuildPreToolUseRequest(ctx context.Context, v any) (*http.Reque
 	return req, nil
 }
 
-// EncodePreToolUseRequest returns an encoder for requests sent to the hooks
-// preToolUse server.
-func EncodePreToolUseRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeClaudeRequest returns an encoder for requests sent to the hooks claude
+// server.
+func EncodeClaudeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*hooks.PreToolUsePayload)
+		p, ok := v.(*hooks.ClaudePayload)
 		if !ok {
-			return goahttp.ErrInvalidType("hooks", "preToolUse", "*hooks.PreToolUsePayload", v)
+			return goahttp.ErrInvalidType("hooks", "claude", "*hooks.ClaudePayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -49,18 +49,18 @@ func EncodePreToolUseRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewPreToolUseRequestBody(p)
+		body := NewClaudeRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("hooks", "preToolUse", err)
+			return goahttp.ErrEncodingError("hooks", "claude", err)
 		}
 		return nil
 	}
 }
 
-// DecodePreToolUseResponse returns a decoder for responses returned by the
-// hooks preToolUse endpoint. restoreBody controls whether the response body
-// should be restored after having been read.
-// DecodePreToolUseResponse may return the following errors:
+// DecodeClaudeResponse returns a decoder for responses returned by the hooks
+// claude endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeClaudeResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -72,7 +72,7 @@ func EncodePreToolUseRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodePreToolUseResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeClaudeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -89,645 +89,165 @@ func DecodePreToolUseResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body PreToolUseResponseBody
+				body ClaudeResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 			}
-			err = ValidatePreToolUseResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
-			}
-			res := NewPreToolUseHookResultOK(&body)
+			res := NewClaudeHookResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body PreToolUseUnauthorizedResponseBody
+				body ClaudeUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 			}
-			err = ValidatePreToolUseUnauthorizedResponseBody(&body)
+			err = ValidateClaudeUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrValidationError("hooks", "claude", err)
 			}
-			return nil, NewPreToolUseUnauthorized(&body)
+			return nil, NewClaudeUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body PreToolUseForbiddenResponseBody
+				body ClaudeForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 			}
-			err = ValidatePreToolUseForbiddenResponseBody(&body)
+			err = ValidateClaudeForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrValidationError("hooks", "claude", err)
 			}
-			return nil, NewPreToolUseForbidden(&body)
+			return nil, NewClaudeForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body PreToolUseBadRequestResponseBody
+				body ClaudeBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 			}
-			err = ValidatePreToolUseBadRequestResponseBody(&body)
+			err = ValidateClaudeBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrValidationError("hooks", "claude", err)
 			}
-			return nil, NewPreToolUseBadRequest(&body)
+			return nil, NewClaudeBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body PreToolUseNotFoundResponseBody
+				body ClaudeNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 			}
-			err = ValidatePreToolUseNotFoundResponseBody(&body)
+			err = ValidateClaudeNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrValidationError("hooks", "claude", err)
 			}
-			return nil, NewPreToolUseNotFound(&body)
+			return nil, NewClaudeNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body PreToolUseConflictResponseBody
+				body ClaudeConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 			}
-			err = ValidatePreToolUseConflictResponseBody(&body)
+			err = ValidateClaudeConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrValidationError("hooks", "claude", err)
 			}
-			return nil, NewPreToolUseConflict(&body)
+			return nil, NewClaudeConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body PreToolUseUnsupportedMediaResponseBody
+				body ClaudeUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 			}
-			err = ValidatePreToolUseUnsupportedMediaResponseBody(&body)
+			err = ValidateClaudeUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrValidationError("hooks", "claude", err)
 			}
-			return nil, NewPreToolUseUnsupportedMedia(&body)
+			return nil, NewClaudeUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body PreToolUseInvalidResponseBody
+				body ClaudeInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 			}
-			err = ValidatePreToolUseInvalidResponseBody(&body)
+			err = ValidateClaudeInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrValidationError("hooks", "claude", err)
 			}
-			return nil, NewPreToolUseInvalid(&body)
+			return nil, NewClaudeInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body PreToolUseInvariantViolationResponseBody
+					body ClaudeInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+					return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 				}
-				err = ValidatePreToolUseInvariantViolationResponseBody(&body)
+				err = ValidateClaudeInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
+					return nil, goahttp.ErrValidationError("hooks", "claude", err)
 				}
-				return nil, NewPreToolUseInvariantViolation(&body)
+				return nil, NewClaudeInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body PreToolUseUnexpectedResponseBody
+					body ClaudeUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+					return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 				}
-				err = ValidatePreToolUseUnexpectedResponseBody(&body)
+				err = ValidateClaudeUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
+					return nil, goahttp.ErrValidationError("hooks", "claude", err)
 				}
-				return nil, NewPreToolUseUnexpected(&body)
+				return nil, NewClaudeUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("hooks", "preToolUse", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("hooks", "claude", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body PreToolUseGatewayErrorResponseBody
+				body ClaudeGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrDecodingError("hooks", "claude", err)
 			}
-			err = ValidatePreToolUseGatewayErrorResponseBody(&body)
+			err = ValidateClaudeGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "preToolUse", err)
+				return nil, goahttp.ErrValidationError("hooks", "claude", err)
 			}
-			return nil, NewPreToolUseGatewayError(&body)
+			return nil, NewClaudeGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("hooks", "preToolUse", resp.StatusCode, string(body))
-		}
-	}
-}
-
-// BuildPostToolUseRequest instantiates a HTTP request object with method and
-// path set to call the "hooks" service "postToolUse" endpoint
-func (c *Client) BuildPostToolUseRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PostToolUseHooksPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("hooks", "postToolUse", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodePostToolUseRequest returns an encoder for requests sent to the hooks
-// postToolUse server.
-func EncodePostToolUseRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*hooks.PostToolUsePayload)
-		if !ok {
-			return goahttp.ErrInvalidType("hooks", "postToolUse", "*hooks.PostToolUsePayload", v)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
-		body := NewPostToolUseRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("hooks", "postToolUse", err)
-		}
-		return nil
-	}
-}
-
-// DecodePostToolUseResponse returns a decoder for responses returned by the
-// hooks postToolUse endpoint. restoreBody controls whether the response body
-// should be restored after having been read.
-// DecodePostToolUseResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodePostToolUseResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body PostToolUseResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-			}
-			err = ValidatePostToolUseResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-			}
-			res := NewPostToolUseHookResultOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body PostToolUseUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-			}
-			err = ValidatePostToolUseUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-			}
-			return nil, NewPostToolUseUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body PostToolUseForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-			}
-			err = ValidatePostToolUseForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-			}
-			return nil, NewPostToolUseForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body PostToolUseBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-			}
-			err = ValidatePostToolUseBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-			}
-			return nil, NewPostToolUseBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body PostToolUseNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-			}
-			err = ValidatePostToolUseNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-			}
-			return nil, NewPostToolUseNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body PostToolUseConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-			}
-			err = ValidatePostToolUseConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-			}
-			return nil, NewPostToolUseConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body PostToolUseUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-			}
-			err = ValidatePostToolUseUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-			}
-			return nil, NewPostToolUseUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body PostToolUseInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-			}
-			err = ValidatePostToolUseInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-			}
-			return nil, NewPostToolUseInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body PostToolUseInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-				}
-				err = ValidatePostToolUseInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-				}
-				return nil, NewPostToolUseInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body PostToolUseUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-				}
-				err = ValidatePostToolUseUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-				}
-				return nil, NewPostToolUseUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("hooks", "postToolUse", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body PostToolUseGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUse", err)
-			}
-			err = ValidatePostToolUseGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUse", err)
-			}
-			return nil, NewPostToolUseGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("hooks", "postToolUse", resp.StatusCode, string(body))
-		}
-	}
-}
-
-// BuildPostToolUseFailureRequest instantiates a HTTP request object with
-// method and path set to call the "hooks" service "postToolUseFailure" endpoint
-func (c *Client) BuildPostToolUseFailureRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PostToolUseFailureHooksPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("hooks", "postToolUseFailure", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodePostToolUseFailureRequest returns an encoder for requests sent to the
-// hooks postToolUseFailure server.
-func EncodePostToolUseFailureRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*hooks.PostToolUseFailurePayload)
-		if !ok {
-			return goahttp.ErrInvalidType("hooks", "postToolUseFailure", "*hooks.PostToolUseFailurePayload", v)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
-		body := NewPostToolUseFailureRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("hooks", "postToolUseFailure", err)
-		}
-		return nil
-	}
-}
-
-// DecodePostToolUseFailureResponse returns a decoder for responses returned by
-// the hooks postToolUseFailure endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-// DecodePostToolUseFailureResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodePostToolUseFailureResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body PostToolUseFailureResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-			}
-			err = ValidatePostToolUseFailureResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-			}
-			res := NewPostToolUseFailureHookResultOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body PostToolUseFailureUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-			}
-			err = ValidatePostToolUseFailureUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-			}
-			return nil, NewPostToolUseFailureUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body PostToolUseFailureForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-			}
-			err = ValidatePostToolUseFailureForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-			}
-			return nil, NewPostToolUseFailureForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body PostToolUseFailureBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-			}
-			err = ValidatePostToolUseFailureBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-			}
-			return nil, NewPostToolUseFailureBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body PostToolUseFailureNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-			}
-			err = ValidatePostToolUseFailureNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-			}
-			return nil, NewPostToolUseFailureNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body PostToolUseFailureConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-			}
-			err = ValidatePostToolUseFailureConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-			}
-			return nil, NewPostToolUseFailureConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body PostToolUseFailureUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-			}
-			err = ValidatePostToolUseFailureUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-			}
-			return nil, NewPostToolUseFailureUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body PostToolUseFailureInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-			}
-			err = ValidatePostToolUseFailureInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-			}
-			return nil, NewPostToolUseFailureInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body PostToolUseFailureInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-				}
-				err = ValidatePostToolUseFailureInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-				}
-				return nil, NewPostToolUseFailureInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body PostToolUseFailureUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-				}
-				err = ValidatePostToolUseFailureUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-				}
-				return nil, NewPostToolUseFailureUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("hooks", "postToolUseFailure", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body PostToolUseFailureGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("hooks", "postToolUseFailure", err)
-			}
-			err = ValidatePostToolUseFailureGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("hooks", "postToolUseFailure", err)
-			}
-			return nil, NewPostToolUseFailureGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("hooks", "postToolUseFailure", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("hooks", "claude", resp.StatusCode, string(body))
 		}
 	}
 }

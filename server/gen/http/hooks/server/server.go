@@ -18,10 +18,8 @@ import (
 
 // Server lists the hooks service endpoint HTTP handlers.
 type Server struct {
-	Mounts             []*MountPoint
-	PreToolUse         http.Handler
-	PostToolUse        http.Handler
-	PostToolUseFailure http.Handler
+	Mounts []*MountPoint
+	Claude http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -51,13 +49,9 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"PreToolUse", "POST", "/rpc/hooks.preToolUse"},
-			{"PostToolUse", "POST", "/rpc/hooks.postToolUse"},
-			{"PostToolUseFailure", "POST", "/rpc/hooks.postToolUseFailure"},
+			{"Claude", "POST", "/rpc/hooks.claude"},
 		},
-		PreToolUse:         NewPreToolUseHandler(e.PreToolUse, mux, decoder, encoder, errhandler, formatter),
-		PostToolUse:        NewPostToolUseHandler(e.PostToolUse, mux, decoder, encoder, errhandler, formatter),
-		PostToolUseFailure: NewPostToolUseFailureHandler(e.PostToolUseFailure, mux, decoder, encoder, errhandler, formatter),
+		Claude: NewClaudeHandler(e.Claude, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -66,9 +60,7 @@ func (s *Server) Service() string { return "hooks" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.PreToolUse = m(s.PreToolUse)
-	s.PostToolUse = m(s.PostToolUse)
-	s.PostToolUseFailure = m(s.PostToolUseFailure)
+	s.Claude = m(s.Claude)
 }
 
 // MethodNames returns the methods served.
@@ -76,9 +68,7 @@ func (s *Server) MethodNames() []string { return hooks.MethodNames[:] }
 
 // Mount configures the mux to serve the hooks endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountPreToolUseHandler(mux, h.PreToolUse)
-	MountPostToolUseHandler(mux, h.PostToolUse)
-	MountPostToolUseFailureHandler(mux, h.PostToolUseFailure)
+	MountClaudeHandler(mux, h.Claude)
 }
 
 // Mount configures the mux to serve the hooks endpoints.
@@ -86,21 +76,21 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
 }
 
-// MountPreToolUseHandler configures the mux to serve the "hooks" service
-// "preToolUse" endpoint.
-func MountPreToolUseHandler(mux goahttp.Muxer, h http.Handler) {
+// MountClaudeHandler configures the mux to serve the "hooks" service "claude"
+// endpoint.
+func MountClaudeHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/hooks.preToolUse", f)
+	mux.Handle("POST", "/rpc/hooks.claude", f)
 }
 
-// NewPreToolUseHandler creates a HTTP handler which loads the HTTP request and
-// calls the "hooks" service "preToolUse" endpoint.
-func NewPreToolUseHandler(
+// NewClaudeHandler creates a HTTP handler which loads the HTTP request and
+// calls the "hooks" service "claude" endpoint.
+func NewClaudeHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -109,119 +99,13 @@ func NewPreToolUseHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodePreToolUseRequest(mux, decoder)
-		encodeResponse = EncodePreToolUseResponse(encoder)
-		encodeError    = EncodePreToolUseError(encoder, formatter)
+		decodeRequest  = DecodeClaudeRequest(mux, decoder)
+		encodeResponse = EncodeClaudeResponse(encoder)
+		encodeError    = EncodeClaudeError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "preToolUse")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountPostToolUseHandler configures the mux to serve the "hooks" service
-// "postToolUse" endpoint.
-func MountPostToolUseHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/hooks.postToolUse", f)
-}
-
-// NewPostToolUseHandler creates a HTTP handler which loads the HTTP request
-// and calls the "hooks" service "postToolUse" endpoint.
-func NewPostToolUseHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodePostToolUseRequest(mux, decoder)
-		encodeResponse = EncodePostToolUseResponse(encoder)
-		encodeError    = EncodePostToolUseError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "postToolUse")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountPostToolUseFailureHandler configures the mux to serve the "hooks"
-// service "postToolUseFailure" endpoint.
-func MountPostToolUseFailureHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/hooks.postToolUseFailure", f)
-}
-
-// NewPostToolUseFailureHandler creates a HTTP handler which loads the HTTP
-// request and calls the "hooks" service "postToolUseFailure" endpoint.
-func NewPostToolUseFailureHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodePostToolUseFailureRequest(mux, decoder)
-		encodeResponse = EncodePostToolUseFailureResponse(encoder)
-		encodeError    = EncodePostToolUseFailureError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "postToolUseFailure")
+		ctx = context.WithValue(ctx, goa.MethodKey, "claude")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
 		payload, err := decodeRequest(r)
 		if err != nil {

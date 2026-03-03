@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
@@ -34,6 +35,14 @@ type Service struct {
 	auth             *auth.Auth
 }
 
+// HookSpecificOutput is the structure for hook-specific output in responses
+type HookSpecificOutput struct {
+	HookEventName            *string `json:"hookEventName,omitempty"`
+	AdditionalContext        *string `json:"additionalContext,omitempty"`
+	PermissionDecision       *string `json:"permissionDecision,omitempty"`
+	PermissionDecisionReason *string `json:"permissionDecisionReason,omitempty"`
+}
+
 var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, tracerProvider trace.TracerProvider, telemetryService *telemetry.Service, sessions *sessions.Manager) *Service {
@@ -61,109 +70,116 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s *Service) PreToolUse(ctx context.Context, payload *gen.PreToolUsePayload) (*gen.HookResult, error) {
-	// Extract auth context for project and organization IDs
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.ErrorContext(ctx, "PreToolUse called without valid auth context")
-		return &gen.HookResult{OK: true}, nil // TODO different failure modes
-	}
-
-	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK PreToolUse: %s", payload.ToolName),
-		attr.SlogEvent("pre_tool_use"),
-		attr.SlogToolName(payload.ToolName),
-		attr.SlogValueAny(payload.ToolInput),
+// Claude is the unified endpoint for all Claude Code hook events
+func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
+		attr.SlogEvent("claude_hook"),
+		attr.SlogValueAny(map[string]any{
+			"hookEventName": payload.HookEventName,
+			"toolName":      payload.ToolName,
+		}),
 	)
 
-	// Generate unique trace and span IDs for this hook event
-	traceID := generateTraceID()
-	spanID := generateSpanID()
-
-	// Write to ClickHouse
-	attrs := s.buildBaseAttributes(payload.ToolName, payload.ToolInput)
-	attrs[attr.HookEventKey] = "pre_tool_use"
-	attrs[attr.LogBodyKey] = fmt.Sprintf("Pre-tool use hook: %s", payload.ToolName)
-	attrs[attr.TraceIDKey] = traceID
-	attrs[attr.SpanIDKey] = spanID
-	if payload.SessionID != nil {
-		attrs[attr.SessionIDKey] = *payload.SessionID
+	// Route to appropriate handler based on hook type
+	switch payload.HookEventName {
+	case "SessionStart":
+		return s.handleSessionStart(ctx, payload)
+	case "PreToolUse":
+		return s.handlePreToolUse(ctx, payload)
+	case "PostToolUse":
+		return s.handlePostToolUse(ctx, payload)
+	case "PostToolUseFailure":
+		return s.handlePostToolUseFailure(ctx, payload)
+	default:
+		s.logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
+		return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
+			HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
+				HookEventName: &payload.HookEventName,
+			},
+		}, nil
 	}
-
-	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, payload.ToolName, attrs)
-
-	return &gen.HookResult{OK: true}, nil
 }
 
-func (s *Service) PostToolUse(ctx context.Context, payload *gen.PostToolUsePayload) (*gen.HookResult, error) {
-	// Extract auth context for project and organization IDs
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.ErrorContext(ctx, "PostToolUse called without valid auth context")
-		return &gen.HookResult{OK: true}, nil // TODO different failure modes
-	}
+func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	s.logger.InfoContext(ctx, "🚀 Session Start")
 
-	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK PostToolUse: %s", payload.ToolName),
-		attr.SlogEvent("post_tool_use"),
-		attr.SlogToolName(payload.ToolName),
-		attr.SlogValueAny(payload.ToolInput),
-	)
-
-	// Generate unique trace and span IDs for this hook event
-	traceID := generateTraceID()
-	spanID := generateSpanID()
-
-	// Write to ClickHouse
-	attrs := s.buildBaseAttributes(payload.ToolName, payload.ToolInput)
-	attrs[attr.HookEventKey] = "post_tool_use"
-	attrs[attr.LogBodyKey] = fmt.Sprintf("Post-tool use hook: %s", payload.ToolName)
-	if payload.ToolResponse != nil {
-		attrs[attr.GenAIToolCallResultKey] = payload.ToolResponse
-	}
-	attrs[attr.TraceIDKey] = traceID
-	attrs[attr.SpanIDKey] = spanID
-	if payload.SessionID != nil {
-		attrs[attr.SessionIDKey] = *payload.SessionID
-	}
-
-	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, payload.ToolName, attrs)
-
-	return &gen.HookResult{OK: true}, nil
+	// For now, always allow sessions to start
+	continueVal := true
+	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
+		Continue: &continueVal,
+		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
+			HookEventName: &payload.HookEventName,
+		},
+	}, nil
 }
 
-func (s *Service) PostToolUseFailure(ctx context.Context, payload *gen.PostToolUseFailurePayload) (*gen.HookResult, error) {
-	// Extract auth context for project and organization IDs
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.ErrorContext(ctx, "PostToolUseFailure called without valid auth context")
-		return &gen.HookResult{OK: true}, nil // TODO different failure modes
+func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	authCtx, ok := s.extractAuthContext(ctx, "PreToolUse")
+	if !ok {
+		// Allow tool to proceed even without auth
+		allow := "allow"
+		return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
+			HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
+				HookEventName:      &payload.HookEventName,
+				PermissionDecision: &allow,
+			},
+		}, nil
 	}
 
-	s.logger.WarnContext(ctx, fmt.Sprintf("🪝 HOOK PostToolUseFailure: %s", payload.ToolName),
-		attr.SlogEvent("post_tool_use_failure"),
-		attr.SlogToolName(payload.ToolName),
-		attr.SlogValueAny(payload.ToolInput),
-	)
+	attrs := s.buildTelemetryAttributes(payload)
+	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, s.getToolName(payload), attrs)
 
-	// Generate unique trace and span IDs for this hook event
-	traceID := generateTraceID()
-	spanID := generateSpanID()
+	// For now, always allow tools
+	allow := "allow"
+	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
+		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
+			HookEventName:      &payload.HookEventName,
+			PermissionDecision: &allow,
+		},
+	}, nil
+}
 
-	// Write to ClickHouse
-	attrs := s.buildBaseAttributes(payload.ToolName, payload.ToolInput)
-	attrs[attr.HookEventKey] = "post_tool_use_failure"
-	attrs[attr.LogBodyKey] = fmt.Sprintf("Post-tool use failure hook: %s", payload.ToolName)
+func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	authCtx, ok := s.extractAuthContext(ctx, "PostToolUse")
+	if !ok {
+		return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
+			HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
+				HookEventName: &payload.HookEventName,
+			},
+		}, nil
+	}
+
+	attrs := s.buildTelemetryAttributes(payload)
+	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, s.getToolName(payload), attrs)
+
+	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
+		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
+			HookEventName: &payload.HookEventName,
+		},
+	}, nil
+}
+
+func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	authCtx, ok := s.extractAuthContext(ctx, "PostToolUse Failure")
+	if !ok {
+		return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
+			HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
+				HookEventName: &payload.HookEventName,
+			},
+		}, nil
+	}
+
+	attrs := s.buildTelemetryAttributes(payload)
 	if payload.ToolError != nil {
 		attrs[attr.HookErrorKey] = payload.ToolError
 	}
-	attrs[attr.TraceIDKey] = traceID
-	attrs[attr.SpanIDKey] = spanID
-	if payload.SessionID != nil {
-		attrs[attr.SessionIDKey] = *payload.SessionID
-	}
+	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, s.getToolName(payload), attrs)
 
-	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, payload.ToolName, attrs)
-
-	return &gen.HookResult{OK: true}, nil
+	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
+		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
+			HookEventName: &payload.HookEventName,
+		},
+	}, nil
 }
 
 // generateTraceID generates a W3C-compliant trace ID (32 hex characters)
@@ -173,6 +189,14 @@ func generateTraceID() string {
 	return hex.EncodeToString(b)
 }
 
+// hashToolCallIDToTraceID converts a tool call ID (e.g., toolu_01SsRreQbJuFTsZS9ZszkzNR)
+// into a W3C-compliant 32-character hex trace ID using SHA256 hashing
+func hashToolCallIDToTraceID(toolCallID string) string {
+	hash := sha256.Sum256([]byte(toolCallID))
+	// Take first 16 bytes (128 bits) of the hash to create a 32-hex-char trace ID
+	return hex.EncodeToString(hash[:16])
+}
+
 // generateSpanID generates a W3C-compliant span ID (16 hex characters)
 func generateSpanID() string {
 	b := make([]byte, 8)
@@ -180,15 +204,35 @@ func generateSpanID() string {
 	return hex.EncodeToString(b)
 }
 
-// buildBaseAttributes creates the base set of attributes for a hook event
-func (s *Service) buildBaseAttributes(toolName string, toolInput any) map[attr.Key]any {
+// extractAuthContext extracts and validates the auth context from the request
+func (s *Service) extractAuthContext(ctx context.Context, handlerName string) (*contextvalues.AuthContext, bool) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.ErrorContext(ctx, fmt.Sprintf("%s called without valid auth context", handlerName))
+		return nil, false
+	}
+	return authCtx, true
+}
+
+// getToolName safely extracts the tool name from the payload
+func (s *Service) getToolName(payload *gen.ClaudePayload) string {
+	if payload.ToolName != nil {
+		return *payload.ToolName
+	}
+	return ""
+}
+
+// buildTelemetryAttributes creates the full set of attributes for a hook event with common fields
+func (s *Service) buildTelemetryAttributes(payload *gen.ClaudePayload) map[attr.Key]any {
+	toolName := s.getToolName(payload)
+
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey: string(telemetry.EventSourceHook),
 		attr.ToolNameKey:    toolName,
-	}
-
-	if toolInput != nil {
-		attrs[attr.GenAIToolCallArgumentsKey] = toolInput
+		attr.HookEventKey:   payload.HookEventName,
+		attr.SpanIDKey:      generateSpanID(),
+		attr.TraceIDKey:     generateTraceID(),
+		attr.LogBodyKey:     fmt.Sprintf("Tool: %s, Hook: %s", toolName, payload.HookEventName),
 	}
 
 	// Parse MCP tool names (format: mcp__<server>__<tool>)
@@ -198,6 +242,24 @@ func (s *Service) buildBaseAttributes(toolName string, toolInput any) map[attr.K
 			attrs[attr.ToolCallSourceKey] = parts[1]
 			attrs[attr.ToolNameKey] = parts[2]
 		}
+	}
+
+	// Hash toolUseID to create a valid W3C trace ID if available, otherwise use generated one
+	if payload.ToolUseID != nil && *payload.ToolUseID != "" {
+		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(*payload.ToolUseID)
+	}
+	// Add session and tool use IDs if present
+	if payload.SessionID != nil {
+		attrs[attr.SessionIDKey] = *payload.SessionID
+	}
+	if payload.ToolUseID != nil {
+		attrs[attr.GenAIToolCallIDKey] = *payload.ToolUseID
+	}
+	if payload.ToolInput != nil {
+		attrs[attr.GenAIToolCallArgumentsKey] = payload.ToolInput
+	}
+	if payload.ToolResponse != nil {
+		attrs[attr.GenAIToolCallResultKey] = payload.ToolResponse
 	}
 
 	return attrs
