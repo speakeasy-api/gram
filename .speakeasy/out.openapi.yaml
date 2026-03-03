@@ -12653,9 +12653,8 @@ components:
           description: Chat session duration in seconds
           format: double
         end_time_unix_nano:
-          type: integer
-          description: Latest log timestamp in Unix nanoseconds
-          format: int64
+          type: string
+          description: Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
         gram_chat_id:
           type: string
           description: Chat session ID
@@ -12671,9 +12670,8 @@ components:
           type: string
           description: LLM model used in this chat session
         start_time_unix_nano:
-          type: integer
-          description: Earliest log timestamp in Unix nanoseconds
-          format: int64
+          type: string
+          description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
         status:
           type: string
           description: Chat session status
@@ -16900,9 +16898,8 @@ components:
           description: Log record ID
           format: uuid
         observed_time_unix_nano:
-          type: integer
-          description: Unix time in nanoseconds when event was observed
-          format: int64
+          type: string
+          description: Unix time in nanoseconds when event was observed (string for JS int64 precision)
         resource_attributes:
           description: Resource attributes as JSON object
         service:
@@ -16914,9 +16911,8 @@ components:
           type: string
           description: W3C span ID (16 hex characters)
         time_unix_nano:
-          type: integer
-          description: Unix time in nanoseconds when event occurred
-          format: int64
+          type: string
+          description: Unix time in nanoseconds when event occurred (string for JS int64 precision)
         trace_id:
           type: string
           description: W3C trace ID (32 hex characters)
@@ -17080,9 +17076,8 @@ components:
           description: Total number of logs in this tool call
           format: int64
         start_time_unix_nano:
-          type: integer
-          description: Earliest log timestamp in Unix nanoseconds
-          format: int64
+          type: string
+          description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
         trace_id:
           type: string
           description: Trace ID (32 hex characters)

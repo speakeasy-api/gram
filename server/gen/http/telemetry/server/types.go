@@ -2106,10 +2106,11 @@ type ListAttributeKeysGatewayErrorResponseBody struct {
 type TelemetryLogRecordResponseBody struct {
 	// Log record ID
 	ID string `form:"id" json:"id" xml:"id"`
-	// Unix time in nanoseconds when event occurred
-	TimeUnixNano int64 `form:"time_unix_nano" json:"time_unix_nano" xml:"time_unix_nano"`
-	// Unix time in nanoseconds when event was observed
-	ObservedTimeUnixNano int64 `form:"observed_time_unix_nano" json:"observed_time_unix_nano" xml:"observed_time_unix_nano"`
+	// Unix time in nanoseconds when event occurred (string for JS int64 precision)
+	TimeUnixNano string `form:"time_unix_nano" json:"time_unix_nano" xml:"time_unix_nano"`
+	// Unix time in nanoseconds when event was observed (string for JS int64
+	// precision)
+	ObservedTimeUnixNano string `form:"observed_time_unix_nano" json:"observed_time_unix_nano" xml:"observed_time_unix_nano"`
 	// Text representation of severity
 	SeverityText *string `form:"severity_text,omitempty" json:"severity_text,omitempty" xml:"severity_text,omitempty"`
 	// The primary log message
@@ -2138,8 +2139,8 @@ type ServiceInfoResponseBody struct {
 type ToolCallSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
 	TraceID string `form:"trace_id" json:"trace_id" xml:"trace_id"`
-	// Earliest log timestamp in Unix nanoseconds
-	StartTimeUnixNano int64 `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
 	// Total number of logs in this tool call
 	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
 	// HTTP status code (if applicable)
@@ -2152,10 +2153,10 @@ type ToolCallSummaryResponseBody struct {
 type ChatSummaryResponseBody struct {
 	// Chat session ID
 	GramChatID string `form:"gram_chat_id" json:"gram_chat_id" xml:"gram_chat_id"`
-	// Earliest log timestamp in Unix nanoseconds
-	StartTimeUnixNano int64 `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
-	// Latest log timestamp in Unix nanoseconds
-	EndTimeUnixNano int64 `form:"end_time_unix_nano" json:"end_time_unix_nano" xml:"end_time_unix_nano"`
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
+	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	EndTimeUnixNano string `form:"end_time_unix_nano" json:"end_time_unix_nano" xml:"end_time_unix_nano"`
 	// Total number of logs in this chat session
 	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
 	// Number of tool calls in this chat session

@@ -25,9 +25,9 @@ export type ToolCallSummary = {
    */
   logCount: number;
   /**
-   * Earliest log timestamp in Unix nanoseconds
+   * Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
    */
-  startTimeUnixNano: number;
+  startTimeUnixNano: string;
   /**
    * Trace ID (32 hex characters)
    */
@@ -43,7 +43,7 @@ export const ToolCallSummary$inboundSchema: z.ZodMiniType<
     gram_urn: z.string(),
     http_status_code: z.optional(z.int()),
     log_count: z.int(),
-    start_time_unix_nano: z.int(),
+    start_time_unix_nano: z.string(),
     trace_id: z.string(),
   }),
   z.transform((v) => {
