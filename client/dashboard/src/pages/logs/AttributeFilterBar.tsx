@@ -127,6 +127,7 @@ export function AttributeFilterBar({
     setSelectedOp(op);
     setStep("value");
     setFilterValue("");
+    onSearchInputChange("");
   };
 
   // Wraps the parent onSearchInputChange. During the operator step, if the
