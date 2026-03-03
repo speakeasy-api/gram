@@ -58,7 +58,7 @@ var materializedColumns = map[string]string{
 		log.Fatalf("format source: %v", err)
 	}
 
-	if err := os.WriteFile("materialized_columns_gen.go", out, 0o644); err != nil {
+	if err := os.WriteFile("materialized_columns_gen.go", out, 0o600); err != nil {
 		log.Fatalf("write output: %v", err)
 	}
 

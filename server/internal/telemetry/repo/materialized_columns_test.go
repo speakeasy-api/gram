@@ -13,6 +13,7 @@ import (
 // materialized_columns_gen.go. Run `mise run clickhouse:gen-materialized-cols`
 // to fix failures.
 func TestMaterializedColumnsMatchSchema(t *testing.T) {
+	t.Parallel()
 	schema, err := os.ReadFile("../../../clickhouse/schema.sql")
 	require.NoError(t, err)
 
