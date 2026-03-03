@@ -8,9 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { slackDeleteSlackConnection } from "../funcs/slackDeleteSlackConnection.js";
+import { slackCreateSlackApp } from "../funcs/slackCreateSlackApp.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,15 +28,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type DeleteSlackConnectionMutationVariables = {
-  request?: operations.DeleteSlackConnectionRequest | undefined;
-  security?: operations.DeleteSlackConnectionSecurity | undefined;
+export type CreateSlackAppMutationVariables = {
+  request: operations.CreateSlackAppRequest;
+  security?: operations.CreateSlackAppSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type DeleteSlackConnectionMutationData = void;
+export type CreateSlackAppMutationData = components.CreateSlackAppResult;
 
-export type DeleteSlackConnectionMutationError =
+export type CreateSlackAppMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -47,49 +48,49 @@ export type DeleteSlackConnectionMutationError =
   | SDKValidationError;
 
 /**
- * deleteSlackConnection slack
+ * createSlackApp slack
  *
  * @remarks
- * delete slack connection for an organization and project.
+ * Create a new Slack app and generate its manifest.
  */
-export function useDeleteSlackConnectionMutation(
+export function useCreateSlackAppMutation(
   options?: MutationHookOptions<
-    DeleteSlackConnectionMutationData,
-    DeleteSlackConnectionMutationError,
-    DeleteSlackConnectionMutationVariables
+    CreateSlackAppMutationData,
+    CreateSlackAppMutationError,
+    CreateSlackAppMutationVariables
   >,
 ): UseMutationResult<
-  DeleteSlackConnectionMutationData,
-  DeleteSlackConnectionMutationError,
-  DeleteSlackConnectionMutationVariables
+  CreateSlackAppMutationData,
+  CreateSlackAppMutationError,
+  CreateSlackAppMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildDeleteSlackConnectionMutation(client, options),
+    ...buildCreateSlackAppMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyDeleteSlackConnection(): MutationKey {
-  return ["@gram/client", "slack", "deleteSlackConnection"];
+export function mutationKeyCreateSlackApp(): MutationKey {
+  return ["@gram/client", "slack", "createSlackApp"];
 }
 
-export function buildDeleteSlackConnectionMutation(
+export function buildCreateSlackAppMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: DeleteSlackConnectionMutationVariables,
-  ) => Promise<DeleteSlackConnectionMutationData>;
+    variables: CreateSlackAppMutationVariables,
+  ) => Promise<CreateSlackAppMutationData>;
 } {
   return {
-    mutationKey: mutationKeyDeleteSlackConnection(),
-    mutationFn: function deleteSlackConnectionMutationFn({
+    mutationKey: mutationKeyCreateSlackApp(),
+    mutationFn: function createSlackAppMutationFn({
       request,
       security,
       options,
-    }): Promise<DeleteSlackConnectionMutationData> {
+    }): Promise<CreateSlackAppMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -102,7 +103,7 @@ export function buildDeleteSlackConnectionMutation(
           ),
         },
       };
-      return unwrapAsync(slackDeleteSlackConnection(
+      return unwrapAsync(slackCreateSlackApp(
         client$,
         request,
         security,

@@ -1,5 +1,11 @@
 # server
 
+## 0.26.0
+
+### Minor Changes
+
+- 125d6c9: adds the ability to install slack apps through the Gram UI
+
 ## 0.25.0
 
 ### Minor Changes

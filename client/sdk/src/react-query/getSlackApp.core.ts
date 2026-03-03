@@ -8,23 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { slackGetSlackConnection } from "../funcs/slackGetSlackConnection.js";
+import { slackGetSlackApp } from "../funcs/slackGetSlackApp.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetSlackConnectionQueryData = components.GetSlackConnectionResult;
+export type GetSlackAppQueryData = components.SlackAppResult;
 
-export function prefetchGetSlackConnection(
+export function prefetchGetSlackApp(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetSlackConnectionRequest | undefined,
-  security?: operations.GetSlackConnectionSecurity | undefined,
+  request: operations.GetSlackAppRequest,
+  security?: operations.GetSlackAppSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildGetSlackConnectionQuery(
+    ...buildGetSlackAppQuery(
       client$,
       request,
       security,
@@ -33,25 +33,24 @@ export function prefetchGetSlackConnection(
   });
 }
 
-export function buildGetSlackConnectionQuery(
+export function buildGetSlackAppQuery(
   client$: GramCore,
-  request?: operations.GetSlackConnectionRequest | undefined,
-  security?: operations.GetSlackConnectionSecurity | undefined,
+  request: operations.GetSlackAppRequest,
+  security?: operations.GetSlackAppSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<GetSlackConnectionQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<GetSlackAppQueryData>;
 } {
   return {
-    queryKey: queryKeyGetSlackConnection({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
+    queryKey: queryKeyGetSlackApp({
+      id: request.id,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
     }),
-    queryFn: async function getSlackConnectionQueryFn(
+    queryFn: async function getSlackAppQueryFn(
       ctx,
-    ): Promise<GetSlackConnectionQueryData> {
+    ): Promise<GetSlackAppQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -63,7 +62,7 @@ export function buildGetSlackConnectionQuery(
         signal: sig,
       };
 
-      return unwrapAsync(slackGetSlackConnection(
+      return unwrapAsync(slackGetSlackApp(
         client$,
         request,
         security,
@@ -73,11 +72,12 @@ export function buildGetSlackConnectionQuery(
   };
 }
 
-export function queryKeyGetSlackConnection(
+export function queryKeyGetSlackApp(
   parameters: {
+    id: string;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "slack", "getSlackConnection", parameters];
+  return ["@gram/client", "slack", "getSlackApp", parameters];
 }

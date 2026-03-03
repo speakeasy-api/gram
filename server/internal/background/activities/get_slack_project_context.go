@@ -33,12 +33,11 @@ type SlackToolsetSummary struct {
 }
 
 type SlackProjectContextResponse struct {
-	TeamName           string
-	OrganizationID     string
-	ProjectID          uuid.UUID
-	ProjectSlug        string
-	DefaultToolsetSlug *string
-	Toolsets           []SlackToolsetSummary
+	TeamName       string
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ProjectSlug    string
+	Toolsets       []SlackToolsetSummary
 }
 
 func NewSlackProjectContextActivity(logger *slog.Logger, db *pgxpool.Pool, client *client.SlackClient) *GetSlackProjectContext {
@@ -92,11 +91,10 @@ func (s *GetSlackProjectContext) Do(ctx context.Context, event types.SlackEvent)
 	}
 
 	return &SlackProjectContextResponse{
-		TeamName:           authInfo.TeamName,
-		OrganizationID:     authInfo.OrganizationID,
-		ProjectID:          authInfo.ProjectID,
-		ProjectSlug:        projectSlug,
-		DefaultToolsetSlug: authInfo.DefaultToolsetSlug,
-		Toolsets:           toolsetSummaries,
+		TeamName:       authInfo.TeamName,
+		OrganizationID: authInfo.OrganizationID,
+		ProjectID:      authInfo.ProjectID,
+		ProjectSlug:    projectSlug,
+		Toolsets:       toolsetSummaries,
 	}, nil
 }

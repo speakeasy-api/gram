@@ -1,10 +1,7 @@
 import { Page } from "@/components/page-layout";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { cn } from "@/lib/utils";
 import { useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
-import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -106,7 +103,6 @@ export default function Sources() {
   const deployment = deploymentResult?.deployment;
 
   const assetsCausingFailure = useUnusedAssetIds();
-  const failedDeployment = useFailedDeploymentSources();
   const {
     dialogState,
     openRemoveSource,
@@ -249,26 +245,15 @@ export default function Sources() {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title>
-          <span className="inline-flex items-center gap-2">
-            Sources
-            {failedDeployment.hasFailures && failedDeployment.deployment && (
-              <routes.deployments.deployment.Link
-                params={[failedDeployment.deployment.id]}
-                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-sm font-medium text-destructive bg-destructive/10 hover:bg-destructive/20 transition-colors"
-              >
-                <CircleAlert className="size-4" />
-                <span>Deployment errors</span>
-              </routes.deployments.deployment.Link>
-            )}
-          </span>
-        </Page.Section.Title>
+        <Page.Section.Title>Sources</Page.Section.Title>
         <Page.Section.Description>
           {isFunctionsEnabled
             ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"
             : "OpenAPI documents and third-party MCP servers providing tools for your project"}
         </Page.Section.Description>
-        <DeploymentsButton deploymentId={deployment?.id} />
+        <Page.Section.CTA>
+          <DeploymentsButton deploymentId={deployment?.id} />
+        </Page.Section.CTA>
         <Page.Section.CTA>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -433,46 +418,29 @@ const useUnusedAssetIds = () => {
 
 function DeploymentsButton({ deploymentId }: { deploymentId?: string }) {
   const routes = useRoutes();
-  const { data: deploymentResult } = useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-  const deploymentLogsSummary = useDeploymentLogsSummary(deploymentId);
+  const failedDeployment = useFailedDeploymentSources();
 
-  const hasErrors = deploymentLogsSummary && deploymentLogsSummary.errors > 0;
-  const deploymentFailed = deployment?.status === "failed";
-
-  const icon = hasErrors ? (
-    <Icon name="triangle-alert" className="text-yellow-500" />
-  ) : (
-    <Icon name="history" className="text-muted-foreground" />
-  );
-
-  let tooltip = "View deployment history";
-  if (deployment && deploymentLogsSummary) {
-    tooltip = deploymentFailed
-      ? "Latest deployment failed"
-      : "Latest deployment succeeded";
-
-    if (deploymentLogsSummary.skipped > 0) {
-      tooltip += ` (${deploymentLogsSummary.skipped} operations skipped)`;
-    }
+  if (failedDeployment.hasFailures && deploymentId) {
+    return (
+      <a href={routes.deployments.deployment.href(deploymentId)}>
+        <Button variant="secondary" className="text-destructive">
+          <Button.LeftIcon>
+            <CircleAlert className="w-4 h-4" />
+          </Button.LeftIcon>
+          <Button.Text>Deployment Errors</Button.Text>
+        </Button>
+      </a>
+    );
   }
 
   return (
-    <Page.Section.CTA>
-      <SimpleTooltip tooltip={tooltip}>
-        <a href={routes.deployments.href()}>
-          <Button
-            variant="tertiary"
-            className={cn(
-              hasErrors &&
-                "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!",
-            )}
-          >
-            <Button.LeftIcon>{icon}</Button.LeftIcon>
-            Deployments
-          </Button>
-        </a>
-      </SimpleTooltip>
-    </Page.Section.CTA>
+    <a href={routes.deployments.href()}>
+      <Button variant="secondary">
+        <Button.LeftIcon>
+          <Icon name="history" />
+        </Button.LeftIcon>
+        <Button.Text>Deployments</Button.Text>
+      </Button>
+    </a>
   );
 }

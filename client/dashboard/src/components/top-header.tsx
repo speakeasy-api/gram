@@ -122,23 +122,25 @@ export function TopHeader() {
                 <CommandList className="max-h-[250px] !p-1">
                   <CommandEmpty>No projects found.</CommandEmpty>
                   <CommandGroup heading="Projects">
-                    {organization.projects.map((p) => (
-                      <CommandItem
-                        key={p.id}
-                        value={p.slug}
-                        onSelect={() => handleProjectSelect(p.slug)}
-                        className="flex items-center gap-2 cursor-pointer"
-                      >
-                        <ProjectAvatar
-                          project={p}
-                          className="h-5 w-5 rounded shrink-0"
-                        />
-                        <span className="flex-1 truncate">{p.slug}</span>
-                        {p.id === project.id && (
-                          <CheckIcon className="w-4 h-4 shrink-0" />
-                        )}
-                      </CommandItem>
-                    ))}
+                    {[...organization.projects]
+                      .sort((a, b) => a.slug.localeCompare(b.slug))
+                      .map((p) => (
+                        <CommandItem
+                          key={p.id}
+                          value={p.slug}
+                          onSelect={() => handleProjectSelect(p.slug)}
+                          className="flex items-center gap-2 cursor-pointer"
+                        >
+                          <ProjectAvatar
+                            project={p}
+                            className="h-5 w-5 rounded shrink-0"
+                          />
+                          <span className="flex-1 truncate">{p.slug}</span>
+                          {p.id === project.id && (
+                            <CheckIcon className="w-4 h-4 shrink-0" />
+                          )}
+                        </CommandItem>
+                      ))}
                   </CommandGroup>
                 </CommandList>
               </Command>
@@ -153,8 +155,36 @@ export function TopHeader() {
           </Popover>
         </div>
 
-        {/* Right side - Theme toggle & User menu */}
+        {/* Right side - Nav links, Theme toggle & User menu */}
         <div className="ml-auto flex items-center gap-4">
+          <nav className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-sm"
+              onClick={() => window.Pylon?.("show")}
+            >
+              Support
+            </Button>
+            <Button variant="outline" size="sm" className="text-sm" asChild>
+              <a
+                href="https://www.speakeasy.com/docs/mcp"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Docs
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" className="text-sm" asChild>
+              <a
+                href="https://www.speakeasy.com/changelog?product=mcp-platform"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Changelog
+              </a>
+            </Button>
+          </nav>
           <ThemeSwitcher />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -197,18 +227,18 @@ export function TopHeader() {
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                  <a href="mailto:gram@speakeasy.com">
-                    <MailIcon className="mr-2 h-4 w-4" />
-                    Get Support
-                  </a>
-                </DropdownMenuItem>
                 {window.Pylon && (
                   <DropdownMenuItem onClick={() => window.Pylon("show")}>
                     <MessageCircleIcon className="mr-2 h-4 w-4" />
-                    Chat with Team
+                    Get Support
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuItem asChild>
+                  <a href="mailto:gram@speakeasy.com">
+                    <MailIcon className="mr-2 h-4 w-4" />
+                    Email Team
+                  </a>
+                </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <a
                     href="https://github.com/speakeasy-api/gram/issues/new"

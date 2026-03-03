@@ -11,7 +11,7 @@ interface TraceLogsListProps {
   toolName: string;
   isExpanded: boolean;
   onLogClick: (log: TelemetryLogRecord) => void;
-  parentTimestamp: number;
+  parentTimestamp: string;
 }
 
 export function TraceLogsList({
@@ -99,7 +99,7 @@ interface ChildLogRowProps {
   log: TelemetryLogRecord;
   isLast: boolean;
   onClick: () => void;
-  parentTimestamp: number;
+  parentTimestamp: string;
 }
 
 function ChildLogRow({

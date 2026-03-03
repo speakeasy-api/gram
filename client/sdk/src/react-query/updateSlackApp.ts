@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { slackUpdateSlackConnection } from "../funcs/slackUpdateSlackConnection.js";
+import { slackUpdateSlackApp } from "../funcs/slackUpdateSlackApp.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -28,16 +28,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type UpdateSlackConnectionMutationVariables = {
-  request: operations.UpdateSlackConnectionRequest;
-  security?: operations.UpdateSlackConnectionSecurity | undefined;
+export type UpdateSlackAppMutationVariables = {
+  request: operations.UpdateSlackAppRequest;
+  security?: operations.UpdateSlackAppSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpdateSlackConnectionMutationData =
-  components.GetSlackConnectionResult;
+export type UpdateSlackAppMutationData = components.SlackAppResult;
 
-export type UpdateSlackConnectionMutationError =
+export type UpdateSlackAppMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -49,49 +48,49 @@ export type UpdateSlackConnectionMutationError =
   | SDKValidationError;
 
 /**
- * updateSlackConnection slack
+ * updateSlackApp slack
  *
  * @remarks
- * update slack connection for an organization and project.
+ * Update a Slack app's settings.
  */
-export function useUpdateSlackConnectionMutation(
+export function useUpdateSlackAppMutation(
   options?: MutationHookOptions<
-    UpdateSlackConnectionMutationData,
-    UpdateSlackConnectionMutationError,
-    UpdateSlackConnectionMutationVariables
+    UpdateSlackAppMutationData,
+    UpdateSlackAppMutationError,
+    UpdateSlackAppMutationVariables
   >,
 ): UseMutationResult<
-  UpdateSlackConnectionMutationData,
-  UpdateSlackConnectionMutationError,
-  UpdateSlackConnectionMutationVariables
+  UpdateSlackAppMutationData,
+  UpdateSlackAppMutationError,
+  UpdateSlackAppMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildUpdateSlackConnectionMutation(client, options),
+    ...buildUpdateSlackAppMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyUpdateSlackConnection(): MutationKey {
-  return ["@gram/client", "slack", "updateSlackConnection"];
+export function mutationKeyUpdateSlackApp(): MutationKey {
+  return ["@gram/client", "slack", "updateSlackApp"];
 }
 
-export function buildUpdateSlackConnectionMutation(
+export function buildUpdateSlackAppMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: UpdateSlackConnectionMutationVariables,
-  ) => Promise<UpdateSlackConnectionMutationData>;
+    variables: UpdateSlackAppMutationVariables,
+  ) => Promise<UpdateSlackAppMutationData>;
 } {
   return {
-    mutationKey: mutationKeyUpdateSlackConnection(),
-    mutationFn: function updateSlackConnectionMutationFn({
+    mutationKey: mutationKeyUpdateSlackApp(),
+    mutationFn: function updateSlackAppMutationFn({
       request,
       security,
       options,
-    }): Promise<UpdateSlackConnectionMutationData> {
+    }): Promise<UpdateSlackAppMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -104,7 +103,7 @@ export function buildUpdateSlackConnectionMutation(
           ),
         },
       };
-      return unwrapAsync(slackUpdateSlackConnection(
+      return unwrapAsync(slackUpdateSlackApp(
         client$,
         request,
         security,

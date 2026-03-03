@@ -20,21 +20,24 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { slackSlackLogin } from "@gram/client/funcs/slackSlackLogin.js";
+import { assetsCreateSignedChatAttachmentURL } from "@gram/client/funcs/assetsCreateSignedChatAttachmentURL.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await slackSlackLogin(gram, {
-    projectSlug: "<value>",
+  const res = await assetsCreateSignedChatAttachmentURL(gram, {
+    createSignedChatAttachmentURLForm2: {
+      id: "<id>",
+      projectId: "<id>",
+    },
   });
   if (res.ok) {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("slackSlackLogin failed:", res.error);
+    console.log("assetsCreateSignedChatAttachmentURL failed:", res.error);
   }
 }
 

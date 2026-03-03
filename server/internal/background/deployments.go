@@ -47,10 +47,10 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 	logger := workflow.GetLogger(ctx)
 
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Minute,
+		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    30 * time.Second,
-			MaximumInterval:    2 * time.Minute,
+			InitialInterval:    time.Second,
+			MaximumInterval:    time.Minute,
 			BackoffCoefficient: 2,
 			MaximumAttempts:    5,
 		},
