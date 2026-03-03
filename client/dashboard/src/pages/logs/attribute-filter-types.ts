@@ -17,8 +17,6 @@ export const OP_LABELS: Record<Op, string> = {
   not_exists: "not_exists",
 };
 
-export const VALUELESS_OPS: Op[] = [Op.Exists, Op.NotExists];
-
 // Ordered longest-first so `!=` is checked before `=`.
 const SYMBOL_TO_OP: [string, Op][] = [
   ["!=", Op.NotEq],
