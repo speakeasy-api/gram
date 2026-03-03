@@ -28,7 +28,7 @@ export function logsToTraceSummaries(
 ): ToolCallSummary[] {
   const groups = new Map<
     string,
-    { logs: TelemetryLogRecord[]; minTime: number }
+    { logs: TelemetryLogRecord[]; minTime: string }
   >();
 
   for (const log of logs) {
@@ -38,7 +38,9 @@ export function logsToTraceSummaries(
     const existing = groups.get(traceId);
     if (existing) {
       existing.logs.push(log);
-      existing.minTime = Math.min(existing.minTime, log.timeUnixNano);
+      if (BigInt(log.timeUnixNano) < BigInt(existing.minTime)) {
+        existing.minTime = log.timeUnixNano;
+      }
     } else {
       groups.set(traceId, { logs: [log], minTime: log.timeUnixNano });
     }
@@ -71,8 +73,12 @@ export function logsToTraceSummaries(
     });
   }
 
-  // Sort by start time descending (most recent first)
-  summaries.sort((a, b) => b.startTimeUnixNano - a.startTimeUnixNano);
+  // Sort by start time descending (most recent first).
+  // Lexicographic comparison is safe here since all nanosecond timestamps are
+  // the same digit-width (19 digits for current-era Unix nanoseconds).
+  summaries.sort((a, b) =>
+    a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
+  );
   return summaries;
 }
 

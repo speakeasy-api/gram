@@ -1,5 +1,5 @@
 import { Op } from "@gram/client/models/components/attributefilter";
-import type { ActiveAttributeFilter } from "./attribute-filter-types";
+import { VALUELESS_OPS, type ActiveAttributeFilter } from "./attribute-filter-types";
 
 /**
  * Serialize active filters to a URL param value.
@@ -51,6 +51,9 @@ export function parseFilters(param: string | null): ActiveAttributeFilter[] {
       }
 
       if (!path || !VALID_OPS.has(op)) return null;
+      // Ops that require a value (eq, not_eq, contains) must have one; reject
+      // malformed segments like "attr:eq" that would produce an API error.
+      if (!VALUELESS_OPS.includes(op as Op) && value === undefined) return null;
 
       return {
         id: crypto.randomUUID(),

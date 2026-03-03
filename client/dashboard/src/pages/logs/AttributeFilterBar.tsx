@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { Op } from "@gram/client/models/components/attributefilter";
 import { Command as CmdkRoot } from "cmdk";
 import { Search, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type ActiveAttributeFilter,
   OP_LABELS,
@@ -64,6 +64,14 @@ export function AttributeFilterBar({
   const [filterValue, setFilterValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const popoverContentRef = useRef<HTMLDivElement>(null);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+    };
+  }, []);
 
   // Filter attribute keys by typed text (only relevant in key step)
   const filteredKeys =
@@ -108,12 +116,16 @@ export function AttributeFilterBar({
     onChange(filters.filter((f) => f.id !== id));
   };
 
-  const clearAll = () => onChange([]);
+  const clearAll = () => {
+    onChange([]);
+    resetFlow();
+  };
 
   const handleKeySelect = (key: string) => {
     setSelectedKey(key);
     setStep("operator");
     onSearchInputChange("");
+    focusMainInput();
   };
 
   const handleOpSelect = (op: Op) => {
@@ -137,8 +149,10 @@ export function AttributeFilterBar({
       case "Tab":
         e.preventDefault();
         if (popoverOpen) {
-          // Select the highlighted item in the popover (rendered in a portal)
-          document
+          // Select the highlighted item in the popover. Scope the query to the
+          // popover content element (rendered in a portal) to avoid accidentally
+          // clicking an item in a different cmdk instance on the page.
+          (popoverContentRef.current ?? document)
             .querySelector<HTMLElement>("[cmdk-item][aria-selected='true']")
             ?.click();
         } else if (step === "key" && searchInput.trim()) {
@@ -170,7 +184,13 @@ export function AttributeFilterBar({
       shouldFilter={false}
       className="relative overflow-visible bg-transparent"
     >
-      <Popover open={popoverOpen}>
+      <Popover
+        open={popoverOpen}
+        onOpenChange={(open) => {
+          // Allow clicking outside to dismiss the operator step
+          if (!open && step === "operator") resetFlow();
+        }}
+      >
         <PopoverAnchor asChild>
           <div
             className={cn(
@@ -238,7 +258,10 @@ export function AttributeFilterBar({
                 onFocus={() => setInputFocused(true)}
                 onBlur={() => {
                   // Delay so click events on popover items fire first
-                  setTimeout(() => setInputFocused(false), 150);
+                  blurTimeoutRef.current = setTimeout(
+                    () => setInputFocused(false),
+                    150,
+                  );
                 }}
                 placeholder={
                   step === "operator"
@@ -276,6 +299,7 @@ export function AttributeFilterBar({
         </PopoverAnchor>
 
         <PopoverContent
+          ref={popoverContentRef}
           className="p-0"
           align="start"
           style={{ width: "var(--radix-popover-trigger-width)" }}

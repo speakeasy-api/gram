@@ -432,16 +432,17 @@ function LogsContent() {
       const existing = merged.get(trace.traceId);
       if (existing) {
         existing.logCount += trace.logCount;
-        existing.startTimeUnixNano = Math.min(
-          existing.startTimeUnixNano,
-          trace.startTimeUnixNano,
-        );
+        if (
+          BigInt(trace.startTimeUnixNano) < BigInt(existing.startTimeUnixNano)
+        ) {
+          existing.startTimeUnixNano = trace.startTimeUnixNano;
+        }
       } else {
         merged.set(trace.traceId, { ...trace });
       }
     }
-    return Array.from(merged.values()).sort(
-      (a, b) => b.startTimeUnixNano - a.startTimeUnixNano,
+    return Array.from(merged.values()).sort((a, b) =>
+      a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
     );
   }, [data?.pages, hasAttributeFilters]);
 
@@ -654,34 +655,14 @@ function LogsInnerContent({
   attributeKeys: string[];
   isLoadingAttributeKeys?: boolean;
 }) {
-  if (isLogsDisabled) {
-    return (
-      <div className="h-full overflow-hidden flex flex-col">
-        <Page>
-          <Page.Header>
-            <Page.Header.Breadcrumbs fullWidth />
-          </Page.Header>
-          <Page.Body fullWidth className="space-y-6">
-            <div className="flex flex-col gap-1 min-w-0">
-              <h1 className="text-xl font-semibold">Logs</h1>
-              <p className="text-sm text-muted-foreground">
-                Browse raw tool call traces and telemetry data
-              </p>
-            </div>
-            <div className="flex-1 relative">
-              <div
-                className="pointer-events-none select-none h-full"
-                aria-hidden="true"
-              >
-                <ObservabilitySkeleton />
-              </div>
-              <EnableLoggingOverlay onEnabled={refetch} />
-            </div>
-          </Page.Body>
-        </Page>
-      </div>
-    );
-  }
+  const pageTitle = (
+    <div className="flex flex-col gap-1 min-w-0">
+      <h1 className="text-xl font-semibold">Logs</h1>
+      <p className="text-sm text-muted-foreground">
+        Browse raw tool call traces and telemetry data
+      </p>
+    </div>
+  );
 
   return (
     <>
@@ -690,17 +671,26 @@ function LogsInnerContent({
           <Page.Header>
             <Page.Header.Breadcrumbs fullWidth />
           </Page.Header>
+          {isLogsDisabled ? (
+            <Page.Body fullWidth className="space-y-6">
+              {pageTitle}
+              <div className="flex-1 relative">
+                <div
+                  className="pointer-events-none select-none h-full"
+                  aria-hidden="true"
+                >
+                  <ObservabilitySkeleton />
+                </div>
+                <EnableLoggingOverlay onEnabled={refetch} />
+              </div>
+            </Page.Body>
+          ) : (
           <Page.Body fullWidth noPadding overflowHidden>
             <div className="flex flex-col flex-1 min-h-0 w-full">
               {/* Header section */}
               <div className="px-8 py-4 shrink-0">
                 <div className="flex items-start justify-between gap-4 mb-4">
-                  <div className="flex flex-col gap-1 min-w-0">
-                    <h1 className="text-xl font-semibold">Logs</h1>
-                    <p className="text-sm text-muted-foreground">
-                      Browse raw tool call traces and telemetry data
-                    </p>
-                  </div>
+                  {pageTitle}
                   <Button variant="outline" size="sm" asChild>
                     <Link to="../settings/logs">
                       <Settings className="h-4 w-4" />
@@ -770,6 +760,7 @@ function LogsInnerContent({
                       isLoading={isLoading}
                       allTraces={allTraces}
                       searchQuery={searchQuery}
+                      hasAttributeFilters={attributeFilters.length > 0}
                       expandedTraceId={expandedTraceId}
                       isFetchingNextPage={isFetchingNextPage}
                       onToggleExpand={toggleExpand}
@@ -791,10 +782,10 @@ function LogsInnerContent({
               </div>
             </div>
           </Page.Body>
+          )}
         </Page>
       </div>
 
-      {/* Log Detail Sheet */}
       <LogDetailSheet
         log={selectedLog}
         open={!!selectedLog}
@@ -809,6 +800,7 @@ function TraceListContent({
   isLoading,
   allTraces,
   searchQuery,
+  hasAttributeFilters,
   expandedTraceId,
   isFetchingNextPage,
   onToggleExpand,
@@ -818,6 +810,7 @@ function TraceListContent({
   isLoading: boolean;
   allTraces: ToolCallSummary[];
   searchQuery: string | null;
+  hasAttributeFilters: boolean;
   expandedTraceId: string | null;
   isFetchingNextPage: boolean;
   onToggleExpand: (traceId: string) => void;
@@ -840,7 +833,12 @@ function TraceListContent({
   }
 
   if (allTraces.length === 0) {
-    return <LogsEmptyState searchQuery={searchQuery} />;
+    return (
+      <LogsEmptyState
+        searchQuery={searchQuery}
+        hasAttributeFilters={hasAttributeFilters}
+      />
+    );
   }
 
   return (
@@ -888,7 +886,14 @@ function LogsLoading() {
   );
 }
 
-function LogsEmptyState({ searchQuery }: { searchQuery: string | null }) {
+function LogsEmptyState({
+  searchQuery,
+  hasAttributeFilters,
+}: {
+  searchQuery: string | null;
+  hasAttributeFilters: boolean;
+}) {
+  const hasActiveFilters = !!searchQuery || hasAttributeFilters;
   return (
     <div className="py-12 text-center">
       <div className="flex flex-col items-center gap-3">
@@ -896,11 +901,11 @@ function LogsEmptyState({ searchQuery }: { searchQuery: string | null }) {
           <Icon name="inbox" className="size-6 text-muted-foreground" />
         </div>
         <span className="font-medium text-foreground">
-          {searchQuery ? "No matching traces" : "No traces found"}
+          {hasActiveFilters ? "No matching traces" : "No traces found"}
         </span>
         <span className="text-sm text-muted-foreground max-w-sm">
-          {searchQuery
-            ? "Try adjusting your search query"
+          {hasActiveFilters
+            ? "Try adjusting your search or filters"
             : "Traces will appear here when tool calls are made"}
         </span>
       </div>
