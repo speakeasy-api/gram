@@ -578,7 +578,7 @@ function HooksInnerContent({
                   {/* Header */}
                   <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
                     <div className="shrink-0 w-[150px]">Timestamp</div>
-                    <div className="flex-1">Server / Tool</div>
+                    <div className="flex-1 min-w-0">Server / Tool</div>
                     <div className="shrink-0 w-[250px]">User</div>
                     <div className="shrink-0 w-20 text-right">Event</div>
                   </div>
@@ -799,18 +799,18 @@ function HookLogRow({
       <div className="shrink-0 w-[150px] text-sm text-muted-foreground">
         {timeAgo}
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          {serverNameBadge}
-          <span className="text-sm font-mono truncate">
-            {toolName || "unknown"}
-          </span>
-        </div>
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        {serverNameBadge}
+        <span className="text-sm font-mono truncate">
+          {toolName || "unknown"}
+        </span>
       </div>
       <div className="shrink-0 w-[250px] text-sm text-muted-foreground truncate">
         {userEmail || "—"}
       </div>
-      <HookEventBadge eventName={hookEventName} />
+      <div className="shrink-0 w-20 flex justify-end">
+        <HookEventBadge eventName={hookEventName} />
+      </div>
     </button>
   );
 }

@@ -2,11 +2,11 @@
 # Unified hook forwarder - forwards all hook events to server
 
 # Check if GRAM_API_KEY is set
-if [ -z "$GRAM_API_KEY2" ]; then
+if [ -z "$GRAM_API_KEY" ]; then
   cat <<EOF
 {
   "continue": false,
-  "stopReason": "GRAM_API_KEY2 environment variable is not set.\n\nTo authenticate with Gram, please run:\n  /gram login"
+  "stopReason": "GRAM_API_KEY environment variable is not set.\n\nTo authenticate with Gram, please run:\n  /gram login"
 }
 EOF
   exit 0

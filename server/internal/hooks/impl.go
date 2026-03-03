@@ -238,6 +238,7 @@ func (s *Service) buildTelemetryAttributes(authCtx *contextvalues.AuthContext, p
 		attr.APIKeyIDKey:       authCtx.APIKeyID,
 		attr.ProjectIDKey:      authCtx.ProjectID.String(),
 		attr.OrganizationIDKey: authCtx.ActiveOrganizationID,
+		attr.HookSourceKey:     "claude", // TODO: support other hook sources
 	}
 
 	if authCtx.Email != nil {
