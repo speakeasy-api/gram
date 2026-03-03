@@ -1111,7 +1111,7 @@ ON users (workos_id);
 CREATE TABLE IF NOT EXISTS deployment_tags (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
-  name TEXT NOT NULL,
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   deployment_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1125,17 +1125,14 @@ CREATE TABLE IF NOT EXISTS deployment_tags (
 CREATE UNIQUE INDEX IF NOT EXISTS deployment_tags_project_id_name_key
 ON deployment_tags (project_id, name);
 
-CREATE INDEX IF NOT EXISTS idx_deployment_tags_project_name
-ON deployment_tags (project_id, name);
-
 CREATE TABLE IF NOT EXISTS deployment_tag_history (
+  -- Column order optimized for alignment (PG110)
+  changed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  changed_by TEXT,
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   tag_id uuid NOT NULL,
   previous_deployment_id uuid,
   new_deployment_id uuid,
-  changed_by TEXT,
-
-  changed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT deployment_tag_history_pkey PRIMARY KEY (id),
   CONSTRAINT deployment_tag_history_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES deployment_tags (id) ON DELETE CASCADE,
