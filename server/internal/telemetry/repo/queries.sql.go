@@ -33,6 +33,23 @@ type AttributeFilter struct {
 	Value string // Value to compare against (ignored for "exists"/"not_exists")
 }
 
+// resolveAttributeColumn maps an AttributeFilter.Path to the ClickHouse column
+// expression used in WHERE clauses.
+//
+//   - @-prefixed paths → toString(attributes.app.<path>) (user attributes)
+//   - Materialized column hit → bare column name (bloom-filter indexed)
+//   - Fallback → toString(attributes.<path>) (JSON accessor)
+func resolveAttributeColumn(path string) string {
+	switch {
+	case strings.HasPrefix(path, "@"):
+		return fmt.Sprintf("toString(attributes.app.%s)", path[1:])
+	case materializedColumns[path] != "":
+		return materializedColumns[path]
+	default:
+		return fmt.Sprintf("toString(attributes.%s)", path)
+	}
+}
+
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
@@ -209,18 +226,7 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 			continue // skip invalid paths to prevent injection
 		}
 
-		// @prefix → user attribute (app.<path>), always via JSON accessor.
-		// Bare paths → check for a materialized column first (bloom-filter indexed),
-		// then fall back to the JSON accessor.
-		var col string
-		switch path := f.Path; {
-		case strings.HasPrefix(path, "@"):
-			col = fmt.Sprintf("toString(attributes.app.%s)", path[1:])
-		case materializedColumns[path] != "":
-			col = materializedColumns[path]
-		default:
-			col = fmt.Sprintf("toString(attributes.%s)", path)
-		}
+		col := resolveAttributeColumn(f.Path)
 
 		switch f.Op {
 		case "eq":
