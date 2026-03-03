@@ -30,17 +30,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const teamUrl =
     organization?.userWorkspaceSlugs &&
-      organization.userWorkspaceSlugs.length > 0
+    organization.userWorkspaceSlugs.length > 0
       ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
       : "https://app.speakeasy.com";
 
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
-    build: [
-      routes.elements,
-      routes.mcp,
-      routes.slackApps,
-    ],
+    build: [routes.elements, routes.mcp, routes.slackApps],
     observe: [
       routes.observability,
       routes.logs,
