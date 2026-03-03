@@ -869,6 +869,65 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
         </ol>
       </div>
     </template>
+    <template
+      class="install-target-template"
+      data-install-target="claude-desktop"
+    >
+      <div class="modal-content">
+        <h1>Instructions</h1>
+        <ol>
+          <li class="instruction-item">
+            In Claude Desktop, navigate to
+            <strong>Settings &gt; Connectors</strong>.
+          </li>
+          <li class="instruction-item">
+            Click <strong>"Add custom connector"</strong> at the bottom of the
+            Connectors section.
+          </li>
+          <li class="instruction-item">
+            Enter the following URL as the remote MCP server URL:
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <!-- prettier-ignore -->
+              <code class="code-snippet">{{ .MCPURL }}</code>
+            </div>
+          </li>
+          <li class="instruction-item">
+            Click <strong>"Add"</strong> to finish configuring the connector.
+          </li>
+        </ol>
+        <h2 class="modal-sub-heading">For Teams &amp; Enterprise</h2>
+        <p>
+          Admins can add this as a managed connector for their organization from
+          the
+          <a
+            href="https://claude.ai/admin/connectors"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Admin Dashboard &gt; Connectors</a
+          >
+          page. Once added, team members can connect from
+          <strong>Settings &gt; Connectors</strong>.
+        </p>
+      </div>
+    </template>
     <template class="install-target-template" data-install-target="codex-cli">
       <div class="modal-content">
         <h1>Instructions</h1>
@@ -1016,7 +1075,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                   </button>
                   <button
                     class="popover-button"
-                    data-install-method="dxt-download"
+                    data-install-method="modal"
                     data-install-target="claude-desktop"
                   >
                     Claude Desktop
@@ -1093,7 +1152,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
             <div
               tabindex="0"
               class="card install-target"
-              data-install-method="dxt-download"
+              data-install-method="modal"
               data-install-target="claude-desktop"
             >
               <div class="target">
@@ -1415,43 +1474,6 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
             </button>
             <code class="code-snippet language-json">{{- .MCPConfig -}}</code>
           </div>
-          <!-- prettier-ignore -->
-          <code
-            id="manifest-json-blob"
-            type="application/json"
-            style="display: none"
-          >{
-    "manifest_version": "0.1",
-    "name": "{{ .MCPName }}",
-    "version": "1.0.0",
-    "description": "{{ .MCPDescription }}",
-    "author": {
-        "name": "{{ .OrganizationName }} with Gram"
-    },
-    "server": {
-    "type": "node",
-    "entry_point": "npx",
-    "mcp_config": {
-        "command": "npx",
-        "args": [
-        "mcp-remote@0.1.25",
-        "{{ .MCPURL }}"{{- range .SecurityInputs }},
-        "--header",
-        "{{ printf "%s:${user_config.%s}" (.SystemName | asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }}
-        ]
-    }
-    },
-    "user_config": {
-    {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
-    "{{ $input.DisplayName | asPosixName }}": {
-        "type": "string",
-        "title": "{{ $input.DisplayName | asPosixName }}",
-        "description": "Get this value from your gram env",
-        "sensitive": {{ $input.Sensitive }},
-        "required": true
-    }{{- end }}
-    }
-}</code>
         </section>
       </div>
     </main>
@@ -1539,7 +1561,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
     </svg>
     <script
       type="module"
-      src="{{ .SiteURL }}/external/hosted-install-page-2b40cdd1.js"
+      src="{{ .ScriptURL }}"
     ></script>
   </body>
 </html>
