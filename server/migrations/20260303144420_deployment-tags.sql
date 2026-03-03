@@ -1,11 +1,11 @@
 -- Create "deployment_tags" table
 CREATE TABLE "deployment_tags" (
-  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
-  "project_id" uuid NOT NULL,
-  "name" text NOT NULL,
-  "deployment_id" uuid NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "name" text NOT NULL,
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "project_id" uuid NOT NULL,
+  "deployment_id" uuid NULL,
   PRIMARY KEY ("id"),
   CONSTRAINT "deployment_tags_deployment_id_fkey" FOREIGN KEY ("deployment_id") REFERENCES "deployments" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "deployment_tags_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,

@@ -1109,13 +1109,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
 
 CREATE TABLE IF NOT EXISTS deployment_tags (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
-  deployment_id uuid,
-
+  -- Column order optimized for alignment (PG110)
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  deployment_id uuid,
 
   CONSTRAINT deployment_tags_pkey PRIMARY KEY (id),
   CONSTRAINT deployment_tags_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
