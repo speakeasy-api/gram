@@ -685,103 +685,103 @@ function LogsInnerContent({
               </div>
             </Page.Body>
           ) : (
-          <Page.Body fullWidth noPadding overflowHidden>
-            <div className="flex flex-col flex-1 min-h-0 w-full">
-              {/* Header section */}
-              <div className="px-8 py-4 shrink-0">
-                <div className="flex items-start justify-between gap-4 mb-4">
-                  {pageTitle}
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to="../settings/logs">
-                      <Settings className="h-4 w-4" />
-                      Configure settings
-                    </Link>
-                  </Button>
-                </div>
-                {/* Filter and Search Row */}
-                <div className="flex items-center gap-4 flex-wrap">
-                  <MCPServerFilter
-                    selectedServer={selectedServer}
-                    onServerChange={onServerChange}
-                    toolsets={toolsets}
-                    isLoading={isLoadingToolsets}
-                  />
-                  <div className="flex-1">
-                    <AttributeFilterBar
-                      filters={attributeFilters}
-                      onChange={onAttributeFiltersChange}
-                      attributeKeys={attributeKeys}
-                      isLoadingKeys={isLoadingAttributeKeys}
-                      searchInput={searchInput}
-                      onSearchInputChange={setSearchInput}
-                      onSearchSubmit={onSearchSubmit}
-                    />
+            <Page.Body fullWidth noPadding overflowHidden>
+              <div className="flex flex-col flex-1 min-h-0 w-full">
+                {/* Header section */}
+                <div className="px-8 py-4 shrink-0">
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    {pageTitle}
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to="../settings/logs">
+                        <Settings className="h-4 w-4" />
+                        Configure settings
+                      </Link>
+                    </Button>
                   </div>
-                  <div className="ml-auto">
-                    <TimeRangePicker
-                      preset={customRange ? null : dateRange}
-                      customRange={customRange}
-                      customRangeLabel={customRangeLabel}
-                      onPresetChange={onDateRangeChange}
-                      onCustomRangeChange={onCustomRangeChange}
-                      onClearCustomRange={onClearCustomRange}
-                      projectSlug={projectSlug}
+                  {/* Filter and Search Row */}
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <MCPServerFilter
+                      selectedServer={selectedServer}
+                      onServerChange={onServerChange}
+                      toolsets={toolsets}
+                      isLoading={isLoadingToolsets}
                     />
+                    <div className="flex-1">
+                      <AttributeFilterBar
+                        filters={attributeFilters}
+                        onChange={onAttributeFiltersChange}
+                        attributeKeys={attributeKeys}
+                        isLoadingKeys={isLoadingAttributeKeys}
+                        searchInput={searchInput}
+                        onSearchInputChange={setSearchInput}
+                        onSearchSubmit={onSearchSubmit}
+                      />
+                    </div>
+                    <div className="ml-auto">
+                      <TimeRangePicker
+                        preset={customRange ? null : dateRange}
+                        customRange={customRange}
+                        customRangeLabel={customRangeLabel}
+                        onPresetChange={onDateRangeChange}
+                        onCustomRangeChange={onCustomRangeChange}
+                        onClearCustomRange={onClearCustomRange}
+                        projectSlug={projectSlug}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Content section - full width */}
+                <div className="flex-1 overflow-hidden min-h-0 border-t">
+                  <div className="h-full flex flex-col bg-background">
+                    {/* Loading indicator */}
+                    {isFetching && allTraces.length > 0 && (
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
+                        <div className="h-full bg-primary animate-pulse" />
+                      </div>
+                    )}
+
+                    {/* Header */}
+                    <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+                      <div className="shrink-0 w-[150px]">Timestamp</div>
+                      <div className="shrink-0 w-5" />
+                      <div className="flex-1">Source / Tool</div>
+                      <div className="shrink-0 w-16 text-right">Status</div>
+                    </div>
+
+                    {/* Scrollable trace list */}
+                    <div
+                      ref={containerRef}
+                      className="overflow-y-auto flex-1"
+                      onScroll={handleScroll}
+                    >
+                      <TraceListContent
+                        error={error}
+                        isLoading={isLoading}
+                        allTraces={allTraces}
+                        searchQuery={searchQuery}
+                        hasAttributeFilters={attributeFilters.length > 0}
+                        expandedTraceId={expandedTraceId}
+                        isFetchingNextPage={isFetchingNextPage}
+                        onToggleExpand={toggleExpand}
+                        onLogClick={handleLogClick}
+                      />
+                    </div>
+
+                    {/* Footer */}
+                    {allTraces.length > 0 && (
+                      <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+                        <span>
+                          {allTraces.length}{" "}
+                          {allTraces.length === 1 ? "trace" : "traces"}
+                          {hasNextPage && " • Scroll to load more"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-
-              {/* Content section - full width */}
-              <div className="flex-1 overflow-hidden min-h-0 border-t">
-                <div className="h-full flex flex-col bg-background">
-                  {/* Loading indicator */}
-                  {isFetching && allTraces.length > 0 && (
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
-                      <div className="h-full bg-primary animate-pulse" />
-                    </div>
-                  )}
-
-                  {/* Header */}
-                  <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-                    <div className="shrink-0 w-[150px]">Timestamp</div>
-                    <div className="shrink-0 w-5" />
-                    <div className="flex-1">Source / Tool</div>
-                    <div className="shrink-0 w-16 text-right">Status</div>
-                  </div>
-
-                  {/* Scrollable trace list */}
-                  <div
-                    ref={containerRef}
-                    className="overflow-y-auto flex-1"
-                    onScroll={handleScroll}
-                  >
-                    <TraceListContent
-                      error={error}
-                      isLoading={isLoading}
-                      allTraces={allTraces}
-                      searchQuery={searchQuery}
-                      hasAttributeFilters={attributeFilters.length > 0}
-                      expandedTraceId={expandedTraceId}
-                      isFetchingNextPage={isFetchingNextPage}
-                      onToggleExpand={toggleExpand}
-                      onLogClick={handleLogClick}
-                    />
-                  </div>
-
-                  {/* Footer */}
-                  {allTraces.length > 0 && (
-                    <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
-                      <span>
-                        {allTraces.length}{" "}
-                        {allTraces.length === 1 ? "trace" : "traces"}
-                        {hasNextPage && " • Scroll to load more"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Page.Body>
+            </Page.Body>
           )}
         </Page>
       </div>
