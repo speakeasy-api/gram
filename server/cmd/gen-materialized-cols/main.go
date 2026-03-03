@@ -16,13 +16,21 @@ func main() {
 		log.Fatalf("read schema: %v", err)
 	}
 
+	// Scope to the telemetry_logs CREATE TABLE block to avoid false matches in other tables.
+	tableRe := regexp.MustCompile(`(?s)CREATE TABLE IF NOT EXISTS telemetry_logs\s*\((.+?)\)\s*ENGINE\s*=`)
+	tableMatch := tableRe.FindSubmatch(schema)
+	if tableMatch == nil {
+		log.Fatal("telemetry_logs table not found in clickhouse/schema.sql")
+	}
+	block := tableMatch[1]
+
 	// Match: col_name <Type> MATERIALIZED toString(attributes.<path>)
 	// Excludes resource_attributes.* — different namespace, not routable via AttributeFilter.
-	re := regexp.MustCompile(`(\w+)\s+\w+\s+MATERIALIZED\s+toString\(attributes\.([^)]+)\)`)
-	matches := re.FindAllSubmatch(schema, -1)
+	colRe := regexp.MustCompile(`(\w+)\s+\w+\s+MATERIALIZED\s+toString\(attributes\.([^)]+)\)`)
+	matches := colRe.FindAllSubmatch(block, -1)
 
 	if len(matches) == 0 {
-		log.Fatal("no MATERIALIZED toString(attributes.*) columns found in clickhouse/schema.sql")
+		log.Fatal("no MATERIALIZED toString(attributes.*) columns found in telemetry_logs")
 	}
 
 	var entries []string
