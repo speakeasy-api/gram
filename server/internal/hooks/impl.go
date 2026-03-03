@@ -126,7 +126,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		}, nil
 	}
 
-	attrs := s.buildTelemetryAttributes(payload)
+	attrs := s.buildTelemetryAttributes(authCtx, payload)
 	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, s.getToolName(payload), attrs)
 
 	// For now, always allow tools
@@ -149,7 +149,7 @@ func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayl
 		}, nil
 	}
 
-	attrs := s.buildTelemetryAttributes(payload)
+	attrs := s.buildTelemetryAttributes(authCtx, payload)
 	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, s.getToolName(payload), attrs)
 
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
@@ -169,7 +169,7 @@ func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.Cla
 		}, nil
 	}
 
-	attrs := s.buildTelemetryAttributes(payload)
+	attrs := s.buildTelemetryAttributes(authCtx, payload)
 	if payload.ToolError != nil {
 		attrs[attr.HookErrorKey] = payload.ToolError
 	}
@@ -223,16 +223,25 @@ func (s *Service) getToolName(payload *gen.ClaudePayload) string {
 }
 
 // buildTelemetryAttributes creates the full set of attributes for a hook event with common fields
-func (s *Service) buildTelemetryAttributes(payload *gen.ClaudePayload) map[attr.Key]any {
+func (s *Service) buildTelemetryAttributes(authCtx *contextvalues.AuthContext, payload *gen.ClaudePayload) map[attr.Key]any {
 	toolName := s.getToolName(payload)
 
 	attrs := map[attr.Key]any{
-		attr.EventSourceKey: string(telemetry.EventSourceHook),
-		attr.ToolNameKey:    toolName,
-		attr.HookEventKey:   payload.HookEventName,
-		attr.SpanIDKey:      generateSpanID(),
-		attr.TraceIDKey:     generateTraceID(),
-		attr.LogBodyKey:     fmt.Sprintf("Tool: %s, Hook: %s", toolName, payload.HookEventName),
+		attr.EventSourceKey:    string(telemetry.EventSourceHook),
+		attr.ToolNameKey:       toolName,
+		attr.HookEventKey:      payload.HookEventName,
+		attr.SpanIDKey:         generateSpanID(),
+		attr.TraceIDKey:        generateTraceID(),
+		attr.LogBodyKey:        fmt.Sprintf("Tool: %s, Hook: %s", toolName, payload.HookEventName),
+		attr.UserIDKey:         authCtx.UserID,
+		attr.ExternalUserIDKey: authCtx.ExternalUserID,
+		attr.APIKeyIDKey:       authCtx.APIKeyID,
+		attr.ProjectIDKey:      authCtx.ProjectID.String(),
+		attr.OrganizationIDKey: authCtx.ActiveOrganizationID,
+	}
+
+	if authCtx.Email != nil {
+		attrs[attr.UserEmailKey] = *authCtx.Email
 	}
 
 	// Parse MCP tool names (format: mcp__<server>__<tool>)
@@ -248,9 +257,8 @@ func (s *Service) buildTelemetryAttributes(payload *gen.ClaudePayload) map[attr.
 	if payload.ToolUseID != nil && *payload.ToolUseID != "" {
 		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(*payload.ToolUseID)
 	}
-	// Add session and tool use IDs if present
 	if payload.SessionID != nil {
-		attrs[attr.SessionIDKey] = *payload.SessionID
+		attrs[attr.GenAIConversationIDKey] = *payload.SessionID
 	}
 	if payload.ToolUseID != nil {
 		attrs[attr.GenAIToolCallIDKey] = *payload.ToolUseID

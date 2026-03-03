@@ -24,7 +24,7 @@ func BuildSearchLogsPayload(telemetrySearchLogsBody string, telemetrySearchLogsA
 	{
 		err = json.Unmarshal([]byte(telemetrySearchLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"attribute_filters\": [\n            {\n               \"op\": \"not_eq\",\n               \"path\": \"@user.region\",\n               \"value\": \"us-east-1\"\n            }\n         ],\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_chat_id\": \"abc123\",\n         \"gram_urn\": \"abc123\",\n         \"gram_urns\": [\n            \"abc123\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"abc123\",\n         \"http_status_code\": 1,\n         \"service_name\": \"abc123\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"11111111111111111111111111111111\",\n         \"user_id\": \"abc123\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"attribute_filters\": [\n            {\n               \"op\": \"not_eq\",\n               \"path\": \"@user.region\",\n               \"value\": \"us-east-1\"\n            }\n         ],\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"external_user_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_chat_id\": \"abc123\",\n         \"gram_urn\": \"abc123\",\n         \"gram_urns\": [\n            \"abc123\"\n         ],\n         \"http_method\": \"POST\",\n         \"http_route\": \"abc123\",\n         \"http_status_code\": 1,\n         \"service_name\": \"abc123\",\n         \"severity_text\": \"INFO\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"trace_id\": \"11111111111111111111111111111111\",\n         \"user_id\": \"abc123\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -80,7 +80,7 @@ func BuildSearchToolCallsPayload(telemetrySearchToolCallsBody string, telemetryS
 	{
 		err = json.Unmarshal([]byte(telemetrySearchToolCallsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_urn\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"function_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"gram_urn\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\"\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -559,6 +559,51 @@ func BuildListAttributeKeysPayload(telemetryListAttributeKeysBody string, teleme
 		}
 	}
 	v := &telemetry.ListAttributeKeysPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetHooksSummaryPayload builds the payload for the telemetry
+// getHooksSummary endpoint from CLI flags.
+func BuildGetHooksSummaryPayload(telemetryGetHooksSummaryBody string, telemetryGetHooksSummaryApikeyToken string, telemetryGetHooksSummarySessionToken string, telemetryGetHooksSummaryProjectSlugInput string) (*telemetry.GetHooksSummaryPayload, error) {
+	var err error
+	var body GetHooksSummaryRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetHooksSummaryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetHooksSummaryApikeyToken != "" {
+			apikeyToken = &telemetryGetHooksSummaryApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetHooksSummarySessionToken != "" {
+			sessionToken = &telemetryGetHooksSummarySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetHooksSummaryProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetHooksSummaryProjectSlugInput
+		}
+	}
+	v := &telemetry.GetHooksSummaryPayload{
 		From: body.From,
 		To:   body.To,
 	}

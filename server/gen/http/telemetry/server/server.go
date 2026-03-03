@@ -29,6 +29,7 @@ type Server struct {
 	GetObservabilityOverview http.Handler
 	ListFilterOptions        http.Handler
 	ListAttributeKeys        http.Handler
+	GetHooksSummary          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -68,6 +69,7 @@ func New(
 			{"GetObservabilityOverview", "POST", "/rpc/telemetry.getObservabilityOverview"},
 			{"ListFilterOptions", "POST", "/rpc/telemetry.listFilterOptions"},
 			{"ListAttributeKeys", "POST", "/rpc/telemetry.listAttributeKeys"},
+			{"GetHooksSummary", "POST", "/rpc/telemetry.getHooksSummary"},
 		},
 		SearchLogs:               NewSearchLogsHandler(e.SearchLogs, mux, decoder, encoder, errhandler, formatter),
 		SearchToolCalls:          NewSearchToolCallsHandler(e.SearchToolCalls, mux, decoder, encoder, errhandler, formatter),
@@ -79,6 +81,7 @@ func New(
 		GetObservabilityOverview: NewGetObservabilityOverviewHandler(e.GetObservabilityOverview, mux, decoder, encoder, errhandler, formatter),
 		ListFilterOptions:        NewListFilterOptionsHandler(e.ListFilterOptions, mux, decoder, encoder, errhandler, formatter),
 		ListAttributeKeys:        NewListAttributeKeysHandler(e.ListAttributeKeys, mux, decoder, encoder, errhandler, formatter),
+		GetHooksSummary:          NewGetHooksSummaryHandler(e.GetHooksSummary, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -97,6 +100,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetObservabilityOverview = m(s.GetObservabilityOverview)
 	s.ListFilterOptions = m(s.ListFilterOptions)
 	s.ListAttributeKeys = m(s.ListAttributeKeys)
+	s.GetHooksSummary = m(s.GetHooksSummary)
 }
 
 // MethodNames returns the methods served.
@@ -114,6 +118,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetObservabilityOverviewHandler(mux, h.GetObservabilityOverview)
 	MountListFilterOptionsHandler(mux, h.ListFilterOptions)
 	MountListAttributeKeysHandler(mux, h.ListAttributeKeys)
+	MountGetHooksSummaryHandler(mux, h.GetHooksSummary)
 }
 
 // Mount configures the mux to serve the telemetry endpoints.
@@ -630,6 +635,59 @@ func NewListAttributeKeysHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listAttributeKeys")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetHooksSummaryHandler configures the mux to serve the "telemetry"
+// service "getHooksSummary" endpoint.
+func MountGetHooksSummaryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getHooksSummary", f)
+}
+
+// NewGetHooksSummaryHandler creates a HTTP handler which loads the HTTP
+// request and calls the "telemetry" service "getHooksSummary" endpoint.
+func NewGetHooksSummaryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetHooksSummaryRequest(mux, decoder)
+		encodeResponse = EncodeGetHooksSummaryResponse(encoder)
+		encodeError    = EncodeGetHooksSummaryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getHooksSummary")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

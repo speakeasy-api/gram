@@ -3,6 +3,7 @@
  */
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
+import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
@@ -30,6 +31,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CaptureEventResult> {
     return unwrapAsync(telemetryCaptureEvent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getHooksSummary telemetry
+   *
+   * @remarks
+   * Get aggregated hooks metrics grouped by server
+   */
+  async getHooksSummary(
+    request: operations.GetHooksSummaryRequest,
+    security?: operations.GetHooksSummarySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetHooksSummaryResult> {
+    return unwrapAsync(telemetryGetHooksSummary(
       this,
       request,
       security,

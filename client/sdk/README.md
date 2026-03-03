@@ -265,6 +265,7 @@ run();
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
 * [captureEvent](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
+* [getHooksSummary](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 * [getObservabilityOverview](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 * [getProjectMetricsSummary](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 * [getUserMetricsSummary](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
@@ -416,6 +417,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`slackListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
 - [`slackUpdateSlackApp`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
+- [`telemetryGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 - [`telemetryGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`telemetryGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`telemetryGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
@@ -518,6 +520,7 @@ To learn about this feature and how to get started, check
 - [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
+- [`useGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`useGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`useGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage

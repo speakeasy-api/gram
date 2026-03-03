@@ -56,3 +56,8 @@ func ListFilterOptionsTelemetryPath() string {
 func ListAttributeKeysTelemetryPath() string {
 	return "/rpc/telemetry.listAttributeKeys"
 }
+
+// GetHooksSummaryTelemetryPath returns the URL path to the telemetry service getHooksSummary HTTP endpoint.
+func GetHooksSummaryTelemetryPath() string {
+	return "/rpc/telemetry.getHooksSummary"
+}

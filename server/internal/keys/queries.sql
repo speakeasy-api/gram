@@ -19,8 +19,9 @@ INSERT INTO api_keys (
 RETURNING *;
 
 -- name: GetAPIKeyByKeyHash :one
-SELECT *
+SELECT api_keys.*, users.email
 FROM api_keys
+JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = @key_hash
   AND deleted IS FALSE;
 

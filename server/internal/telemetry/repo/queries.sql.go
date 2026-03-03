@@ -127,6 +127,7 @@ type ListTelemetryLogsParams struct {
 	GramChatID             string
 	UserID                 string
 	ExternalUserID         string
+	EventSource            string
 	AttributeFilters       []AttributeFilter
 	SortOrder              string
 	Cursor                 string
@@ -202,6 +203,9 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
+	if arg.EventSource != "" {
+		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
+	}
 
 	// Arbitrary attribute filters
 	for _, f := range arg.AttributeFilters {
@@ -271,6 +275,7 @@ type ListToolTracesParams struct {
 	GramDeploymentID string
 	GramFunctionID   string
 	GramURN          string // Single URN filter (supports substring matching)
+	EventSource      string
 	SortOrder        string
 	Cursor           string // trace_id to paginate from
 	Limit            int
@@ -320,6 +325,12 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	if arg.GramURN != "" {
 		havingParts = append(havingParts, "position(gram_urn, ?) > 0")
 		havingArgs = append(havingArgs, arg.GramURN)
+	}
+
+	// EventSource filter must use HAVING because it's an aggregate function in SELECT
+	if arg.EventSource != "" {
+		havingParts = append(havingParts, "event_source = ?")
+		havingArgs = append(havingArgs, arg.EventSource)
 	}
 
 	// Combine all HAVING conditions with explicit AND to ensure proper filtering
@@ -1272,4 +1283,112 @@ func (q *Queries) ListAttributeKeys(ctx context.Context, arg ListAttributeKeysPa
 	}
 
 	return keys, nil
+}
+
+// HooksServerSummaryRow contains aggregated hooks metrics for a single server.
+type HooksServerSummaryRow struct {
+	ServerName   string  `ch:"server_name"`
+	EventCount   uint64  `ch:"event_count"`
+	UniqueTools  uint64  `ch:"unique_tools"`
+	SuccessCount uint64  `ch:"success_count"`
+	FailureCount uint64  `ch:"failure_count"`
+	FailureRate  float64 `ch:"failure_rate"`
+}
+
+// GetHooksSummaryParams defines the parameters for getting hooks summary.
+type GetHooksSummaryParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+}
+
+// GetHooksSummary retrieves aggregated hooks metrics grouped by server.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams) ([]HooksServerSummaryRow, error) {
+	sb := sq.Select(
+		"ifNull(toString(attributes.`gram.tool_call.source`), 'local') as server_name",
+		"count(*) as event_count",
+		"uniqExact(tool_name) as unique_tools",
+		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUse') as success_count",
+		"countIf(toString(attributes.`gram.hook.event`) = 'PostToolUseFailure') as failure_count",
+		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("toString(attributes.`gram.hook.event`) IN ('PostToolUse', 'PostToolUseFailure')").
+		GroupBy("server_name").
+		OrderBy("event_count DESC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building hooks summary query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summaries []HooksServerSummaryRow
+	for rows.Next() {
+		var summary HooksServerSummaryRow
+		if err = rows.ScanStruct(&summary); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		summaries = append(summaries, summary)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return summaries, nil
+}
+
+// GetHooksSessionCountParams defines the parameters for getting unique session count.
+type GetHooksSessionCountParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+}
+
+// GetHooksSessionCount retrieves the count of unique sessions for hooks.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetHooksSessionCount(ctx context.Context, arg GetHooksSessionCountParams) (int64, error) {
+	sb := sq.Select("uniqExact(toString(attributes.`gram.session.id`)) as session_count").
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building hooks session count query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var count uint64
+	if rows.Next() {
+		if err = rows.Scan(&count); err != nil {
+			return 0, fmt.Errorf("error scanning session count: %w", err)
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return 0, err
+	}
+
+	return int64(count), nil
 }

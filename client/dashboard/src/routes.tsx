@@ -22,6 +22,7 @@ import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
 import Logs from "./pages/logs/Logs";
+import Hooks from "./pages/hooks/Hooks";
 import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
@@ -288,6 +289,12 @@ const ROUTE_STRUCTURE = {
     url: "logs",
     customIcon: McpIcon,
     component: Logs,
+  },
+  hooks: {
+    title: "Hooks",
+    url: "hooks",
+    icon: "webhook",
+    component: Hooks,
   },
   observability: {
     title: "Insights",

@@ -306,6 +306,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listAttributeKeys")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAttributeKeys", "type": "query"}`)
 	})
+
+	Method("getHooksSummary", func() {
+		Description("Get aggregated hooks metrics grouped by server")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetHooksSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetHooksSummaryResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getHooksSummary")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getHooksSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getHooksSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetHooksSummary", "type": "query"}`)
+	})
 })
 
 var TelemetryFilter = Type("TelemetryFilter", func() {
@@ -349,6 +378,7 @@ var SearchLogsFilter = Type("SearchLogsFilter", func() {
 	Attribute("gram_chat_id", String, "Chat ID filter")
 	Attribute("user_id", String, "User ID filter")
 	Attribute("external_user_id", String, "External user ID filter")
+	Attribute("event_source", String, "Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')")
 	Attribute("attribute_filters", ArrayOf(AttributeFilter), "Filters on custom log attributes")
 })
 
@@ -440,6 +470,8 @@ var SearchToolCallsFilter = Type("SearchToolCallsFilter", func() {
 	Description("Filter criteria for searching tool calls")
 
 	Extend(TelemetryFilter)
+
+	Attribute("event_source", String, "Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')")
 })
 
 var SearchToolCallsPayload = Type("SearchToolCallsPayload", func() {
@@ -1003,4 +1035,45 @@ var ListAttributeKeysResult = Type("ListAttributeKeysResult", func() {
 	Attribute("keys", ArrayOf(String), "Distinct attribute keys. User attributes are prefixed with @")
 
 	Required("keys")
+})
+
+// Hooks summary types
+
+var GetHooksSummaryPayload = Type("GetHooksSummaryPayload", func() {
+	Description("Payload for getting aggregated hooks metrics")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+
+	Required("from", "to")
+})
+
+var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
+	Description("Result of hooks summary query")
+
+	Attribute("servers", ArrayOf(HooksServerSummaryType), "Aggregated metrics grouped by server")
+	Attribute("total_events", Int64, "Total number of hook events")
+	Attribute("total_sessions", Int64, "Total number of unique sessions")
+	Attribute("enabled", Boolean, "Whether telemetry is enabled for the organization")
+
+	Required("servers", "total_events", "total_sessions", "enabled")
+})
+
+var HooksServerSummaryType = Type("HooksServerSummary", func() {
+	Description("Aggregated hooks metrics for a single server")
+
+	Attribute("server_name", String, "Server name (extracted from tool name, or 'local' for non-MCP tools)")
+	Attribute("event_count", Int64, "Total number of hook events for this server")
+	Attribute("unique_tools", Int64, "Number of unique tools used for this server")
+	Attribute("success_count", Int64, "Number of successful tool completions (PostToolUse events)")
+	Attribute("failure_count", Int64, "Number of failed tool completions (PostToolUseFailure events)")
+	Attribute("failure_rate", Float64, "Failure rate as a decimal (0.0 to 1.0)")
+
+	Required("server_name", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
 })
