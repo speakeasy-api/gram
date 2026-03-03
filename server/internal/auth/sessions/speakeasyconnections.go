@@ -414,7 +414,6 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 			continue
 		}
 		if orgMembership == nil {
-			s.logger.ErrorContext(ctx, "org membership not found in workos")
 			continue
 		}
 

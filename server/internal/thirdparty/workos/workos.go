@@ -43,7 +43,7 @@ func (w *WorkOS) GetUserByEmail(ctx context.Context, email string) (*usermanagem
 	}
 
 	if len(user.Data) == 0 {
-		return nil, errors.New("user not found in workos")
+		return nil, nil
 	}
 
 	return &user.Data[0], nil
@@ -72,7 +72,7 @@ func (w *WorkOS) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID
 	}
 
 	if len(membership.Data) == 0 {
-		return nil, errors.New("organization membership not found in workos")
+		return nil, nil
 	}
 
 	return &membership.Data[0], nil
