@@ -41,13 +41,20 @@ export function parseOperatorSymbol(input: string): Op | null {
 export function tryParseFilterExpression(
   input: string,
 ): { key: string; op: Op; value: string } | null {
+  let best: { key: string; op: Op; value: string; idx: number } | null = null;
   for (const [symbol, op] of SYMBOL_TO_OP) {
     const idx = input.indexOf(symbol);
     if (idx === -1) continue;
 
     const key = input.slice(0, idx).trim();
     const value = input.slice(idx + symbol.length).trim();
-    if (key && value) return { key, op, value };
+    if (!key || !value) continue;
+
+    // Pick the earliest match. At the same position, the iteration order
+    // already prefers longer symbols (`!=` before `=`).
+    if (!best || idx < best.idx) {
+      best = { key, op, value, idx };
+    }
   }
-  return null;
+  return best ? { key: best.key, op: best.op, value: best.value } : null;
 }
