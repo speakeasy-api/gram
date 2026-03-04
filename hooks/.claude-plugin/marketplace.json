@@ -1,0 +1,17 @@
+{
+  "name": "gram-marketplace",
+  "owner": {
+    "name": "Gram",
+    "email": "support@getgram.ai"
+  },
+  "metadata": {
+    "description": "Official Gram plugins for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "gram-hooks",
+      "source": "./plugin-claude",
+      "description": "Forward Claude Code hooks to Gram for analytics, monitoring, and compliance"
+    }
+  ]
+}
