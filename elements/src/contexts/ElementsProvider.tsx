@@ -100,7 +100,10 @@ const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer question
 Tool Result Display:
 Some tools have custom visual components that automatically render their results (you'll see a rich card/widget appear). For these, do not repeat the data - just add brief context or a follow-up question if needed.
 
-For tools WITHOUT custom components, you should present the data clearly - either as plain text for simple results, or using the UI code block format for structured data like lists of items, categories, or dashboards.`
+For tools WITHOUT custom components, you should present the data clearly - either as plain text for simple results, or using the UI code block format for structured data like lists of items, categories, or dashboards.
+
+UI Widget Guidelines:
+IMPORTANT: Only render ONE generative UI widget (chart, dashboard, visualization) per response. Never render multiple widgets in a single message - this causes layout shifts during streaming and overwhelms the user. If you have multiple visualizations to show, render the most important one and explicitly offer to show others as follow-ups (e.g., "Would you like to see a breakdown by status as well?").`
 
 function mergeInternalSystemPromptWith(
   userSystemPrompt: string | undefined,
