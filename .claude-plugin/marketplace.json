@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "gram-hooks",
-      "source": "./plugin-claude",
+      "source": "./hooks/plugin-claude",
       "description": "Forward Claude Code hooks to Gram for analytics, monitoring, and compliance"
     }
   ]
