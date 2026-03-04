@@ -231,9 +231,13 @@ func (tp *ToolProxy) doFunction(
 		if val := env.UserConfig.Get(plan.AuthInput.Variable); val != "" {
 			payloadEnv[plan.AuthInput.Variable] = val
 		}
-		if plan.AuthInput.GramEmail && env.GramEmail != "" {
-			payloadEnv[gramUserEmailEnvVar] = env.GramEmail
-		}
+	}
+
+	// GRAM_USER_EMAIL is a platform-controlled variable — remove any
+	// user-supplied value and only set it from the authenticated context.
+	delete(payloadEnv, gramUserEmailEnvVar)
+	if plan.AuthInput != nil && plan.AuthInput.GramEmail && env.GramEmail != "" {
+		payloadEnv[gramUserEmailEnvVar] = env.GramEmail
 	}
 
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
