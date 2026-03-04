@@ -90,6 +90,7 @@ export type ManifestTool = {
   authInput?: {
     type: "oauth2";
     variable: string;
+    gramEmail?: string;
   };
   meta?: unknown;
 };
@@ -233,6 +234,7 @@ export class Gram<
   #authInput?: {
     type: "oauth2";
     variable: string;
+    gramEmail?: string;
   };
 
   constructor(opts?: {
@@ -261,6 +263,12 @@ export class Gram<
        * Must be a key in envSchema.
        */
       oauthVariable: keyof EnvSchema & string;
+      /**
+       * The name of the environment variable that will receive the authenticated
+       * Gram user's email address.
+       * Must be a key in envSchema.
+       */
+      gramEmailVariable?: keyof EnvSchema & string;
     };
   }) {
     this.#tools = new Map();
@@ -271,6 +279,7 @@ export class Gram<
       ? {
           type: "oauth2",
           variable: opts.authInput.oauthVariable,
+          gramEmail: opts.authInput.gramEmailVariable,
         }
       : undefined;
   }
@@ -415,6 +424,7 @@ export class Gram<
         authInput?: {
           type: "oauth2";
           variable: string;
+          gramEmail?: string;
         };
       } = {
         name: tool.name,

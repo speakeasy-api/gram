@@ -226,6 +226,9 @@ func (tp *ToolProxy) doFunction(
 		if val := env.UserConfig.Get(plan.AuthInput.Variable); val != "" {
 			payloadEnv[plan.AuthInput.Variable] = val
 		}
+		if plan.AuthInput.GramEmail != "" && env.GramEmail != "" {
+			payloadEnv[plan.AuthInput.GramEmail] = env.GramEmail
+		}
 	}
 
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
