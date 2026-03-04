@@ -3,7 +3,6 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"math"
 	"sort"
@@ -1117,7 +1116,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		TimeEnd:       timeEnd,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, fmt.Sprintf("error getting hooks summary: %v", err))
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks summary: %v", err)
 	}
 
 	// Transform rows into response
@@ -1126,13 +1125,13 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	for _, row := range rows {
 		servers = append(servers, &telem_gen.HooksServerSummary{
 			ServerName:   row.ServerName,
-			EventCount:   int64(row.EventCount),
-			UniqueTools:  int64(row.UniqueTools),
-			SuccessCount: int64(row.SuccessCount),
-			FailureCount: int64(row.FailureCount),
+			EventCount:   int64(row.EventCount),   //nolint:gosec // Bounded count
+			UniqueTools:  int64(row.UniqueTools),  //nolint:gosec // Bounded count
+			SuccessCount: int64(row.SuccessCount), //nolint:gosec // Bounded count
+			FailureCount: int64(row.FailureCount), //nolint:gosec // Bounded count
 			FailureRate:  row.FailureRate,
 		})
-		totalEvents += int64(row.EventCount)
+		totalEvents += int64(row.EventCount) //nolint:gosec // Bounded count
 	}
 
 	// Get unique session count
@@ -1142,7 +1141,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		TimeEnd:       timeEnd,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, fmt.Sprintf("error getting hooks session count: %w", err))
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks session count: %v", err)
 	}
 	totalSessions = sessionCount
 

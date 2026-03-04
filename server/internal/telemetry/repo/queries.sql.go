@@ -345,6 +345,10 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	if arg.EventSource != "" {
 		havingParts = append(havingParts, "event_source = ?")
 		havingArgs = append(havingArgs, arg.EventSource)
+	} else {
+		// Exclude hooks logs by default when no event_source filter is specified
+		havingParts = append(havingParts, "event_source != ?")
+		havingArgs = append(havingArgs, "hook")
 	}
 
 	// Combine all HAVING conditions with explicit AND to ensure proper filtering
