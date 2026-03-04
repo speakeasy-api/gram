@@ -2,14 +2,13 @@ import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { useOrganization, useProject } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
 import { type Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Button, Combobox, Input, Stack } from "@speakeasy-api/moonshine";
+import { Button, Input, Stack } from "@speakeasy-api/moonshine";
 import { Loader2, Search, SearchXIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
@@ -27,8 +26,6 @@ export function CatalogRoot() {
 
 export default function Catalog() {
   const routes = useRoutes();
-  const client = useSdkClient();
-  const organization = useOrganization();
   const project = useProject();
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -39,7 +36,8 @@ export default function Catalog() {
     new Set(),
   );
   const [addingServers, setAddingServers] = useState<Server[]>([]);
-  const [targetProjectSlug, setTargetProjectSlug] = useState(project.slug);
+  const [anchorElement, setAnchorElement] = useState<HTMLElement | null>(null);
+  const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteListMCPCatalog(searchQuery);
@@ -76,43 +74,46 @@ export default function Catalog() {
     );
   }, [filterState.filters]);
 
-  const toggleServerSelection = (serverKey: string) => {
+  const toggleServerSelection = (serverKey: string, element: HTMLElement) => {
     setSelectedServers((prev) => {
       const next = new Set(prev);
       if (next.has(serverKey)) {
         next.delete(serverKey);
+        // If we're deselecting and it was the last one, clear anchor
+        if (next.size === 0) {
+          setAnchorElement(null);
+        }
       } else {
         next.add(serverKey);
+        // Only update anchor if this card is on a different row
+        // (cards on same row have same top position)
+        if (anchorElement) {
+          const currentRect = anchorElement.getBoundingClientRect();
+          const newRect = element.getBoundingClientRect();
+          // Different row if top positions differ by more than a small threshold
+          if (Math.abs(currentRect.top - newRect.top) > 10) {
+            setAnchorElement(element);
+          }
+        } else {
+          setAnchorElement(element);
+        }
       }
       return next;
     });
   };
 
-  const clearSelection = () => setSelectedServers(new Set());
+  const clearSelection = () => {
+    setSelectedServers(new Set());
+    setAnchorElement(null);
+  };
 
   const getSelectedServerObjects = () =>
     filteredServers.filter((s) =>
       selectedServers.has(`${s.registryId}-${s.registrySpecifier}`),
     );
 
-  const projectOptions = organization.projects.map((p) => ({
-    value: p.slug,
-    label: p.name || p.slug,
-  }));
-
   const handleAdd = () => {
     setAddingServers(getSelectedServerObjects());
-  };
-
-  const handleCreateProject = async (name: string) => {
-    const result = await client.projects.create({
-      createProjectRequestBody: {
-        name,
-        organizationId: organization.id,
-      },
-    });
-    await organization.refetch();
-    setTargetProjectSlug(result.project.slug);
   };
 
   // Infinite scroll with IntersectionObserver
@@ -205,8 +206,17 @@ export default function Catalog() {
                 />
               )}
 
-              {/* Server grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Server grid - clicking empty space clears selection */}
+              {/* biome-ignore lint/a11y/useKeyWithClickEvents: Grid click-to-clear is mouse-only UX enhancement */}
+              <div
+                ref={setGridElement}
+                className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+                onClick={() => {
+                  if (selectedServers.size > 0) {
+                    clearSelection();
+                  }
+                }}
+              >
                 {isLoading &&
                   Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
                     (id) => <Skeleton key={id} className="h-[200px]" />,
@@ -223,7 +233,9 @@ export default function Catalog() {
                         )}
                         externalMcps={externalMcps}
                         isSelected={selectedServers.has(serverKey)}
-                        onToggleSelect={() => toggleServerSelection(serverKey)}
+                        onToggleSelect={(el) =>
+                          toggleServerSelection(serverKey, el)
+                        }
                       />
                     );
                   })}
@@ -267,19 +279,7 @@ export default function Catalog() {
 
       <AddServerDialog
         servers={addingServers}
-        projectSlug={targetProjectSlug}
-        projectSelector={
-          <Combobox
-            options={projectOptions}
-            value={targetProjectSlug}
-            onValueChange={(v) => v && setTargetProjectSlug(v)}
-            searchable
-            placeholder="Select project..."
-            createOptions={{
-              handleCreate: handleCreateProject,
-            }}
-          />
-        }
+        projectSlug={project.slug}
         open={addingServers.length > 0}
         onOpenChange={(open) => {
           if (!open) {
@@ -291,12 +291,10 @@ export default function Catalog() {
       />
       <CommandBar
         selectedCount={selectedServers.size}
-        projects={projectOptions}
-        currentProjectSlug={targetProjectSlug}
-        onSelectProject={setTargetProjectSlug}
-        onCreateProject={handleCreateProject}
         onAdd={handleAdd}
         onClear={clearSelection}
+        anchorElement={anchorElement}
+        containerElement={gridElement}
       />
     </Page>
   );
