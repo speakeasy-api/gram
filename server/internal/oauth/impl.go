@@ -369,6 +369,11 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			urlParams.Set("scope", req.Scope)
 		}
 
+		// Per OIDC Core §11, prompt=consent is required when requesting offline_access
+		if strings.Contains(urlParams.Get("scope"), "offline_access") {
+			urlParams.Set("prompt", "consent")
+		}
+
 		if proxyServer.Audience.Valid {
 			urlParams.Set("audience", proxyServer.Audience.String)
 		}
