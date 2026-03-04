@@ -389,8 +389,12 @@ func TestService_HandleWellKnownOAuthServerMetadata_RefreshTokenGrant(t *testing
 		err = json.Unmarshal(w.Body.Bytes(), &metadata)
 		require.NoError(t, err)
 
-		_, hasScopes := metadata["scopes_supported"]
-		require.False(t, hasScopes, "scopes_supported should be omitted when empty")
+		// Even with no provider scopes, offline_access is always advertised
+		scopes, hasScopes := metadata["scopes_supported"]
+		require.True(t, hasScopes, "scopes_supported should be present")
+		scopeList, ok := scopes.([]any)
+		require.True(t, ok)
+		require.Equal(t, []any{"offline_access"}, scopeList)
 	})
 }
 
