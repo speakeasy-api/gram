@@ -626,7 +626,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	}
 
 	// Make multiple completions
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, err := client.GetCompletion(context.Background(), req)
 		require.NoError(t, err)
 	}
@@ -648,9 +648,9 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 
 // trackingTitleGenerator records every ScheduleChatTitleGeneration call with its chatID.
 type trackingTitleGenerator struct {
-	mu      sync.Mutex
-	calls   []string // chatIDs for each call
-	err     error
+	mu    sync.Mutex
+	calls []string // chatIDs for each call
+	err   error
 }
 
 func (m *trackingTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error {
@@ -816,7 +816,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 	projectID := uuid.New()
 
 	// Three completions with a valid ChatID
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, err := client.GetCompletion(context.Background(), CompletionRequest{
 			OrgID:       "test-org",
 			ProjectID:   projectID.String(),
@@ -903,9 +903,9 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
 		Messages: []or.Message{
-			CreateMessageUser("Hello"),            // from history
-			CreateMessageAssistant("Response 1"),  // from history
-			CreateMessageUser("How are you?"),     // new user message
+			CreateMessageUser("Hello"),           // from history
+			CreateMessageAssistant("Response 1"), // from history
+			CreateMessageUser("How are you?"),    // new user message
 		},
 		ChatID:      chatID,
 		UsageSource: billing.ModelUsageSourcePlayground,
@@ -933,10 +933,208 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		"assistant messages should never be re-stored by StartOrResumeChat on reload")
 
 	// Verify the exact sequence of stored messages
-	require.Equal(t, "user", tracker.storedMessages[0].role)         // round 1: user
-	require.Equal(t, "assistant", tracker.storedMessages[1].role)     // round 1: assistant response
-	require.Equal(t, "user", tracker.storedMessages[2].role)         // round 2: new user message only
-	require.Equal(t, "assistant", tracker.storedMessages[3].role)     // round 2: assistant response
+	require.Equal(t, "user", tracker.storedMessages[0].role)      // round 1: user
+	require.Equal(t, "assistant", tracker.storedMessages[1].role) // round 1: assistant response
+	require.Equal(t, "user", tracker.storedMessages[2].role)      // round 2: new user message only
+	require.Equal(t, "assistant", tracker.storedMessages[3].role) // round 2: assistant response
+}
+
+// TestChatClient_GetCompletion_WithJSONSchema verifies that when a JSONSchema is provided,
+// it gets passed through to the OpenRouter API as response_format for structured output.
+// This is required for AI SDK's generateObject to work correctly.
+func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
+	t.Parallel()
+
+	// Track the request body sent to the server
+	var receivedRequestBody OpenAIChatRequest
+
+	// Create a mock OpenRouter server that captures the request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Parse and capture request body
+		err := json.NewDecoder(r.Body).Decode(&receivedRequestBody)
+		if !assert.NoError(t, err) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Send mock response with structured JSON
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id": "msg_schema_test",
+			"model": "openai/gpt-4o-mini",
+			"choices": [{
+				"message": {
+					"role": "assistant",
+					"content": "{\"isQuestion\": true}"
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {
+				"prompt_tokens": 10,
+				"completion_tokens": 5,
+				"total_tokens": 15
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	// Create mocks
+	provisioner := &mockProvisioner{apiKey: "test-api-key"}
+	captureStrategy := &mockMessageCaptureStrategy{}
+	trackingStrategy := &mockUsageTrackingStrategy{}
+	titleGenerator := &mockChatTitleGenerator{}
+	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
+	telemetryService := &mockTelemetryService{}
+
+	// Create client
+	client := NewUnifiedClient(
+		slog.Default(),
+		provisioner,
+		captureStrategy,
+		trackingStrategy,
+		titleGenerator,
+		resolutionAnalyzer,
+		telemetryService,
+	)
+
+	// Override the HTTP client to use the test server
+	client.httpClient = &http.Client{
+		Transport: &testTransport{server: server},
+	}
+
+	// Create test request with JSON schema (simulating AI SDK's generateObject)
+	chatID := uuid.New()
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: projectID.String(),
+		Messages: []or.Message{
+			CreateMessageUser("Is this a question?"),
+		},
+		ChatID:      chatID,
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "test-api-key-id",
+		JSONSchema: &or.JSONSchemaConfig{
+			Name: "question_check",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"isQuestion": map[string]any{
+						"type":        "boolean",
+						"description": "Whether the message is a question",
+					},
+				},
+				"required": []string{"isQuestion"},
+			},
+		},
+	}
+
+	// Call GetCompletion
+	resp, err := client.GetCompletion(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Verify response
+	assert.Equal(t, "msg_schema_test", resp.MessageID)
+	assert.Contains(t, resp.Content, "isQuestion")
+
+	// Verify that response_format was included in the request to OpenRouter
+	require.NotNil(t, receivedRequestBody.ResponseFormat, "response_format should be set when JSONSchema is provided")
+
+	// Verify the response_format contains the JSON schema
+	assert.Equal(t, "json_schema", string(receivedRequestBody.ResponseFormat.Type),
+		"response_format type should be json_schema")
+	assert.NotNil(t, receivedRequestBody.ResponseFormat.ResponseFormatJSONSchema,
+		"ResponseFormatJSONSchema should be set")
+	assert.Equal(t, "question_check", receivedRequestBody.ResponseFormat.ResponseFormatJSONSchema.JSONSchema.Name,
+		"schema name should match")
+}
+
+// TestChatClient_GetCompletion_WithoutJSONSchema verifies that when no JSONSchema is provided,
+// response_format is not set (preserving default behavior).
+func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
+	t.Parallel()
+
+	// Track the request body sent to the server
+	var receivedRequestBody OpenAIChatRequest
+
+	// Create a mock OpenRouter server that captures the request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Parse and capture request body
+		err := json.NewDecoder(r.Body).Decode(&receivedRequestBody)
+		if !assert.NoError(t, err) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Send mock response
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id": "msg_no_schema",
+			"model": "openai/gpt-4o",
+			"choices": [{
+				"message": {
+					"role": "assistant",
+					"content": "Hello, world!"
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {
+				"prompt_tokens": 10,
+				"completion_tokens": 5,
+				"total_tokens": 15
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	// Create mocks
+	provisioner := &mockProvisioner{apiKey: "test-api-key"}
+	captureStrategy := &mockMessageCaptureStrategy{}
+	trackingStrategy := &mockUsageTrackingStrategy{}
+	titleGenerator := &mockChatTitleGenerator{}
+	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
+	telemetryService := &mockTelemetryService{}
+
+	// Create client
+	client := NewUnifiedClient(
+		slog.Default(),
+		provisioner,
+		captureStrategy,
+		trackingStrategy,
+		titleGenerator,
+		resolutionAnalyzer,
+		telemetryService,
+	)
+
+	// Override the HTTP client to use the test server
+	client.httpClient = &http.Client{
+		Transport: &testTransport{server: server},
+	}
+
+	// Create test request WITHOUT JSON schema
+	chatID := uuid.New()
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: projectID.String(),
+		Messages: []or.Message{
+			CreateMessageUser("Hello"),
+		},
+		ChatID:      chatID,
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "test-api-key-id",
+		JSONSchema:  nil, // No schema
+	}
+
+	// Call GetCompletion
+	resp, err := client.GetCompletion(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Verify that response_format was NOT set
+	assert.Nil(t, receivedRequestBody.ResponseFormat,
+		"response_format should not be set when JSONSchema is nil")
 }
 
 // testTransport is a custom http.RoundTripper that redirects all requests to the test server
