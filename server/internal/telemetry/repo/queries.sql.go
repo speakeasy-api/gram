@@ -1375,7 +1375,7 @@ type GetHooksSessionCountParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksSessionCount(ctx context.Context, arg GetHooksSessionCountParams) (int64, error) {
-	sb := sq.Select("uniqExact(toString(attributes.`gram.session.id`)) as session_count").
+	sb := sq.Select("uniqExact(toString(attributes.`genai.conversation.id`)) as session_count").
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
