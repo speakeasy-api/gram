@@ -46,6 +46,11 @@ type ToolCallSource string
 const (
 	ToolCallSourceDirect ToolCallSource = "direct"
 	ToolCallSourceMCP    ToolCallSource = "mcp"
+
+	// gramUserEmailEnvVar is the environment variable injected into function
+	// payloads when authInput.gramEmail is enabled and Gram has authenticated
+	// the identity accessing the MCP server.
+	gramUserEmailEnvVar = "GRAM_USER_EMAIL"
 )
 
 var proxiedHeaders = []string{
@@ -227,7 +232,7 @@ func (tp *ToolProxy) doFunction(
 			payloadEnv[plan.AuthInput.Variable] = val
 		}
 		if plan.AuthInput.GramEmail && env.GramEmail != "" {
-			payloadEnv[toolconfig.GramUserEmailEnvVar] = env.GramEmail
+			payloadEnv[gramUserEmailEnvVar] = env.GramEmail
 		}
 	}
 
