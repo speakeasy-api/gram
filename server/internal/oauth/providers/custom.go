@@ -25,6 +25,75 @@ type CustomProvider struct {
 	environments *environments.EnvironmentEntries
 }
 
+// oauthTokenResponseSnake is the spec-compliant (RFC 6749) token response format.
+type oauthTokenResponseSnake struct {
+	AccessToken  string  `json:"access_token"`
+	RefreshToken string  `json:"refresh_token"`
+	ExpiresIn    float64 `json:"expires_in"`
+}
+
+// oauthTokenResponseCamel is a non-compliant camelCase variant that some providers return.
+// TODO: Remove this fallback (and the double-deserialization in parseTokenResponse) once
+// we've confirmed no providers use it. To check, query Datadog:
+//
+//	@msg:"non-compliant camelCase OAuth token response" service:gram-server
+//
+// If zero hits appear over a reasonable window (e.g. 30 days), it's safe to delete.
+type oauthTokenResponseCamel struct {
+	AccessToken  string  `json:"accessToken"`
+	RefreshToken string  `json:"refreshToken"`
+	ExpiresIn    float64 `json:"expiresIn"`
+}
+
+// parseTokenResponse deserializes a raw OAuth token response body into a TokenExchangeResult.
+// It first tries the spec-compliant snake_case format, then falls back to camelCase for
+// non-compliant providers. Returns an error only if neither format yields an access token.
+func (p *CustomProvider) parseTokenResponse(ctx context.Context, body []byte, providerSlug string) (*TokenExchangeResult, error) {
+	var snake oauthTokenResponseSnake
+	if err := json.Unmarshal(body, &snake); err != nil {
+		return nil, fmt.Errorf("failed to parse token response: %w", err)
+	}
+
+	// Happy path: spec-compliant snake_case response
+	if snake.AccessToken != "" {
+		var expiresAt *time.Time
+		if snake.ExpiresIn > 0 {
+			expiryTime := time.Now().Add(time.Duration(snake.ExpiresIn) * time.Second)
+			expiresAt = &expiryTime
+		}
+		return &TokenExchangeResult{
+			AccessToken:  snake.AccessToken,
+			RefreshToken: snake.RefreshToken,
+			ExpiresAt:    expiresAt,
+		}, nil
+	}
+
+	// Fallback: try camelCase for non-compliant providers
+	var camel oauthTokenResponseCamel
+	if err := json.Unmarshal(body, &camel); err != nil {
+		return nil, fmt.Errorf("failed to parse token response: %w", err)
+	}
+
+	if camel.AccessToken == "" {
+		return nil, fmt.Errorf("missing access_token in token response")
+	}
+
+	// Log so we can track which providers use camelCase and eventually remove this fallback.
+	p.logger.WarnContext(ctx, "non-compliant camelCase OAuth token response",
+		attr.SlogOAuthProvider(providerSlug))
+
+	var expiresAt *time.Time
+	if camel.ExpiresIn > 0 {
+		expiryTime := time.Now().Add(time.Duration(camel.ExpiresIn) * time.Second)
+		expiresAt = &expiryTime
+	}
+	return &TokenExchangeResult{
+		AccessToken:  camel.AccessToken,
+		RefreshToken: camel.RefreshToken,
+		ExpiresAt:    expiresAt,
+	}, nil
+}
+
 // NewCustomProvider creates a new custom OAuth provider
 func NewCustomProvider(logger *slog.Logger, environments *environments.EnvironmentEntries) *CustomProvider {
 	return &CustomProvider{
@@ -38,15 +107,22 @@ func NewCustomProvider(logger *slog.Logger, environments *environments.Environme
 func (p *CustomProvider) resolveClientCredentials(ctx context.Context, provider repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (string, string, error) {
 	var secrets map[string]string
 	if err := json.Unmarshal(provider.Secrets, &secrets); err != nil {
+		p.logger.ErrorContext(ctx, "OAuth provider secrets invalid",
+			attr.SlogOAuthProvider(provider.Slug),
+			attr.SlogError(err))
 		return "", "", fmt.Errorf("OAuth provider secrets invalid: %w", err)
 	}
 
 	clientID := secrets["client_id"]
 	clientSecret := secrets["client_secret"]
 
+	// Fallback to environment if credentials are missing and environment is specified
 	if (clientID == "" || clientSecret == "") && secrets["environment_slug"] != "" {
 		envMap, err := p.environments.Load(ctx, toolset.ProjectID, toolconfig.Slug(secrets["environment_slug"]))
 		if err != nil {
+			p.logger.ErrorContext(ctx, "failed to load environment",
+				attr.SlogOAuthProvider(provider.Slug),
+				attr.SlogError(err))
 			return "", "", fmt.Errorf("failed to load environment: %w", err)
 		}
 
@@ -61,9 +137,13 @@ func (p *CustomProvider) resolveClientCredentials(ctx context.Context, provider 
 	}
 
 	if clientID == "" {
+		p.logger.ErrorContext(ctx, "OAuth provider client_id not configured",
+			attr.SlogOAuthProvider(provider.Slug))
 		return "", "", fmt.Errorf("OAuth provider client_id not configured")
 	}
 	if clientSecret == "" {
+		p.logger.ErrorContext(ctx, "OAuth provider client_secret not configured",
+			attr.SlogOAuthProvider(provider.Slug))
 		return "", "", fmt.Errorf("OAuth provider client_secret not configured")
 	}
 
@@ -148,52 +228,15 @@ func (p *CustomProvider) ExchangeToken(
 		return nil, fmt.Errorf("failed to read OAuth token response: %w", err)
 	}
 
-	var oauthTokenResp map[string]any
-	if err := json.Unmarshal(tokenRespBody, &oauthTokenResp); err != nil {
+	result, err := p.parseTokenResponse(ctx, tokenRespBody, provider.Slug)
+	if err != nil {
 		p.logger.ErrorContext(ctx, "failed to parse OAuth token response",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
-		return nil, fmt.Errorf("failed to parse OAuth token response: %w", err)
+		return nil, err
 	}
 
-	// Technically the OAuth spec does expect snake_case field names in the response
-	// but we will be generous to mistakes and try with camelCase
-	accessToken, ok := oauthTokenResp["access_token"].(string)
-	if !ok {
-		// Retry with camelCase field name
-		accessToken, ok = oauthTokenResp["accessToken"].(string)
-		if !ok {
-			p.logger.ErrorContext(ctx, "missing access_token in OAuth response",
-				attr.SlogOAuthProvider(provider.Slug))
-			return nil, fmt.Errorf("missing access_token in OAuth response")
-		}
-	}
-
-	var expiresAt *time.Time
-	if expiresInFloat, ok := oauthTokenResp["expires_in"].(float64); ok {
-		expiryTime := time.Now().Add(time.Duration(expiresInFloat) * time.Second)
-		expiresAt = &expiryTime
-	}
-	if expiresAt == nil {
-		if expiresInFloat, ok := oauthTokenResp["expiresIn"].(float64); ok {
-			// Retry with camelCase field name
-			expiryTime := time.Now().Add(time.Duration(expiresInFloat) * time.Second)
-			expiresAt = &expiryTime
-		}
-	}
-
-	var refreshToken string
-	if rt, ok := oauthTokenResp["refresh_token"].(string); ok {
-		refreshToken = rt
-	} else if rt, ok := oauthTokenResp["refreshToken"].(string); ok {
-		refreshToken = rt
-	}
-
-	return &TokenExchangeResult{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresAt:    expiresAt,
-	}, nil
+	return result, nil
 }
 
 // RefreshToken exchanges a refresh token for a new access token from a custom OAuth provider
@@ -255,41 +298,13 @@ func (p *CustomProvider) RefreshToken(
 		return nil, fmt.Errorf("failed to read refresh token response: %w", err)
 	}
 
-	var oauthTokenResp map[string]any
-	if err := json.Unmarshal(tokenRespBody, &oauthTokenResp); err != nil {
-		return nil, fmt.Errorf("failed to parse refresh token response: %w", err)
+	result, err := p.parseTokenResponse(ctx, tokenRespBody, provider.Slug)
+	if err != nil {
+		p.logger.ErrorContext(ctx, "failed to parse refresh token response",
+			attr.SlogOAuthProvider(provider.Slug),
+			attr.SlogError(err))
+		return nil, err
 	}
 
-	accessToken, ok := oauthTokenResp["access_token"].(string)
-	if !ok {
-		accessToken, ok = oauthTokenResp["accessToken"].(string)
-		if !ok {
-			return nil, fmt.Errorf("missing access_token in refresh response")
-		}
-	}
-
-	var newRefreshToken string
-	if rt, ok := oauthTokenResp["refresh_token"].(string); ok {
-		newRefreshToken = rt
-	} else if rt, ok := oauthTokenResp["refreshToken"].(string); ok {
-		newRefreshToken = rt
-	}
-
-	var expiresAt *time.Time
-	if expiresInFloat, ok := oauthTokenResp["expires_in"].(float64); ok {
-		expiryTime := time.Now().Add(time.Duration(expiresInFloat) * time.Second)
-		expiresAt = &expiryTime
-	}
-	if expiresAt == nil {
-		if expiresInFloat, ok := oauthTokenResp["expiresIn"].(float64); ok {
-			expiryTime := time.Now().Add(time.Duration(expiresInFloat) * time.Second)
-			expiresAt = &expiryTime
-		}
-	}
-
-	return &TokenExchangeResult{
-		AccessToken:  accessToken,
-		RefreshToken: newRefreshToken,
-		ExpiresAt:    expiresAt,
-	}, nil
+	return result, nil
 }
