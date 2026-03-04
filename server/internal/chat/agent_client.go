@@ -360,6 +360,7 @@ func (c *Client) LoadToolsetTools(
 				SystemEnv:  systemConfig,
 				UserConfig: ciEnv,
 				OAuthToken: "", // Chat does not support OAuth tokens for external MCP
+				GramEmail:  "",
 			}, plan, telemetry.HTTPLogAttributes{})
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)

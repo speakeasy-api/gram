@@ -1,5 +1,11 @@
 # @gram-ai/create-function
 
+## 0.13.0
+
+### Minor Changes
+
+- be6dcae: Upgrade zod to v4 across the monorepo. Bump @modelcontextprotocol/sdk
+
 ## 0.12.4
 
 ## 0.12.3

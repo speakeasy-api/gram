@@ -131,6 +131,7 @@ type ToolCallEnv struct {
 	SystemEnv  *CaseInsensitiveEnv
 	UserConfig *CaseInsensitiveEnv
 	OAuthToken string // OAuth token for external MCP servers (empty if not applicable)
+	GramEmail  string // Authenticated Gram user's email (empty if not applicable)
 }
 
 // ToNormalizedEnvKey converts a string to a normalized environment variable key

@@ -1,5 +1,26 @@
 # dashboard
 
+## 0.31.0
+
+### Minor Changes
+
+- be6dcae: Upgrade zod to v4 across the monorepo. Bump @modelcontextprotocol/sdk
+- f066870: Adds ability to telemetry logs page to filter by dynamic attributes.
+
+### Patch Changes
+
+- 907ea0b: Move server instructions to dedicated section with LLM generation with best practices for mcp server instructions based on [mcp release](https://blog.modelcontextprotocol.io/posts/2025-11-03-using-server-instructions/)
+- 1821e46: Adds an initial pass "POC" implementation of Gram hooks for tool capture
+- fb7439b: Improve settings page with tabs routing and logging API
+- 998102f: Update telemetry search logs API response to sent unix nano timestamps as strings instead of int.
+- Updated dependencies [ee711ab]
+- Updated dependencies [1821e46]
+- Updated dependencies [be6dcae]
+- Updated dependencies [fb7439b]
+- Updated dependencies [998102f]
+  - @gram-ai/elements@1.27.4
+  - @gram/client@0.28.0
+
 ## 0.30.0
 
 ### Minor Changes

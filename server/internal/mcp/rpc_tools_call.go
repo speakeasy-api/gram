@@ -197,10 +197,18 @@ func handleToolsCall(
 		}
 	}
 
+	var gramEmail string
+	if payload.authenticated {
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx.Email != nil {
+			gramEmail = *authCtx.Email
+		}
+	}
+
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
 		OAuthToken: oauthToken,
+		GramEmail:  gramEmail,
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
