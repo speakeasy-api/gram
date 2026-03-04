@@ -30,7 +30,7 @@
   "preferredLineLength": 120,
   "notes": "Only use kubectl and terraform commands for validation/dry-run as defined in CLAUDE.md. Only run mise commands for local iteration (helm:up, helm:update, k8s:refresh). Do not automatically run commands that make real infrastructure changes without specific user request.",
   "extraKnownMarketplaces": {
-    "gram-marketplace": {
+    "gram": {
       "source": {
         "source": "github",
         "repo": "speakeasy-api/gram"
@@ -39,6 +39,9 @@
   },
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true,
-    "gram-hooks@gram-marketplace": true
+    "gram-hooks@gram": true
+  },
+  "env": {
+    "GRAM_SERVER_URL": "https://app.getgram.ai"
   }
 }
