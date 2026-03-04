@@ -307,6 +307,57 @@ const gram = new Gram({
 
 If not provided, the framework falls back to `process.env`.
 
+## Authentication & Identity
+
+### OAuth Tokens
+
+If your function needs to access external APIs on behalf of the user, you can
+declare an OAuth variable in `authInput`. Gram will handle the OAuth flow and
+inject the acquired token into the specified environment variable:
+
+```typescript
+const gram = new Gram({
+  envSchema: {
+    OAUTH_TOKEN: z.optional(z.string()),
+  },
+  authInput: {
+    oauthVariable: "OAUTH_TOKEN",
+  },
+});
+```
+
+### User Identity
+
+When an authenticated Gram user invokes a tool, you can opt in to receiving
+their email address by setting `gramEmail: true` in `authInput`. The email will
+be available as the `GRAM_USER_EMAIL` environment variable:
+
+```typescript
+const gram = new Gram({
+  envSchema: {
+    OAUTH_TOKEN: z.optional(z.string()),
+    GRAM_USER_EMAIL: z.optional(z.string()),
+  },
+  authInput: {
+    oauthVariable: "OAUTH_TOKEN",
+    gramEmail: true,
+  },
+}).tool({
+  name: "whoami",
+  description: "Returns the current user's email",
+  inputSchema: {},
+  async execute(ctx) {
+    const email = ctx.env.GRAM_USER_EMAIL;
+    if (!email) {
+      return ctx.json({ authenticated: false });
+    }
+    return ctx.json({ authenticated: true, email });
+  },
+});
+```
+
+`GRAM_USER_EMAIL` will be empty when the request is unauthenticated.
+
 ## Response Types
 
 The framework supports multiple response types. All response methods return Web API `Response` objects.

@@ -332,6 +332,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
 		OAuthToken: "", // Instances do not support OAuth tokens for external MCP
+		GramEmail:  "",
 	}, plan, attrRecorder)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
