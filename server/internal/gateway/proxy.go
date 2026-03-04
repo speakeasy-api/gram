@@ -227,7 +227,7 @@ func (tp *ToolProxy) doFunction(
 			payloadEnv[plan.AuthInput.Variable] = val
 		}
 		if plan.AuthInput.GramEmail && env.GramEmail != "" {
-			payloadEnv["GRAM_USER_EMAIL"] = env.GramEmail
+			payloadEnv[toolconfig.GramUserEmailEnvVar] = env.GramEmail
 		}
 	}
 

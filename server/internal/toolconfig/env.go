@@ -124,6 +124,10 @@ func (c *CaseInsensitiveEnv) Keys() []string {
 	return keys
 }
 
+// GramUserEmailEnvVar is the environment variable name used to pass the
+// authenticated Gram user's email to functions.
+const GramUserEmailEnvVar = "GRAM_USER_EMAIL"
+
 // ToolCallEnv holds the environment configuration for a tool call.
 // SystemEnv contains base values, UserConfig contains user overrides.
 // OAuthToken is an optional OAuth token for external MCP servers that require authentication.
