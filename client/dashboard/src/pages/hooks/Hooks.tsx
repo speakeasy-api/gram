@@ -728,10 +728,6 @@ function HooksLogsContent({
     );
   }
 
-  if (1 == 1) { // TODO remove
-    return <HooksEmptyState />;
-  }
-
   if (logs.length === 0) {
     // Show the full empty state if no filters are applied
     const hasFilters = searchQuery || selectedServer || userEmailFilter;

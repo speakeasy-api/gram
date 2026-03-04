@@ -1,11 +1,11 @@
-import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
 import { useProductTier } from "@/hooks/useProductTier";
+import { Button, Icon, IconName } from "@speakeasy-api/moonshine";
 import React from "react";
 
 interface EnterpriseGateProps {
   children: React.ReactNode;
-  icon?: string;
+  icon?: IconName;
   title?: string;
   description?: string;
 }

@@ -1,7 +1,6 @@
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { Icon } from "@speakeasy-api/moonshine";
 import { ExternalLink, Workflow } from "lucide-react";
@@ -89,7 +88,12 @@ interface ProviderCardProps {
   onInstall: () => void;
 }
 
-function ProviderCard({ name, icon: IconComponent, status, onInstall }: ProviderCardProps) {
+function ProviderCard({
+  name,
+  icon: IconComponent,
+  status,
+  onInstall,
+}: ProviderCardProps) {
   const isComingSoon = status === "coming-soon";
 
   return (
@@ -209,7 +213,6 @@ export function HooksEmptyState() {
   const [showClaudeModal, setShowClaudeModal] = useState(false);
   const [showFeatureRequestModal, setShowFeatureRequestModal] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string>("");
-  const telemetry = useTelemetry();
 
   const handleProviderClick = (provider: string, status: string) => {
     if (status === "coming-soon") {
