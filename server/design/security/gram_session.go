@@ -33,6 +33,7 @@ var DeleteSessionCookie = func() {
 	CookieMaxAge(-1)
 	CookieSecure()
 	CookieHTTPOnly()
+	CookiePath("/")
 }
 
 var SessionHeader = func() {
