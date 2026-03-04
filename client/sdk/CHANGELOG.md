@@ -4,6 +4,18 @@
 
 ### Minor Changes
 
+- be6dcae: Upgrade zod to v4 across the monorepo. Bump @modelcontextprotocol/sdk
+
+### Patch Changes
+
+- 1821e46: Adds an initial pass "POC" implementation of Gram hooks for tool capture
+- fb7439b: Improve settings page with tabs routing and logging API
+- 998102f: Update telemetry search logs API response to sent unix nano timestamps as strings instead of int.
+
+## 0.28.0
+
+### Minor Changes
+
 - f364cc0: Adds listAttributeKeys endpoint to retrieve distinct attribute keys for telemetry filtering.
 
 ### Patch Changes

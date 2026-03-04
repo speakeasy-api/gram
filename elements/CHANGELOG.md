@@ -1,5 +1,15 @@
 # @gram-ai/elements
 
+## 1.27.4
+
+### Patch Changes
+
+- ee711ab: Fix feedback UI:
+  - Set `showFeedback` default to `true` (matching documentation)
+  - Improve dark mode styling for feedback buttons
+  - Update system prompt to prevent multiple generative UI widgets per response
+- fb7439b: Improve settings page with tabs routing and logging API
+
 ## 1.27.3
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # server
 
+## 0.26.1
+
+### Patch Changes
+
+- 1821e46: Adds an initial pass "POC" implementation of Gram hooks for tool capture
+- fb7439b: Improve settings page with tabs routing and logging API
+- 0dab374: Adds ability to track external auth user IDs in telemetry logs.
+- 998102f: Update telemetry search logs API response to sent unix nano timestamps as strings instead of int.
+
 ## 0.26.0
 
 ### Minor Changes
