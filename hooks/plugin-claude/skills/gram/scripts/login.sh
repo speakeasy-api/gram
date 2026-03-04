@@ -150,5 +150,7 @@ else
   fi
 fi
 
-echo "✅ Successfully authenticated with Gram!"
-echo "YOU MUST RESTART CLAUDE FOR THE CHANGE TO TAKE EFFECT"
+cat << EOF
+  Successfully authenticated with Gram!
+  YOU MUST RESTART CLAUDE FOR THE CHANGE TO TAKE EFFECT
+EOF
