@@ -31,6 +31,100 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const createTestDeployment = `-- name: CreateTestDeployment :one
+INSERT INTO deployments (
+    idempotency_key
+  , user_id
+  , organization_id
+  , project_id
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+)
+RETURNING id, seq, user_id, project_id, organization_id, idempotency_key, cloned_from, github_repo, github_pr, github_sha, external_id, external_url, created_at, updated_at
+`
+
+type CreateTestDeploymentParams struct {
+	IdempotencyKey string
+	UserID         string
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) CreateTestDeployment(ctx context.Context, arg CreateTestDeploymentParams) (Deployment, error) {
+	row := q.db.QueryRow(ctx, createTestDeployment,
+		arg.IdempotencyKey,
+		arg.UserID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.Seq,
+		&i.UserID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.IdempotencyKey,
+		&i.ClonedFrom,
+		&i.GithubRepo,
+		&i.GithubPr,
+		&i.GithubSha,
+		&i.ExternalID,
+		&i.ExternalUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDeploymentTagByID = `-- name: GetDeploymentTagByID :one
+SELECT created_at, updated_at, name, id, project_id, deployment_id
+FROM deployment_tags
+WHERE id = $1
+`
+
+func (q *Queries) GetDeploymentTagByID(ctx context.Context, id uuid.UUID) (DeploymentTag, error) {
+	row := q.db.QueryRow(ctx, getDeploymentTagByID, id)
+	var i DeploymentTag
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.ID,
+		&i.ProjectID,
+		&i.DeploymentID,
+	)
+	return i, err
+}
+
+const getDeploymentTagByName = `-- name: GetDeploymentTagByName :one
+SELECT created_at, updated_at, name, id, project_id, deployment_id
+FROM deployment_tags
+WHERE project_id = $1 AND name = $2
+`
+
+type GetDeploymentTagByNameParams struct {
+	ProjectID uuid.UUID
+	Name      string
+}
+
+func (q *Queries) GetDeploymentTagByName(ctx context.Context, arg GetDeploymentTagByNameParams) (DeploymentTag, error) {
+	row := q.db.QueryRow(ctx, getDeploymentTagByName, arg.ProjectID, arg.Name)
+	var i DeploymentTag
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.ID,
+		&i.ProjectID,
+		&i.DeploymentID,
+	)
+	return i, err
+}
+
 const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
 SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, meta, created_at, updated_at, deleted_at, deleted
 FROM function_resource_definitions
@@ -176,6 +270,40 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeploymentTagHistoryByTagID = `-- name: ListDeploymentTagHistoryByTagID :many
+SELECT changed_at, changed_by, id, tag_id, previous_deployment_id, new_deployment_id
+FROM deployment_tag_history
+WHERE tag_id = $1
+ORDER BY changed_at DESC
+`
+
+func (q *Queries) ListDeploymentTagHistoryByTagID(ctx context.Context, tagID uuid.UUID) ([]DeploymentTagHistory, error) {
+	rows, err := q.db.Query(ctx, listDeploymentTagHistoryByTagID, tagID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentTagHistory
+	for rows.Next() {
+		var i DeploymentTagHistory
+		if err := rows.Scan(
+			&i.ChangedAt,
+			&i.ChangedBy,
+			&i.ID,
+			&i.TagID,
+			&i.PreviousDeploymentID,
+			&i.NewDeploymentID,
 		); err != nil {
 			return nil, err
 		}

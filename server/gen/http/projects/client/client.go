@@ -45,6 +45,10 @@ type Client struct {
 	// deleteProject endpoint.
 	DeleteProjectDoer goahttp.Doer
 
+	// CreateDeploymentTag Doer is the HTTP client used to make requests to the
+	// createDeploymentTag endpoint.
+	CreateDeploymentTagDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -72,6 +76,7 @@ func NewClient(
 		ListAllowedOriginsDoer:  doer,
 		UpsertAllowedOriginDoer: doer,
 		DeleteProjectDoer:       doer,
+		CreateDeploymentTagDoer: doer,
 		RestoreResponseBody:     restoreBody,
 		scheme:                  scheme,
 		host:                    host,
@@ -243,6 +248,30 @@ func (c *Client) DeleteProject() goa.Endpoint {
 		resp, err := c.DeleteProjectDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("projects", "deleteProject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateDeploymentTag returns an endpoint that makes HTTP requests to the
+// projects service createDeploymentTag server.
+func (c *Client) CreateDeploymentTag() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateDeploymentTagRequest(c.encoder)
+		decodeResponse = DecodeCreateDeploymentTagResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateDeploymentTagRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateDeploymentTagDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("projects", "createDeploymentTag", err)
 		}
 		return decodeResponse(resp)
 	}

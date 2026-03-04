@@ -331,3 +331,66 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 
 	return nil
 }
+
+func (s *Service) CreateDeploymentTag(ctx context.Context, payload *gen.CreateDeploymentTagPayload) (*gen.CreateDeploymentTagResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	deploymentID, err := uuid.Parse(payload.DeploymentID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid deployment_id format").Log(ctx, s.logger)
+	}
+
+	// Verify the deployment exists and belongs to this project
+	_, err = s.repo.GetDeploymentByIDForProject(ctx, repo.GetDeploymentByIDForProjectParams{
+		ID:        deploymentID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "deployment not found or does not belong to this project")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error verifying deployment").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+	}
+
+	// Create the deployment tag
+	tag, err := s.repo.CreateDeploymentTag(ctx, repo.CreateDeploymentTagParams{
+		ProjectID:    *authCtx.ProjectID,
+		DeploymentID: uuid.NullUUID{UUID: deploymentID, Valid: true},
+		Name:         payload.Name,
+	})
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.As(err, &pgErr):
+		if pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "tag name already exists for this project")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "database error creating deployment tag").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "unexpected error creating deployment tag").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+	}
+
+	// Create history entry for the initial tag creation
+	err = s.repo.CreateDeploymentTagHistoryEntry(ctx, repo.CreateDeploymentTagHistoryEntryParams{
+		TagID:                tag.ID,
+		PreviousDeploymentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		NewDeploymentID:      uuid.NullUUID{UUID: deploymentID, Valid: true},
+		ChangedBy:            conv.ToPGText(authCtx.UserID),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating tag history entry").Log(ctx, s.logger)
+	}
+
+	return &gen.CreateDeploymentTagResult{
+		Tag: &types.DeploymentTag{
+			ID:           tag.ID.String(),
+			ProjectID:    tag.ProjectID.String(),
+			DeploymentID: conv.FromNullableUUID(tag.DeploymentID),
+			Name:         tag.Name,
+			CreatedAt:    tag.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:    tag.UpdatedAt.Time.Format(time.RFC3339),
+		},
+	}, nil
+}

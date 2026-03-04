@@ -188,6 +188,34 @@ var _ = Service("projects", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteById")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteProject"}`)
 	})
+
+	Method("createDeploymentTag", func() {
+		Description("Create a new deployment tag for a project.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ProjectSlug, security.Session)
+
+		Payload(func() {
+			Extend(CreateDeploymentTagForm)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			security.SessionPayload()
+		})
+		Result(CreateDeploymentTagResult)
+
+		HTTP(func() {
+			POST("/rpc/projects.createDeploymentTag")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "createDeploymentTag")
+		Meta("openapi:extension:x-speakeasy-name-override", "createDeploymentTag")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateDeploymentTag"}`)
+	})
 })
 
 var GetProjectForm = Type("GetProjectForm", func() {
@@ -285,4 +313,23 @@ var UpsertAllowedOriginResult = Type("UpsertAllowedOriginResult", func() {
 	Required("allowed_origin")
 
 	Attribute("allowed_origin", AllowedOrigin, "The upserted allowed origin")
+})
+
+var CreateDeploymentTagForm = Type("CreateDeploymentTagForm", func() {
+	Required("name", "deployment_id")
+
+	Attribute("name", String, "The name of the tag (e.g., 'main', 'latest', 'v1.2.3'). Must be alphanumeric with hyphens and dots allowed.", func() {
+		MaxLength(60)
+		MinLength(1)
+		Pattern(`^[a-zA-Z0-9][a-zA-Z0-9.\-]*$`)
+	})
+	Attribute("deployment_id", String, "The ID of the deployment this tag should point to", func() {
+		Format(FormatUUID)
+	})
+})
+
+var CreateDeploymentTagResult = Type("CreateDeploymentTagResult", func() {
+	Required("tag")
+
+	Attribute("tag", shared.DeploymentTag, "The created deployment tag")
 })
