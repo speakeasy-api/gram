@@ -9,6 +9,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type DeploymentTag struct {
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	Name         string
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	DeploymentID uuid.NullUUID
+}
+
 type Project struct {
 	ID                     uuid.UUID
 	Name                   string

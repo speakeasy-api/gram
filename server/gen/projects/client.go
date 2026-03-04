@@ -22,10 +22,11 @@ type Client struct {
 	ListAllowedOriginsEndpoint  goa.Endpoint
 	UpsertAllowedOriginEndpoint goa.Endpoint
 	DeleteProjectEndpoint       goa.Endpoint
+	CreateDeploymentTagEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "projects" service client given the endpoints.
-func NewClient(getProject, createProject, listProjects, setLogo, listAllowedOrigins, upsertAllowedOrigin, deleteProject goa.Endpoint) *Client {
+func NewClient(getProject, createProject, listProjects, setLogo, listAllowedOrigins, upsertAllowedOrigin, deleteProject, createDeploymentTag goa.Endpoint) *Client {
 	return &Client{
 		GetProjectEndpoint:          getProject,
 		CreateProjectEndpoint:       createProject,
@@ -34,6 +35,7 @@ func NewClient(getProject, createProject, listProjects, setLogo, listAllowedOrig
 		ListAllowedOriginsEndpoint:  listAllowedOrigins,
 		UpsertAllowedOriginEndpoint: upsertAllowedOrigin,
 		DeleteProjectEndpoint:       deleteProject,
+		CreateDeploymentTagEndpoint: createDeploymentTag,
 	}
 }
 
@@ -187,4 +189,27 @@ func (c *Client) UpsertAllowedOrigin(ctx context.Context, p *UpsertAllowedOrigin
 func (c *Client) DeleteProject(ctx context.Context, p *DeleteProjectPayload) (err error) {
 	_, err = c.DeleteProjectEndpoint(ctx, p)
 	return
+}
+
+// CreateDeploymentTag calls the "createDeploymentTag" endpoint of the
+// "projects" service.
+// CreateDeploymentTag may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateDeploymentTag(ctx context.Context, p *CreateDeploymentTagPayload) (res *CreateDeploymentTagResult, err error) {
+	var ires any
+	ires, err = c.CreateDeploymentTagEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CreateDeploymentTagResult), nil
 }

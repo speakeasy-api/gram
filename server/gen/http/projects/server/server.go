@@ -26,6 +26,7 @@ type Server struct {
 	ListAllowedOrigins  http.Handler
 	UpsertAllowedOrigin http.Handler
 	DeleteProject       http.Handler
+	CreateDeploymentTag http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -62,6 +63,7 @@ func New(
 			{"ListAllowedOrigins", "GET", "/rpc/projects.listAllowedOrigins"},
 			{"UpsertAllowedOrigin", "POST", "/rpc/projects.upsertAllowedOrigin"},
 			{"DeleteProject", "DELETE", "/rpc/projects.delete"},
+			{"CreateDeploymentTag", "POST", "/rpc/projects.createDeploymentTag"},
 		},
 		GetProject:          NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
 		CreateProject:       NewCreateProjectHandler(e.CreateProject, mux, decoder, encoder, errhandler, formatter),
@@ -70,6 +72,7 @@ func New(
 		ListAllowedOrigins:  NewListAllowedOriginsHandler(e.ListAllowedOrigins, mux, decoder, encoder, errhandler, formatter),
 		UpsertAllowedOrigin: NewUpsertAllowedOriginHandler(e.UpsertAllowedOrigin, mux, decoder, encoder, errhandler, formatter),
 		DeleteProject:       NewDeleteProjectHandler(e.DeleteProject, mux, decoder, encoder, errhandler, formatter),
+		CreateDeploymentTag: NewCreateDeploymentTagHandler(e.CreateDeploymentTag, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -85,6 +88,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListAllowedOrigins = m(s.ListAllowedOrigins)
 	s.UpsertAllowedOrigin = m(s.UpsertAllowedOrigin)
 	s.DeleteProject = m(s.DeleteProject)
+	s.CreateDeploymentTag = m(s.CreateDeploymentTag)
 }
 
 // MethodNames returns the methods served.
@@ -99,6 +103,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListAllowedOriginsHandler(mux, h.ListAllowedOrigins)
 	MountUpsertAllowedOriginHandler(mux, h.UpsertAllowedOrigin)
 	MountDeleteProjectHandler(mux, h.DeleteProject)
+	MountCreateDeploymentTagHandler(mux, h.CreateDeploymentTag)
 }
 
 // Mount configures the mux to serve the projects endpoints.
@@ -454,6 +459,59 @@ func NewDeleteProjectHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteProject")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateDeploymentTagHandler configures the mux to serve the "projects"
+// service "createDeploymentTag" endpoint.
+func MountCreateDeploymentTagHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/projects.createDeploymentTag", f)
+}
+
+// NewCreateDeploymentTagHandler creates a HTTP handler which loads the HTTP
+// request and calls the "projects" service "createDeploymentTag" endpoint.
+func NewCreateDeploymentTagHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateDeploymentTagRequest(mux, decoder)
+		encodeResponse = EncodeCreateDeploymentTagResponse(encoder)
+		encodeError    = EncodeCreateDeploymentTagError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createDeploymentTag")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
 		payload, err := decodeRequest(r)
 		if err != nil {

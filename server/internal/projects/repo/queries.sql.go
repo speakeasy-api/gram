@@ -12,6 +12,70 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createDeploymentTag = `-- name: CreateDeploymentTag :one
+INSERT INTO deployment_tags (
+    project_id
+  , deployment_id
+  , name
+) VALUES (
+    $1
+  , $2
+  , $3
+)
+RETURNING created_at, updated_at, name, id, project_id, deployment_id
+`
+
+type CreateDeploymentTagParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.NullUUID
+	Name         string
+}
+
+func (q *Queries) CreateDeploymentTag(ctx context.Context, arg CreateDeploymentTagParams) (DeploymentTag, error) {
+	row := q.db.QueryRow(ctx, createDeploymentTag, arg.ProjectID, arg.DeploymentID, arg.Name)
+	var i DeploymentTag
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.ID,
+		&i.ProjectID,
+		&i.DeploymentID,
+	)
+	return i, err
+}
+
+const createDeploymentTagHistoryEntry = `-- name: CreateDeploymentTagHistoryEntry :exec
+INSERT INTO deployment_tag_history (
+    tag_id
+  , previous_deployment_id
+  , new_deployment_id
+  , changed_by
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+)
+`
+
+type CreateDeploymentTagHistoryEntryParams struct {
+	TagID                uuid.UUID
+	PreviousDeploymentID uuid.NullUUID
+	NewDeploymentID      uuid.NullUUID
+	ChangedBy            pgtype.Text
+}
+
+func (q *Queries) CreateDeploymentTagHistoryEntry(ctx context.Context, arg CreateDeploymentTagHistoryEntryParams) error {
+	_, err := q.db.Exec(ctx, createDeploymentTagHistoryEntry,
+		arg.TagID,
+		arg.PreviousDeploymentID,
+		arg.NewDeploymentID,
+		arg.ChangedBy,
+	)
+	return err
+}
+
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (
     name
@@ -59,6 +123,30 @@ WHERE id = $1
 func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteProject, id)
 	return err
+}
+
+const getDeploymentByIDForProject = `-- name: GetDeploymentByIDForProject :one
+SELECT id, project_id
+FROM deployments
+WHERE id = $1
+  AND project_id = $2
+`
+
+type GetDeploymentByIDForProjectParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetDeploymentByIDForProjectRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetDeploymentByIDForProject(ctx context.Context, arg GetDeploymentByIDForProjectParams) (GetDeploymentByIDForProjectRow, error) {
+	row := q.db.QueryRow(ctx, getDeploymentByIDForProject, arg.ID, arg.ProjectID)
+	var i GetDeploymentByIDForProjectRow
+	err := row.Scan(&i.ID, &i.ProjectID)
+	return i, err
 }
 
 const getProjectByID = `-- name: GetProjectByID :one

@@ -1679,6 +1679,249 @@ func DecodeDeleteProjectResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildCreateDeploymentTagRequest instantiates a HTTP request object with
+// method and path set to call the "projects" service "createDeploymentTag"
+// endpoint
+func (c *Client) BuildCreateDeploymentTagRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateDeploymentTagProjectsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("projects", "createDeploymentTag", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateDeploymentTagRequest returns an encoder for requests sent to the
+// projects createDeploymentTag server.
+func EncodeCreateDeploymentTagRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*projects.CreateDeploymentTagPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("projects", "createDeploymentTag", "*projects.CreateDeploymentTagPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateDeploymentTagRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("projects", "createDeploymentTag", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateDeploymentTagResponse returns a decoder for responses returned
+// by the projects createDeploymentTag endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeCreateDeploymentTagResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateDeploymentTagResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateDeploymentTagResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+			}
+			err = ValidateCreateDeploymentTagResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+			}
+			res := NewCreateDeploymentTagResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateDeploymentTagUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+			}
+			err = ValidateCreateDeploymentTagUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+			}
+			return nil, NewCreateDeploymentTagUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateDeploymentTagForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+			}
+			err = ValidateCreateDeploymentTagForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+			}
+			return nil, NewCreateDeploymentTagForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateDeploymentTagBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+			}
+			err = ValidateCreateDeploymentTagBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+			}
+			return nil, NewCreateDeploymentTagBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateDeploymentTagNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+			}
+			err = ValidateCreateDeploymentTagNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+			}
+			return nil, NewCreateDeploymentTagNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateDeploymentTagConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+			}
+			err = ValidateCreateDeploymentTagConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+			}
+			return nil, NewCreateDeploymentTagConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateDeploymentTagUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+			}
+			err = ValidateCreateDeploymentTagUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+			}
+			return nil, NewCreateDeploymentTagUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateDeploymentTagInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+			}
+			err = ValidateCreateDeploymentTagInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+			}
+			return nil, NewCreateDeploymentTagInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateDeploymentTagInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+				}
+				err = ValidateCreateDeploymentTagInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+				}
+				return nil, NewCreateDeploymentTagInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateDeploymentTagUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+				}
+				err = ValidateCreateDeploymentTagUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+				}
+				return nil, NewCreateDeploymentTagUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "createDeploymentTag", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateDeploymentTagGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "createDeploymentTag", err)
+			}
+			err = ValidateCreateDeploymentTagGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "createDeploymentTag", err)
+			}
+			return nil, NewCreateDeploymentTagGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("projects", "createDeploymentTag", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalProjectResponseBodyToProjectsProject builds a value of type
 // *projects.Project from a value of type *ProjectResponseBody.
 func unmarshalProjectResponseBodyToProjectsProject(v *ProjectResponseBody) *projects.Project {
@@ -1717,6 +1960,21 @@ func unmarshalAllowedOriginResponseBodyToProjectsAllowedOrigin(v *AllowedOriginR
 		Status:    *v.Status,
 		CreatedAt: *v.CreatedAt,
 		UpdatedAt: *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalDeploymentTagResponseBodyToTypesDeploymentTag builds a value of
+// type *types.DeploymentTag from a value of type *DeploymentTagResponseBody.
+func unmarshalDeploymentTagResponseBodyToTypesDeploymentTag(v *DeploymentTagResponseBody) *types.DeploymentTag {
+	res := &types.DeploymentTag{
+		ID:           *v.ID,
+		ProjectID:    *v.ProjectID,
+		DeploymentID: v.DeploymentID,
+		Name:         *v.Name,
+		CreatedAt:    *v.CreatedAt,
+		UpdatedAt:    *v.UpdatedAt,
 	}
 
 	return res

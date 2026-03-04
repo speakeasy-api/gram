@@ -161,3 +161,31 @@ var DeploymentExternalMCP = Type("DeploymentExternalMCP", func() {
 
 	Meta("struct:pkg:path", "types")
 })
+
+var DeploymentTag = Type("DeploymentTag", func() {
+	Required("id", "project_id", "name", "created_at", "updated_at")
+
+	Attribute("id", String, func() {
+		Description("The ID of the deployment tag.")
+	})
+	Attribute("project_id", String, func() {
+		Description("The ID of the project this tag belongs to.")
+	})
+	Attribute("deployment_id", String, func() {
+		Description("The ID of the deployment this tag currently points to. May be null if the deployment was deleted.")
+	})
+	Attribute("name", String, func() {
+		Description("The name of the tag (e.g., 'main', 'latest', 'v1.2.3').")
+		MaxLength(60)
+	})
+	Attribute("created_at", String, func() {
+		Description("The creation date of the tag.")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("The last update date of the tag.")
+		Format(FormatDateTime)
+	})
+
+	Meta("struct:pkg:path", "types")
+})

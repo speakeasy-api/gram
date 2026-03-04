@@ -89,3 +89,34 @@ UPDATE projects
 SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND deleted_at IS NULL;
+
+-- name: GetDeploymentByIDForProject :one
+SELECT id, project_id
+FROM deployments
+WHERE id = @id
+  AND project_id = @project_id;
+
+-- name: CreateDeploymentTag :one
+INSERT INTO deployment_tags (
+    project_id
+  , deployment_id
+  , name
+) VALUES (
+    @project_id
+  , @deployment_id
+  , @name
+)
+RETURNING *;
+
+-- name: CreateDeploymentTagHistoryEntry :exec
+INSERT INTO deployment_tag_history (
+    tag_id
+  , previous_deployment_id
+  , new_deployment_id
+  , changed_by
+) VALUES (
+    @tag_id
+  , @previous_deployment_id
+  , @new_deployment_id
+  , @changed_by
+);

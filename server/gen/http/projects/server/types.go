@@ -39,6 +39,16 @@ type UpsertAllowedOriginRequestBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
 
+// CreateDeploymentTagRequestBody is the type of the "projects" service
+// "createDeploymentTag" endpoint HTTP request body.
+type CreateDeploymentTagRequestBody struct {
+	// The name of the tag (e.g., 'main', 'latest', 'v1.2.3'). Must be alphanumeric
+	// with hyphens and dots allowed.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The ID of the deployment this tag should point to
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+}
+
 // GetProjectResponseBody is the type of the "projects" service "getProject"
 // endpoint HTTP response body.
 type GetProjectResponseBody struct {
@@ -79,6 +89,13 @@ type ListAllowedOriginsResponseBody struct {
 type UpsertAllowedOriginResponseBody struct {
 	// The upserted allowed origin
 	AllowedOrigin *AllowedOriginResponseBody `form:"allowed_origin" json:"allowed_origin" xml:"allowed_origin"`
+}
+
+// CreateDeploymentTagResponseBody is the type of the "projects" service
+// "createDeploymentTag" endpoint HTTP response body.
+type CreateDeploymentTagResponseBody struct {
+	// The created deployment tag
+	Tag *DeploymentTagResponseBody `form:"tag" json:"tag" xml:"tag"`
 }
 
 // GetProjectUnauthorizedResponseBody is the type of the "projects" service
@@ -1364,6 +1381,195 @@ type DeleteProjectGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateDeploymentTagUnauthorizedResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateDeploymentTagUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeploymentTagForbiddenResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateDeploymentTagForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeploymentTagBadRequestResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateDeploymentTagBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeploymentTagNotFoundResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "not_found" error.
+type CreateDeploymentTagNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeploymentTagConflictResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the "conflict"
+// error.
+type CreateDeploymentTagConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeploymentTagUnsupportedMediaResponseBody is the type of the
+// "projects" service "createDeploymentTag" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateDeploymentTagUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeploymentTagInvalidResponseBody is the type of the "projects" service
+// "createDeploymentTag" endpoint HTTP response body for the "invalid" error.
+type CreateDeploymentTagInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeploymentTagInvariantViolationResponseBody is the type of the
+// "projects" service "createDeploymentTag" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateDeploymentTagInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeploymentTagUnexpectedResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateDeploymentTagUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeploymentTagGatewayErrorResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateDeploymentTagGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ProjectResponseBody is used to define fields on response body types.
 type ProjectResponseBody struct {
 	// The ID of the project
@@ -1404,6 +1610,23 @@ type AllowedOriginResponseBody struct {
 	// The creation date of the allowed origin.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the allowed origin.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// DeploymentTagResponseBody is used to define fields on response body types.
+type DeploymentTagResponseBody struct {
+	// The ID of the deployment tag.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the project this tag belongs to.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The ID of the deployment this tag currently points to. May be null if the
+	// deployment was deleted.
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// The name of the tag (e.g., 'main', 'latest', 'v1.2.3').
+	Name string `form:"name" json:"name" xml:"name"`
+	// The creation date of the tag.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the tag.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
@@ -1481,6 +1704,16 @@ func NewUpsertAllowedOriginResponseBody(res *projects.UpsertAllowedOriginResult)
 	body := &UpsertAllowedOriginResponseBody{}
 	if res.AllowedOrigin != nil {
 		body.AllowedOrigin = marshalProjectsAllowedOriginToAllowedOriginResponseBody(res.AllowedOrigin)
+	}
+	return body
+}
+
+// NewCreateDeploymentTagResponseBody builds the HTTP response body from the
+// result of the "createDeploymentTag" endpoint of the "projects" service.
+func NewCreateDeploymentTagResponseBody(res *projects.CreateDeploymentTagResult) *CreateDeploymentTagResponseBody {
+	body := &CreateDeploymentTagResponseBody{}
+	if res.Tag != nil {
+		body.Tag = marshalTypesDeploymentTagToDeploymentTagResponseBody(res.Tag)
 	}
 	return body
 }
@@ -2481,6 +2714,155 @@ func NewDeleteProjectGatewayErrorResponseBody(res *goa.ServiceError) *DeleteProj
 	return body
 }
 
+// NewCreateDeploymentTagUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createDeploymentTag" endpoint of the "projects"
+// service.
+func NewCreateDeploymentTagUnauthorizedResponseBody(res *goa.ServiceError) *CreateDeploymentTagUnauthorizedResponseBody {
+	body := &CreateDeploymentTagUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeploymentTagForbiddenResponseBody builds the HTTP response body
+// from the result of the "createDeploymentTag" endpoint of the "projects"
+// service.
+func NewCreateDeploymentTagForbiddenResponseBody(res *goa.ServiceError) *CreateDeploymentTagForbiddenResponseBody {
+	body := &CreateDeploymentTagForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeploymentTagBadRequestResponseBody builds the HTTP response body
+// from the result of the "createDeploymentTag" endpoint of the "projects"
+// service.
+func NewCreateDeploymentTagBadRequestResponseBody(res *goa.ServiceError) *CreateDeploymentTagBadRequestResponseBody {
+	body := &CreateDeploymentTagBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeploymentTagNotFoundResponseBody builds the HTTP response body
+// from the result of the "createDeploymentTag" endpoint of the "projects"
+// service.
+func NewCreateDeploymentTagNotFoundResponseBody(res *goa.ServiceError) *CreateDeploymentTagNotFoundResponseBody {
+	body := &CreateDeploymentTagNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeploymentTagConflictResponseBody builds the HTTP response body
+// from the result of the "createDeploymentTag" endpoint of the "projects"
+// service.
+func NewCreateDeploymentTagConflictResponseBody(res *goa.ServiceError) *CreateDeploymentTagConflictResponseBody {
+	body := &CreateDeploymentTagConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeploymentTagUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createDeploymentTag" endpoint of the "projects"
+// service.
+func NewCreateDeploymentTagUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateDeploymentTagUnsupportedMediaResponseBody {
+	body := &CreateDeploymentTagUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeploymentTagInvalidResponseBody builds the HTTP response body from
+// the result of the "createDeploymentTag" endpoint of the "projects" service.
+func NewCreateDeploymentTagInvalidResponseBody(res *goa.ServiceError) *CreateDeploymentTagInvalidResponseBody {
+	body := &CreateDeploymentTagInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeploymentTagInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createDeploymentTag" endpoint of the
+// "projects" service.
+func NewCreateDeploymentTagInvariantViolationResponseBody(res *goa.ServiceError) *CreateDeploymentTagInvariantViolationResponseBody {
+	body := &CreateDeploymentTagInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeploymentTagUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createDeploymentTag" endpoint of the "projects"
+// service.
+func NewCreateDeploymentTagUnexpectedResponseBody(res *goa.ServiceError) *CreateDeploymentTagUnexpectedResponseBody {
+	body := &CreateDeploymentTagUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeploymentTagGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createDeploymentTag" endpoint of the "projects"
+// service.
+func NewCreateDeploymentTagGatewayErrorResponseBody(res *goa.ServiceError) *CreateDeploymentTagGatewayErrorResponseBody {
+	body := &CreateDeploymentTagGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetProjectPayload builds a projects service getProject endpoint payload.
 func NewGetProjectPayload(slug string, apikeyToken *string, sessionToken *string) *projects.GetProjectPayload {
 	v := &projects.GetProjectPayload{}
@@ -2568,6 +2950,20 @@ func NewDeleteProjectPayload(id string, apikeyToken *string, sessionToken *strin
 	return v
 }
 
+// NewCreateDeploymentTagPayload builds a projects service createDeploymentTag
+// endpoint payload.
+func NewCreateDeploymentTagPayload(body *CreateDeploymentTagRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *projects.CreateDeploymentTagPayload {
+	v := &projects.CreateDeploymentTagPayload{
+		Name:         *body.Name,
+		DeploymentID: *body.DeploymentID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateProjectRequestBody runs the validations defined on
 // CreateProjectRequestBody
 func ValidateCreateProjectRequestBody(body *CreateProjectRequestBody) (err error) {
@@ -2613,6 +3009,34 @@ func ValidateUpsertAllowedOriginRequestBody(body *UpsertAllowedOriginRequestBody
 		if !(*body.Status == "pending" || *body.Status == "approved" || *body.Status == "rejected") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "approved", "rejected"}))
 		}
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagRequestBody runs the validations defined on
+// CreateDeploymentTagRequestBody
+func ValidateCreateDeploymentTagRequestBody(body *CreateDeploymentTagRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.DeploymentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
+	}
+	if body.Name != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-zA-Z0-9][a-zA-Z0-9.\\-]*$"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 60, false))
+		}
+	}
+	if body.DeploymentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
 	}
 	return
 }

@@ -65,7 +65,7 @@ func UsageCommands() []string {
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"features (get-product-features|set-product-feature)",
-		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project)",
+		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|create-deployment-tag)",
 		"resources list-resources",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys)",
@@ -552,6 +552,12 @@ func ParseEndpoint(
 		projectsDeleteProjectApikeyTokenFlag  = projectsDeleteProjectFlags.String("apikey-token", "", "")
 		projectsDeleteProjectSessionTokenFlag = projectsDeleteProjectFlags.String("session-token", "", "")
 
+		projectsCreateDeploymentTagFlags                = flag.NewFlagSet("create-deployment-tag", flag.ExitOnError)
+		projectsCreateDeploymentTagBodyFlag             = projectsCreateDeploymentTagFlags.String("body", "REQUIRED", "")
+		projectsCreateDeploymentTagApikeyTokenFlag      = projectsCreateDeploymentTagFlags.String("apikey-token", "", "")
+		projectsCreateDeploymentTagSessionTokenFlag     = projectsCreateDeploymentTagFlags.String("session-token", "", "")
+		projectsCreateDeploymentTagProjectSlugInputFlag = projectsCreateDeploymentTagFlags.String("project-slug-input", "", "")
+
 		resourcesFlags = flag.NewFlagSet("resources", flag.ContinueOnError)
 
 		resourcesListResourcesFlags                = flag.NewFlagSet("list-resources", flag.ExitOnError)
@@ -922,6 +928,7 @@ func ParseEndpoint(
 	projectsListAllowedOriginsFlags.Usage = projectsListAllowedOriginsUsage
 	projectsUpsertAllowedOriginFlags.Usage = projectsUpsertAllowedOriginUsage
 	projectsDeleteProjectFlags.Usage = projectsDeleteProjectUsage
+	projectsCreateDeploymentTagFlags.Usage = projectsCreateDeploymentTagUsage
 
 	resourcesFlags.Usage = resourcesUsage
 	resourcesListResourcesFlags.Usage = resourcesListResourcesUsage
@@ -1363,6 +1370,9 @@ func ParseEndpoint(
 
 			case "delete-project":
 				epf = projectsDeleteProjectFlags
+
+			case "create-deployment-tag":
+				epf = projectsCreateDeploymentTagFlags
 
 			}
 
@@ -1857,6 +1867,9 @@ func ParseEndpoint(
 			case "delete-project":
 				endpoint = c.DeleteProject()
 				data, err = projectsc.BuildDeleteProjectPayload(*projectsDeleteProjectIDFlag, *projectsDeleteProjectApikeyTokenFlag, *projectsDeleteProjectSessionTokenFlag)
+			case "create-deployment-tag":
+				endpoint = c.CreateDeploymentTag()
+				data, err = projectsc.BuildCreateDeploymentTagPayload(*projectsCreateDeploymentTagBodyFlag, *projectsCreateDeploymentTagApikeyTokenFlag, *projectsCreateDeploymentTagSessionTokenFlag, *projectsCreateDeploymentTagProjectSlugInputFlag)
 			}
 		case "resources":
 			c := resourcesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3872,6 +3885,7 @@ func projectsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-allowed-origins: List allowed origins for a project.`)
 	fmt.Fprintln(os.Stderr, `    upsert-allowed-origin: Upsert an allowed origin for a project.`)
 	fmt.Fprintln(os.Stderr, `    delete-project: Delete a project by its ID`)
+	fmt.Fprintln(os.Stderr, `    create-deployment-tag: Create a new deployment tag for a project.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s projects COMMAND --help\n", os.Args[0])
@@ -4032,6 +4046,30 @@ func projectsDeleteProjectUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects delete-project --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func projectsCreateDeploymentTagUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] projects create-deployment-tag", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new deployment tag for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects create-deployment-tag --body '{\n      \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // resourcesUsage displays the usage of the resources command and its

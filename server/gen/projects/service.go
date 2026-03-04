@@ -31,6 +31,8 @@ type Service interface {
 	UpsertAllowedOrigin(context.Context, *UpsertAllowedOriginPayload) (res *UpsertAllowedOriginResult, err error)
 	// Delete a project by its ID
 	DeleteProject(context.Context, *DeleteProjectPayload) (err error)
+	// Create a new deployment tag for a project.
+	CreateDeploymentTag(context.Context, *CreateDeploymentTagPayload) (res *CreateDeploymentTagResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -53,7 +55,7 @@ const ServiceName = "projects"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"getProject", "createProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject"}
+var MethodNames = [8]string{"getProject", "createProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject", "createDeploymentTag"}
 
 type AllowedOrigin struct {
 	// The ID of the allowed origin
@@ -67,6 +69,26 @@ type AllowedOrigin struct {
 	CreatedAt string
 	// The last update date of the allowed origin.
 	UpdatedAt string
+}
+
+// CreateDeploymentTagPayload is the payload type of the projects service
+// createDeploymentTag method.
+type CreateDeploymentTagPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	SessionToken     *string
+	// The name of the tag (e.g., 'main', 'latest', 'v1.2.3'). Must be alphanumeric
+	// with hyphens and dots allowed.
+	Name string
+	// The ID of the deployment this tag should point to
+	DeploymentID string
+}
+
+// CreateDeploymentTagResult is the result type of the projects service
+// createDeploymentTag method.
+type CreateDeploymentTagResult struct {
+	// The created deployment tag
+	Tag *types.DeploymentTag
 }
 
 // CreateProjectPayload is the payload type of the projects service

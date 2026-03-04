@@ -11,6 +11,41 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type Deployment struct {
+	ID             uuid.UUID
+	Seq            int64
+	UserID         string
+	ProjectID      uuid.UUID
+	OrganizationID string
+	IdempotencyKey string
+	ClonedFrom     uuid.NullUUID
+	GithubRepo     pgtype.Text
+	GithubPr       pgtype.Text
+	GithubSha      pgtype.Text
+	ExternalID     pgtype.Text
+	ExternalUrl    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type DeploymentTag struct {
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	Name         string
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	DeploymentID uuid.NullUUID
+}
+
+type DeploymentTagHistory struct {
+	ChangedAt            pgtype.Timestamptz
+	ChangedBy            pgtype.Text
+	ID                   uuid.UUID
+	TagID                uuid.UUID
+	PreviousDeploymentID uuid.NullUUID
+	NewDeploymentID      uuid.NullUUID
+}
+
 type FunctionResourceDefinition struct {
 	ID           uuid.UUID
 	ResourceUrn  urn.Resource

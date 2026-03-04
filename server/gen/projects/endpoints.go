@@ -23,6 +23,7 @@ type Endpoints struct {
 	ListAllowedOrigins  goa.Endpoint
 	UpsertAllowedOrigin goa.Endpoint
 	DeleteProject       goa.Endpoint
+	CreateDeploymentTag goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "projects" service with endpoints.
@@ -37,6 +38,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListAllowedOrigins:  NewListAllowedOriginsEndpoint(s, a.APIKeyAuth),
 		UpsertAllowedOrigin: NewUpsertAllowedOriginEndpoint(s, a.APIKeyAuth),
 		DeleteProject:       NewDeleteProjectEndpoint(s, a.APIKeyAuth),
+		CreateDeploymentTag: NewCreateDeploymentTagEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -49,6 +51,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListAllowedOrigins = m(e.ListAllowedOrigins)
 	e.UpsertAllowedOrigin = m(e.UpsertAllowedOrigin)
 	e.DeleteProject = m(e.DeleteProject)
+	e.CreateDeploymentTag = m(e.CreateDeploymentTag)
 }
 
 // NewGetProjectEndpoint returns an endpoint function that calls the method
@@ -365,5 +368,64 @@ func NewDeleteProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return nil, s.DeleteProject(ctx, p)
+	}
+}
+
+// NewCreateDeploymentTagEndpoint returns an endpoint function that calls the
+// method "createDeploymentTag" of service "projects".
+func NewCreateDeploymentTagEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateDeploymentTagPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "session",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.SessionToken != nil {
+					key = *p.SessionToken
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateDeploymentTag(ctx, p)
 	}
 }

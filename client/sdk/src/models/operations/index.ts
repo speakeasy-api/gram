@@ -15,6 +15,7 @@ export * from "./createchatsession.js";
 export * from "./createcheckout.js";
 export * from "./createcustomersession.js";
 export * from "./createdeployment.js";
+export * from "./createdeploymenttag.js";
 export * from "./createenvironment.js";
 export * from "./createpackage.js";
 export * from "./createproject.js";

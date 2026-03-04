@@ -38,6 +38,16 @@ type UpsertAllowedOriginRequestBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 }
 
+// CreateDeploymentTagRequestBody is the type of the "projects" service
+// "createDeploymentTag" endpoint HTTP request body.
+type CreateDeploymentTagRequestBody struct {
+	// The name of the tag (e.g., 'main', 'latest', 'v1.2.3'). Must be alphanumeric
+	// with hyphens and dots allowed.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The ID of the deployment this tag should point to
+	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
+}
+
 // GetProjectResponseBody is the type of the "projects" service "getProject"
 // endpoint HTTP response body.
 type GetProjectResponseBody struct {
@@ -78,6 +88,13 @@ type ListAllowedOriginsResponseBody struct {
 type UpsertAllowedOriginResponseBody struct {
 	// The upserted allowed origin
 	AllowedOrigin *AllowedOriginResponseBody `form:"allowed_origin,omitempty" json:"allowed_origin,omitempty" xml:"allowed_origin,omitempty"`
+}
+
+// CreateDeploymentTagResponseBody is the type of the "projects" service
+// "createDeploymentTag" endpoint HTTP response body.
+type CreateDeploymentTagResponseBody struct {
+	// The created deployment tag
+	Tag *DeploymentTagResponseBody `form:"tag,omitempty" json:"tag,omitempty" xml:"tag,omitempty"`
 }
 
 // GetProjectUnauthorizedResponseBody is the type of the "projects" service
@@ -1363,6 +1380,195 @@ type DeleteProjectGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateDeploymentTagUnauthorizedResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateDeploymentTagUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeploymentTagForbiddenResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateDeploymentTagForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeploymentTagBadRequestResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateDeploymentTagBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeploymentTagNotFoundResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "not_found" error.
+type CreateDeploymentTagNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeploymentTagConflictResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the "conflict"
+// error.
+type CreateDeploymentTagConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeploymentTagUnsupportedMediaResponseBody is the type of the
+// "projects" service "createDeploymentTag" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateDeploymentTagUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeploymentTagInvalidResponseBody is the type of the "projects" service
+// "createDeploymentTag" endpoint HTTP response body for the "invalid" error.
+type CreateDeploymentTagInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeploymentTagInvariantViolationResponseBody is the type of the
+// "projects" service "createDeploymentTag" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateDeploymentTagInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeploymentTagUnexpectedResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateDeploymentTagUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeploymentTagGatewayErrorResponseBody is the type of the "projects"
+// service "createDeploymentTag" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateDeploymentTagGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ProjectResponseBody is used to define fields on response body types.
 type ProjectResponseBody struct {
 	// The ID of the project
@@ -1406,6 +1612,23 @@ type AllowedOriginResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// DeploymentTagResponseBody is used to define fields on response body types.
+type DeploymentTagResponseBody struct {
+	// The ID of the deployment tag.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the project this tag belongs to.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the deployment this tag currently points to. May be null if the
+	// deployment was deleted.
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// The name of the tag (e.g., 'main', 'latest', 'v1.2.3').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The creation date of the tag.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The last update date of the tag.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // NewCreateProjectRequestBody builds the HTTP request body from the payload of
 // the "createProject" endpoint of the "projects" service.
 func NewCreateProjectRequestBody(p *projects.CreateProjectPayload) *CreateProjectRequestBody {
@@ -1437,6 +1660,16 @@ func NewUpsertAllowedOriginRequestBody(p *projects.UpsertAllowedOriginPayload) *
 		if body.Status == zero {
 			body.Status = "pending"
 		}
+	}
+	return body
+}
+
+// NewCreateDeploymentTagRequestBody builds the HTTP request body from the
+// payload of the "createDeploymentTag" endpoint of the "projects" service.
+func NewCreateDeploymentTagRequestBody(p *projects.CreateDeploymentTagPayload) *CreateDeploymentTagRequestBody {
+	body := &CreateDeploymentTagRequestBody{
+		Name:         p.Name,
+		DeploymentID: p.DeploymentID,
 	}
 	return body
 }
@@ -2557,6 +2790,165 @@ func NewDeleteProjectGatewayError(body *DeleteProjectGatewayErrorResponseBody) *
 	return v
 }
 
+// NewCreateDeploymentTagResultOK builds a "projects" service
+// "createDeploymentTag" endpoint result from a HTTP "OK" response.
+func NewCreateDeploymentTagResultOK(body *CreateDeploymentTagResponseBody) *projects.CreateDeploymentTagResult {
+	v := &projects.CreateDeploymentTagResult{}
+	v.Tag = unmarshalDeploymentTagResponseBodyToTypesDeploymentTag(body.Tag)
+
+	return v
+}
+
+// NewCreateDeploymentTagUnauthorized builds a projects service
+// createDeploymentTag endpoint unauthorized error.
+func NewCreateDeploymentTagUnauthorized(body *CreateDeploymentTagUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeploymentTagForbidden builds a projects service
+// createDeploymentTag endpoint forbidden error.
+func NewCreateDeploymentTagForbidden(body *CreateDeploymentTagForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeploymentTagBadRequest builds a projects service
+// createDeploymentTag endpoint bad_request error.
+func NewCreateDeploymentTagBadRequest(body *CreateDeploymentTagBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeploymentTagNotFound builds a projects service createDeploymentTag
+// endpoint not_found error.
+func NewCreateDeploymentTagNotFound(body *CreateDeploymentTagNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeploymentTagConflict builds a projects service createDeploymentTag
+// endpoint conflict error.
+func NewCreateDeploymentTagConflict(body *CreateDeploymentTagConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeploymentTagUnsupportedMedia builds a projects service
+// createDeploymentTag endpoint unsupported_media error.
+func NewCreateDeploymentTagUnsupportedMedia(body *CreateDeploymentTagUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeploymentTagInvalid builds a projects service createDeploymentTag
+// endpoint invalid error.
+func NewCreateDeploymentTagInvalid(body *CreateDeploymentTagInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeploymentTagInvariantViolation builds a projects service
+// createDeploymentTag endpoint invariant_violation error.
+func NewCreateDeploymentTagInvariantViolation(body *CreateDeploymentTagInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeploymentTagUnexpected builds a projects service
+// createDeploymentTag endpoint unexpected error.
+func NewCreateDeploymentTagUnexpected(body *CreateDeploymentTagUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeploymentTagGatewayError builds a projects service
+// createDeploymentTag endpoint gateway_error error.
+func NewCreateDeploymentTagGatewayError(body *CreateDeploymentTagGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetProjectResponseBody runs the validations defined on
 // GetProjectResponseBody
 func ValidateGetProjectResponseBody(body *GetProjectResponseBody) (err error) {
@@ -2639,6 +3031,20 @@ func ValidateUpsertAllowedOriginResponseBody(body *UpsertAllowedOriginResponseBo
 	}
 	if body.AllowedOrigin != nil {
 		if err2 := ValidateAllowedOriginResponseBody(body.AllowedOrigin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagResponseBody runs the validations defined on
+// CreateDeploymentTagResponseBody
+func ValidateCreateDeploymentTagResponseBody(body *CreateDeploymentTagResponseBody) (err error) {
+	if body.Tag == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tag", "body"))
+	}
+	if body.Tag != nil {
+		if err2 := ValidateDeploymentTagResponseBody(body.Tag); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -4325,6 +4731,246 @@ func ValidateDeleteProjectGatewayErrorResponseBody(body *DeleteProjectGatewayErr
 	return
 }
 
+// ValidateCreateDeploymentTagUnauthorizedResponseBody runs the validations
+// defined on createDeploymentTag_unauthorized_response_body
+func ValidateCreateDeploymentTagUnauthorizedResponseBody(body *CreateDeploymentTagUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagForbiddenResponseBody runs the validations
+// defined on createDeploymentTag_forbidden_response_body
+func ValidateCreateDeploymentTagForbiddenResponseBody(body *CreateDeploymentTagForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagBadRequestResponseBody runs the validations
+// defined on createDeploymentTag_bad_request_response_body
+func ValidateCreateDeploymentTagBadRequestResponseBody(body *CreateDeploymentTagBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagNotFoundResponseBody runs the validations defined
+// on createDeploymentTag_not_found_response_body
+func ValidateCreateDeploymentTagNotFoundResponseBody(body *CreateDeploymentTagNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagConflictResponseBody runs the validations defined
+// on createDeploymentTag_conflict_response_body
+func ValidateCreateDeploymentTagConflictResponseBody(body *CreateDeploymentTagConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagUnsupportedMediaResponseBody runs the validations
+// defined on createDeploymentTag_unsupported_media_response_body
+func ValidateCreateDeploymentTagUnsupportedMediaResponseBody(body *CreateDeploymentTagUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagInvalidResponseBody runs the validations defined
+// on createDeploymentTag_invalid_response_body
+func ValidateCreateDeploymentTagInvalidResponseBody(body *CreateDeploymentTagInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagInvariantViolationResponseBody runs the
+// validations defined on createDeploymentTag_invariant_violation_response_body
+func ValidateCreateDeploymentTagInvariantViolationResponseBody(body *CreateDeploymentTagInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagUnexpectedResponseBody runs the validations
+// defined on createDeploymentTag_unexpected_response_body
+func ValidateCreateDeploymentTagUnexpectedResponseBody(body *CreateDeploymentTagUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeploymentTagGatewayErrorResponseBody runs the validations
+// defined on createDeploymentTag_gateway_error_response_body
+func ValidateCreateDeploymentTagGatewayErrorResponseBody(body *CreateDeploymentTagGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateProjectResponseBody runs the validations defined on
 // ProjectResponseBody
 func ValidateProjectResponseBody(body *ProjectResponseBody) (err error) {
@@ -4410,6 +5056,38 @@ func ValidateAllowedOriginResponseBody(body *AllowedOriginResponseBody) (err err
 	if body.Status != nil {
 		if !(*body.Status == "pending" || *body.Status == "approved" || *body.Status == "rejected") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "approved", "rejected"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDeploymentTagResponseBody runs the validations defined on
+// DeploymentTagResponseBody
+func ValidateDeploymentTagResponseBody(body *DeploymentTagResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 60, false))
 		}
 	}
 	if body.CreatedAt != nil {

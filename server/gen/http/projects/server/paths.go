@@ -41,3 +41,8 @@ func UpsertAllowedOriginProjectsPath() string {
 func DeleteProjectProjectsPath() string {
 	return "/rpc/projects.delete"
 }
+
+// CreateDeploymentTagProjectsPath returns the URL path to the projects service createDeploymentTag HTTP endpoint.
+func CreateDeploymentTagProjectsPath() string {
+	return "/rpc/projects.createDeploymentTag"
+}

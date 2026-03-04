@@ -275,3 +275,54 @@ func BuildDeleteProjectPayload(projectsDeleteProjectID string, projectsDeletePro
 
 	return v, nil
 }
+
+// BuildCreateDeploymentTagPayload builds the payload for the projects
+// createDeploymentTag endpoint from CLI flags.
+func BuildCreateDeploymentTagPayload(projectsCreateDeploymentTagBody string, projectsCreateDeploymentTagApikeyToken string, projectsCreateDeploymentTagSessionToken string, projectsCreateDeploymentTagProjectSlugInput string) (*projects.CreateDeploymentTagPayload, error) {
+	var err error
+	var body CreateDeploymentTagRequestBody
+	{
+		err = json.Unmarshal([]byte(projectsCreateDeploymentTagBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-zA-Z0-9][a-zA-Z0-9.\\-]*$"))
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 60, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", body.DeploymentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if projectsCreateDeploymentTagApikeyToken != "" {
+			apikeyToken = &projectsCreateDeploymentTagApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if projectsCreateDeploymentTagSessionToken != "" {
+			sessionToken = &projectsCreateDeploymentTagSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if projectsCreateDeploymentTagProjectSlugInput != "" {
+			projectSlugInput = &projectsCreateDeploymentTagProjectSlugInput
+		}
+	}
+	v := &projects.CreateDeploymentTagPayload{
+		Name:         body.Name,
+		DeploymentID: body.DeploymentID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
