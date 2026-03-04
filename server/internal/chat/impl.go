@@ -589,14 +589,6 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	// Non-streaming: Use UnifiedClient
 	temp := float64(chatRequest.Temperature)
-
-	// Extract JSON schema from response_format if present
-	var jsonSchema *or.JSONSchemaConfig
-	if chatRequest.ResponseFormat != nil && chatRequest.ResponseFormat.ResponseFormatJSONSchema != nil {
-		schema := chatRequest.ResponseFormat.ResponseFormatJSONSchema.GetJSONSchema()
-		jsonSchema = &schema
-	}
-
 	completionReq := openrouter.CompletionRequest{
 		OrgID:          orgID,
 		ProjectID:      authCtx.ProjectID.String(),
@@ -615,7 +607,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			IPAddress: metadata.IPAddress,
 		},
 		APIKeyID:   authCtx.APIKeyID,
-		JSONSchema: jsonSchema,
+		JSONSchema: nil,
 	}
 
 	isStreaming := chatRequest.Stream
