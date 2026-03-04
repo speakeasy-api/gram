@@ -35,7 +35,7 @@ func NewTokenService(cacheImpl cache.Cache, clientRegistration *ClientRegistrati
 		grantManager:          grantManager,
 		pkceService:           pkceService,
 		logger:                logger,
-		accessTokenExpiration: 30 * 24 * time.Hour, // This is an overaching default, it is actually driven by the underlying credentials
+		accessTokenExpiration: 30 * 24 * time.Hour, // This is an overarching default, it is actually driven by the underlying credentials
 		tokenLength:           32,
 		enc:                   enc,
 	}
@@ -115,11 +115,6 @@ func (ts *TokenService) ExchangeRefreshToken(ctx context.Context, req *TokenRequ
 		return nil, fmt.Errorf("invalid refresh token: %w", err)
 	}
 
-	// Check if the token has expired
-	if time.Now().After(oldToken.ExpiresAt) {
-		return nil, fmt.Errorf("refresh token has expired")
-	}
-
 	// Decrypt external secrets and check expiration
 	for i, externalSecret := range oldToken.ExternalSecrets {
 		decrypted, err := ts.enc.Decrypt(externalSecret.Token)
@@ -190,9 +185,8 @@ func (ts *TokenService) ValidateAccessToken(ctx context.Context, toolsetId uuid.
 
 	// Check if token has expired
 	if time.Now().After(token.ExpiresAt) {
-		if err := ts.deleteToken(ctx, *token); err != nil {
-			ts.logger.ErrorContext(ctx, "failed to delete expired token", attr.SlogError(err))
-		}
+		// Don't delete — the refresh token may still be valid and the client
+		// can exchange it for a new token pair.
 		return nil, ErrExpiredAccessToken
 	}
 

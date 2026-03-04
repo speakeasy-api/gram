@@ -82,7 +82,10 @@ func (t Token) AdditionalCacheKeys() []string {
 }
 
 func (t Token) TTL() time.Duration {
-	return time.Until(t.ExpiresAt)
+	// Add grace period so refresh token cache entry outlives the access token.
+	// Without this, the cache evicts the entry at the same time the access token
+	// expires, making the refresh token unusable.
+	return time.Until(t.ExpiresAt) + 24*time.Hour
 }
 
 var _ cache.CacheableObject[OauthProxyClientInfo] = (*OauthProxyClientInfo)(nil)
