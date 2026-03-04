@@ -38,6 +38,8 @@ type Service interface {
 	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
 	// List distinct attribute keys available for filtering
 	ListAttributeKeys(context.Context, *ListAttributeKeysPayload) (res *ListAttributeKeysResult, err error)
+	// Get aggregated hooks metrics grouped by server
+	GetHooksSummary(context.Context, *GetHooksSummaryPayload) (res *GetHooksSummaryResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -62,7 +64,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys"}
+var MethodNames = [11]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary"}
 
 // Filter on a log attribute by path.
 type AttributeFilter struct {
@@ -136,6 +138,31 @@ type FilterOption struct {
 	Label string
 	// Number of events for this option
 	Count int64
+}
+
+// GetHooksSummaryPayload is the payload type of the telemetry service
+// getHooksSummary method.
+type GetHooksSummaryPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
+// GetHooksSummaryResult is the result type of the telemetry service
+// getHooksSummary method.
+type GetHooksSummaryResult struct {
+	// Aggregated metrics grouped by server
+	Servers []*HooksServerSummary
+	// Total number of hook events
+	TotalEvents int64
+	// Total number of unique sessions
+	TotalSessions int64
+	// Whether telemetry is enabled for the organization
+	Enabled bool
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -221,6 +248,22 @@ type GetUserMetricsSummaryResult struct {
 	Metrics *ProjectSummary
 	// Whether telemetry is enabled for the organization
 	Enabled bool
+}
+
+// Aggregated hooks metrics for a single server
+type HooksServerSummary struct {
+	// Server name (extracted from tool name, or 'local' for non-MCP tools)
+	ServerName string
+	// Total number of hook events for this server
+	EventCount int64
+	// Number of unique tools used for this server
+	UniqueTools int64
+	// Number of successful tool completions (PostToolUse events)
+	SuccessCount int64
+	// Number of failed tool completions (PostToolUseFailure events)
+	FailureCount int64
+	// Failure rate as a decimal (0.0 to 1.0)
+	FailureRate float64
 }
 
 // ListAttributeKeysPayload is the payload type of the telemetry service
@@ -410,6 +453,8 @@ type SearchLogsFilter struct {
 	UserID *string
 	// External user ID filter
 	ExternalUserID *string
+	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
+	EventSource *string
 	// Filters on custom log attributes
 	AttributeFilters []*AttributeFilter
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
@@ -453,6 +498,8 @@ type SearchLogsResult struct {
 
 // Filter criteria for searching tool calls
 type SearchToolCallsFilter struct {
+	// Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
+	EventSource *string
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
 	From *string
 	// End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')

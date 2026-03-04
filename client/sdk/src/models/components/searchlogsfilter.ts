@@ -56,6 +56,10 @@ export type SearchLogsFilter = {
    */
   deploymentId?: string | undefined;
   /**
+   * Event source filter (e.g., 'hook', 'tool_call', 'chat_completion')
+   */
+  eventSource?: string | undefined;
+  /**
    * External user ID filter
    */
   externalUserId?: string | undefined;
@@ -125,6 +129,7 @@ export const SeverityText$outboundSchema: z.ZodMiniEnum<typeof SeverityText> = z
 export type SearchLogsFilter$Outbound = {
   attribute_filters?: Array<AttributeFilter$Outbound> | undefined;
   deployment_id?: string | undefined;
+  event_source?: string | undefined;
   external_user_id?: string | undefined;
   from?: string | undefined;
   function_id?: string | undefined;
@@ -149,6 +154,7 @@ export const SearchLogsFilter$outboundSchema: z.ZodMiniType<
   z.object({
     attributeFilters: z.optional(z.array(AttributeFilter$outboundSchema)),
     deploymentId: z.optional(z.string()),
+    eventSource: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     functionId: z.optional(z.string()),
@@ -168,6 +174,7 @@ export const SearchLogsFilter$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       attributeFilters: "attribute_filters",
       deploymentId: "deployment_id",
+      eventSource: "event_source",
       externalUserId: "external_user_id",
       functionId: "function_id",
       gramChatId: "gram_chat_id",

@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 # Unified hook forwarder - forwards all hook events to server
 
+# Check if GRAM_API_KEY is set
+if [ -z "$GRAM_API_KEY" ]; then
+  cat <<EOF
+{
+  "continue": false,
+  "stopReason": "GRAM_API_KEY environment variable is not set.\n\nTo authenticate with Gram, please run:\n  /gram login"
+}
+EOF
+  exit 0
+fi
+
 SERVER_URL="https://app.getgram.ai"
 if [ -n "$GRAM_SERVER_URL" ]; then
   SERVER_URL="$GRAM_SERVER_URL"
