@@ -185,6 +185,10 @@ const (
 	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
 	VisibilityKey                  = attribute.Key("gram.visibility")
 
+	// Hooks
+	HookEventKey = attribute.Key("gram.hook.event")
+	HookErrorKey = attribute.Key("gram.hook.error")
+
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")
 	PaginationCursorKey      = attribute.Key("gram.pagination.cursor")

@@ -602,6 +602,12 @@ type ToolCallSummary struct {
 	HTTPStatusCode *int32
 	// Gram URN associated with this tool call
 	GramUrn string
+	// Tool name (from attributes.gram.tool.name)
+	ToolName *string
+	// Tool call source (from attributes.gram.tool_call.source)
+	ToolSource *string
+	// Event source (from attributes.gram.event.source)
+	EventSource *string
 }
 
 // Aggregated metrics for a single tool

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"strings"
 	"testing"
 	"time"
 
@@ -453,9 +454,9 @@ func TestSearchLogs_Filters(t *testing.T) {
 			traceID:      &traceID1,
 			gramURN:      "urn:gram:http:api:get-users",
 			severity:     "INFO",
-			httpMethod:   new("GET"),
-			httpStatus:   new(int32(200)),
-			httpRoute:    new("/api/users"),
+			httpMethod:   ptr("GET"),
+			httpStatus:   ptr(int32(200)),
+			httpRoute:    ptr("/api/users"),
 			serviceName:  "gram-http-gateway",
 		},
 		{
@@ -466,9 +467,9 @@ func TestSearchLogs_Filters(t *testing.T) {
 			traceID:      &traceID1,
 			gramURN:      "urn:gram:http:api:get-users",
 			severity:     "DEBUG",
-			httpMethod:   new("GET"),
-			httpStatus:   new(int32(200)),
-			httpRoute:    new("/api/users"),
+			httpMethod:   ptr("GET"),
+			httpStatus:   ptr(int32(200)),
+			httpRoute:    ptr("/api/users"),
 			serviceName:  "gram-http-gateway",
 		},
 		// Deployment 1, Function 1 - HTTP POST logs with errors
@@ -480,9 +481,9 @@ func TestSearchLogs_Filters(t *testing.T) {
 			traceID:      &traceID2,
 			gramURN:      "urn:gram:http:api:create-order",
 			severity:     "ERROR",
-			httpMethod:   new("POST"),
-			httpStatus:   new(int32(500)),
-			httpRoute:    new("/api/orders"),
+			httpMethod:   ptr("POST"),
+			httpStatus:   ptr(int32(500)),
+			httpRoute:    ptr("/api/orders"),
 			serviceName:  "gram-http-gateway",
 		},
 		{
@@ -493,9 +494,9 @@ func TestSearchLogs_Filters(t *testing.T) {
 			traceID:      &traceID2,
 			gramURN:      "urn:gram:http:api:create-order",
 			severity:     "WARN",
-			httpMethod:   new("POST"),
-			httpStatus:   new(int32(500)),
-			httpRoute:    new("/api/orders"),
+			httpMethod:   ptr("POST"),
+			httpStatus:   ptr(int32(500)),
+			httpRoute:    ptr("/api/orders"),
 			serviceName:  "gram-http-gateway",
 		},
 		// Deployment 1, Function 2 - Function execution logs
@@ -549,9 +550,9 @@ func TestSearchLogs_Filters(t *testing.T) {
 			traceID:      nil,
 			gramURN:      "urn:gram:http:api:delete-user",
 			severity:     "INFO",
-			httpMethod:   new("DELETE"),
-			httpStatus:   new(int32(204)),
-			httpRoute:    new("/api/users/:id"),
+			httpMethod:   ptr("DELETE"),
+			httpStatus:   ptr(int32(204)),
+			httpRoute:    ptr("/api/users/:id"),
 			serviceName:  "gram-http-gateway",
 		},
 		// Edge case: FATAL severity
@@ -563,9 +564,9 @@ func TestSearchLogs_Filters(t *testing.T) {
 			traceID:      nil,
 			gramURN:      "urn:gram:http:api:crash",
 			severity:     "FATAL",
-			httpMethod:   new("POST"),
-			httpStatus:   new(int32(500)),
-			httpRoute:    new("/api/crash"),
+			httpMethod:   ptr("POST"),
+			httpStatus:   ptr(int32(500)),
+			httpRoute:    ptr("/api/crash"),
 			serviceName:  "gram-http-gateway",
 		},
 	}
@@ -608,7 +609,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 			filter: &gen.SearchLogsFilter{
 				From:    &from,
 				To:      &to,
-				GramUrn: new("urn:gram:http:api:get-users"),
+				GramUrn: ptr("urn:gram:http:api:get-users"),
 			},
 			expectedCount: 2,
 		},
@@ -626,7 +627,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 			filter: &gen.SearchLogsFilter{
 				From:         &from,
 				To:           &to,
-				SeverityText: new("ERROR"),
+				SeverityText: ptr("ERROR"),
 			},
 			expectedCount: 2,
 		},
@@ -635,7 +636,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 			filter: &gen.SearchLogsFilter{
 				From:           &from,
 				To:             &to,
-				HTTPStatusCode: new(int32(500)),
+				HTTPStatusCode: ptr(int32(500)),
 			},
 			expectedCount: 3,
 		},
@@ -644,7 +645,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 			filter: &gen.SearchLogsFilter{
 				From:      &from,
 				To:        &to,
-				HTTPRoute: new("/api/users"),
+				HTTPRoute: ptr("/api/users"),
 			},
 			expectedCount: 2,
 		},
@@ -653,7 +654,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 			filter: &gen.SearchLogsFilter{
 				From:       &from,
 				To:         &to,
-				HTTPMethod: new("POST"),
+				HTTPMethod: ptr("POST"),
 			},
 			expectedCount: 3,
 		},
@@ -662,7 +663,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 			filter: &gen.SearchLogsFilter{
 				From:        &from,
 				To:          &to,
-				ServiceName: new("gram-functions"),
+				ServiceName: ptr("gram-functions"),
 			},
 			expectedCount: 4,
 		},
@@ -672,7 +673,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 				From:         &from,
 				To:           &to,
 				DeploymentID: &deployment1,
-				SeverityText: new("INFO"),
+				SeverityText: ptr("INFO"),
 			},
 			expectedCount: 2,
 		},
@@ -682,15 +683,15 @@ func TestSearchLogs_Filters(t *testing.T) {
 				From:       &from,
 				To:         &to,
 				FunctionID: &function2,
-				GramUrn:    new("urn:gram:function:utils:hash-password"),
+				GramUrn:    ptr("urn:gram:function:utils:hash-password"),
 			},
 			expectedCount: 2,
 		},
 		{
 			name: "time range filter excludes logs outside range",
 			filter: &gen.SearchLogsFilter{
-				From: new(baseTime.Add(5 * time.Minute).Format(time.RFC3339)),
-				To:   new(baseTime.Add(8 * time.Minute).Format(time.RFC3339)),
+				From: ptr(baseTime.Add(5 * time.Minute).Format(time.RFC3339)),
+				To:   ptr(baseTime.Add(8 * time.Minute).Format(time.RFC3339)),
 			},
 			expectedCount: 3,
 		},
@@ -744,7 +745,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 			filter: &gen.SearchLogsFilter{
 				From:     &from,
 				To:       &to,
-				GramUrn:  new("urn:gram:http:api:get-users"),
+				GramUrn:  ptr("urn:gram:http:api:get-users"),
 				GramUrns: []string{"urn:gram:http:api:create-order"},
 			},
 			expectedCount: 2, // Only create-order logs, not get-users
@@ -757,7 +758,7 @@ func TestSearchLogs_Filters(t *testing.T) {
 				To:           &to,
 				DeploymentID: &deployment1,
 				FunctionID:   &function1,
-				SeverityText: new("INFO"),
+				SeverityText: ptr("INFO"),
 			},
 			expectedCount: 1, // Only deployment1 + function1 + INFO
 		},
@@ -776,8 +777,8 @@ func TestSearchLogs_Filters(t *testing.T) {
 			filter: &gen.SearchLogsFilter{
 				From:           &from,
 				To:             &to,
-				HTTPMethod:     new("POST"),
-				HTTPStatusCode: new(int32(500)),
+				HTTPMethod:     ptr("POST"),
+				HTTPStatusCode: ptr(int32(500)),
 			},
 			expectedCount: 3, // POST requests with 500 status
 		},
@@ -786,8 +787,8 @@ func TestSearchLogs_Filters(t *testing.T) {
 			filter: &gen.SearchLogsFilter{
 				From:         &from,
 				To:           &to,
-				ServiceName:  new("gram-functions"),
-				SeverityText: new("INFO"),
+				ServiceName:  ptr("gram-functions"),
+				SeverityText: ptr("INFO"),
 			},
 			expectedCount: 2, // gram-functions + INFO
 		},
@@ -881,7 +882,7 @@ func TestSearchLogs_AttributeFilters(t *testing.T) {
 			gramURN:      "urn:gram:func:test",
 			severity:     "INFO",
 			serviceName:  "gram-functions",
-			httpRoute:    new("/api/health"),
+			httpRoute:    ptr("/api/health"),
 			customAttrs:  map[string]any{},
 		},
 	}
@@ -1125,8 +1126,8 @@ func TestSearchToolCalls_FilterByGramURN(t *testing.T) {
 	insertTelemetryLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), &traceID2, "tools:http:petstore:getPet", "INFO")
 	insertTelemetryLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), &traceID3, "tools:http:weather:getForecast", "INFO")
 
-	// Wait for ClickHouse eventual consistency
-	time.Sleep(100 * time.Millisecond)
+	// Wait for ClickHouse materialized view to process and eventual consistency
+	time.Sleep(500 * time.Millisecond)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -1218,6 +1219,25 @@ func insertTelemetryLog(t *testing.T, ctx context.Context, projectID, deployment
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	// Build attributes JSON with tool name for SearchToolCalls compatibility
+	// Extract tool name from URN:
+	// - "urn:gram:test1" -> "test1"
+	// - "tools:http:petstore:listPets" -> "listPets"
+	attrs := map[string]any{}
+	if after, ok := strings.CutPrefix(gramURN, "urn:gram:"); ok {
+		toolName := after
+		attrs["gram.tool.name"] = toolName
+	} else if strings.HasPrefix(gramURN, "tools:") {
+		// For "tools:" URNs, extract the last segment as tool name
+		parts := strings.Split(gramURN, ":")
+		if len(parts) > 0 {
+			toolName := parts[len(parts)-1]
+			attrs["gram.tool.name"] = toolName
+		}
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
@@ -1225,7 +1245,7 @@ func insertTelemetryLog(t *testing.T, ctx context.Context, projectID, deployment
 			gram_project_id, gram_deployment_id, gram_urn, service_name
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), severityText, "test log body",
-		traceID, nil, "{}", "{}",
+		traceID, nil, string(attrsJSON), "{}",
 		projectID, deploymentID, gramURN, "test-service")
 	require.NoError(t, err)
 
@@ -1245,6 +1265,25 @@ func insertTelemetryLogAtExactTime(t *testing.T, ctx context.Context, projectID,
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	// Build attributes JSON with tool name for SearchToolCalls compatibility
+	// Extract tool name from URN:
+	// - "urn:gram:test1" -> "test1"
+	// - "tools:http:petstore:listPets" -> "listPets"
+	attrs := map[string]any{}
+	if after, ok := strings.CutPrefix(gramURN, "urn:gram:"); ok {
+		toolName := after
+		attrs["gram.tool.name"] = toolName
+	} else if strings.HasPrefix(gramURN, "tools:") {
+		// For "tools:" URNs, extract the last segment as tool name
+		parts := strings.Split(gramURN, ":")
+		if len(parts) > 0 {
+			toolName := parts[len(parts)-1]
+			attrs["gram.tool.name"] = toolName
+		}
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
@@ -1252,7 +1291,7 @@ func insertTelemetryLogAtExactTime(t *testing.T, ctx context.Context, projectID,
 			gram_project_id, gram_deployment_id, gram_urn, service_name
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), severityText, "test log body",
-		traceID, nil, "{}", "{}",
+		traceID, nil, string(attrsJSON), "{}",
 		projectID, deploymentID, gramURN, "test-service")
 	require.NoError(t, err)
 }
@@ -1269,6 +1308,9 @@ type testLogParams struct {
 	httpStatus   *int32
 	httpRoute    *string
 	serviceName  string
+	toolName     *string        // for tool call logs
+	toolSource   *string        // for tool call logs
+	eventSource  *string        // for tool call logs
 	customAttrs  map[string]any // additional attributes merged into the JSON
 }
 
@@ -1281,7 +1323,7 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
-	// Build attributes JSON with HTTP fields and custom attributes
+	// Build attributes JSON with HTTP fields, tool fields, and custom attributes
 	attrs := map[string]any{}
 	if params.httpMethod != nil {
 		attrs["http.request.method"] = *params.httpMethod
@@ -1291,6 +1333,15 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 	}
 	if params.httpRoute != nil {
 		attrs["http.route"] = *params.httpRoute
+	}
+	if params.toolName != nil {
+		attrs["gram.tool.name"] = *params.toolName
+	}
+	if params.toolSource != nil {
+		attrs["gram.tool_call.source"] = *params.toolSource
+	}
+	if params.eventSource != nil {
+		attrs["gram.event.source"] = *params.eventSource
 	}
 	maps.Copy(attrs, params.customAttrs)
 
@@ -1310,4 +1361,11 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 		params.projectID, params.deploymentID, params.functionID, params.gramURN,
 		params.serviceName, nil)
 	require.NoError(t, err)
+}
+
+// ptr returns a pointer to the given value
+//
+//go:fix inline
+func ptr[T any](v T) *T {
+	return &v
 }

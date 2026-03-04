@@ -277,8 +277,8 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 	return items, nil
 }
 
-// ListTracesParams contains the parameters for listing traces.
-type ListTracesParams struct {
+// ListToolTracesParams contains the parameters for listing tool call traces.
+type ListToolTracesParams struct {
 	GramProjectID    string
 	TimeStart        int64
 	TimeEnd          int64
@@ -290,7 +290,7 @@ type ListTracesParams struct {
 	Limit            int
 }
 
-// ListTraces retrieves aggregated trace summaries grouped by trace_id.
+// ListToolTraces retrieves aggregated trace summaries for tool calls (filtered to only include traces with tool_name set).
 //
 // Original SQL reference:
 // SELECT trace_id, min(time_unix_nano), count(*), ... FROM telemetry_logs
@@ -298,13 +298,16 @@ type ListTracesParams struct {
 // [+ optional filters] GROUP BY trace_id ORDER BY start_time_unix_nano LIMIT ?
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]TraceSummary, error) {
+func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) ([]TraceSummary, error) {
 	sb := sq.Select(
 		"trace_id",
 		"min(start_time_unix_nano) as start_time_unix_nano",
 		"sum(log_count) as log_count",
 		"anyIfMerge(http_status_code) as http_status_code",
 		"any(gram_urn) as gram_urn",
+		"any(tool_name) as tool_name",
+		"any(tool_source) as tool_source",
+		"any(event_source) as event_source",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -319,10 +322,23 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
 	}
 
-	// URN filter must use HAVING because gram_urn in SELECT is aliased to any(gram_urn),
-	// and ClickHouse resolves aliases in WHERE, which would create an invalid aggregate-in-WHERE.
+	// Build HAVING clause for tool filtering.
+	// IMPORTANT: We must construct a single HAVING clause with explicit AND logic to ensure
+	// correct boolean precedence. Multiple .Having() calls would create separate conditions
+	// that interact incorrectly with the OR in the tool_name check, causing the gram_urn
+	// filter to be bypassed when startsWith(gram_urn, 'tools:') is true.
+	havingParts := []string{"((tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:'))"}
+	havingArgs := []any{}
+
+	// URN filter must use HAVING because it's an aggregate function in SELECT
 	if arg.GramURN != "" {
-		sb = sb.Having("position(gram_urn, ?) > 0", arg.GramURN)
+		havingParts = append(havingParts, "position(gram_urn, ?) > 0")
+		havingArgs = append(havingArgs, arg.GramURN)
+	}
+
+	// Combine all HAVING conditions with explicit AND to ensure proper filtering
+	if len(havingParts) > 0 {
+		sb = sb.Having(strings.Join(havingParts, " AND "), havingArgs...)
 	}
 
 	// Exclude chat completion logs (urn:uuid:...) which are not tool calls.
@@ -351,7 +367,7 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 
 	query, args, err := sb.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("building list traces query: %w", err)
+		return nil, fmt.Errorf("building list tool traces query: %w", err)
 	}
 
 	rows, err := q.conn.Query(ctx, query, args...)

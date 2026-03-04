@@ -12,7 +12,7 @@ func (n *StubToolMetricsClient) ListTelemetryLogs(_ context.Context, _ repo.List
 	return nil, nil
 }
 
-func (n *StubToolMetricsClient) ListTraces(_ context.Context, _ repo.ListTracesParams) ([]repo.TraceSummary, error) {
+func (n *StubToolMetricsClient) ListToolTraces(_ context.Context, _ repo.ListToolTracesParams) ([]repo.TraceSummary, error) {
 	return nil, nil
 }
 

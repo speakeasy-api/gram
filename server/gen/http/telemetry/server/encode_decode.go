@@ -2526,6 +2526,9 @@ func marshalTelemetryToolCallSummaryToToolCallSummaryResponseBody(v *telemetry.T
 		LogCount:          v.LogCount,
 		HTTPStatusCode:    v.HTTPStatusCode,
 		GramUrn:           v.GramUrn,
+		ToolName:          v.ToolName,
+		ToolSource:        v.ToolSource,
+		EventSource:       v.EventSource,
 	}
 
 	return res

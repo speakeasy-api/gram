@@ -78,8 +78,6 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	observedTimeUnixNano := time.Now().UnixNano()
 	allAttrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
 	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
-
-	// Manually add service name, as it's always going to be gram server
 	allAttrs[attr.ServiceNameKey] = serviceName
 
 	spanAttrs, resourceAttrs, err := parseAttributes(allAttrs)

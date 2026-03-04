@@ -246,7 +246,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}
 
 	// Query with limit+1 to detect if there are more results
-	items, err := s.chRepo.ListTraces(ctx, repo.ListTracesParams{
+	items, err := s.chRepo.ListToolTraces(ctx, repo.ListToolTracesParams{
 		GramProjectID:    params.projectID,
 		TimeStart:        params.timeStart,
 		TimeEnd:          params.timeEnd,
@@ -258,6 +258,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 		Limit:            params.limit + 1,
 	})
 	if err != nil {
+		s.logger.ErrorContext(ctx, "error listing tool traces", attr.SlogError(err))
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing traces")
 	}
 
@@ -277,6 +278,9 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 			LogCount:          item.LogCount,
 			HTTPStatusCode:    item.HTTPStatusCode,
 			GramUrn:           item.GramURN,
+			ToolName:          item.ToolName,
+			ToolSource:        item.ToolSource,
+			EventSource:       item.EventSource,
 		}
 	}
 

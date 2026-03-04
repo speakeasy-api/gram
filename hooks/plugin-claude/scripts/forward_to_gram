@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Unified hook forwarder - forwards all hook events to server
+
+SERVER_URL="https://app.getgram.ai"
+if [ -n "$GRAM_SERVER_URL" ]; then
+  SERVER_URL="$GRAM_SERVER_URL"
+fi
+
+PROJECT="default"
+if [ -n "$GRAM_PROJECT" ]; then
+  PROJECT="$GRAM_PROJECT"
+fi
+
+URL="$SERVER_URL/rpc/hooks.claude"
+
+# Read stdin (hook payload)
+INPUT=$(cat)
+
+# Forward to server and pipe response directly to stdout
+curl -s -X POST "$URL" \
+  -H "Content-Type: application/json" \
+  -H "Gram-Key: ${GRAM_API_KEY}" \
+  -H "Gram-Project: ${PROJECT}" \
+  -d "$INPUT"
+
+# Exit with curl's exit code
+exit $?

@@ -53,3 +53,4 @@ package-lock.json
 /examples/*/pnpm-lock.yaml
 .worktrees
 .granary/
+.claude/hooks/*

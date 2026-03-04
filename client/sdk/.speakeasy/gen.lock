@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: ca77380d98e456bbf376bd79be027d85
+  docChecksum: 3f9178131f6fca8593a625fd0420b65e
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.15
-  configChecksum: a1d14c1c9ae5119047eb42e069bdfb75
+  releaseVersion: 0.27.20
+  configChecksum: 0c92f2bd4dd41c7f6bea1d5e033cf8a7
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -467,7 +467,7 @@ trackedFiles:
   docs/models/components/toolannotations.md:
     last_write_checksum: sha1:cfb3f615e75717616f385d78ad41ee94ed6019f1
   docs/models/components/toolcallsummary.md:
-    last_write_checksum: sha1:53fc221fd0b295340a23b718719be68a29ac6190
+    last_write_checksum: sha1:cdf37acd4c46e9be93f4131a7f13a64ed4c50a32
   docs/models/components/toolentry.md:
     last_write_checksum: sha1:6e30e93e231fc9a01cfbfcd1be2356d7f1d000ab
   docs/models/components/toolentrytype.md:
@@ -1388,11 +1388,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:259ae58dd6a29e12ff6c5d1a74e9b12e7c1876a5
+    last_write_checksum: sha1:fa0e88f4fbef2a96e9e913c8f22a5ea53d241272
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:6e2a87b29c3a14c89cfa72058a97eec7b8216203
+    last_write_checksum: sha1:5c820009185b5297f6b893ebf78ac987e842efea
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1848,7 +1848,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:0d420ec82c9c599f4081efc0bf9d78f3902bafdb
+    last_write_checksum: sha1:d498cc8604f0219f9ebd4be3b6566891fa80d620
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2524,7 +2524,7 @@ trackedFiles:
     last_write_checksum: sha1:0833923cd45d537957bd9ad8d58a194ab0dc1696
   src/models/components/toolcallsummary.ts:
     id: 240c70fb9551
-    last_write_checksum: sha1:d587ef7c7c458833d1d849b5430838f0ae7d4dd0
+    last_write_checksum: sha1:fe6eaa5a86e8fbe210c7b576c8445da458ea1338
     pristine_git_object: 228edbe83abf771d6a654e54a6212ddcce12c88b
   src/models/components/toolentry.ts:
     id: 82f49d8e8ee1

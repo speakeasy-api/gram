@@ -2209,6 +2209,12 @@ type ToolCallSummaryResponseBody struct {
 	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
 	// Gram URN associated with this tool call
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
+	// Tool name (from attributes.gram.tool.name)
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Tool call source (from attributes.gram.tool_call.source)
+	ToolSource *string `form:"tool_source,omitempty" json:"tool_source,omitempty" xml:"tool_source,omitempty"`
+	// Event source (from attributes.gram.event.source)
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 }
 
 // SearchChatsFilterRequestBody is used to define fields on request body types.

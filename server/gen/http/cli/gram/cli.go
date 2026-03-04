@@ -24,6 +24,7 @@ import (
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
+	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
@@ -59,6 +60,7 @@ func UsageCommands() []string {
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"mcp-registries list-catalog",
 		"functions get-signed-asset-url",
+		"hooks claude",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -412,6 +414,13 @@ func ParseEndpoint(
 		functionsGetSignedAssetURLFlags             = flag.NewFlagSet("get-signed-asset-url", flag.ExitOnError)
 		functionsGetSignedAssetURLBodyFlag          = functionsGetSignedAssetURLFlags.String("body", "REQUIRED", "")
 		functionsGetSignedAssetURLFunctionTokenFlag = functionsGetSignedAssetURLFlags.String("function-token", "", "")
+
+		hooksFlags = flag.NewFlagSet("hooks", flag.ContinueOnError)
+
+		hooksClaudeFlags                = flag.NewFlagSet("claude", flag.ExitOnError)
+		hooksClaudeBodyFlag             = hooksClaudeFlags.String("body", "REQUIRED", "")
+		hooksClaudeApikeyTokenFlag      = hooksClaudeFlags.String("apikey-token", "", "")
+		hooksClaudeProjectSlugInputFlag = hooksClaudeFlags.String("project-slug-input", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
@@ -885,6 +894,9 @@ func ParseEndpoint(
 	functionsFlags.Usage = functionsUsage
 	functionsGetSignedAssetURLFlags.Usage = functionsGetSignedAssetURLUsage
 
+	hooksFlags.Usage = hooksUsage
+	hooksClaudeFlags.Usage = hooksClaudeUsage
+
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
 
@@ -1018,6 +1030,8 @@ func ParseEndpoint(
 			svcf = mcpRegistriesFlags
 		case "functions":
 			svcf = functionsFlags
+		case "hooks":
+			svcf = hooksFlags
 		case "instances":
 			svcf = instancesFlags
 		case "integrations":
@@ -1263,6 +1277,13 @@ func ParseEndpoint(
 			switch epn {
 			case "get-signed-asset-url":
 				epf = functionsGetSignedAssetURLFlags
+
+			}
+
+		case "hooks":
+			switch epn {
+			case "claude":
+				epf = hooksClaudeFlags
 
 			}
 
@@ -1757,6 +1778,13 @@ func ParseEndpoint(
 			case "get-signed-asset-url":
 				endpoint = c.GetSignedAssetURL()
 				data, err = functionsc.BuildGetSignedAssetURLPayload(*functionsGetSignedAssetURLBodyFlag, *functionsGetSignedAssetURLFunctionTokenFlag)
+			}
+		case "hooks":
+			c := hooksc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "claude":
+				endpoint = c.Claude()
+				data, err = hooksc.BuildClaudePayload(*hooksClaudeBodyFlag, *hooksClaudeApikeyTokenFlag, *hooksClaudeProjectSlugInputFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3404,6 +3432,38 @@ func functionsGetSignedAssetURLUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "functions get-signed-asset-url --body '{\n      \"asset_id\": \"abc123\"\n   }' --function-token \"abc123\"")
+}
+
+// hooksUsage displays the usage of the hooks command and its subcommands.
+func hooksUsage() {
+	fmt.Fprintln(os.Stderr, `Receives Claude Code hook events for tool usage observability.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] hooks COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    claude: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s hooks COMMAND --help\n", os.Args[0])
+}
+func hooksClaudeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks claude", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"hook_event_name\": \"PreToolUse\",\n      \"session_id\": \"abc123\",\n      \"tool_error\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its

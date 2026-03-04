@@ -12577,6 +12577,51 @@ components:
                 - total_input_tokens
                 - total_output_tokens
                 - total_tokens
+        ClaudeHookPayload:
+            type: object
+            properties:
+                additional_data:
+                    type: object
+                    description: Additional hook-specific data
+                    additionalProperties: true
+                hook_event_name:
+                    type: string
+                    description: The type of hook event
+                    enum:
+                        - SessionStart
+                        - PreToolUse
+                        - PostToolUse
+                        - PostToolUseFailure
+                session_id:
+                    type: string
+                    description: The Claude Code session ID
+                tool_error:
+                    description: The error from the tool (PostToolUseFailure only)
+                tool_input:
+                    description: The input to the tool
+                tool_name:
+                    type: string
+                    description: The name of the tool (for tool-related events)
+                tool_response:
+                    description: The response from the tool (PostToolUse only)
+                tool_use_id:
+                    type: string
+                    description: The unique ID for this tool use
+            description: Unified payload for all Claude Code hook events
+            required:
+                - hook_event_name
+        ClaudeHookResult:
+            type: object
+            properties:
+                continue:
+                    type: boolean
+                    description: Whether to continue (SessionStart only)
+                hookSpecificOutput:
+                    description: Hook-specific output as JSON object
+                stopReason:
+                    type: string
+                    description: Reason if blocked (SessionStart only)
+            description: Unified result for all Claude Code hook events with proper response structure
         ConfigureSlackAppRequestBody:
             type: object
             properties:
@@ -16930,6 +16975,9 @@ components:
         ToolCallSummary:
             type: object
             properties:
+                event_source:
+                    type: string
+                    description: Event source (from attributes.gram.event.source)
                 gram_urn:
                     type: string
                     description: Gram URN associated with this tool call
@@ -16944,6 +16992,12 @@ components:
                 start_time_unix_nano:
                     type: string
                     description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+                tool_name:
+                    type: string
+                    description: Tool name (from attributes.gram.tool.name)
+                tool_source:
+                    type: string
+                    description: Tool call source (from attributes.gram.tool_call.source)
                 trace_id:
                     type: string
                     description: Trace ID (32 hex characters)

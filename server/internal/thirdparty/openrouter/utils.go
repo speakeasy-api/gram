@@ -12,9 +12,9 @@ func CreateMessageUser(content string) or.Message {
 			Content: or.CreateUserMessageContentStr(content),
 			Name:    nil,
 		},
-		SystemMessage:      nil,
-		MessageDeveloper:   nil,
-		AssistantMessage:   nil,
+		SystemMessage:       nil,
+		MessageDeveloper:    nil,
+		AssistantMessage:    nil,
 		ToolResponseMessage: nil,
 	}
 }
@@ -39,9 +39,9 @@ func CreateMessageSystem(content string) or.Message {
 			Content: or.CreateSystemMessageContentStr(content),
 			Name:    nil,
 		},
-		UserMessage:        nil,
-		MessageDeveloper:   nil,
-		AssistantMessage:   nil,
+		UserMessage:         nil,
+		MessageDeveloper:    nil,
+		AssistantMessage:    nil,
 		ToolResponseMessage: nil,
 	}
 }

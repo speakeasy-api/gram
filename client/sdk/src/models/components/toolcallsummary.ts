@@ -13,6 +13,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type ToolCallSummary = {
   /**
+   * Event source (from attributes.gram.event.source)
+   */
+  eventSource?: string | undefined;
+  /**
    * Gram URN associated with this tool call
    */
   gramUrn: string;
@@ -29,6 +33,14 @@ export type ToolCallSummary = {
    */
   startTimeUnixNano: string;
   /**
+   * Tool name (from attributes.gram.tool.name)
+   */
+  toolName?: string | undefined;
+  /**
+   * Tool call source (from attributes.gram.tool_call.source)
+   */
+  toolSource?: string | undefined;
+  /**
    * Trace ID (32 hex characters)
    */
   traceId: string;
@@ -40,18 +52,24 @@ export const ToolCallSummary$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    event_source: z.optional(z.string()),
     gram_urn: z.string(),
     http_status_code: z.optional(z.int()),
     log_count: z.int(),
     start_time_unix_nano: z.string(),
+    tool_name: z.optional(z.string()),
+    tool_source: z.optional(z.string()),
     trace_id: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "event_source": "eventSource",
       "gram_urn": "gramUrn",
       "http_status_code": "httpStatusCode",
       "log_count": "logCount",
       "start_time_unix_nano": "startTimeUnixNano",
+      "tool_name": "toolName",
+      "tool_source": "toolSource",
       "trace_id": "traceId",
     });
   }),

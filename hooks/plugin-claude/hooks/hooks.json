@@ -1,0 +1,46 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
