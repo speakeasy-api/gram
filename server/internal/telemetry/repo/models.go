@@ -56,14 +56,14 @@ type TelemetryLog struct {
 	// OTel Resource Attributes (WHO/WHERE generated this log)
 	ResourceAttributes string `ch:"resource_attributes"` // JSON (stringified)
 
-	// Denormalized Gram Fields (for fast filtering)
-	GramProjectID    string  `ch:"gram_project_id"`    // UUID
-	GramDeploymentID *string `ch:"gram_deployment_id"` // Nullable(UUID)
-	GramFunctionID   *string `ch:"gram_function_id"`   // Nullable(UUID)
-	GramURN          string  `ch:"gram_urn"`           // String
-	ServiceName      string  `ch:"service_name"`       // LowCardinality(String)
-	ServiceVersion   *string `ch:"service_version"`    // Nullable(String)
-	GramChatID       *string `ch:"gram_chat_id"`       // Nullable(String)
+	// Gram Fields (for fast filtering)
+	GramProjectID  string  `ch:"gram_project_id"` // UUID (ORDER BY key)
+	DeploymentID   string  `ch:"deployment_id"`   // String (materialized from resource_attributes.gram.deployment.id)
+	FunctionID     string  `ch:"function_id"`     // String (materialized from attributes.gram.function.id)
+	URN            string  `ch:"urn"`             // String (materialized from attributes.gram.tool.urn)
+	ServiceName    string  `ch:"service_name"`    // LowCardinality(String)
+	ServiceVersion *string `ch:"service_version"` // Nullable(String)
+	ChatID         string  `ch:"chat_id"`         // String (materialized from attributes.gen_ai.conversation.id)
 }
 
 // TraceSummary represents an aggregated view of a trace (one row per trace).
@@ -73,13 +73,13 @@ type TraceSummary struct {
 	StartTimeUnixNano int64  `ch:"start_time_unix_nano"` // Int64 - earliest log timestamp
 	LogCount          uint64 `ch:"log_count"`            // UInt64 - total logs in trace
 	HTTPStatusCode    *int32 `ch:"http_status_code"`     // Nullable(Int32) - any HTTP status code
-	GramURN           string `ch:"gram_urn"`             // String - any gram_urn from the trace
+	URN               string `ch:"urn"`                  // String - any urn from the trace
 }
 
 // ChatSummary represents an aggregated view of a chat session (one row per gram_chat_id).
 // Used for displaying a list of chat sessions in the UI.
 type ChatSummary struct {
-	GramChatID        string  `ch:"gram_chat_id"`
+	ChatID            string  `ch:"chat_id"`
 	StartTimeUnixNano int64   `ch:"start_time_unix_nano"`
 	EndTimeUnixNano   int64   `ch:"end_time_unix_nano"`
 	LogCount          uint64  `ch:"log_count"`
@@ -192,7 +192,7 @@ type TimeSeriesBucket struct {
 // ToolMetric represents aggregated metrics for a single tool.
 // Used for the top tools tables in the observability overview.
 type ToolMetric struct {
-	GramURN      string  `ch:"gram_urn"`
+	URN          string  `ch:"urn"`
 	CallCount    uint64  `ch:"call_count"`
 	SuccessCount uint64  `ch:"success_count"`
 	FailureCount uint64  `ch:"failure_count"`

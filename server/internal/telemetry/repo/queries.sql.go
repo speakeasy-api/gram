@@ -65,12 +65,8 @@ type InsertTelemetryLogParams struct {
 	Attributes           string
 	ResourceAttributes   string
 	GramProjectID        string
-	GramDeploymentID     *string
-	GramFunctionID       *string
-	GramURN              string
 	ServiceName          string
 	ServiceVersion       *string
-	GramChatID           *string
 }
 
 // InsertTelemetryLog inserts a telemetry log record into ClickHouse.
@@ -94,12 +90,8 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 			"attributes",
 			"resource_attributes",
 			"gram_project_id",
-			"gram_deployment_id",
-			"gram_function_id",
-			"gram_urn",
 			"service_name",
 			"service_version",
-			"gram_chat_id",
 		).
 		Values(
 			arg.ID,
@@ -112,12 +104,8 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 			arg.Attributes,
 			arg.ResourceAttributes,
 			arg.GramProjectID,
-			arg.GramDeploymentID,
-			arg.GramFunctionID,
-			arg.GramURN,
 			arg.ServiceName,
 			arg.ServiceVersion,
-			arg.GramChatID,
 		).
 		ToSql()
 	if err != nil {
@@ -132,16 +120,16 @@ type ListTelemetryLogsParams struct {
 	GramProjectID          string
 	TimeStart              int64
 	TimeEnd                int64
-	GramURNs               []string // Supports multiple URNs
+	URNs                   []string // Supports multiple URNs
 	TraceID                string
-	GramDeploymentID       string
-	GramFunctionID         string
+	DeploymentID           string
+	FunctionID             string
 	SeverityText           string
 	HTTPResponseStatusCode int32
 	HTTPRoute              string
 	HTTPRequestMethod      string
 	ServiceName            string
-	GramChatID             string
+	ChatID                 string
 	UserID                 string
 	ExternalUserID         string
 	AttributeFilters       []AttributeFilter
@@ -170,12 +158,12 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		"toString(attributes) as attributes",
 		"toString(resource_attributes) as resource_attributes",
 		"gram_project_id",
-		"gram_deployment_id",
-		"gram_function_id",
-		"gram_urn",
+		"deployment_id",
+		"function_id",
+		"urn",
 		"service_name",
 		"service_version",
-		"gram_chat_id",
+		"chat_id",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -183,17 +171,17 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
 	// Optional filters
-	if len(arg.GramURNs) > 0 {
-		sb = sb.Where("has(?, gram_urn)", arg.GramURNs)
+	if len(arg.URNs) > 0 {
+		sb = sb.Where("has(?, urn)", arg.URNs)
 	}
 	if arg.TraceID != "" {
 		sb = sb.Where(squirrel.Eq{"trace_id": arg.TraceID})
 	}
-	if arg.GramDeploymentID != "" {
-		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+	if arg.DeploymentID != "" {
+		sb = sb.Where(squirrel.Eq{"deployment_id": arg.DeploymentID})
 	}
-	if arg.GramFunctionID != "" {
-		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
+	if arg.FunctionID != "" {
+		sb = sb.Where(squirrel.Eq{"function_id": arg.FunctionID})
 	}
 	if arg.SeverityText != "" {
 		sb = sb.Where(squirrel.Eq{"severity_text": arg.SeverityText})
@@ -210,8 +198,8 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 	if arg.ServiceName != "" {
 		sb = sb.Where(squirrel.Eq{"service_name": arg.ServiceName})
 	}
-	if arg.GramChatID != "" {
-		sb = sb.Where(squirrel.Eq{"gram_chat_id": arg.GramChatID})
+	if arg.ChatID != "" {
+		sb = sb.Where(squirrel.Eq{"chat_id": arg.ChatID})
 	}
 	if arg.UserID != "" {
 		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
@@ -279,15 +267,15 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 
 // ListTracesParams contains the parameters for listing traces.
 type ListTracesParams struct {
-	GramProjectID    string
-	TimeStart        int64
-	TimeEnd          int64
-	GramDeploymentID string
-	GramFunctionID   string
-	GramURN          string // Single URN filter (supports substring matching)
-	SortOrder        string
-	Cursor           string // trace_id to paginate from
-	Limit            int
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+	DeploymentID  string
+	FunctionID    string
+	URN           string // Single URN filter (supports substring matching)
+	SortOrder     string
+	Cursor        string // trace_id to paginate from
+	Limit         int
 }
 
 // ListTraces retrieves aggregated trace summaries grouped by trace_id.
@@ -304,7 +292,7 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		"min(start_time_unix_nano) as start_time_unix_nano",
 		"sum(log_count) as log_count",
 		"anyIfMerge(http_status_code) as http_status_code",
-		"any(gram_urn) as gram_urn",
+		"any(urn) as urn",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -312,25 +300,25 @@ func (q *Queries) ListTraces(ctx context.Context, arg ListTracesParams) ([]Trace
 		Having("start_time_unix_nano <= ?", arg.TimeEnd)
 
 	// Optional filters
-	if arg.GramDeploymentID != "" {
-		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+	if arg.DeploymentID != "" {
+		sb = sb.Where(squirrel.Eq{"deployment_id": arg.DeploymentID})
 	}
-	if arg.GramFunctionID != "" {
-		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
+	if arg.FunctionID != "" {
+		sb = sb.Where(squirrel.Eq{"function_id": arg.FunctionID})
 	}
 
-	// URN filter must use HAVING because gram_urn in SELECT is aliased to any(gram_urn),
+	// URN filter must use HAVING because urn in SELECT is aliased to any(urn),
 	// and ClickHouse resolves aliases in WHERE, which would create an invalid aggregate-in-WHERE.
-	if arg.GramURN != "" {
-		sb = sb.Having("position(gram_urn, ?) > 0", arg.GramURN)
+	if arg.URN != "" {
+		sb = sb.Having("position(urn, ?) > 0", arg.URN)
 	}
 
 	// Exclude chat completion logs (urn:uuid:...) which are not tool calls.
 	// The trace_summaries_mv filters these at insert time via a WHERE clause,
-	// so for new data any(gram_urn) will never pick a urn:uuid: value.
+	// so for new data any(urn) will never pick a urn:uuid: value.
 	// This HAVING clause is kept as a safety net for historical data that may
 	// have been inserted before the MV was updated to exclude these URNs.
-	sb = sb.Having("position(gram_urn, 'urn:uuid:') != 1")
+	sb = sb.Having("position(urn, 'urn:uuid:') != 1")
 
 	sb = sb.GroupBy("trace_id")
 
@@ -531,14 +519,14 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 			data AS (
 				SELECT
 					toInt64(toStartOfInterval(fromUnixTimestamp64Nano(time_unix_nano), INTERVAL %d SECOND)) * 1000000000 as bucket_time_unix_nano,
-					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label != '') as total_chats,
-					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'success') as resolved_chats,
-					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'failure') as failed_chats,
-					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'partial') as partial_chats,
-					uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'abandoned') as abandoned_chats,
-					countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls,
-					countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls,
-					avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_tool_latency_ms,
+					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label != '') as total_chats,
+					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats,
+					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats,
+					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'partial') as partial_chats,
+					uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'abandoned') as abandoned_chats,
+					countIf(startsWith(urn, 'tools:')) as total_tool_calls,
+					countIf(startsWith(urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls,
+					avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(urn, 'tools:')) as avg_tool_latency_ms,
 					avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms
 				FROM telemetry_logs
 				WHERE gram_project_id = ?
@@ -616,7 +604,7 @@ func buildOptionalFiltersSQL(externalUserID, apiKeyID, toolsetID string) string 
 		filters += " AND api_key_id = ?"
 	}
 	if toolsetID != "" {
-		filters += " AND startsWith(gram_urn, ?)"
+		filters += " AND startsWith(urn, ?)"
 	}
 	return filters
 }
@@ -638,7 +626,7 @@ type GetToolMetricsBreakdownParams struct {
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetricsBreakdownParams) ([]ToolMetric, error) {
 	sb := sq.Select(
-		"gram_urn",
+		"urn",
 		"count(*) as call_count",
 		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) as success_count",
 		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failure_count",
@@ -649,7 +637,7 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("startsWith(gram_urn, 'tools:')")
+		Where("startsWith(urn, 'tools:')")
 
 	// Optional filters
 	if arg.ExternalUserID != "" {
@@ -660,10 +648,10 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.ToolsetID != "" {
 		// Filter by toolset - ToolsetID is expected to be a URN prefix like "tools:http:gram"
-		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
+		sb = sb.Where("startsWith(urn, ?)", arg.ToolsetID+":")
 	}
 
-	sb = sb.GroupBy("gram_urn")
+	sb = sb.GroupBy("urn")
 
 	// Sort by count or failure rate
 	if arg.SortBy == "failure_rate" {
@@ -783,14 +771,14 @@ func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) squirrel.Se
 // getOverviewSummaryRaw builds a query against the raw telemetry_logs table (used when filters are applied).
 func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.SelectBuilder {
 	sb := sq.Select(
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label != '') as total_chats",
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
-		"uniqExactIf(gram_chat_id, gram_chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label != '') as total_chats",
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
+		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms",
-		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
-		"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls",
-		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_latency_ms",
+		"countIf(startsWith(urn, 'tools:')) as total_tool_calls",
+		"countIf(startsWith(urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls",
+		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(urn, 'tools:')) as avg_latency_ms",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -805,7 +793,7 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.ToolsetID != "" {
 		// Filter by toolset - ToolsetID is expected to be a URN prefix like "tools:http:gram"
-		sb = sb.Where("startsWith(gram_urn, ?)", arg.ToolsetID+":")
+		sb = sb.Where("startsWith(urn, ?)", arg.ToolsetID+":")
 	}
 
 	return sb
@@ -813,39 +801,39 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 
 // ListChatsParams contains the parameters for listing chats.
 type ListChatsParams struct {
-	GramProjectID    string
-	TimeStart        int64
-	TimeEnd          int64
-	GramDeploymentID string
-	GramURN          string
-	UserID           string
-	ExternalUserID   string
-	SortOrder        string
-	Cursor           string // gram_chat_id to paginate from
-	Limit            int
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	DeploymentID   string
+	URN            string
+	UserID         string
+	ExternalUserID string
+	SortOrder      string
+	Cursor         string // chat_id to paginate from
+	Limit          int
 }
 
-// ListChats retrieves aggregated chat summaries grouped by gram_chat_id.
+// ListChats retrieves aggregated chat summaries grouped by chat_id.
 //
 // Original SQL reference:
-// SELECT gram_chat_id, min(time_unix_nano), max(time_unix_nano), ... FROM telemetry_logs
+// SELECT chat_id, min(time_unix_nano), max(time_unix_nano), ... FROM telemetry_logs
 // WHERE gram_project_id = ? AND time_unix_nano >= ? AND time_unix_nano <= ?
-// [+ optional filters] GROUP BY gram_chat_id ORDER BY start_time_unix_nano LIMIT ?
+// [+ optional filters] GROUP BY chat_id ORDER BY start_time_unix_nano LIMIT ?
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSummary, error) {
 	sb := sq.Select(
-		"gram_chat_id",
+		"chat_id",
 		"min(time_unix_nano) as start_time_unix_nano",
 		"max(time_unix_nano) as end_time_unix_nano",
 		"count(*) as log_count",
-		"countIf(startsWith(gram_urn, 'tools:')) as tool_call_count",
+		"countIf(startsWith(urn, 'tools:')) as tool_call_count",
 		// Message count: number of LLM completion events in this chat
 		"countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as message_count",
 		// Duration in seconds (max event time - min event time)
 		"toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0 as duration_seconds",
 		// Status: failed if any tool call returned 4xx/5xx, otherwise success
-		"if(countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) > 0, 'error', 'success') as status",
+		"if(countIf(startsWith(urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) > 0, 'error', 'success') as status",
 		"anyIf(toString(attributes.user.id), toString(attributes.user.id) != '') as user_id",
 		// Model used (pick any non-empty response model from completion events)
 		"anyIf(toString(attributes.gen_ai.response.model), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') as model",
@@ -857,15 +845,15 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("gram_chat_id IS NOT NULL").
-		Where("gram_chat_id != ''")
+		Where("chat_id IS NOT NULL").
+		Where("chat_id != ''")
 
 	// Optional filters
-	if arg.GramDeploymentID != "" {
-		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+	if arg.DeploymentID != "" {
+		sb = sb.Where("deployment_id = toUUIDOrNull(?)", arg.DeploymentID)
 	}
-	if arg.GramURN != "" {
-		sb = sb.Where("position(telemetry_logs.gram_urn, ?) > 0", arg.GramURN)
+	if arg.URN != "" {
+		sb = sb.Where("position(telemetry_logs.urn, ?) > 0", arg.URN)
 	}
 	if arg.UserID != "" {
 		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
@@ -874,13 +862,13 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
 
-	sb = sb.GroupBy("gram_chat_id")
+	sb = sb.GroupBy("chat_id")
 
 	// HAVING clause for cursor pagination with tuple comparison for tie-breaking
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)")
+	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "chat_id", "min(time_unix_nano)")
 
-	// Ordering - include gram_chat_id as secondary for stable ordering
-	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "gram_chat_id")
+	// Ordering - include chat_id as secondary for stable ordering
+	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "chat_id")
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
 
@@ -913,14 +901,14 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 
 // SearchUsersParams contains the parameters for searching users with aggregated metrics.
 type SearchUsersParams struct {
-	GramProjectID    string
-	TimeStart        int64
-	TimeEnd          int64
-	GramDeploymentID string // optional
-	GroupBy          string // "user_id" or "external_user_id"
-	SortOrder        string // "asc" or "desc"
-	Cursor           string // user identifier to paginate from
-	Limit            int
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+	DeploymentID  string // optional
+	GroupBy       string // "user_id" or "external_user_id"
+	SortOrder     string // "asc" or "desc"
+	Cursor        string // user identifier to paginate from
+	Limit         int
 }
 
 // SearchUsers retrieves aggregated usage metrics grouped by user identifier.
@@ -959,9 +947,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_call_failure",
 
 		// Tool breakdowns (maps of tool URN -> count)
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
+		"sumMapIf(map(urn, toUInt64(1)), startsWith(urn, 'tools:')) AS tool_counts",
+		"sumMapIf(map(urn, toUInt64(1)), startsWith(urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
+		"sumMapIf(map(urn, toUInt64(1)), startsWith(urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -971,8 +959,8 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		Where(groupCol + " != ''")
 
 	// Optional deployment filter
-	if arg.GramDeploymentID != "" {
-		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+	if arg.DeploymentID != "" {
+		sb = sb.Where("deployment_id = toUUIDOrNull(?)", arg.DeploymentID)
 	}
 
 	sb = sb.GroupBy(groupCol)
@@ -1067,9 +1055,9 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"sumMapIf(map(toString(attributes.gen_ai.response.model), toUInt64(1)), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') AS models",
 
 		// Tool breakdowns (maps of tool URN -> count)
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
+		"sumMapIf(map(urn, toUInt64(1)), startsWith(urn, 'tools:')) AS tool_counts",
+		"sumMapIf(map(urn, toUInt64(1)), startsWith(urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
+		"sumMapIf(map(urn, toUInt64(1)), startsWith(urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1187,8 +1175,8 @@ func (q *Queries) ListFilterOptions(ctx context.Context, arg ListFilterOptionsPa
 
 	sb := sq.Select(
 		groupCol+" AS id",
-		groupCol+" AS label",               // For now, label is same as ID
-		"uniqExact(gram_chat_id) AS count", // Count unique chat sessions, not log rows
+		groupCol+" AS label",          // For now, label is same as ID
+		"uniqExact(chat_id) AS count", // Count unique chat sessions, not log rows
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).

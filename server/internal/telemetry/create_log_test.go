@@ -38,9 +38,9 @@ func TestCreateLog_LogsCorrectly(t *testing.T) {
 
 	// logs tool info
 	require.Equal(t, toolInfo.ProjectID, log.GramProjectID)
-	require.NotNil(t, log.GramDeploymentID)
-	require.Equal(t, toolInfo.DeploymentID, *log.GramDeploymentID)
-	require.Equal(t, toolInfo.URN, log.GramURN)
+	require.NotEmpty(t, log.DeploymentID)
+	require.Equal(t, toolInfo.DeploymentID, log.DeploymentID)
+	require.Equal(t, toolInfo.URN, log.URN)
 	require.Equal(t, "gram-server", log.ServiceName)
 
 	// logs to attributes col
@@ -75,7 +75,7 @@ func TestCreateLog_NilFunctionID(t *testing.T) {
 
 	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
-	require.Nil(t, log.GramFunctionID)
+	require.Empty(t, log.FunctionID)
 }
 
 func TestCreateLog_NonNilFunctionID(t *testing.T) {
@@ -99,8 +99,8 @@ func TestCreateLog_NonNilFunctionID(t *testing.T) {
 
 	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
-	require.NotNil(t, log.GramFunctionID)
-	require.Equal(t, funcID, *log.GramFunctionID)
+	require.NotEmpty(t, log.FunctionID)
+	require.Equal(t, funcID, log.FunctionID)
 }
 
 func TestCreateLog_SeverityFromStatusCode(t *testing.T) {
@@ -295,7 +295,7 @@ func TestCreateLog_NoOpWhenFeatureDisabled(t *testing.T) {
 			GramProjectID: toolInfo.ProjectID,
 			TimeStart:     timestamp.Add(-1 * time.Minute).UnixNano(),
 			TimeEnd:       timestamp.Add(1 * time.Minute).UnixNano(),
-			GramURNs:      []string{toolInfo.URN},
+			URNs:          []string{toolInfo.URN},
 			SortOrder:     "desc",
 			Cursor:        "",
 			Limit:         10,
@@ -324,7 +324,7 @@ func TestCreateLog_EmptyDeploymentIDNotInAttributes(t *testing.T) {
 
 	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
-	require.Nil(t, log.GramDeploymentID)
+	require.Empty(t, log.DeploymentID)
 	// The deployment ID key should not appear in resource_attributes when empty
 	require.NotContains(t, log.ResourceAttributes, "gram.deployment.id")
 }
@@ -350,8 +350,8 @@ func TestCreateLog_ChatIDColumn(t *testing.T) {
 
 	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
-	require.NotNil(t, log.GramChatID)
-	require.Equal(t, chatID, *log.GramChatID)
+	require.NotEmpty(t, log.ChatID)
+	require.Equal(t, chatID, log.ChatID)
 }
 
 func TestCreateLog_NilChatIDWhenNotProvided(t *testing.T) {
@@ -373,7 +373,7 @@ func TestCreateLog_NilChatIDWhenNotProvided(t *testing.T) {
 
 	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
-	require.Nil(t, log.GramChatID)
+	require.Empty(t, log.ChatID)
 }
 
 func TestCreateLog_TraceAndSpanIDColumns(t *testing.T) {
@@ -508,7 +508,7 @@ func waitForLog(t *testing.T, ctx context.Context, client *repo.Queries, project
 			GramProjectID: projectID,
 			TimeStart:     timestamp.Add(-1 * time.Minute).UnixNano(),
 			TimeEnd:       timestamp.Add(1 * time.Minute).UnixNano(),
-			GramURNs:      []string{urn},
+			URNs:          []string{urn},
 			SortOrder:     "desc",
 			Cursor:        "",
 			Limit:         10,

@@ -164,16 +164,16 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		GramProjectID:          params.projectID,
 		TimeStart:              params.timeStart,
 		TimeEnd:                params.timeEnd,
-		GramURNs:               gramURNs,
+		URNs:                   gramURNs,
 		TraceID:                traceID,
-		GramDeploymentID:       deploymentID,
-		GramFunctionID:         functionID,
+		DeploymentID:           deploymentID,
+		FunctionID:             functionID,
 		SeverityText:           severityText,
 		HTTPResponseStatusCode: httpStatusCode,
 		HTTPRoute:              httpRoute,
 		HTTPRequestMethod:      httpMethod,
 		ServiceName:            serviceName,
-		GramChatID:             gramChatID,
+		ChatID:                 gramChatID,
 		UserID:                 userID,
 		ExternalUserID:         externalUserID,
 		AttributeFilters:       attributeFilters,
@@ -247,15 +247,15 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.chRepo.ListTraces(ctx, repo.ListTracesParams{
-		GramProjectID:    params.projectID,
-		TimeStart:        params.timeStart,
-		TimeEnd:          params.timeEnd,
-		GramDeploymentID: deploymentID,
-		GramFunctionID:   functionID,
-		GramURN:          gramURN,
-		SortOrder:        params.sortOrder,
-		Cursor:           params.cursor,
-		Limit:            params.limit + 1,
+		GramProjectID: params.projectID,
+		TimeStart:     params.timeStart,
+		TimeEnd:       params.timeEnd,
+		DeploymentID:  deploymentID,
+		FunctionID:    functionID,
+		URN:           gramURN,
+		SortOrder:     params.sortOrder,
+		Cursor:        params.cursor,
+		Limit:         params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing traces")
@@ -276,7 +276,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
 			LogCount:          item.LogCount,
 			HTTPStatusCode:    item.HTTPStatusCode,
-			GramUrn:           item.GramURN,
+			GramUrn:           item.URN,
 		}
 	}
 
@@ -313,16 +313,16 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 	}
 
 	items, err := s.chRepo.ListChats(ctx, repo.ListChatsParams{
-		GramProjectID:    params.projectID,
-		TimeStart:        params.timeStart,
-		TimeEnd:          params.timeEnd,
-		GramDeploymentID: deploymentID,
-		GramURN:          gramURN,
-		UserID:           userID,
-		ExternalUserID:   externalUserID,
-		SortOrder:        params.sortOrder,
-		Cursor:           params.cursor,
-		Limit:            params.limit + 1,
+		GramProjectID:  params.projectID,
+		TimeStart:      params.timeStart,
+		TimeEnd:        params.timeEnd,
+		DeploymentID:   deploymentID,
+		URN:            gramURN,
+		UserID:         userID,
+		ExternalUserID: externalUserID,
+		SortOrder:      params.sortOrder,
+		Cursor:         params.cursor,
+		Limit:          params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing chats")
@@ -330,14 +330,14 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 
 	var nextCursor *string
 	if len(items) > params.limit {
-		nextCursor = &items[params.limit-1].GramChatID
+		nextCursor = &items[params.limit-1].ChatID
 		items = items[:params.limit]
 	}
 
 	chats := make([]*telem_gen.ChatSummary, len(items))
 	for i, item := range items {
 		chats[i] = &telem_gen.ChatSummary{
-			GramChatID:        item.GramChatID,
+			GramChatID:        item.ChatID,
 			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
 			EndTimeUnixNano:   strconv.FormatInt(item.EndTimeUnixNano, 10),
 			LogCount:          item.LogCount,
@@ -379,14 +379,14 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 	}
 
 	items, err := s.chRepo.SearchUsers(ctx, repo.SearchUsersParams{
-		GramProjectID:    params.projectID,
-		TimeStart:        params.timeStart,
-		TimeEnd:          params.timeEnd,
-		GramDeploymentID: deploymentID,
-		GroupBy:          groupBy,
-		SortOrder:        params.sortOrder,
-		Cursor:           params.cursor,
-		Limit:            params.limit + 1,
+		GramProjectID: params.projectID,
+		TimeStart:     params.timeStart,
+		TimeEnd:       params.timeEnd,
+		DeploymentID:  deploymentID,
+		GroupBy:       groupBy,
+		SortOrder:     params.sortOrder,
+		Cursor:        params.cursor,
+		Limit:         params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error searching users")
@@ -973,7 +973,7 @@ func toToolMetrics(tools []repo.ToolMetric) []*telem_gen.ToolMetric {
 	for i, t := range tools {
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		result[i] = &telem_gen.ToolMetric{
-			GramUrn:      t.GramURN,
+			GramUrn:      t.URN,
 			CallCount:    int64(t.CallCount),
 			SuccessCount: int64(t.SuccessCount),
 			FailureCount: int64(t.FailureCount),

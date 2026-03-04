@@ -169,15 +169,18 @@ func insertChatCompletionLog(t *testing.T, ctx context.Context, projectID, deplo
 	attrsJSON, err := json.Marshal(attributes)
 	require.NoError(t, err)
 
+	resAttrsJSON, err := json.Marshal(map[string]any{"gram.deployment.id": deploymentID})
+	require.NoError(t, err)
+
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
 			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_deployment_id, gram_urn, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			gram_project_id, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
-		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, "agents:chat:completion", "gram-agents")
+		nil, nil, string(attrsJSON), string(resAttrsJSON),
+		projectID, "gram-agents")
 	require.NoError(t, err)
 }
 
@@ -199,15 +202,18 @@ func insertToolCallLog(t *testing.T, ctx context.Context, projectID, deploymentI
 	attrsJSON, err := json.Marshal(attributes)
 	require.NoError(t, err)
 
+	resAttrsJSON, err := json.Marshal(map[string]any{"gram.deployment.id": deploymentID})
+	require.NoError(t, err)
+
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
 			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_deployment_id, gram_urn, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			gram_project_id, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool call",
-		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, toolURN, "gram-tools")
+		nil, nil, string(attrsJSON), string(resAttrsJSON),
+		projectID, "gram-tools")
 	require.NoError(t, err)
 }
 

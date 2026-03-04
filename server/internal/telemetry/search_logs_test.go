@@ -1218,15 +1218,21 @@ func insertTelemetryLog(t *testing.T, ctx context.Context, projectID, deployment
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	attrsJSON, err := json.Marshal(map[string]any{"gram.tool.urn": gramURN})
+	require.NoError(t, err)
+
+	resAttrsJSON, err := json.Marshal(map[string]any{"gram.deployment.id": deploymentID})
+	require.NoError(t, err)
+
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
 			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_deployment_id, gram_urn, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			gram_project_id, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), severityText, "test log body",
-		traceID, nil, "{}", "{}",
-		projectID, deploymentID, gramURN, "test-service")
+		traceID, nil, string(attrsJSON), string(resAttrsJSON),
+		projectID, "test-service")
 	require.NoError(t, err)
 
 	// ClickHouse eventual consistency
@@ -1245,15 +1251,21 @@ func insertTelemetryLogAtExactTime(t *testing.T, ctx context.Context, projectID,
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	attrsJSON, err := json.Marshal(map[string]any{"gram.tool.urn": gramURN})
+	require.NoError(t, err)
+
+	resAttrsJSON, err := json.Marshal(map[string]any{"gram.deployment.id": deploymentID})
+	require.NoError(t, err)
+
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
 			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_deployment_id, gram_urn, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			gram_project_id, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), severityText, "test log body",
-		traceID, nil, "{}", "{}",
-		projectID, deploymentID, gramURN, "test-service")
+		traceID, nil, string(attrsJSON), string(resAttrsJSON),
+		projectID, "test-service")
 	require.NoError(t, err)
 }
 
@@ -1282,7 +1294,7 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 	require.NoError(t, err)
 
 	// Build attributes JSON with HTTP fields and custom attributes
-	attrs := map[string]any{}
+	attrs := map[string]any{"gram.tool.urn": params.gramURN}
 	if params.httpMethod != nil {
 		attrs["http.request.method"] = *params.httpMethod
 	}
@@ -1292,22 +1304,26 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 	if params.httpRoute != nil {
 		attrs["http.route"] = *params.httpRoute
 	}
+	if params.functionID != nil {
+		attrs["gram.function.id"] = *params.functionID
+	}
 	maps.Copy(attrs, params.customAttrs)
 
 	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
+	resAttrsJSON, err := json.Marshal(map[string]any{"gram.deployment.id": params.deploymentID})
 	require.NoError(t, err)
 
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
 			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_deployment_id, gram_function_id, gram_urn,
-			service_name, service_version
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			gram_project_id, service_name, service_version
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), params.timestamp.UnixNano(), params.timestamp.UnixNano(),
 		params.severity, "test log body",
-		params.traceID, nil, string(attrsJSON), "{}",
-		params.projectID, params.deploymentID, params.functionID, params.gramURN,
-		params.serviceName, nil)
+		params.traceID, nil, string(attrsJSON), string(resAttrsJSON),
+		params.projectID, params.serviceName, nil)
 	require.NoError(t, err)
 }

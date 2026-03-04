@@ -253,21 +253,25 @@ func insertLogWithAPIKey(t *testing.T, ctx context.Context, projectID, deploymen
 	require.NoError(t, err)
 
 	attributes := map[string]any{
-		"gram.api_key.id": apiKeyID,
+		"gram.api_key.id":        apiKeyID,
+		"gen_ai.conversation.id": chatID,
 	}
 
 	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	resAttrsJSON, err := json.Marshal(map[string]any{"gram.deployment.id": deploymentID})
 	require.NoError(t, err)
 
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
 			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_deployment_id, gram_chat_id, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			gram_project_id, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "api call",
-		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, chatID, "gram-api")
+		nil, nil, string(attrsJSON), string(resAttrsJSON),
+		projectID, "gram-api")
 	require.NoError(t, err)
 }
 
@@ -282,20 +286,24 @@ func insertLogWithExternalUser(t *testing.T, ctx context.Context, projectID, dep
 	require.NoError(t, err)
 
 	attributes := map[string]any{
-		"gram.external_user.id": externalUserID,
+		"gram.external_user.id":  externalUserID,
+		"gen_ai.conversation.id": chatID,
 	}
 
 	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	resAttrsJSON, err := json.Marshal(map[string]any{"gram.deployment.id": deploymentID})
 	require.NoError(t, err)
 
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
 			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_deployment_id, gram_chat_id, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			gram_project_id, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "user action",
-		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, chatID, "gram-api")
+		nil, nil, string(attrsJSON), string(resAttrsJSON),
+		projectID, "gram-api")
 	require.NoError(t, err)
 }
