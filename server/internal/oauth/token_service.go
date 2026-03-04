@@ -345,11 +345,6 @@ func (ts *TokenService) getToken(ctx context.Context, toolsetId uuid.UUID, acces
 
 	token.AccessToken = accessTokenHash
 
-	// Check if token has expired
-	if time.Now().After(token.ExpiresAt) {
-		return nil, fmt.Errorf("token has expired")
-	}
-
 	for i, externalSecret := range token.ExternalSecrets {
 		decryptedTokenSecret, err := ts.enc.Decrypt(externalSecret.Token)
 		if err != nil {
