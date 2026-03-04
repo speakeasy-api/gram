@@ -50,7 +50,7 @@ type ManifestVariableAttributeV0 struct {
 type ManifestAuthInputAttributeV0 struct {
 	Type      string `json:"type"`
 	Variable  string `json:"variable"`
-	GramEmail string `json:"gramEmail,omitempty"`
+	GramEmail bool   `json:"gramEmail,omitempty"`
 }
 
 type Manifest struct {
