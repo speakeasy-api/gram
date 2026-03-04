@@ -22,6 +22,7 @@ export * from "./createAPIKey.js";
 export * from "./createCheckout.js";
 export * from "./createCustomerSession.js";
 export * from "./createDeployment.js";
+export * from "./createDeploymentTag.js";
 export * from "./createEnvironment.js";
 export * from "./createPackage.js";
 export * from "./createProject.js";

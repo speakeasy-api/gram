@@ -3,6 +3,7 @@
  */
 
 import { projectsCreate } from "../funcs/projectsCreate.js";
+import { projectsCreateDeploymentTag } from "../funcs/projectsCreateDeploymentTag.js";
 import { projectsDeleteById } from "../funcs/projectsDeleteById.js";
 import { projectsList } from "../funcs/projectsList.js";
 import { projectsListAllowedOrigins } from "../funcs/projectsListAllowedOrigins.js";
@@ -27,6 +28,25 @@ export class Projects extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CreateProjectResult> {
     return unwrapAsync(projectsCreate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createDeploymentTag projects
+   *
+   * @remarks
+   * Create a new deployment tag for a project.
+   */
+  async createDeploymentTag(
+    request: operations.CreateDeploymentTagRequest,
+    security?: operations.CreateDeploymentTagSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.CreateDeploymentTagResult> {
+    return unwrapAsync(projectsCreateDeploymentTag(
       this,
       request,
       security,

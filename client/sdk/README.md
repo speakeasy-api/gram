@@ -242,6 +242,7 @@ run();
 ### [Projects](docs/sdks/projects/README.md)
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
+* [createDeploymentTag](docs/sdks/projects/README.md#createdeploymenttag) - createDeploymentTag projects
 * [deleteById](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 * [read](docs/sdks/projects/README.md#read) - getProject projects
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
@@ -402,6 +403,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`packagesPublish`](docs/sdks/packages/README.md#publish) - publish packages
 - [`packagesUpdate`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
+- [`projectsCreateDeploymentTag`](docs/sdks/projects/README.md#createdeploymenttag) - createDeploymentTag projects
 - [`projectsDeleteById`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`projectsListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
@@ -493,6 +495,7 @@ To learn about this feature and how to get started, check
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
+- [`useCreateDeploymentTagMutation`](docs/sdks/projects/README.md#createdeploymenttag) - createDeploymentTag projects
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
