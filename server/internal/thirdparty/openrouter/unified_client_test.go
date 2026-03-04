@@ -626,7 +626,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	}
 
 	// Make multiple completions
-	for range 3 {
+	for i := 0; i < 3; i++ {
 		_, err := client.GetCompletion(context.Background(), req)
 		require.NoError(t, err)
 	}
@@ -648,9 +648,9 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 
 // trackingTitleGenerator records every ScheduleChatTitleGeneration call with its chatID.
 type trackingTitleGenerator struct {
-	mu    sync.Mutex
-	calls []string // chatIDs for each call
-	err   error
+	mu      sync.Mutex
+	calls   []string // chatIDs for each call
+	err     error
 }
 
 func (m *trackingTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error {
@@ -816,7 +816,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 	projectID := uuid.New()
 
 	// Three completions with a valid ChatID
-	for range 3 {
+	for i := 0; i < 3; i++ {
 		_, err := client.GetCompletion(context.Background(), CompletionRequest{
 			OrgID:       "test-org",
 			ProjectID:   projectID.String(),
@@ -903,9 +903,9 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
 		Messages: []or.Message{
-			CreateMessageUser("Hello"),           // from history
-			CreateMessageAssistant("Response 1"), // from history
-			CreateMessageUser("How are you?"),    // new user message
+			CreateMessageUser("Hello"),            // from history
+			CreateMessageAssistant("Response 1"),  // from history
+			CreateMessageUser("How are you?"),     // new user message
 		},
 		ChatID:      chatID,
 		UsageSource: billing.ModelUsageSourcePlayground,
@@ -933,10 +933,10 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		"assistant messages should never be re-stored by StartOrResumeChat on reload")
 
 	// Verify the exact sequence of stored messages
-	require.Equal(t, "user", tracker.storedMessages[0].role)      // round 1: user
-	require.Equal(t, "assistant", tracker.storedMessages[1].role) // round 1: assistant response
-	require.Equal(t, "user", tracker.storedMessages[2].role)      // round 2: new user message only
-	require.Equal(t, "assistant", tracker.storedMessages[3].role) // round 2: assistant response
+	require.Equal(t, "user", tracker.storedMessages[0].role)         // round 1: user
+	require.Equal(t, "assistant", tracker.storedMessages[1].role)     // round 1: assistant response
+	require.Equal(t, "user", tracker.storedMessages[2].role)         // round 2: new user message only
+	require.Equal(t, "assistant", tracker.storedMessages[3].role)     // round 2: assistant response
 }
 
 // testTransport is a custom http.RoundTripper that redirects all requests to the test server
