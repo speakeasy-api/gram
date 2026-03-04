@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Unified hook forwarder - forwards all hook events to server
 
-# Check if RAM_API_KEY is set
+# Check if GRAM_API_KEY is set
 if [ -z "$GRAM_API_KEY" ]; then
   cat <<EOF
 {
