@@ -9,7 +9,6 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useOrganization } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
@@ -24,13 +23,12 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const organization = useOrganization();
-  const telemetry = useTelemetry();
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   const teamUrl =
     organization?.userWorkspaceSlugs &&
-    organization.userWorkspaceSlugs.length > 0
+      organization.userWorkspaceSlugs.length > 0
       ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
       : "https://app.speakeasy.com";
 

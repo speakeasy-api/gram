@@ -4,4 +4,4 @@
 #MISE dir="{{ config_root }}"
 
 claude plugin marketplace add ./hooks
-claude plugin install gram-hooks@gram-marketplace
+claude plugin install gram-hooks@gram

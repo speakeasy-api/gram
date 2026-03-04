@@ -30,6 +30,7 @@ import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "../logs/LogDetailSheet";
+import { HooksEmptyState } from "./HooksEmptyState";
 
 const validPresets: DateRangePreset[] = [
   "15m",
@@ -390,6 +391,7 @@ function HooksContent() {
           setSearchInput={setSearchInput}
           userEmailInput={userEmailInput}
           setUserEmailInput={setUserEmailInput}
+          userEmailFilter={userEmailFilter}
           selectedServer={selectedServer}
           onServerChange={handleServerChange}
           selectedLog={selectedLog}
@@ -425,6 +427,7 @@ function HooksInnerContent({
   setSearchInput,
   userEmailInput,
   setUserEmailInput,
+  userEmailFilter,
   selectedServer,
   onServerChange,
   selectedLog,
@@ -454,6 +457,7 @@ function HooksInnerContent({
   setSearchInput: (value: string) => void;
   userEmailInput: string;
   setUserEmailInput: (value: string) => void;
+  userEmailFilter: string | null;
   selectedServer: string | null;
   onServerChange: (serverName: string | null) => void;
   selectedLog: TelemetryLogRecord | null;
@@ -594,6 +598,8 @@ function HooksInnerContent({
                       isLoading={isLoading}
                       logs={logs}
                       searchQuery={searchQuery}
+                      selectedServer={selectedServer}
+                      userEmailFilter={userEmailFilter}
                       isFetchingNextPage={isFetchingNextPage}
                       onLogClick={handleLogClick}
                     />
@@ -683,6 +689,8 @@ function HooksLogsContent({
   isLoading,
   logs,
   searchQuery,
+  selectedServer,
+  userEmailFilter,
   isFetchingNextPage,
   onLogClick,
 }: {
@@ -690,6 +698,8 @@ function HooksLogsContent({
   isLoading: boolean;
   logs: TelemetryLogRecord[];
   searchQuery: string | null;
+  selectedServer: string | null;
+  userEmailFilter: string | null;
   isFetchingNextPage: boolean;
   onLogClick: (log: TelemetryLogRecord) => void;
 }) {
@@ -718,7 +728,19 @@ function HooksLogsContent({
     );
   }
 
+  if (1 == 1) { // TODO remove
+    return <HooksEmptyState />;
+  }
+
   if (logs.length === 0) {
+    // Show the full empty state if no filters are applied
+    const hasFilters = searchQuery || selectedServer || userEmailFilter;
+
+    if (!hasFilters) {
+      return <HooksEmptyState />;
+    }
+
+    // Show filtered empty state
     return (
       <div className="py-12 text-center">
         <div className="flex flex-col items-center gap-3">
@@ -726,12 +748,10 @@ function HooksLogsContent({
             <Icon name="inbox" className="size-6 text-muted-foreground" />
           </div>
           <span className="font-medium text-foreground">
-            {searchQuery ? "No matching hook events" : "No hook events found"}
+            No matching hook events
           </span>
           <span className="text-sm text-muted-foreground max-w-sm">
-            {searchQuery
-              ? "Try adjusting your search query or time range"
-              : "Hook events will appear here when tools are executed"}
+            Try adjusting your search query or time range
           </span>
         </div>
       </div>
