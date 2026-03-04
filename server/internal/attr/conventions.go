@@ -147,6 +147,8 @@ const (
 	OAuthStatusKey                 = attribute.Key("gram.oauth.status")
 	OAuthConnectedKey              = attribute.Key("gram.oauth.connected")
 	OAuthExpiredKey                = attribute.Key("gram.oauth.expired")
+	OAuthProxyServerIDKey          = attribute.Key("gram.oauth.proxy_server_id")
+	OAuthProviderCountKey          = attribute.Key("gram.oauth.provider_count")
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
 	OpenAPIPathKey                 = attribute.Key("gram.openapi.path")
@@ -650,6 +652,14 @@ func SlogOAuthConnected(v bool) slog.Attr      { return slog.Bool(string(OAuthCo
 
 func OAuthExpired(v bool) attribute.KeyValue { return OAuthExpiredKey.Bool(v) }
 func SlogOAuthExpired(v bool) slog.Attr      { return slog.Bool(string(OAuthExpiredKey), v) }
+
+func OAuthProxyServerID(v string) attribute.KeyValue { return OAuthProxyServerIDKey.String(v) }
+func SlogOAuthProxyServerID(v string) slog.Attr {
+	return slog.String(string(OAuthProxyServerIDKey), v)
+}
+
+func OAuthProviderCount(v int) attribute.KeyValue { return OAuthProviderCountKey.Int(v) }
+func SlogOAuthProviderCount(v int) slog.Attr      { return slog.Int(string(OAuthProviderCountKey), v) }
 
 func OpenAPIMethod(v string) attribute.KeyValue { return OpenAPIMethodKey.String(v) }
 func SlogOpenAPIMethod(v string) slog.Attr      { return slog.String(string(OpenAPIMethodKey), v) }

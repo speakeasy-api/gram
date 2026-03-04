@@ -25,10 +25,12 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -82,14 +84,31 @@ func ResolveOAuthServerMetadataFromToolset(
 	mcpSlug string,
 ) (*OAuthServerMetadataResult, error) {
 	if toolset.OauthProxyServerID.Valid {
-		var scopesSupported []string
 		providers, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
 			OauthProxyServerID: toolset.OauthProxyServerID.UUID,
 			ProjectID:          toolset.ProjectID,
 		})
-		if err == nil {
-			for _, p := range providers {
-				scopesSupported = append(scopesSupported, p.ScopesSupported...)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list OAuth proxy providers").Log(ctx, logger)
+		}
+		if len(providers) == 0 {
+			return nil, oops.E(oops.CodeNotFound, nil, "no OAuth proxy providers configured for server").Log(ctx, logger)
+		}
+		if len(providers) > 1 {
+			logger.ErrorContext(ctx, "multiple OAuth proxy providers per server is not supported",
+				attr.SlogOAuthProxyServerID(toolset.OauthProxyServerID.UUID.String()),
+				attr.SlogOAuthProviderCount(len(providers)))
+			return nil, oops.E(oops.CodeUnexpected, nil, "multiple OAuth proxy providers per server is not supported").Log(ctx, logger)
+		}
+		provider := providers[0]
+
+		// Always include offline_access — Gram issues refresh tokens for all provider types.
+		// The provider's own scopes describe upstream capabilities; offline_access describes
+		// Gram's capability as the authorization server.
+		scopes := []string{"offline_access"}
+		for _, s := range provider.ScopesSupported {
+			if s != "offline_access" {
+				scopes = append(scopes, s)
 			}
 		}
 
@@ -100,7 +119,7 @@ func ResolveOAuthServerMetadataFromToolset(
 				AuthorizationEndpoint:         baseURL + "/oauth/" + mcpSlug + "/authorize",
 				TokenEndpoint:                 baseURL + "/oauth/" + mcpSlug + "/token",
 				RegistrationEndpoint:          baseURL + "/oauth/" + mcpSlug + "/register",
-				ScopesSupported:               scopesSupported,
+				ScopesSupported:               scopes,
 				ResponseTypesSupported:        []string{"code"},
 				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
 				CodeChallengeMethodsSupported: []string{"plain", "S256"},
