@@ -38,10 +38,24 @@ const feedbackButtons = [
   },
 ]
 
-const subtleBounceKeyframes = `
+const feedbackStyles = `
 @keyframes subtle-bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-2px); }
+}
+.aui-feedback-buttons {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(0, 0, 0, 0.02);
+}
+.dark .aui-feedback-buttons,
+:host(.dark) .aui-feedback-buttons {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.aui-feedback-thank-you {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.dark .aui-feedback-thank-you,
+:host(.dark) .aui-feedback-thank-you {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 `
 
@@ -72,20 +86,16 @@ export const MessageFeedback: FC<MessageFeedbackProps> = ({
         className
       )}
     >
-      <style>{subtleBounceKeyframes}</style>
+      <style>{feedbackStyles}</style>
       <AnimatePresence mode="wait">
         {!showDislikeFeedback ? (
           <m.div
             key="feedback-buttons"
-            className="relative flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-gradient-to-b from-white/80 to-white/60 px-3 py-1 shadow-lg backdrop-blur-2xl dark:border-white/[0.08] dark:from-white/15 dark:to-white/10"
+            className="aui-feedback-buttons relative flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-gradient-to-b from-white/80 to-white/60 px-3 py-1 backdrop-blur-2xl dark:border-white/5 dark:from-white/10 dark:to-white/[0.03]"
             initial={{ opacity: 0, scale: 0.8, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: 5 }}
             transition={{ duration: 0.4, delay: 0.75, ease: EASE_OUT_QUINT }}
-            style={{
-              boxShadow:
-                '0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(0, 0, 0, 0.02)',
-            }}
           >
             <TooltipProvider delayDuration={300}>
               {feedbackButtons.map((button, index) => {
@@ -158,14 +168,10 @@ export const MessageFeedback: FC<MessageFeedbackProps> = ({
         ) : (
           <m.div
             key="thank-you"
-            className="text-muted-foreground rounded-full border border-black/[0.08] bg-gradient-to-b from-white/80 to-white/60 px-4 py-2 text-sm shadow-lg backdrop-blur-2xl dark:border-white/[0.08] dark:from-white/15 dark:to-white/10"
+            className="aui-feedback-thank-you text-muted-foreground rounded-full border border-black/[0.08] bg-gradient-to-b from-white/80 to-white/60 px-4 py-2 text-sm backdrop-blur-2xl dark:border-white/5 dark:from-white/10 dark:to-white/[0.03]"
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, ease: EASE_OUT_QUINT }}
-            style={{
-              boxShadow:
-                '0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
-            }}
           >
             Feedback received, thank you
           </m.div>

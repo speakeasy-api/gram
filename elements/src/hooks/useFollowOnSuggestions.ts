@@ -198,6 +198,7 @@ ${conversation}`,
   // 2. There are messages in the thread
   // 3. The last message is from the assistant
   // 4. We haven't already processed this message
+  // 5. Auth is ready (not loading)
   useEffect(() => {
     if (isRunning) {
       // Abort any in-flight request and clear suggestions when a new run starts
@@ -210,6 +211,9 @@ ${conversation}`,
       return
     }
 
+    // Wait for auth to be ready before attempting to fetch
+    if (auth.isLoading || !auth.headers) return
+
     if (messages.length === 0) return
 
     const lastMessage = messages[messages.length - 1]
@@ -220,7 +224,7 @@ ${conversation}`,
 
     lastProcessedMessageIdRef.current = lastMessage.id
     fetchSuggestions()
-  }, [isRunning, messages, fetchSuggestions])
+  }, [isRunning, messages, fetchSuggestions, auth.isLoading, auth.headers])
 
   // Cleanup on unmount
   useEffect(() => {
