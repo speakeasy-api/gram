@@ -22,14 +22,6 @@ fi
 RESPONSE_FILE=$(mktemp)
 trap "rm -f $RESPONSE_FILE" EXIT
 
-cat << EOF
-🔑 **Authenticating with Gram**
-
-Opening browser for authentication...
-Waiting for login to complete (timeout: 2 minutes)...
-
-EOF
-
 # Start temporary HTTP server to receive callback using Python
 python3 -c "
 import http.server
@@ -64,7 +56,7 @@ class CallbackHandler(http.server.BaseHTTPRequestHandler):
 <html>
 <head><title>Authentication Successful</title></head>
 <body style=\"font-family: system-ui; text-align: center; padding: 50px;\">
-  <h1>✅ Authentication Successful!</h1>
+  <h1>Authentication Successful!</h1>
   <p>You can close this window and return to your terminal.</p>
 </body>
 </html>'''
@@ -158,10 +150,5 @@ else
   fi
 fi
 
-echo ""
 echo "✅ Successfully authenticated with Gram!"
-echo "   Configuration saved to $CLAUDE_SETTINGS"
-echo ""
-echo "Project: $GRAM_PROJECT"
-echo ""
 echo "YOU MUST RESTART CLAUDE FOR THE CHANGE TO TAKE EFFECT"
