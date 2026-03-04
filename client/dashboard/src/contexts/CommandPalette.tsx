@@ -15,6 +15,8 @@ export interface CommandAction {
   shortcut?: string;
   onSelect: () => void;
   group?: string;
+  keywords?: string[];
+  description?: string;
 }
 
 interface CommandPaletteContextType {
