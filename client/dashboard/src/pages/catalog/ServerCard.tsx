@@ -8,7 +8,7 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
 import { Button } from "@speakeasy-api/moonshine";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Link } from "react-router";
 import type { Server } from "./hooks";
 import { parseServerMetadata } from "./hooks/serverMetadata";
@@ -18,7 +18,7 @@ interface ServerCardProps {
   detailHref: string;
   externalMcps: DeploymentExternalMCP[];
   isSelected?: boolean;
-  onToggleSelect?: () => void;
+  onToggleSelect?: (element: HTMLElement) => void;
 }
 
 /**
@@ -37,6 +37,7 @@ export function ServerCard({
   isSelected,
   onToggleSelect,
 }: ServerCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
   const metadata = useMemo(() => parseServerMetadata(server), [server]);
   const displayName = server.title ?? server.registrySpecifier;
 
@@ -55,28 +56,34 @@ export function ServerCard({
     return tools.map((t) => t.name || "Unknown tool");
   }, [server.tools]);
 
-  const handleCardClick = () => {
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation(); // Prevent grid's click-to-clear from firing
     if (onToggleSelect) {
-      onToggleSelect();
+      onToggleSelect(e.currentTarget);
     }
   };
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: Card contains nested interactive elements (buttons, links)
     <div
+      ref={cardRef}
       role="button"
       tabIndex={0}
       onClick={handleCardClick}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
-          handleCardClick();
+          e.stopPropagation();
+          if (onToggleSelect && cardRef.current) {
+            onToggleSelect(cardRef.current);
+          }
         }
       }}
       className={cn(
         "group bg-card text-card-foreground flex flex-col rounded-xl border overflow-hidden",
         "hover:border-foreground/20 hover:shadow-md transition-all cursor-pointer h-full",
         isAdded && "border-success/50 ring-1 ring-success/20",
-        isSelected && "border-primary ring-2 ring-primary",
+        isSelected &&
+          "border-primary/60 ring-1 ring-primary/30 bg-primary/[0.02]",
       )}
     >
       {/* Illustration header */}

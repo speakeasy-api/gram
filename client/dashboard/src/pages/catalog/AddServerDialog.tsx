@@ -35,7 +35,6 @@ export interface AddServerDialogProps {
   onOpenChange: (open: boolean) => void;
   onServersAdded?: () => void;
   projectSlug?: string;
-  projectSelector?: React.ReactNode;
 }
 
 export function AddServerDialog({
@@ -44,7 +43,6 @@ export function AddServerDialog({
   onOpenChange,
   onServersAdded,
   projectSlug,
-  projectSelector,
 }: AddServerDialogProps) {
   const releaseState = useExternalMcpReleaseWorkflow({
     servers,
@@ -100,7 +98,6 @@ export function AddServerDialog({
         <PhaseContent
           releaseState={releaseState}
           isSingle={isSingle}
-          projectSelector={projectSelector}
           onClose={() => onOpenChange(false)}
         />
       </Dialog.Content>
@@ -132,12 +129,10 @@ function PhaseDescription({
 function PhaseContent({
   releaseState,
   isSingle,
-  projectSelector,
   onClose,
 }: {
   releaseState: ExternalMcpReleaseWorkflow;
   isSingle: boolean;
-  projectSelector?: React.ReactNode;
   onClose: () => void;
 }) {
   switch (releaseState.phase) {
@@ -146,7 +141,6 @@ function PhaseContent({
         <ConfigurePhaseContent
           releaseState={releaseState}
           isSingle={isSingle}
-          projectSelector={projectSelector}
           onClose={onClose}
         />
       );
@@ -181,12 +175,10 @@ function useTargetRoutes(releaseState: ExternalMcpReleaseWorkflow) {
 function ConfigurePhaseContent({
   releaseState,
   isSingle,
-  projectSelector,
   onClose,
 }: {
   releaseState: ConfigurePhase;
   isSingle: boolean;
-  projectSelector?: React.ReactNode;
   onClose: () => void;
 }) {
   const routes = useTargetRoutes(releaseState);
@@ -210,7 +202,6 @@ function ConfigurePhaseContent({
   return (
     <div onKeyDown={handleKeyDown}>
       <Stack gap={4} className="py-2">
-        {projectSelector}
         {allAlreadyAdded ? (
           <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
             <AlertCircle className="size-4 text-muted-foreground shrink-0 mt-0.5" />
@@ -380,22 +371,48 @@ function CompletePhaseContent({
   const allDone = releaseState.toolsetStatuses.every(
     (s) => s.status === "completed" || s.status === "failed",
   );
+  const allSucceeded = releaseState.toolsetStatuses.every(
+    (s) => s.status === "completed",
+  );
+  const successCount = releaseState.toolsetStatuses.filter(
+    (s) => s.status === "completed",
+  ).length;
 
   return (
     <div className="pb-2 space-y-4">
-      {/* Toolset creation progress */}
-      <div>
-        <Type className="font-medium mb-2">Creating MCP servers</Type>
-        <div className="space-y-2">
-          {releaseState.toolsetStatuses.map((ts) => (
-            <ToolsetStatusRow
-              key={ts.slug}
-              status={ts}
-              releaseState={releaseState}
-            />
-          ))}
+      {/* Success header when all done */}
+      {allDone && allSucceeded && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+          <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+            <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <div>
+            <Type className="font-medium text-emerald-700 dark:text-emerald-300">
+              {successCount === 1
+                ? "Server added successfully"
+                : `${successCount} servers added successfully`}
+            </Type>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Toolset creation progress - only show during creation or if there were failures */}
+      {(!allDone || !allSucceeded) && (
+        <div>
+          <Type small muted className="mb-2">
+            {allDone ? "Results" : "Adding servers..."}
+          </Type>
+          <div className="space-y-1.5">
+            {releaseState.toolsetStatuses.map((ts) => (
+              <ToolsetStatusRow
+                key={ts.slug}
+                status={ts}
+                releaseState={releaseState}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Next steps — only shown when all toolsets are done */}
       {allDone &&
