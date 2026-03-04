@@ -56,7 +56,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.elements == 'true' }}
-        uses: jdx/mise-action@6d1e696aa24c1aa1bcc1adea0212707c71ab78a8 # v3.6.1
+        uses: jdx/mise-action@e79ddf65a11cec7b0e882bedced08d6e976efb2d # v3.6.2
         with:
           install: true
           cache: true
@@ -90,7 +90,7 @@ jobs:
 
       - name: Run Chromatic
         if: ${{ needs.changes.outputs.elements == 'true' }}
-        uses: chromaui/action@93712e37669f856c4828136f9cb535dbfa60b50c # v15.1.1
+        uses: chromaui/action@5ec258af08deb3e8c36653bd618cb7fe52090031 # v15.2.0
         with:
           workingDir: elements
           storybookBuildDir: storybook-static

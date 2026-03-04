@@ -191,7 +191,9 @@ async function seed() {
 
   // Seed observability data for the first seeded project
   const firstSeededProjectSlug = Object.keys(projectToolUrns)[0];
-  const firstProject = firstSeededProjectSlug ? projects[firstSeededProjectSlug] : undefined;
+  const firstProject = firstSeededProjectSlug
+    ? projects[firstSeededProjectSlug]
+    : undefined;
   if (firstProject) {
     const toolUrns = projectToolUrns[firstProject.slug] ?? [];
     await seedObservabilityData({
@@ -389,7 +391,12 @@ async function deployAssets(init: {
   return deploymentId;
 }
 
-type Toolset = { created: boolean; slug: string; mcpURL: string; toolUrns: string[] };
+type Toolset = {
+  created: boolean;
+  slug: string;
+  mcpURL: string;
+  toolUrns: string[];
+};
 
 async function upsertToolset(init: {
   gram: GramCore;
@@ -635,6 +642,7 @@ async function upsertMcpLogsToolset(init: {
         created: false,
         slug: updateRes.value.slug,
         mcpURL: `${serverURL}/mcp/${updateRes.value.mcpSlug}`,
+        toolUrns: updateRes.value.toolUrns,
       };
       break;
     case !createRes.ok:
@@ -670,6 +678,7 @@ async function upsertMcpLogsToolset(init: {
         created: true,
         slug: publicRes.value.slug,
         mcpURL: `${serverURL}/mcp/${publicRes.value.mcpSlug}`,
+        toolUrns: createRes.value.toolUrns,
       };
       break;
   }
@@ -706,7 +715,9 @@ async function seedObservabilityData(init: {
   log.info(`Seeding observability data with ${toolUrns.length} tool URNs...`);
 
   if (toolUrns.length === 0) {
-    log.warn("No tool URNs available for seeding observability data. Skipping.");
+    log.warn(
+      "No tool URNs available for seeding observability data. Skipping.",
+    );
     return;
   }
 
@@ -1165,10 +1176,7 @@ async function seedObservabilityData(init: {
 
   try {
     // Use individual env vars to avoid search_path issue with psql
-    const dbHost = process.env.DB_HOST || "localhost";
-    const dbPort = process.env.DB_PORT || "5432";
     const dbUser = process.env.DB_USER || "gram";
-    const dbPassword = process.env.DB_PASSWORD || "gram";
     const dbName = process.env.DB_NAME || "gram";
 
     // Write SQL to temp file to avoid E2BIG (arg list too long) error
@@ -1176,7 +1184,8 @@ async function seedObservabilityData(init: {
     await fs.writeFile(tmpFile, pgSQL, "utf-8");
 
     try {
-      await $`PGPASSWORD=${dbPassword} psql -h ${dbHost} -p ${dbPort} -U ${dbUser} -d ${dbName} -f ${tmpFile}`.quiet();
+      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed.sql`.quiet();
+      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed.sql`.quiet();
       log.info(`Inserted ${NUM_CHATS} chats with messages into PostgreSQL`);
     } finally {
       // Clean up temp file
@@ -1208,7 +1217,10 @@ async function seedObservabilityData(init: {
 
     // Tool call event - TOOLS now contains full URNs like "tools:http:gram:operation"
     const toolUrn = TOOLS[Math.floor(Math.random() * TOOLS.length)];
-    const statusCode = Math.random() < 0.92 ? 200 : [400, 500, 502][Math.floor(Math.random() * 3)];
+    const statusCode =
+      Math.random() < 0.92
+        ? 200
+        : [400, 500, 502][Math.floor(Math.random() * 3)];
     const latency = (0.05 + Math.random() * 2).toFixed(3);
 
     chInserts.push(
@@ -1216,7 +1228,8 @@ async function seedObservabilityData(init: {
     );
 
     // Chat completion event - same trace ID links it to the tool call
-    const finishReason = Math.random() < 0.65 ? "stop" : Math.random() < 0.9 ? "length" : "error";
+    const finishReason =
+      Math.random() < 0.65 ? "stop" : Math.random() < 0.9 ? "length" : "error";
     const duration = 30 + Math.floor(Math.random() * 150);
     const completionStatus = Math.random() < 0.92 ? 200 : 500;
 

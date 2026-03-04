@@ -2,7 +2,6 @@ import { InsightsSidebar } from "@/components/insights-sidebar";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
-import { SearchBar } from "@/components/ui/search-bar";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useSlugs } from "@/contexts/Sdk";
@@ -11,7 +10,11 @@ import {
   TelemetryLogRecord,
   ToolCallSummary,
 } from "@gram/client/models/components";
-import { useGramContext, useListToolsets } from "@gram/client/react-query";
+import {
+  useGramContext,
+  useListAttributeKeys,
+  useListToolsets,
+} from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,
@@ -35,11 +38,15 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
+import type { ActiveAttributeFilter } from "./attribute-filter-types";
+import { parseFilters, serializeFilters } from "./attribute-filter-url";
+import { AttributeFilterBar } from "./AttributeFilterBar";
 import { LogDetailSheet } from "./LogDetailSheet";
 import { TraceRow } from "./TraceRow";
+import { useAttributeLogsQuery } from "./use-attribute-logs-query";
 
 // Valid date range presets
 const validPresets: DateRangePreset[] = [
@@ -299,6 +306,33 @@ function LogsContent() {
     [customRange, dateRange],
   );
 
+  // Attribute filter state from URL
+  const [attributeFilters, setAttributeFilters] = useState<
+    ActiveAttributeFilter[]
+  >(() => parseFilters(searchParams.get("af")));
+
+  const hasAttributeFilters = attributeFilters.length > 0;
+
+  const handleAttributeFiltersChange = useCallback(
+    (filters: ActiveAttributeFilter[]) => {
+      setAttributeFilters(filters);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          const serialized = serializeFilters(filters);
+          if (serialized) {
+            next.set("af", serialized);
+          } else {
+            next.delete("af");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   // Derive URN prefix from selected server's toolUrns
   const serverUrnPrefix = useMemo(() => {
     if (!selectedServer) return null;
@@ -324,16 +358,15 @@ function LogsContent() {
     return searchQuery;
   }, [serverUrnPrefix, searchQuery]);
 
-  const {
-    data,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetching,
-    isFetchingNextPage,
-    refetch,
-    isLogsDisabled,
-  } = useLogsEnabledErrorCheck(
+  // Fetch attribute keys for filter bar
+  const { data: attributeKeysData, isLoading: isLoadingAttributeKeys } =
+    useListAttributeKeys({
+      getProjectMetricsSummaryPayload: { from, to },
+    });
+  const attributeKeys = attributeKeysData?.keys ?? [];
+
+  // Standard tool calls query (used when no attribute filters active)
+  const toolCallsQuery = useLogsEnabledErrorCheck(
     useInfiniteQuery({
       queryKey: [
         "tool-calls",
@@ -359,12 +392,59 @@ function LogsContent() {
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      enabled: !hasAttributeFilters,
       throwOnError: false,
     }),
   );
 
-  // Flatten all pages into a single array of traces
-  const allTraces = data?.pages.flatMap((page) => page.toolCalls) ?? [];
+  // Attribute-filtered logs query (used when attribute filters are active)
+  const attrLogsQuery = useLogsEnabledErrorCheck(
+    useAttributeLogsQuery({
+      attributeFilters,
+      gramUrn: effectiveGramUrn,
+      from,
+      to,
+      enabled: hasAttributeFilters,
+    }),
+  );
+
+  // Pick the active query based on whether attribute filters are active
+  const {
+    data,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    refetch,
+    isLogsDisabled,
+  } = hasAttributeFilters ? attrLogsQuery : toolCallsQuery;
+
+  // Flatten all pages into a single array of traces, merging duplicates that
+  // span page boundaries (attribute-filtered logs are grouped per-page, so the
+  // same traceId can appear in multiple pages with partial counts).
+  const allTraces = useMemo(() => {
+    const raw = data?.pages.flatMap((page) => page.toolCalls) ?? [];
+    if (!hasAttributeFilters) return raw;
+
+    const merged = new Map<string, ToolCallSummary>();
+    for (const trace of raw) {
+      const existing = merged.get(trace.traceId);
+      if (existing) {
+        existing.logCount += trace.logCount;
+        if (
+          BigInt(trace.startTimeUnixNano) < BigInt(existing.startTimeUnixNano)
+        ) {
+          existing.startTimeUnixNano = trace.startTimeUnixNano;
+        }
+      } else {
+        merged.set(trace.traceId, { ...trace });
+      }
+    }
+    return Array.from(merged.values()).sort((a, b) =>
+      a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
+    );
+  }, [data?.pages, hasAttributeFilters]);
 
   // Handler for server filter change
   const handleServerChange = useCallback(
@@ -387,12 +467,11 @@ function LogsContent() {
     [setSearchParams],
   );
 
-  // Debounce search input and sync URL params
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      const newQuery = searchInput || null;
+  // Submit search explicitly (Enter / Tab / clear)
+  const handleSearchSubmit = useCallback(
+    (query: string) => {
+      const newQuery = query || null;
       setSearchQuery(newQuery);
-      // Sync URL params preserving server filter
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -405,9 +484,9 @@ function LogsContent() {
         },
         { replace: true },
       );
-    }, 500);
-    return () => clearTimeout(timeoutId);
-  }, [searchInput, setSearchParams]);
+    },
+    [setSearchParams],
+  );
 
   // Handle scroll for infinite loading
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -468,6 +547,7 @@ function LogsContent() {
         searchQuery={searchQuery}
         searchInput={searchInput}
         setSearchInput={setSearchInput}
+        onSearchSubmit={handleSearchSubmit}
         selectedServer={selectedServer}
         onServerChange={handleServerChange}
         toolsets={toolsets}
@@ -490,6 +570,11 @@ function LogsContent() {
         onCustomRangeChange={setCustomRangeParam}
         onClearCustomRange={clearCustomRange}
         projectSlug={projectSlug}
+        // Attribute filter props
+        attributeFilters={attributeFilters}
+        onAttributeFiltersChange={handleAttributeFiltersChange}
+        attributeKeys={attributeKeys}
+        isLoadingAttributeKeys={isLoadingAttributeKeys}
       />
     </InsightsSidebar>
   );
@@ -504,6 +589,7 @@ function LogsInnerContent({
   searchQuery,
   searchInput,
   setSearchInput,
+  onSearchSubmit,
   selectedServer,
   onServerChange,
   toolsets,
@@ -526,6 +612,11 @@ function LogsInnerContent({
   onCustomRangeChange,
   onClearCustomRange,
   projectSlug,
+  // Attribute filter props
+  attributeFilters,
+  onAttributeFiltersChange,
+  attributeKeys,
+  isLoadingAttributeKeys,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
@@ -535,6 +626,7 @@ function LogsInnerContent({
   searchQuery: string | null;
   searchInput: string;
   setSearchInput: (value: string) => void;
+  onSearchSubmit: (query: string) => void;
   selectedServer: string | null;
   onServerChange: (serverSlug: string | null) => void;
   toolsets: Array<{ slug: string; name: string; toolUrns: string[] }>;
@@ -557,35 +649,20 @@ function LogsInnerContent({
   onCustomRangeChange: (from: Date, to: Date, label?: string) => void;
   onClearCustomRange: () => void;
   projectSlug?: string;
+  // Attribute filter props
+  attributeFilters: ActiveAttributeFilter[];
+  onAttributeFiltersChange: (filters: ActiveAttributeFilter[]) => void;
+  attributeKeys: string[];
+  isLoadingAttributeKeys?: boolean;
 }) {
-  if (isLogsDisabled) {
-    return (
-      <div className="h-full overflow-hidden flex flex-col">
-        <Page>
-          <Page.Header>
-            <Page.Header.Breadcrumbs fullWidth />
-          </Page.Header>
-          <Page.Body fullWidth className="space-y-6">
-            <div className="flex flex-col gap-1 min-w-0">
-              <h1 className="text-xl font-semibold">Logs</h1>
-              <p className="text-sm text-muted-foreground">
-                Browse raw tool call traces and telemetry data
-              </p>
-            </div>
-            <div className="flex-1 relative">
-              <div
-                className="pointer-events-none select-none h-full"
-                aria-hidden="true"
-              >
-                <ObservabilitySkeleton />
-              </div>
-              <EnableLoggingOverlay onEnabled={refetch} />
-            </div>
-          </Page.Body>
-        </Page>
-      </div>
-    );
-  }
+  const pageTitle = (
+    <div className="flex flex-col gap-1 min-w-0">
+      <h1 className="text-xl font-semibold">Logs</h1>
+      <p className="text-sm text-muted-foreground">
+        Browse raw tool call traces and telemetry data
+      </p>
+    </div>
+  );
 
   return (
     <>
@@ -594,106 +671,121 @@ function LogsInnerContent({
           <Page.Header>
             <Page.Header.Breadcrumbs fullWidth />
           </Page.Header>
-          <Page.Body fullWidth noPadding overflowHidden>
-            <div className="flex flex-col flex-1 min-h-0 w-full">
-              {/* Header section */}
-              <div className="px-8 py-4 shrink-0">
-                <div className="flex items-start justify-between gap-4 mb-4">
-                  <div className="flex flex-col gap-1 min-w-0">
-                    <h1 className="text-xl font-semibold">Logs</h1>
-                    <p className="text-sm text-muted-foreground">
-                      Browse raw tool call traces and telemetry data
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to="../settings/logs">
-                      <Settings className="h-4 w-4" />
-                      Configure settings
-                    </Link>
-                  </Button>
+          {isLogsDisabled ? (
+            <Page.Body fullWidth className="space-y-6">
+              {pageTitle}
+              <div className="flex-1 relative">
+                <div
+                  className="pointer-events-none select-none h-full"
+                  aria-hidden="true"
+                >
+                  <ObservabilitySkeleton />
                 </div>
-                {/* Filter and Search Row */}
-                <div className="flex items-center gap-4 flex-wrap">
-                  <MCPServerFilter
-                    selectedServer={selectedServer}
-                    onServerChange={onServerChange}
-                    toolsets={toolsets}
-                    isLoading={isLoadingToolsets}
-                  />
-                  <SearchBar
-                    value={searchInput}
-                    onChange={setSearchInput}
-                    placeholder="Search by tool URN"
-                    className="flex-1 min-w-[200px]"
-                  />
-                  <div className="ml-auto">
-                    <TimeRangePicker
-                      preset={customRange ? null : dateRange}
-                      customRange={customRange}
-                      customRangeLabel={customRangeLabel}
-                      onPresetChange={onDateRangeChange}
-                      onCustomRangeChange={onCustomRangeChange}
-                      onClearCustomRange={onClearCustomRange}
-                      projectSlug={projectSlug}
+                <EnableLoggingOverlay onEnabled={refetch} />
+              </div>
+            </Page.Body>
+          ) : (
+            <Page.Body fullWidth noPadding overflowHidden>
+              <div className="flex flex-col flex-1 min-h-0 w-full">
+                {/* Header section */}
+                <div className="px-8 py-4 shrink-0">
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    {pageTitle}
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to="../settings/logs">
+                        <Settings className="h-4 w-4" />
+                        Configure settings
+                      </Link>
+                    </Button>
+                  </div>
+                  {/* Filter and Search Row */}
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <MCPServerFilter
+                      selectedServer={selectedServer}
+                      onServerChange={onServerChange}
+                      toolsets={toolsets}
+                      isLoading={isLoadingToolsets}
                     />
+                    <div className="flex-1">
+                      <AttributeFilterBar
+                        filters={attributeFilters}
+                        onChange={onAttributeFiltersChange}
+                        attributeKeys={attributeKeys}
+                        isLoadingKeys={isLoadingAttributeKeys}
+                        searchInput={searchInput}
+                        onSearchInputChange={setSearchInput}
+                        onSearchSubmit={onSearchSubmit}
+                      />
+                    </div>
+                    <div className="ml-auto">
+                      <TimeRangePicker
+                        preset={customRange ? null : dateRange}
+                        customRange={customRange}
+                        customRangeLabel={customRangeLabel}
+                        onPresetChange={onDateRangeChange}
+                        onCustomRangeChange={onCustomRangeChange}
+                        onClearCustomRange={onClearCustomRange}
+                        projectSlug={projectSlug}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Content section - full width */}
+                <div className="flex-1 overflow-hidden min-h-0 border-t">
+                  <div className="h-full flex flex-col bg-background">
+                    {/* Loading indicator */}
+                    {isFetching && allTraces.length > 0 && (
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
+                        <div className="h-full bg-primary animate-pulse" />
+                      </div>
+                    )}
+
+                    {/* Header */}
+                    <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+                      <div className="shrink-0 w-[150px]">Timestamp</div>
+                      <div className="shrink-0 w-5" />
+                      <div className="flex-1">Source / Tool</div>
+                      <div className="shrink-0 w-16 text-right">Status</div>
+                    </div>
+
+                    {/* Scrollable trace list */}
+                    <div
+                      ref={containerRef}
+                      className="overflow-y-auto flex-1"
+                      onScroll={handleScroll}
+                    >
+                      <TraceListContent
+                        error={error}
+                        isLoading={isLoading}
+                        allTraces={allTraces}
+                        searchQuery={searchQuery}
+                        hasAttributeFilters={attributeFilters.length > 0}
+                        expandedTraceId={expandedTraceId}
+                        isFetchingNextPage={isFetchingNextPage}
+                        onToggleExpand={toggleExpand}
+                        onLogClick={handleLogClick}
+                      />
+                    </div>
+
+                    {/* Footer */}
+                    {allTraces.length > 0 && (
+                      <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+                        <span>
+                          {allTraces.length}{" "}
+                          {allTraces.length === 1 ? "trace" : "traces"}
+                          {hasNextPage && " • Scroll to load more"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-
-              {/* Content section - full width */}
-              <div className="flex-1 overflow-hidden min-h-0 border-t">
-                <div className="h-full flex flex-col bg-background">
-                  {/* Loading indicator */}
-                  {isFetching && allTraces.length > 0 && (
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
-                      <div className="h-full bg-primary animate-pulse" />
-                    </div>
-                  )}
-
-                  {/* Header */}
-                  <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-                    <div className="shrink-0 w-[150px]">Timestamp</div>
-                    <div className="shrink-0 w-5" />
-                    <div className="flex-1">Source / Tool</div>
-                    <div className="shrink-0 w-16 text-right">Status</div>
-                  </div>
-
-                  {/* Scrollable trace list */}
-                  <div
-                    ref={containerRef}
-                    className="overflow-y-auto flex-1"
-                    onScroll={handleScroll}
-                  >
-                    <TraceListContent
-                      error={error}
-                      isLoading={isLoading}
-                      allTraces={allTraces}
-                      searchQuery={searchQuery}
-                      expandedTraceId={expandedTraceId}
-                      isFetchingNextPage={isFetchingNextPage}
-                      onToggleExpand={toggleExpand}
-                      onLogClick={handleLogClick}
-                    />
-                  </div>
-
-                  {/* Footer */}
-                  {allTraces.length > 0 && (
-                    <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
-                      <span>
-                        {allTraces.length}{" "}
-                        {allTraces.length === 1 ? "trace" : "traces"}
-                        {hasNextPage && " • Scroll to load more"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Page.Body>
+            </Page.Body>
+          )}
         </Page>
       </div>
 
-      {/* Log Detail Sheet */}
       <LogDetailSheet
         log={selectedLog}
         open={!!selectedLog}
@@ -708,6 +800,7 @@ function TraceListContent({
   isLoading,
   allTraces,
   searchQuery,
+  hasAttributeFilters,
   expandedTraceId,
   isFetchingNextPage,
   onToggleExpand,
@@ -717,6 +810,7 @@ function TraceListContent({
   isLoading: boolean;
   allTraces: ToolCallSummary[];
   searchQuery: string | null;
+  hasAttributeFilters: boolean;
   expandedTraceId: string | null;
   isFetchingNextPage: boolean;
   onToggleExpand: (traceId: string) => void;
@@ -739,7 +833,12 @@ function TraceListContent({
   }
 
   if (allTraces.length === 0) {
-    return <LogsEmptyState searchQuery={searchQuery} />;
+    return (
+      <LogsEmptyState
+        searchQuery={searchQuery}
+        hasAttributeFilters={hasAttributeFilters}
+      />
+    );
   }
 
   return (
@@ -787,7 +886,14 @@ function LogsLoading() {
   );
 }
 
-function LogsEmptyState({ searchQuery }: { searchQuery: string | null }) {
+function LogsEmptyState({
+  searchQuery,
+  hasAttributeFilters,
+}: {
+  searchQuery: string | null;
+  hasAttributeFilters: boolean;
+}) {
+  const hasActiveFilters = !!searchQuery || hasAttributeFilters;
   return (
     <div className="py-12 text-center">
       <div className="flex flex-col items-center gap-3">
@@ -795,11 +901,11 @@ function LogsEmptyState({ searchQuery }: { searchQuery: string | null }) {
           <Icon name="inbox" className="size-6 text-muted-foreground" />
         </div>
         <span className="font-medium text-foreground">
-          {searchQuery ? "No matching traces" : "No traces found"}
+          {hasActiveFilters ? "No matching traces" : "No traces found"}
         </span>
         <span className="text-sm text-muted-foreground max-w-sm">
-          {searchQuery
-            ? "Try adjusting your search query"
+          {hasActiveFilters
+            ? "Try adjusting your search or filters"
             : "Traces will appear here when tool calls are made"}
         </span>
       </div>

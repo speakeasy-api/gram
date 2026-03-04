@@ -64,7 +64,12 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, cfg AuthConfigurations) *Service {
+func NewService(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	cfg AuthConfigurations,
+) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
 	return &Service{
