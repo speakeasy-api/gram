@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -172,6 +173,224 @@ func TestService_HandleWellKnownOAuthServerMetadata(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Contains(t, w.Header().Get("Content-Type"), "application/json")
 		require.NotEmpty(t, w.Body.Bytes())
+	})
+}
+
+func TestService_HandleWellKnownOAuthServerMetadata_RefreshTokenGrant(t *testing.T) {
+	t.Parallel()
+
+	t.Run("grant_types_supported includes refresh_token", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+		oauthRepo := oauth_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		oauthServer, err := oauthRepo.UpsertOAuthProxyServer(ctx, oauth_repo.UpsertOAuthProxyServerParams{
+			ProjectID: *authCtx.ProjectID,
+			Slug:      "grant-types-oauth-server-" + uuid.New().String()[:8],
+		})
+		require.NoError(t, err)
+
+		_, err = oauthRepo.UpsertOAuthProxyProvider(ctx, oauth_repo.UpsertOAuthProxyProviderParams{
+			ProjectID:                         *authCtx.ProjectID,
+			OauthProxyServerID:                oauthServer.ID,
+			Slug:                              "grant-types-provider-" + uuid.New().String()[:8],
+			ProviderType:                      string(oauth.OAuthProxyProviderTypeGram),
+			ScopesSupported:                   []string{},
+			ResponseTypesSupported:            []string{},
+			ResponseModesSupported:            []string{},
+			GrantTypesSupported:               []string{},
+			TokenEndpointAuthMethodsSupported: []string{},
+			SecurityKeyNames:                  []string{},
+			Secrets:                           []byte("{}"),
+		})
+		require.NoError(t, err)
+
+		slug := "grant-types-mcp-" + uuid.New().String()[:8]
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Grant Types MCP",
+			Slug:                   slug,
+			Description:            conv.ToPGText("test grant_types_supported"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                conv.ToPGText(slug),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+			OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
+			Slug:               toolset.Slug,
+			ProjectID:          *authCtx.ProjectID,
+		})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+toolset.McpSlug.String, nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err = ti.service.HandleWellKnownOAuthServerMetadata(w, req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var metadata map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &metadata)
+		require.NoError(t, err)
+
+		grantTypes, ok := metadata["grant_types_supported"].([]any)
+		require.True(t, ok, "grant_types_supported should be an array")
+		require.Contains(t, grantTypes, "authorization_code")
+		require.Contains(t, grantTypes, "refresh_token")
+	})
+
+	t.Run("scopes_supported populated from provider", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+		oauthRepo := oauth_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		oauthServer, err := oauthRepo.UpsertOAuthProxyServer(ctx, oauth_repo.UpsertOAuthProxyServerParams{
+			ProjectID: *authCtx.ProjectID,
+			Slug:      "scopes-oauth-server-" + uuid.New().String()[:8],
+		})
+		require.NoError(t, err)
+
+		_, err = oauthRepo.UpsertOAuthProxyProvider(ctx, oauth_repo.UpsertOAuthProxyProviderParams{
+			ProjectID:                         *authCtx.ProjectID,
+			OauthProxyServerID:                oauthServer.ID,
+			Slug:                              "scopes-provider-" + uuid.New().String()[:8],
+			ProviderType:                      string(oauth.OAuthProxyProviderTypeCustom),
+			ScopesSupported:                   []string{"openid", "profile"},
+			ResponseTypesSupported:            []string{},
+			ResponseModesSupported:            []string{},
+			GrantTypesSupported:               []string{},
+			TokenEndpointAuthMethodsSupported: []string{},
+			SecurityKeyNames:                  []string{},
+			Secrets:                           []byte("{}"),
+		})
+		require.NoError(t, err)
+
+		slug := "scopes-mcp-" + uuid.New().String()[:8]
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Scopes MCP",
+			Slug:                   slug,
+			Description:            conv.ToPGText("test scopes_supported"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                conv.ToPGText(slug),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+			OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
+			Slug:               toolset.Slug,
+			ProjectID:          *authCtx.ProjectID,
+		})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+toolset.McpSlug.String, nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err = ti.service.HandleWellKnownOAuthServerMetadata(w, req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var metadata map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &metadata)
+		require.NoError(t, err)
+
+		scopes, ok := metadata["scopes_supported"].([]any)
+		require.True(t, ok, "scopes_supported should be present")
+		require.Contains(t, scopes, "openid")
+		require.Contains(t, scopes, "profile")
+	})
+
+	t.Run("scopes_supported omitted when empty", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPService(t)
+		toolsetsRepo := toolsets_repo.New(ti.conn)
+		oauthRepo := oauth_repo.New(ti.conn)
+
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+
+		oauthServer, err := oauthRepo.UpsertOAuthProxyServer(ctx, oauth_repo.UpsertOAuthProxyServerParams{
+			ProjectID: *authCtx.ProjectID,
+			Slug:      "no-scopes-oauth-server-" + uuid.New().String()[:8],
+		})
+		require.NoError(t, err)
+
+		_, err = oauthRepo.UpsertOAuthProxyProvider(ctx, oauth_repo.UpsertOAuthProxyProviderParams{
+			ProjectID:                         *authCtx.ProjectID,
+			OauthProxyServerID:                oauthServer.ID,
+			Slug:                              "no-scopes-provider-" + uuid.New().String()[:8],
+			ProviderType:                      string(oauth.OAuthProxyProviderTypeGram),
+			ScopesSupported:                   []string{},
+			ResponseTypesSupported:            []string{},
+			ResponseModesSupported:            []string{},
+			GrantTypesSupported:               []string{},
+			TokenEndpointAuthMethodsSupported: []string{},
+			SecurityKeyNames:                  []string{},
+			Secrets:                           []byte("{}"),
+		})
+		require.NoError(t, err)
+
+		slug := "no-scopes-mcp-" + uuid.New().String()[:8]
+		toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "No Scopes MCP",
+			Slug:                   slug,
+			Description:            conv.ToPGText("test scopes_supported omitted"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                conv.ToPGText(slug),
+			McpEnabled:             true,
+		})
+		require.NoError(t, err)
+
+		toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+			OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
+			Slug:               toolset.Slug,
+			ProjectID:          *authCtx.ProjectID,
+		})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+toolset.McpSlug.String, nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		err = ti.service.HandleWellKnownOAuthServerMetadata(w, req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var metadata map[string]any
+		err = json.Unmarshal(w.Body.Bytes(), &metadata)
+		require.NoError(t, err)
+
+		_, hasScopes := metadata["scopes_supported"]
+		require.False(t, hasScopes, "scopes_supported should be omitted when empty")
 	})
 }
 

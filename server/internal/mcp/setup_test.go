@@ -152,6 +152,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 // mockOAuthService allows controlling OAuth validation behavior in tests
 type mockOAuthService struct {
 	validateFunc func(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error)
+	refreshFunc  func(ctx context.Context, toolsetID uuid.UUID, token *oauth.Token, proxyProvider *oauth_repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*oauth.Token, error)
 }
 
 func (m *mockOAuthService) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error) {
@@ -161,7 +162,10 @@ func (m *mockOAuthService) ValidateAccessToken(ctx context.Context, toolsetId uu
 	return nil, oauth.ErrInvalidAccessToken
 }
 
-func (m *mockOAuthService) RefreshProxyToken(_ context.Context, _ uuid.UUID, _ *oauth.Token, _ *oauth_repo.OauthProxyProvider, _ *toolsets_repo.Toolset) (*oauth.Token, error) {
+func (m *mockOAuthService) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, token *oauth.Token, proxyProvider *oauth_repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*oauth.Token, error) {
+	if m.refreshFunc != nil {
+		return m.refreshFunc(ctx, toolsetID, token, proxyProvider, toolset)
+	}
 	return nil, fmt.Errorf("not implemented")
 }
 
