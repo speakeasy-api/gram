@@ -323,8 +323,10 @@ function SelectRemotesPhaseContent({
                 <label
                   key={remote.url}
                   className={cn(
-                    "flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors",
-                    isSelected ? "ring-1 ring-primary/30" : "hover:bg-muted/30",
+                    "flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors border",
+                    isSelected
+                      ? "border-primary/40"
+                      : "border-border hover:bg-muted/30",
                   )}
                 >
                   <Checkbox
