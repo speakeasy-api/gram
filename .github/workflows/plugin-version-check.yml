@@ -3,7 +3,7 @@ name: Plugin Version Check
 on:
   pull_request:
     paths:
-      - 'hooks/**'
+      - 'hooks/plugin-claude/**'
 
 jobs:
   check-version-bump:
@@ -30,10 +30,10 @@ jobs:
           echo "Base version: $BASE_VERSION"
 
       - name: Compare versions
+        env:
+          PR_VERSION: ${{ steps.pr-version.outputs.version }}
+          BASE_VERSION: ${{ steps.base-version.outputs.version }}
         run: |
-          PR_VERSION="${{ steps.pr-version.outputs.version }}"
-          BASE_VERSION="${{ steps.base-version.outputs.version }}"
-
           if [ "$PR_VERSION" == "$BASE_VERSION" ]; then
             echo "❌ Error: plugin.json version has not been updated"
             echo "Current version: $BASE_VERSION"
@@ -44,8 +44,9 @@ jobs:
           fi
 
       - name: Validate version format
+        env:
+          VERSION: ${{ steps.pr-version.outputs.version }}
         run: |
-          VERSION="${{ steps.pr-version.outputs.version }}"
           if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "❌ Error: Invalid version format: $VERSION"
             echo "Version must follow semantic versioning (e.g., 0.0.3)"
