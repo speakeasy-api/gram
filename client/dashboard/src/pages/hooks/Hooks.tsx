@@ -31,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "../logs/LogDetailSheet";
 import { HooksEmptyState } from "./HooksEmptyState";
+import { HookSourceIcon } from "./HookSourceIcon";
 
 const validPresets: DateRangePreset[] = [
   "15m",
@@ -584,6 +585,7 @@ function HooksInnerContent({
                     <div className="shrink-0 w-[150px]">Timestamp</div>
                     <div className="flex-1 min-w-0">Server / Tool</div>
                     <div className="shrink-0 w-[250px]">User</div>
+                    <div className="shrink-0 w-[150px]">Source</div>
                     <div className="shrink-0 w-20 text-right">Event</div>
                   </div>
 
@@ -782,6 +784,7 @@ function HookLogRow({
   const serverName = log.attributes?.gram?.tool_call?.source as
     | string
     | undefined;
+  const hookSource = log.attributes?.gram?.hook?.source as string | undefined;
   const userEmail = log.attributes?.user?.email as string | undefined;
 
   const timestamp = new Date(Number(log.timeUnixNano) / 1000000);
@@ -823,6 +826,14 @@ function HookLogRow({
       </div>
       <div className="shrink-0 w-[250px] text-sm text-muted-foreground truncate">
         {userEmail || "—"}
+      </div>
+      <div className="shrink-0 w-[150px] flex items-center gap-2">
+        <HookSourceIcon source={hookSource} className="size-4 shrink-0" />
+        {hookSource && (
+          <span className="text-xs text-muted-foreground truncate">
+            {hookSource}
+          </span>
+        )}
       </div>
       <div className="shrink-0 w-20 flex justify-end">
         <HookEventBadge eventName={hookEventName} />

@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 # Unified hook forwarder - forwards all hook events to server
 
+# Write CLAUDE_ENV_FILE to debug output
+echo "sessions start: $CLAUDE_ENV_FILE" > /tmp/hooks-output.txt
+
+if [ -n "$CLAUDE_ENV_FILE" ]; then
+  echo 'export TEST_ENV_VAR=gram_local_b1706a2401ff8d3f0a184749abcaf8d9a88d8b04f46e5613ce5dc5c852a7cf81' >> "$CLAUDE_ENV_FILE"
+fi
+
+# Read stdin (hook payload)
+INPUT=$(cat)
+
+curl -X POST "https://recent-patrica-unmonastically.ngrok-free.dev/rpc/hooks.claude" -d "$INPUT" -H "Claud-Env-File: $CLAUDE_ENV_FILE" -H "Test-Var: $TEST_ENV_VAR" # todo  curl  https://recent-patrica-unmonastically.ngrok-free.dev
+
+
+
+
 # Output a stop message and exit
 output_stop() {
   local reason="$1"
@@ -30,8 +45,6 @@ fi
 
 URL="$SERVER_URL/rpc/hooks.claude"
 
-# Read stdin (hook payload)
-INPUT=$(cat)
 
 # Forward to server and capture both response and status code
 RESPONSE=$(mktemp)

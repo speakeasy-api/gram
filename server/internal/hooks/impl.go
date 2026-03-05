@@ -5,8 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,8 +23,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -33,6 +39,18 @@ type Service struct {
 	db               *pgxpool.Pool
 	telemetryService *telemetry.Service
 	auth             *auth.Auth
+	sessionCache     cache.TypedCacheObject[SessionMetadata]
+	hookBufferCache  cache.TypedCacheObject[ClaudePayloadCache]
+}
+
+// SessionMetadata contains validated session information from the Logs endpoint
+type SessionMetadata struct {
+	SessionID   string
+	ServiceName string
+	UserEmail   string
+	ClaudeOrgID string
+	GramOrgID   string
+	ProjectID   string
 }
 
 // HookSpecificOutput is the structure for hook-specific output in responses
@@ -45,13 +63,18 @@ type HookSpecificOutput struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, tracerProvider trace.TracerProvider, telemetryService *telemetry.Service, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, tracerProvider trace.TracerProvider, telemetryService *telemetry.Service, sessions *sessions.Manager, cacheAdapter cache.Cache) *Service {
+	sessionCache := cache.NewTypedObjectCache[SessionMetadata](logger.With(attr.SlogCacheNamespace("session")), cacheAdapter, cache.SuffixNone)
+	hookBufferCache := cache.NewTypedObjectCache[ClaudePayloadCache](logger.With(attr.SlogCacheNamespace("hook_buffer")), cacheAdapter, cache.SuffixNone)
+
 	return &Service{
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		logger:           logger.With(attr.SlogComponent("hooks")),
 		db:               db,
 		telemetryService: telemetryService,
 		auth:             auth.New(logger, db, sessions),
+		sessionCache:     sessionCache,
+		hookBufferCache:  hookBufferCache,
 	}
 }
 
@@ -60,14 +83,154 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
+// claudeRequestDecoder is a custom decoder that handles both JSON and form-urlencoded content types
+func claudeRequestDecoder(r *http.Request) goahttp.Decoder {
+	contentType := r.Header.Get("Content-Type")
+
+	if strings.Contains(contentType, "application/x-www-form-urlencoded") {
+		return &formDecoder{r: r}
+	}
+
+	return goahttp.RequestDecoder(r)
+}
+
+// formDecoder implements goahttp.Decoder for form-urlencoded data
+type formDecoder struct {
+	r *http.Request
+}
+
+func (d *formDecoder) Decode(v interface{}) error {
+	body, err := io.ReadAll(d.r.Body)
+	if err != nil {
+		return err
+	}
+
+	values, err := url.ParseQuery(string(body))
+	if err != nil {
+		return err
+	}
+
+	// Convert form values to JSON string and then unmarshal
+	// This works because the form keys match the JSON field names
+	jsonData := make(map[string]interface{})
+	for key, vals := range values {
+		if len(vals) > 0 {
+			// Try to unmarshal as JSON if the value looks like JSON
+			var parsed interface{}
+			if err := json.Unmarshal([]byte(vals[0]), &parsed); err == nil {
+				jsonData[key] = parsed
+			} else {
+				jsonData[key] = vals[0]
+			}
+		}
+	}
+
+	// Marshal back to JSON and unmarshal into the target struct
+	jsonBytes, err := json.Marshal(jsonData)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(jsonBytes, v)
+}
+
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
+		srv.New(endpoints, mux, claudeRequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+}
+
+// Logs handles authenticated OTEL logs data from Claude Code
+func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	}
+
+	claudeMetadata := extractSessionMetadata(payload)
+	completeMetadata := SessionMetadata{
+		SessionID:   claudeMetadata.SessionID,
+		ServiceName: claudeMetadata.ServiceName,
+		UserEmail:   claudeMetadata.UserEmail,
+		ClaudeOrgID: claudeMetadata.ClaudeOrgID,
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+
+	if err := s.sessionCache.Store(ctx, completeMetadata); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to store session metadata", attr.SlogError(err))
+	}
+
+	s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
+
+	s.logger.InfoContext(ctx, "Stored session metadata",
+		attr.SlogEvent("session_validated"),
+		"session_id", completeMetadata.SessionID,
+		"user_email", completeMetadata.UserEmail,
+		"claude_org_id", completeMetadata.ClaudeOrgID,
+		"gram_org_id", completeMetadata.GramOrgID,
+		"project_id", completeMetadata.ProjectID,
+	)
+
+	return nil
+}
+
+type claudeLogMetadata struct {
+	SessionID   string
+	ServiceName string
+	UserEmail   string
+	ClaudeOrgID string
+}
+
+func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
+	metadata := claudeLogMetadata{
+		SessionID:   "",
+		ServiceName: "",
+		UserEmail:   "",
+		ClaudeOrgID: "",
+	}
+
+	// Iterate through all resource logs
+	for _, resourceLog := range payload.ResourceLogs {
+		if resourceLog == nil {
+			continue
+		}
+
+		// Extract service name from resource attributes
+		metadata.ServiceName = extractResourceAttribute(resourceLog.Resource, "service.name")
+
+		// Iterate through all scope logs
+		for _, scopeLog := range resourceLog.ScopeLogs {
+			if scopeLog == nil {
+				continue
+			}
+
+			// Iterate through all log records
+			for _, logRecord := range scopeLog.LogRecords {
+				if logRecord == nil {
+					continue
+				}
+
+				// Extract session data
+				data := extractLogData(logRecord)
+
+				if data.SessionID == "" {
+					continue
+				}
+
+				// Store session metadata in Redis
+				metadata.SessionID = data.SessionID
+				metadata.UserEmail = data.UserEmail
+				metadata.ClaudeOrgID = data.ClaudeOrgID
+			}
+		}
+	}
+
+	return metadata
 }
 
 // Claude is the unified endpoint for all Claude Code hook events
@@ -79,6 +242,8 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 			"toolName":      payload.ToolName,
 		}),
 	)
+
+	s.recordToolEvent(ctx, payload)
 
 	// Route to appropriate handler based on hook type
 	switch payload.HookEventName {
@@ -101,8 +266,6 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 }
 
 func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	s.logger.InfoContext(ctx, "🚀 Session Start")
-
 	// For now, always allow sessions to start
 	continueVal := true
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
@@ -113,22 +276,27 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePay
 	}, nil
 }
 
-func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	authCtx, ok := s.extractAuthContext(ctx, "PreToolUse")
-	if !ok {
-		// Allow tool to proceed even without auth
-		allow := "allow"
-		return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-			HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-				HookEventName:      &payload.HookEventName,
-				PermissionDecision: &allow,
-			},
-		}, nil
+// recordToolEvent records a tool event, either directly to ClickHouse if session is validated, or buffers it
+func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudePayload) {
+	if payload.SessionID == nil || *payload.SessionID == "" {
+		s.logger.WarnContext(ctx, "Tool event called without session ID", "hook_event", payload.HookEventName)
+		return
 	}
 
-	attrs := s.buildTelemetryAttributes(authCtx, payload)
-	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, s.getToolName(payload), attrs)
+	sessionID := *payload.SessionID
+	metadata, err := s.sessionCache.Get(ctx, sessionCacheKey(sessionID))
 
+	if err == nil {
+		s.writeHookToClickHouseWithMetadata(ctx, payload, &metadata)
+	} else {
+		// Session not validated yet - buffer in Redis
+		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to buffer hook", attr.SlogError(err))
+		}
+	}
+}
+
+func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	// For now, always allow tools
 	allow := "allow"
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
@@ -140,18 +308,6 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 }
 
 func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	authCtx, ok := s.extractAuthContext(ctx, "PostToolUse")
-	if !ok {
-		return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-			HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-				HookEventName: &payload.HookEventName,
-			},
-		}, nil
-	}
-
-	attrs := s.buildTelemetryAttributes(authCtx, payload)
-	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, s.getToolName(payload), attrs)
-
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
 		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
 			HookEventName: &payload.HookEventName,
@@ -160,21 +316,6 @@ func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayl
 }
 
 func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	authCtx, ok := s.extractAuthContext(ctx, "PostToolUse Failure")
-	if !ok {
-		return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
-			HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
-				HookEventName: &payload.HookEventName,
-			},
-		}, nil
-	}
-
-	attrs := s.buildTelemetryAttributes(authCtx, payload)
-	if payload.ToolError != nil {
-		attrs[attr.HookErrorKey] = payload.ToolError
-	}
-	s.writeToClickHouse(authCtx.ProjectID, authCtx.ActiveOrganizationID, s.getToolName(payload), attrs)
-
 	return &gen.ClaudeHookResult{ //nolint:exhaustruct // optional fields
 		HookSpecificOutput: &HookSpecificOutput{ //nolint:exhaustruct // optional fields
 			HookEventName: &payload.HookEventName,
@@ -202,16 +343,6 @@ func generateSpanID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
-}
-
-// extractAuthContext extracts and validates the auth context from the request
-func (s *Service) extractAuthContext(ctx context.Context, handlerName string) (*contextvalues.AuthContext, bool) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.ErrorContext(ctx, fmt.Sprintf("%s called without valid auth context", handlerName))
-		return nil, false
-	}
-	return authCtx, true
 }
 
 // getToolName safely extracts the tool name from the payload
@@ -300,4 +431,59 @@ func (s *Service) writeToClickHouse(projectID *uuid.UUID, organizationID string,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})
+}
+
+// OTELLogData contains extracted data from an OTEL log record
+type OTELLogData struct {
+	SessionID   string
+	UserEmail   string
+	ClaudeOrgID string
+}
+
+// extractResourceAttribute extracts a specific attribute from OTEL resource
+func extractResourceAttribute(resource *gen.OTELResource, key string) string {
+	if resource == nil || resource.Attributes == nil {
+		return ""
+	}
+	for _, attr := range resource.Attributes {
+		if attr.Key == key && attr.Value != nil && attr.Value.StringValue != nil {
+			return *attr.Value.StringValue
+		}
+	}
+	return ""
+}
+
+// extractLogData extracts session data from an OTEL log record
+func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
+	data := OTELLogData{ //nolint:exhaustruct // fields are populated below
+		SessionID:   "",
+		UserEmail:   "",
+		ClaudeOrgID: "",
+	}
+
+	if logRecord.Attributes == nil {
+		return data
+	}
+
+	for _, attr := range logRecord.Attributes {
+		if attr.Value == nil {
+			continue
+		}
+
+		var value string
+		if attr.Value.StringValue != nil {
+			value = *attr.Value.StringValue
+		}
+
+		switch attr.Key {
+		case "session.id":
+			data.SessionID = value
+		case "user.email":
+			data.UserEmail = value
+		case "organization.id":
+			data.ClaudeOrgID = value
+		}
+	}
+
+	return data
 }

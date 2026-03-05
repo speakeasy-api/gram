@@ -4,8 +4,9 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram"
+            "type": "http",
+            "url": "http://localhost:8080/rpc/hooks.claude",
+            "timeout": 30
           }
         ]
       }
@@ -14,8 +15,9 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram"
+            "type": "http",
+            "url": "http://localhost:8080/rpc/hooks.claude",
+            "timeout": 30
           }
         ]
       }
@@ -24,9 +26,9 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram",
-            "async": true
+            "type": "http",
+            "url": "http://localhost:8080/rpc/hooks.claude",
+            "timeout": 30
           }
         ]
       }
@@ -35,9 +37,9 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "/bin/bash ${CLAUDE_PLUGIN_ROOT}/scripts/forward_to_gram",
-            "async": true
+            "type": "http",
+            "url": "http://localhost:8080/rpc/hooks.claude",
+            "timeout": 30
           }
         ]
       }
