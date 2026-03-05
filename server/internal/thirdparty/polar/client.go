@@ -496,7 +496,9 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 			return false
 		}
 
-		isNotFoundError := externalCustomerState.HTTPMeta.Response.StatusCode == 404
+		isNotFoundError := externalCustomerState != nil &&
+			externalCustomerState.HTTPMeta.Response != nil &&
+			externalCustomerState.HTTPMeta.Response.StatusCode == http.StatusNotFound
 
 		if err != nil && !isNotFoundError && !containsNotFoundError(err) {
 			return nil, fmt.Errorf("query polar customer state: %w", err)
