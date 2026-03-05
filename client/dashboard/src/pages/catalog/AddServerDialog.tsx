@@ -298,7 +298,7 @@ function SelectRemotesPhaseContent({
                 : "Select all"}
             </button>
           </div>
-          <div className="space-y-2 max-h-64 overflow-y-auto rounded-lg border bg-muted/50 p-3">
+          <div className="space-y-2 max-h-64 overflow-y-auto rounded-lg border bg-muted/50 p-4">
             {currentConfig.remotes.map((remote) => {
               const isSelected = currentConfig.selectedRemoteUrls.has(
                 remote.url,
