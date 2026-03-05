@@ -125,7 +125,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.sso_connection_id, om.created_at, om.updated_at, om.disabled_at
+    om.id, om.name, om.slug, om.gram_account_type, om.sso_connection_id, om.workos_id, om.created_at, om.updated_at, om.disabled_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -142,6 +142,7 @@ type GetProjectWithOrganizationMetadataRow struct {
 	Slug            string
 	GramAccountType string
 	SsoConnectionID pgtype.Text
+	WorkosID        pgtype.Text
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DisabledAt      pgtype.Timestamptz
@@ -159,6 +160,7 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.Slug,
 		&i.GramAccountType,
 		&i.SsoConnectionID,
+		&i.WorkosID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,

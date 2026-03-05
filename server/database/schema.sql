@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   gram_account_type TEXT NOT NULL DEFAULT 'free',
-  sso_connection_id TEXT, -- links to an organization in the oidc provider to understand if a user is JIT provisioned via SSO
+  sso_connection_id TEXT, -- links to an organization in the oidc provider to understand if a user is JIT provisioned via SSO. Will be replaced by workos_org_id.
+  workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
