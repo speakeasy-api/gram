@@ -13,10 +13,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
 
-const (
-	hookBufferTTL      = 10 * time.Minute
-	sessionMetadataTTL = 24 * time.Hour
-)
 
 // bufferHook stores a hook payload in Redis for later processing
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
@@ -35,7 +31,6 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 
 	s.logger.DebugContext(ctx, "Buffered hook in Redis",
 		attr.SlogEvent("hook_buffered"),
-		"session_id", sessionID,
 	)
 
 	return nil
@@ -75,8 +70,6 @@ func (s *Service) writeHookToClickHouseWithMetadata(ctx context.Context, payload
 
 	s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
 		attr.SlogEvent("hook_written"),
-		"tool_name", toolName,
-		"user_email", metadata.UserEmail,
 	)
 }
 
@@ -142,5 +135,7 @@ func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metad
 		s.writeHookToClickHouseWithMetadata(ctx, &payload, metadata)
 	}
 	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks to ClickHouse", len(pending.Payloads)))
-	s.hookBufferCache.DeleteByKey(ctx, hookPendingCacheKey(sessionID))
+	if err := s.hookBufferCache.DeleteByKey(ctx, hookPendingCacheKey(sessionID)); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to delete hook buffer", attr.SlogError(err))
+	}
 }

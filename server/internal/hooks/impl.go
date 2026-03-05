@@ -12,9 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -102,12 +100,12 @@ type formDecoder struct {
 func (d *formDecoder) Decode(v interface{}) error {
 	body, err := io.ReadAll(d.r.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("read body: %w", err)
 	}
 
 	values, err := url.ParseQuery(string(body))
 	if err != nil {
-		return err
+		return fmt.Errorf("parse query: %w", err)
 	}
 
 	// Convert form values to JSON string and then unmarshal
@@ -128,10 +126,13 @@ func (d *formDecoder) Decode(v interface{}) error {
 	// Marshal back to JSON and unmarshal into the target struct
 	jsonBytes, err := json.Marshal(jsonData)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal json: %w", err)
 	}
 
-	return json.Unmarshal(jsonBytes, v)
+	if err := json.Unmarshal(jsonBytes, v); err != nil {
+		return fmt.Errorf("unmarshal json: %w", err)
+	}
+	return nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -169,11 +170,6 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 	s.logger.InfoContext(ctx, "Stored session metadata",
 		attr.SlogEvent("session_validated"),
-		"session_id", completeMetadata.SessionID,
-		"user_email", completeMetadata.UserEmail,
-		"claude_org_id", completeMetadata.ClaudeOrgID,
-		"gram_org_id", completeMetadata.GramOrgID,
-		"project_id", completeMetadata.ProjectID,
 	)
 
 	return nil
@@ -279,7 +275,7 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePay
 // recordToolEvent records a tool event, either directly to ClickHouse if session is validated, or buffers it
 func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudePayload) {
 	if payload.SessionID == nil || *payload.SessionID == "" {
-		s.logger.WarnContext(ctx, "Tool event called without session ID", "hook_event", payload.HookEventName)
+		s.logger.WarnContext(ctx, "Tool event called without session ID")
 		return
 	}
 
@@ -345,94 +341,6 @@ func generateSpanID() string {
 	return hex.EncodeToString(b)
 }
 
-// getToolName safely extracts the tool name from the payload
-func (s *Service) getToolName(payload *gen.ClaudePayload) string {
-	if payload.ToolName != nil {
-		return *payload.ToolName
-	}
-	return ""
-}
-
-// buildTelemetryAttributes creates the full set of attributes for a hook event with common fields
-func (s *Service) buildTelemetryAttributes(authCtx *contextvalues.AuthContext, payload *gen.ClaudePayload) map[attr.Key]any {
-	toolName := s.getToolName(payload)
-
-	attrs := map[attr.Key]any{
-		attr.EventSourceKey:    string(telemetry.EventSourceHook),
-		attr.ToolNameKey:       toolName,
-		attr.HookEventKey:      payload.HookEventName,
-		attr.SpanIDKey:         generateSpanID(),
-		attr.TraceIDKey:        generateTraceID(),
-		attr.LogBodyKey:        fmt.Sprintf("Tool: %s, Hook: %s", toolName, payload.HookEventName),
-		attr.UserIDKey:         authCtx.UserID,
-		attr.ExternalUserIDKey: authCtx.ExternalUserID,
-		attr.APIKeyIDKey:       authCtx.APIKeyID,
-		attr.ProjectIDKey:      authCtx.ProjectID.String(),
-		attr.OrganizationIDKey: authCtx.ActiveOrganizationID,
-		attr.HookSourceKey:     "claude", // TODO: support other hook sources
-	}
-
-	if authCtx.Email != nil {
-		attrs[attr.UserEmailKey] = *authCtx.Email
-	}
-
-	// Parse MCP tool names (format: mcp__<server>__<tool>)
-	if strings.HasPrefix(toolName, "mcp__") {
-		parts := strings.SplitN(toolName, "__", 3)
-		if len(parts) == 3 {
-			attrs[attr.ToolCallSourceKey] = parts[1]
-			attrs[attr.ToolNameKey] = parts[2]
-		}
-	}
-
-	// Hash toolUseID to create a valid W3C trace ID if available, otherwise use generated one
-	if payload.ToolUseID != nil && *payload.ToolUseID != "" {
-		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(*payload.ToolUseID)
-	}
-	if payload.SessionID != nil {
-		attrs[attr.GenAIConversationIDKey] = *payload.SessionID
-	}
-	if payload.ToolUseID != nil {
-		attrs[attr.GenAIToolCallIDKey] = *payload.ToolUseID
-	}
-	if payload.ToolInput != nil {
-		attrs[attr.GenAIToolCallArgumentsKey] = payload.ToolInput
-	}
-	if payload.ToolResponse != nil {
-		attrs[attr.GenAIToolCallResultKey] = payload.ToolResponse
-	}
-
-	return attrs
-}
-
-// writeToClickHouse writes the hook event to ClickHouse telemetry
-func (s *Service) writeToClickHouse(projectID *uuid.UUID, organizationID string, toolName string, attrs map[attr.Key]any) {
-	// Make sure we don't discard any tool name information
-	if actualToolName, ok := attrs[attr.ToolNameKey]; ok {
-		tn, ok := actualToolName.(string)
-		if ok {
-			toolName = tn
-		}
-	}
-
-	// Build ToolInfo with project/org context from auth
-	toolInfo := telemetry.ToolInfo{
-		Name:           toolName,
-		OrganizationID: organizationID,
-		ProjectID:      projectID.String(),
-		ID:             "",
-		URN:            "", // These tools have no real URN
-		DeploymentID:   "",
-		FunctionID:     nil,
-	}
-
-	s.telemetryService.CreateLog(telemetry.LogParams{
-		Timestamp:  time.Now(),
-		ToolInfo:   toolInfo,
-		Attributes: attrs,
-	})
-}
-
 // OTELLogData contains extracted data from an OTEL log record
 type OTELLogData struct {
 	SessionID   string
@@ -455,7 +363,7 @@ func extractResourceAttribute(resource *gen.OTELResource, key string) string {
 
 // extractLogData extracts session data from an OTEL log record
 func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
-	data := OTELLogData{ //nolint:exhaustruct // fields are populated below
+	data := OTELLogData{
 		SessionID:   "",
 		UserEmail:   "",
 		ClaudeOrgID: "",
