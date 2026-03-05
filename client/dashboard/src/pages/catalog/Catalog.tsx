@@ -9,7 +9,7 @@ import { type Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
-import { Loader2, Search, SearchXIcon } from "lucide-react";
+import { Loader2, Search, SearchXIcon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
 import { FilterChips } from "./FilterChips";
@@ -96,24 +96,6 @@ export default function Catalog() {
     return () => observer.disconnect();
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
-  // Click outside to deselect
-  useEffect(() => {
-    if (selectedServers.size === 0) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      // Don't clear if clicking on a card or the command bar
-      const isOnCard = target.closest('[role="button"]');
-      const isOnCommandBar = target.closest("[data-command-bar]");
-      if (!isOnCard && !isOnCommandBar) {
-        clearSelection();
-      }
-    };
-
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
-  }, [selectedServers.size, clearSelection]);
-
   return (
     <Page>
       <Page.Header>
@@ -142,8 +124,17 @@ export default function Catalog() {
                       placeholder="Search MCP servers..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 h-10"
+                      className="pl-10 pr-9 h-10"
                     />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label="Clear search"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                   <FilterSidebar
                     values={filterState.filters}

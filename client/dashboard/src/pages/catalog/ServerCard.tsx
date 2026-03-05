@@ -82,51 +82,36 @@ export function ServerCard({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        "group bg-card text-card-foreground flex flex-col rounded-xl border overflow-hidden",
-        "hover:border-foreground/20 hover:shadow-md transition-all cursor-pointer h-full",
+        "group bg-card text-card-foreground flex flex-row rounded-xl border !border-foreground/10 overflow-hidden",
+        "hover:!border-foreground/60 hover:shadow-md transition-all cursor-pointer h-full",
         isAdded && "border-success/50 ring-1 ring-success/20",
       )}
     >
-      {/* Illustration header */}
-      <div className="h-36 w-full overflow-hidden border-b relative">
-        {server.iconUrl ? (
-          <ExternalMCPIllustration
-            slug={slug}
-            logoUrl={server.iconUrl}
-            name={displayName}
-            className={isSelected || isHovered ? "saturate-100" : undefined}
-          />
-        ) : (
-          <MCPPatternIllustration
-            toolsetSlug={slug}
-            className={cn(
-              "transition-all duration-300",
-              isSelected || isHovered ? "saturate-100" : "saturate-[.3]",
-            )}
-          />
+      {/* Illustration sidebar with dot pattern */}
+      <div className="w-40 shrink-0 overflow-hidden border-r relative bg-muted/30 text-muted-foreground/20">
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle, currentColor 1px, transparent 1px)",
+            backgroundSize: "16px 16px",
+          }}
+        />
+        {/* Logo */}
+        {server.iconUrl && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
+              <img
+                src={server.iconUrl}
+                alt={displayName}
+                className="w-12 h-12 object-contain"
+              />
+            </div>
+          </div>
         )}
-        {/* Badge overlays - top right */}
-        <div className="absolute top-3.5 right-3.5 flex flex-col gap-1.5 items-end">
-          {metadata.isOfficial && (
-            <Badge
-              variant="outline"
-              className="bg-white/70 text-black backdrop-blur-sm border-white/50"
-            >
-              Official
-            </Badge>
-          )}
-          {metadata.visitorsMonth === 0 && (
-            <Badge
-              variant="outline"
-              className="bg-white/70 text-black backdrop-blur-sm border-white/50"
-            >
-              New
-            </Badge>
-          )}
-        </div>
         {/* Added indicator overlay */}
         {isAdded && (
-          <div className="absolute top-2 left-2">
+          <div className="absolute top-3.5 left-3.5">
             <Badge
               variant="outline"
               className="border-success/50 bg-success/10 text-success backdrop-blur-sm"
@@ -142,14 +127,21 @@ export function ServerCard({
         {/* Header row with name and tool badge */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0 flex-1">
-            <Type
-              variant="subheading"
-              as="div"
-              className="truncate text-md group-hover:text-primary transition-colors"
-              title={displayName}
-            >
-              {displayName}
-            </Type>
+            <div className="flex items-center gap-2">
+              <Type
+                variant="subheading"
+                as="div"
+                className="truncate text-md group-hover:text-primary transition-colors"
+                title={displayName}
+              >
+                {displayName}
+              </Type>
+              {metadata.visitorsMonth === 0 && (
+                <Badge variant="outline" className="shrink-0">
+                  New
+                </Badge>
+              )}
+            </div>
             <Type small muted className="truncate">
               v{server.version}
             </Type>
@@ -166,11 +158,11 @@ export function ServerCard({
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
           {/* Selection indicator */}
           {isSelected ? (
-            <div className="size-7 rounded-full bg-[#1DA1F2] flex items-center justify-center">
-              <Check className="size-4 text-white" strokeWidth={5} />
+            <div className="size-6 rounded-full bg-[#1DA1F2] flex items-center justify-center">
+              <Check className="size-3.5 text-white" strokeWidth={5} />
             </div>
           ) : (
-            <div className="size-7 rounded-full border-2 border-muted-foreground/30" />
+            <div className="size-6 rounded-full border-2 border-muted-foreground/30" />
           )}
 
           {/* View Details button */}

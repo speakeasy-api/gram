@@ -114,7 +114,7 @@ export function FilterSidebar({
         <Button
           variant="outline"
           className={cn(
-            "gap-2 h-10 bg-background",
+            "gap-2 h-10 bg-background border-input",
             activeCount > 0 && "border-primary text-primary",
           )}
         >

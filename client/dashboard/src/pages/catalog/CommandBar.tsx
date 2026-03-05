@@ -113,11 +113,7 @@ export function CommandBar({
           <div
             ref={barRef}
             data-command-bar
-            className="relative rounded-2xl overflow-hidden border border-primary/20"
-            style={{
-              boxShadow:
-                "0 8px 32px rgba(0, 0, 0, 0.25), 0 0 40px rgba(59, 130, 246, 0.2), 0 0 80px rgba(59, 130, 246, 0.1)",
-            }}
+            className="relative rounded-2xl overflow-hidden border border-primary/20 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.25),0_0_40px_rgba(59,130,246,0.2),0_0_80px_rgba(59,130,246,0.1)] dark:shadow-none"
           >
             {/* Glass effect layer - blur + distortion */}
             <div
@@ -126,21 +122,15 @@ export function CommandBar({
             />
             {/* Tint layer - opaque enough for text readability */}
             <div className="absolute inset-0 bg-white/80 dark:bg-black/70" />
-            {/* Shine layer */}
-            <div
-              className="absolute inset-0"
-              style={{
-                boxShadow:
-                  "inset 2px 2px 1px 0 rgba(255, 255, 255, 0.5), inset -1px -1px 1px 1px rgba(255, 255, 255, 0.3)",
-              }}
-            />
+            {/* Shine layer - light mode only */}
+            <div className="absolute inset-0 dark:hidden shadow-[inset_2px_2px_1px_0_rgba(255,255,255,0.5),inset_-1px_-1px_1px_1px_rgba(255,255,255,0.3)]" />
             {/* Content layer */}
             <div className="relative z-10 px-4 py-3 flex items-center gap-4">
               {/* Clear button */}
               <SimpleTooltip tooltip="Clear selection">
                 <button
                   onClick={onClear}
-                  className="p-1.5 rounded-full text-black/50 hover:text-black hover:bg-black/10 transition-colors"
+                  className="p-1.5 rounded-full text-black/50 hover:text-black hover:bg-black/10 dark:text-white/50 dark:hover:text-white dark:hover:bg-white/10 transition-colors"
                   aria-label="Clear selection"
                 >
                   <X className="w-4 h-4" />
@@ -148,7 +138,7 @@ export function CommandBar({
               </SimpleTooltip>
 
               {/* Divider */}
-              <div className="w-px h-5 bg-black/20" />
+              <div className="w-px h-5 bg-black/20 dark:bg-white/20" />
 
               {/* Count */}
               <Type small className="font-medium text-black dark:text-white">
@@ -157,7 +147,7 @@ export function CommandBar({
               </Type>
 
               {/* Divider */}
-              <div className="w-px h-5 bg-black/20" />
+              <div className="w-px h-5 bg-black/20 dark:bg-white/20" />
 
               {/* Add button - min-w to prevent layout shift */}
               <button
