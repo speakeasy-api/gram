@@ -270,7 +270,34 @@ function SelectRemotesPhaseContent({
 
         {/* Remote checkboxes */}
         <div className="flex flex-col gap-2 mt-2">
-          <Label>Select endpoints to include</Label>
+          <div className="flex items-center justify-between">
+            <Label>Select endpoints to include</Label>
+            <button
+              type="button"
+              onClick={() => {
+                const allSelected =
+                  currentConfig.selectedRemoteUrls.size ===
+                  currentConfig.remotes.length;
+                if (allSelected) {
+                  releaseState.updateCurrentConfig({
+                    selectedRemoteUrls: new Set(),
+                  });
+                } else {
+                  releaseState.updateCurrentConfig({
+                    selectedRemoteUrls: new Set(
+                      currentConfig.remotes.map((r) => r.url),
+                    ),
+                  });
+                }
+              }}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {currentConfig.selectedRemoteUrls.size ===
+              currentConfig.remotes.length
+                ? "Deselect all"
+                : "Select all"}
+            </button>
+          </div>
           <div className="space-y-2 max-h-64 overflow-y-auto rounded-lg border bg-background p-3">
             {currentConfig.remotes.map((remote) => {
               const isSelected = currentConfig.selectedRemoteUrls.has(

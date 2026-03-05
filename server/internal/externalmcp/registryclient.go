@@ -236,12 +236,6 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			continue
 		}
 
-		// Debug: log what remotes we're getting from the registry
-		c.logger.InfoContext(ctx, "registry server remotes",
-			slog.String("server", s.Server.Name),
-			slog.Int("remotes_count", len(s.Server.Remotes)),
-		)
-
 		var iconURL *string
 		if len(s.Server.Icons) > 0 {
 			iconURL = &s.Server.Icons[0].Src

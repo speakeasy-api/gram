@@ -157,16 +157,6 @@ export function useExternalMcpReleaseWorkflow({
     const multiRemote: MultiRemoteServerConfig[] = [];
     const singleRemote: ServerConfig[] = [];
 
-    // Debug logging to help identify issues with multi-remote detection
-    console.log(
-      "[useExternalMcpReleaseWorkflow] Servers received:",
-      servers.map((s) => ({
-        name: s.title ?? s.registrySpecifier,
-        remotesCount: (s.remotes ?? []).length,
-        remotes: s.remotes,
-      })),
-    );
-
     for (const server of servers) {
       const remotes = server.remotes ?? [];
       if (remotes.length > 1) {
