@@ -12,10 +12,9 @@ import { Button, Input, Stack } from "@speakeasy-api/moonshine";
 import { Loader2, Search, SearchXIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
-import { CategoryTabs } from "./CategoryTabs";
 import { FilterChips } from "./FilterChips";
 import { defaultFilterValues, FilterSidebar } from "./FilterSidebar";
-import { countByCategory, filterAndSortServers } from "./hooks/serverMetadata";
+import { filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState } from "./hooks/useFilterState";
 import { useSelectionState } from "./hooks/useSelectionState";
 import { ServerCard } from "./ServerCard";
@@ -52,11 +51,6 @@ export default function Catalog() {
   const allServers = useMemo(() => {
     return data?.pages.flatMap((page) => page.servers as Server[]) ?? [];
   }, [data]);
-
-  // Count servers by category for badges
-  const categoryCounts = useMemo(() => {
-    return countByCategory(allServers);
-  }, [allServers]);
 
   // Apply client-side filtering based on filter state
   const filteredServers = useMemo(() => {
@@ -134,32 +128,23 @@ export default function Catalog() {
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="vertical" gap={6}>
-              {/* Search bar */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search MCP servers..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-
-              {/* Category tabs + Filters row */}
+              {/* Search and filters row */}
               <Stack
                 direction="horizontal"
-                gap={4}
+                gap={3}
                 align="center"
                 justify="space-between"
-                className="flex-wrap"
               >
-                <CategoryTabs
-                  value={filterState.category}
-                  onChange={filterState.setCategory}
-                  counts={categoryCounts}
-                />
-
                 <Stack direction="horizontal" gap={3} align="center">
+                  <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search MCP servers..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10 h-10"
+                    />
+                  </div>
                   <FilterSidebar
                     values={filterState.filters}
                     onChange={filterState.setFilters}
@@ -170,18 +155,16 @@ export default function Catalog() {
                     onChange={filterState.setSort}
                   />
                 </Stack>
-              </Stack>
 
-              {/* Results count */}
-              {!isLoading && (
-                <div className="flex justify-end">
+                {/* Results count */}
+                {!isLoading && (
                   <Type small muted>
                     {filteredServers.length === allServers.length
                       ? `${allServers.length} servers`
                       : `${filteredServers.length} of ${allServers.length} servers`}
                   </Type>
-                </div>
-              )}
+                )}
+              </Stack>
 
               {/* Active filter chips */}
               {hasActiveFilters && (

@@ -180,8 +180,10 @@ export function ServerCard({
             className="ml-auto"
           >
             <Button variant="secondary" size="sm">
-              <Button.Text>View Details</Button.Text>
-              <ArrowRight className="w-4 h-4" />
+              <Button.Text>View</Button.Text>
+              <Button.RightIcon>
+                <ArrowRight className="w-4 h-4" />
+              </Button.RightIcon>
             </Button>
           </Link>
         </div>
