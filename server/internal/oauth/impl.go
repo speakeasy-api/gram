@@ -369,6 +369,11 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			urlParams.Set("scope", req.Scope)
 		}
 
+		// Per OIDC Core §11, prompt=consent is required when requesting offline_access
+		if strings.Contains(urlParams.Get("scope"), "offline_access") {
+			urlParams.Set("prompt", "consent")
+		}
+
 		if proxyServer.Audience.Valid {
 			urlParams.Set("audience", proxyServer.Audience.String)
 		}
@@ -421,6 +426,7 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		CodeVerifier: r.FormValue("code_verifier"),
+		RefreshToken: r.FormValue("refresh_token"),
 	}
 
 	var token *Token
@@ -428,6 +434,8 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 	switch req.GrantType {
 	case "authorization_code":
 		token, err = s.tokenService.ExchangeAuthorizationCode(ctx, req, fullMCPURL, toolset.ID)
+	case "refresh_token":
+		token, err = s.tokenService.ExchangeRefreshToken(ctx, req, fullMCPURL, toolset.ID)
 	default:
 		return oops.E(oops.CodeBadRequest, nil, "unsupported grant type: %s", req.GrantType).Log(ctx, s.logger)
 	}
@@ -536,6 +544,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	// Provider-specific token exchange
 	var accessToken string
+	var refreshToken string
 	var expiresAt *time.Time
 
 	var oauthProvider providers.Provider
@@ -597,6 +606,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	accessToken = result.AccessToken
+	refreshToken = result.RefreshToken
 	expiresAt = result.ExpiresAt
 
 	// Reconstruct the original authorization request from decoded state
@@ -611,7 +621,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		Nonce:               oauthReqInfo["nonce"],
 	}
 
-	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMCPURL, toolset.ID, accessToken, expiresAt, provider.SecurityKeyNames)
+	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMCPURL, toolset.ID, accessToken, refreshToken, expiresAt, provider.SecurityKeyNames)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create authorization grant", attr.SlogError(err))
 
@@ -722,4 +732,42 @@ func (s *Service) parseBasicAuth(authHeader string) (string, string, bool) {
 // ValidateAccessToken validates an OAuth access token
 func (s *Service) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {
 	return s.tokenService.ValidateAccessToken(ctx, toolsetId, accessToken)
+}
+
+// RefreshProxyToken refreshes upstream credentials for an OAuth proxy token
+func (s *Service) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, token *Token, proxyProvider *repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*Token, error) {
+	var provider providers.Provider
+	switch proxyProvider.ProviderType {
+	case string(OAuthProxyProviderTypeCustom):
+		provider = s.customProvider
+	default:
+		return nil, fmt.Errorf("refresh not supported for provider type: %s", proxyProvider.ProviderType)
+	}
+
+	newSecrets := make([]ExternalSecret, len(token.ExternalSecrets))
+	for i, es := range token.ExternalSecrets {
+		if es.RefreshToken == "" {
+			return nil, ErrNoUpstreamRefreshToken
+		}
+		result, err := provider.RefreshToken(ctx, es.RefreshToken, *proxyProvider, toolset)
+		if err != nil {
+			return nil, fmt.Errorf("upstream token refresh failed: %w", err)
+		}
+		refreshToken := result.RefreshToken
+		if refreshToken == "" {
+			refreshToken = es.RefreshToken // preserve the original refresh token
+		}
+		newSecrets[i] = ExternalSecret{
+			SecurityKeys: es.SecurityKeys,
+			Token:        result.AccessToken,
+			RefreshToken: refreshToken,
+			ExpiresAt:    result.ExpiresAt,
+		}
+	}
+
+	if err := s.tokenService.RefreshExternalSecrets(ctx, token, newSecrets); err != nil {
+		return nil, fmt.Errorf("failed to update token after refresh: %w", err)
+	}
+
+	return token, nil
 }

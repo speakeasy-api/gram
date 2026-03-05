@@ -35,7 +35,7 @@ func NewTokenService(cacheImpl cache.Cache, clientRegistration *ClientRegistrati
 		grantManager:          grantManager,
 		pkceService:           pkceService,
 		logger:                logger,
-		accessTokenExpiration: 30 * 24 * time.Hour, // This is an overaching default, it is actually driven by the underlying credentials
+		accessTokenExpiration: 30 * 24 * time.Hour, // This is an overarching default, it is actually driven by the underlying credentials
 		tokenLength:           32,
 		enc:                   enc,
 	}
@@ -69,10 +69,16 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
+	refreshToken, err := ts.generateToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
 	// Create token response
 	token := &Token{
 		ToolsetID:       toolsetId,
 		AccessToken:     accessToken,
+		RefreshToken:    refreshToken,
 		TokenType:       "Bearer",
 		Scope:           grant.Scope,
 		ExternalSecrets: grant.ExternalSecrets,
@@ -87,9 +93,87 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 	return token, nil
 }
 
+// ExchangeRefreshToken exchanges a refresh token for a new access/refresh token pair (rotation).
+func (ts *TokenService) ExchangeRefreshToken(ctx context.Context, req *TokenRequest, mcpURL string, toolsetID uuid.UUID) (*Token, error) {
+	if req.ClientID == "" {
+		return nil, fmt.Errorf("client_id is required")
+	}
+	if req.RefreshToken == "" {
+		return nil, fmt.Errorf("refresh_token is required")
+	}
+
+	_, err := ts.clientRegistration.ValidateClientCredentials(ctx, mcpURL, req.ClientID, req.ClientSecret)
+	if err != nil {
+		return nil, fmt.Errorf("invalid client credentials: %w", err)
+	}
+
+	// Look up existing token by refresh token hash
+	refreshHash := sha256.Sum256([]byte(req.RefreshToken))
+	refreshTokenHash := base64.RawURLEncoding.EncodeToString(refreshHash[:])
+	oldToken, err := ts.tokenStorage.Get(ctx, RefreshTokenCacheKey(toolsetID, refreshTokenHash))
+	if err != nil {
+		return nil, fmt.Errorf("invalid refresh token: %w", err)
+	}
+
+	// Decrypt external secrets and check expiration
+	for i, externalSecret := range oldToken.ExternalSecrets {
+		decrypted, err := ts.enc.Decrypt(externalSecret.Token)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt token secret: %w", err)
+		}
+		oldToken.ExternalSecrets[i].Token = decrypted
+		if externalSecret.RefreshToken != "" {
+			decryptedRefresh, err := ts.enc.Decrypt(externalSecret.RefreshToken)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt refresh token secret: %w", err)
+			}
+			oldToken.ExternalSecrets[i].RefreshToken = decryptedRefresh
+		}
+		if externalSecret.ExpiresAt != nil && externalSecret.ExpiresAt.Before(time.Now()) {
+			return nil, fmt.Errorf("underlying credentials have expired")
+		}
+	}
+
+	// Delete old token (removes both access + refresh cache keys).
+	// The retrieved token already has hashed AccessToken and RefreshToken from storage,
+	// so CacheKey() and AdditionalCacheKeys() compute the correct keys.
+	if err := ts.deleteToken(ctx, oldToken); err != nil {
+		ts.logger.ErrorContext(ctx, "failed to delete old token during refresh", attr.SlogError(err))
+	}
+
+	// Generate new access token + new refresh token (rotation)
+	newAccessToken, err := ts.generateToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
+	}
+	newRefreshToken, err := ts.generateToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	newToken := &Token{
+		ToolsetID:       toolsetID,
+		AccessToken:     newAccessToken,
+		RefreshToken:    newRefreshToken,
+		TokenType:       "Bearer",
+		Scope:           oldToken.Scope,
+		ExternalSecrets: oldToken.ExternalSecrets,
+		CreatedAt:       time.Now(),
+		ExpiresAt:       time.Now().Add(ts.accessTokenExpiration),
+	}
+
+	if err := ts.storeToken(ctx, *newToken); err != nil {
+		return nil, fmt.Errorf("failed to store new token: %w", err)
+	}
+
+	return newToken, nil
+}
+
 var (
-	ErrInvalidAccessToken = fmt.Errorf("invalid access token")
-	ErrExpiredAccessToken = fmt.Errorf("access token has expired")
+	ErrInvalidAccessToken     = fmt.Errorf("invalid access token")
+	ErrExpiredAccessToken     = fmt.Errorf("access token has expired")
+	ErrExpiredExternalSecrets = fmt.Errorf("underlying credentials have expired")
+	ErrNoUpstreamRefreshToken = fmt.Errorf("no upstream refresh token available")
 )
 
 // ValidateAccessToken validates an access token
@@ -101,19 +185,15 @@ func (ts *TokenService) ValidateAccessToken(ctx context.Context, toolsetId uuid.
 
 	// Check if token has expired
 	if time.Now().After(token.ExpiresAt) {
-		if err := ts.deleteToken(ctx, *token); err != nil {
-			ts.logger.ErrorContext(ctx, "failed to delete expired token", attr.SlogError(err))
-		}
+		// Don't delete — the refresh token may still be valid and the client
+		// can exchange it for a new token pair.
 		return nil, ErrExpiredAccessToken
 	}
 
 	for _, externalSecret := range token.ExternalSecrets {
-		if externalSecret.ExpiresAt.Before(time.Now()) {
-			// TODO: Eventually we will want to 403 but not actually delete the credentials as we may have multiple credentials under the hood
-			if err := ts.deleteToken(ctx, *token); err != nil {
-				ts.logger.ErrorContext(ctx, "failed to delete expired token", attr.SlogError(err))
-			}
-			return nil, ErrExpiredAccessToken
+		if externalSecret.ExpiresAt != nil && externalSecret.ExpiresAt.Before(time.Now()) {
+			// Return the token alongside the error so the caller can attempt an upstream refresh
+			return token, ErrExpiredExternalSecrets
 		}
 	}
 
@@ -156,10 +236,11 @@ func (ts *TokenService) CreateTokenResponse(token *Token) *TokenResponse {
 	expiresIn := max(int(time.Until(token.ExpiresAt).Seconds()), 0)
 
 	return &TokenResponse{
-		AccessToken: token.AccessToken,
-		TokenType:   token.TokenType,
-		ExpiresIn:   expiresIn,
-		Scope:       token.Scope,
+		AccessToken:  token.AccessToken,
+		TokenType:    token.TokenType,
+		ExpiresIn:    expiresIn,
+		Scope:        token.Scope,
+		RefreshToken: token.RefreshToken,
 	}
 }
 
@@ -181,6 +262,41 @@ func (ts *TokenService) SetTokenExpiration(accessTokenExpiration time.Duration) 
 	ts.accessTokenExpiration = accessTokenExpiration
 }
 
+// RefreshExternalSecrets updates the external secrets on an existing token in the cache.
+func (ts *TokenService) RefreshExternalSecrets(ctx context.Context, token *Token, newSecrets []ExternalSecret) error {
+	token.ExternalSecrets = newSecrets
+	storeCopy := *token
+
+	// Encrypt external secrets
+	encryptedExternalSecrets := make([]ExternalSecret, len(storeCopy.ExternalSecrets))
+	for i, es := range storeCopy.ExternalSecrets {
+		encryptedToken, err := ts.enc.Encrypt([]byte(es.Token))
+		if err != nil {
+			return fmt.Errorf("failed to encrypt token secret: %w", err)
+		}
+		var encryptedRefreshToken string
+		if es.RefreshToken != "" {
+			encryptedRefreshToken, err = ts.enc.Encrypt([]byte(es.RefreshToken))
+			if err != nil {
+				return fmt.Errorf("failed to encrypt refresh token secret: %w", err)
+			}
+		}
+		encryptedExternalSecrets[i] = ExternalSecret{
+			Token:        encryptedToken,
+			RefreshToken: encryptedRefreshToken,
+			SecurityKeys: es.SecurityKeys,
+			ExpiresAt:    es.ExpiresAt,
+		}
+	}
+	storeCopy.ExternalSecrets = encryptedExternalSecrets
+
+	// The token's AccessToken is already hashed from getToken, so we can store directly
+	if err := ts.tokenStorage.Store(ctx, storeCopy); err != nil {
+		return fmt.Errorf("failed to store updated token: %w", err)
+	}
+	return nil
+}
+
 func (ts *TokenService) storeToken(ctx context.Context, token Token) error {
 	encryptedExternalSecrets := make([]ExternalSecret, len(token.ExternalSecrets))
 	for i, externalSecret := range token.ExternalSecrets {
@@ -188,8 +304,16 @@ func (ts *TokenService) storeToken(ctx context.Context, token Token) error {
 		if err != nil {
 			return fmt.Errorf("failed to encrypt token secret: %w", err)
 		}
+		var encryptedRefreshToken string
+		if externalSecret.RefreshToken != "" {
+			encryptedRefreshToken, err = ts.enc.Encrypt([]byte(externalSecret.RefreshToken))
+			if err != nil {
+				return fmt.Errorf("failed to encrypt refresh token secret: %w", err)
+			}
+		}
 		encryptedExternalSecrets[i] = ExternalSecret{
 			Token:        encryptedTokenSecret,
+			RefreshToken: encryptedRefreshToken,
 			SecurityKeys: externalSecret.SecurityKeys,
 			ExpiresAt:    externalSecret.ExpiresAt,
 		}
@@ -198,6 +322,12 @@ func (ts *TokenService) storeToken(ctx context.Context, token Token) error {
 	// hash access token on storage
 	hash := sha256.Sum256([]byte(token.AccessToken))
 	token.AccessToken = base64.RawURLEncoding.EncodeToString(hash[:])
+
+	// hash refresh token on storage
+	if token.RefreshToken != "" {
+		refreshHash := sha256.Sum256([]byte(token.RefreshToken))
+		token.RefreshToken = base64.RawURLEncoding.EncodeToString(refreshHash[:])
+	}
 
 	if err := ts.tokenStorage.Store(ctx, token); err != nil {
 		return fmt.Errorf("failed to store token: %w", err)
@@ -215,17 +345,19 @@ func (ts *TokenService) getToken(ctx context.Context, toolsetId uuid.UUID, acces
 
 	token.AccessToken = accessTokenHash
 
-	// Check if token has expired
-	if time.Now().After(token.ExpiresAt) {
-		return nil, fmt.Errorf("token has expired")
-	}
-
 	for i, externalSecret := range token.ExternalSecrets {
 		decryptedTokenSecret, err := ts.enc.Decrypt(externalSecret.Token)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decrypt token secret: %w", err)
 		}
 		token.ExternalSecrets[i].Token = decryptedTokenSecret
+		if externalSecret.RefreshToken != "" {
+			decryptedRefreshToken, err := ts.enc.Decrypt(externalSecret.RefreshToken)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt refresh token secret: %w", err)
+			}
+			token.ExternalSecrets[i].RefreshToken = decryptedRefreshToken
+		}
 	}
 
 	return &token, nil

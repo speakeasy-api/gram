@@ -41,7 +41,7 @@ func NewGrantManager(cacheImpl cache.Cache, clientRegistration *ClientRegistrati
 }
 
 // CreateAuthorizationGrant creates a new authorization grant
-func (gm *GrantManager) CreateAuthorizationGrant(ctx context.Context, req *AuthorizationRequest, mcpURL string, toolsetId uuid.UUID, accessToken string, expiresAt *time.Time, securityKeys []string) (*Grant, error) {
+func (gm *GrantManager) CreateAuthorizationGrant(ctx context.Context, req *AuthorizationRequest, mcpURL string, toolsetId uuid.UUID, accessToken string, refreshToken string, expiresAt *time.Time, securityKeys []string) (*Grant, error) {
 	if err := gm.ValidateAuthorizationRequest(ctx, req, mcpURL); err != nil {
 		return nil, fmt.Errorf("invalid authorization request: %w", err)
 	}
@@ -65,6 +65,7 @@ func (gm *GrantManager) CreateAuthorizationGrant(ctx context.Context, req *Autho
 			{
 				SecurityKeys: securityKeys,
 				Token:        accessToken,
+				RefreshToken: refreshToken,
 				ExpiresAt:    expiresAt,
 			},
 		},
@@ -265,8 +266,16 @@ func (gm *GrantManager) storeGrant(ctx context.Context, grant Grant) error {
 		if err != nil {
 			return fmt.Errorf("failed to encrypt token secret: %w", err)
 		}
+		var encryptedRefreshToken string
+		if externalSecret.RefreshToken != "" {
+			encryptedRefreshToken, err = gm.enc.Encrypt([]byte(externalSecret.RefreshToken))
+			if err != nil {
+				return fmt.Errorf("failed to encrypt refresh token secret: %w", err)
+			}
+		}
 		encryptedExternalSecrets[i] = ExternalSecret{
 			Token:        encryptedTokenSecret,
+			RefreshToken: encryptedRefreshToken,
 			SecurityKeys: externalSecret.SecurityKeys,
 			ExpiresAt:    externalSecret.ExpiresAt,
 		}
@@ -292,6 +301,13 @@ func (gm *GrantManager) getGrant(ctx context.Context, toolsetId uuid.UUID, code 
 			return nil, fmt.Errorf("failed to decrypt token secret: %w", err)
 		}
 		grant.ExternalSecrets[i].Token = decryptedTokenSecret
+		if externalSecret.RefreshToken != "" {
+			decryptedRefreshToken, err := gm.enc.Decrypt(externalSecret.RefreshToken)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt refresh token secret: %w", err)
+			}
+			grant.ExternalSecrets[i].RefreshToken = decryptedRefreshToken
+		}
 	}
 
 	// Check if grant has expired
