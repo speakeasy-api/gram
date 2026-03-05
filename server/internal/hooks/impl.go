@@ -153,6 +153,10 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 	}
 
 	claudeMetadata := extractSessionMetadata(payload)
+	if claudeMetadata.SessionID == "" {
+		s.logger.WarnContext(ctx, "Logs payload contained no session ID")
+		return nil
+	}
 	completeMetadata := SessionMetadata{
 		SessionID:   claudeMetadata.SessionID,
 		ServiceName: claudeMetadata.ServiceName,

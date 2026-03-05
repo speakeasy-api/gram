@@ -17,7 +17,7 @@ import (
 // bufferHook stores a hook payload in Redis for later processing
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
 	currentCache, err := s.hookBufferCache.Get(ctx, hookPendingCacheKey(sessionID))
-	if err == nil && currentCache.Payloads == nil {
+	if err != nil || currentCache.Payloads == nil {
 		currentCache = ClaudePayloadCache{
 			SessionID: sessionID,
 			Payloads:  make([]gen.ClaudePayload, 0),
@@ -101,8 +101,10 @@ func (s *Service) buildTelemetryAttributesWithMetadata(payload *gen.ClaudePayloa
 	// Parse MCP tool names
 	if strings.HasPrefix(toolName, "mcp__") {
 		parts := strings.SplitN(toolName, "__", 3)
-		attrs[attr.ToolCallSourceKey] = parts[1]
-		attrs[attr.ToolNameKey] = parts[2]
+		if len(parts) == 3 {
+			attrs[attr.ToolCallSourceKey] = parts[1]
+			attrs[attr.ToolNameKey] = parts[2]
+		}
 	}
 
 	// Hash toolUseID to create trace ID if available
