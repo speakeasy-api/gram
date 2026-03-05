@@ -134,6 +134,24 @@ export default function Catalog() {
     return () => observer.disconnect();
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
+  // Click outside to deselect
+  useEffect(() => {
+    if (selectedServers.size === 0) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't clear if clicking on a card or the command bar
+      const isOnCard = target.closest('[role="button"]');
+      const isOnCommandBar = target.closest("[data-command-bar]");
+      if (!isOnCard && !isOnCommandBar) {
+        clearSelection();
+      }
+    };
+
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [selectedServers.size]);
+
   return (
     <Page>
       <Page.Header>
@@ -206,16 +224,10 @@ export default function Catalog() {
                 />
               )}
 
-              {/* Server grid - clicking empty space clears selection */}
-              {/* biome-ignore lint/a11y/useKeyWithClickEvents: Grid click-to-clear is mouse-only UX enhancement */}
+              {/* Server grid */}
               <div
                 ref={setGridElement}
                 className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-                onClick={() => {
-                  if (selectedServers.size > 0) {
-                    clearSelection();
-                  }
-                }}
               >
                 {isLoading &&
                   Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
