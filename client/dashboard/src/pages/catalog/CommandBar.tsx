@@ -120,19 +120,22 @@ export function CommandBar({
       rafId = requestAnimationFrame(updatePosition);
     };
 
-    // Initialize position
+    // Initialize position - always jump on first render to avoid animating from top
     const viewportHeight = window.innerHeight;
     const fixedTop = viewportHeight - barHeight - 24;
     if (anchorElement && isAnchorVisible) {
       const rect = anchorElement.getBoundingClientRect();
-      rawTop.jump(Math.min(rect.bottom + gap, fixedTop));
+      const initialTop = Math.min(rect.bottom + gap, fixedTop);
+      rawTop.jump(initialTop);
+      smoothTop.jump(initialTop);
     } else {
       rawTop.jump(fixedTop);
+      smoothTop.jump(fixedTop);
     }
 
     updatePosition();
     return () => cancelAnimationFrame(rafId);
-  }, [anchorElement, selectedCount, isAnchorVisible, rawTop]);
+  }, [anchorElement, selectedCount, isAnchorVisible, rawTop, smoothTop]);
 
   // Default to viewport center if no container
   const leftPosition = containerCenter ?? window.innerWidth / 2;
@@ -155,27 +158,10 @@ export function CommandBar({
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
           >
-            <div className="bg-background border rounded-2xl shadow-2xl px-3 py-2 flex items-center gap-3">
-              {/* Count */}
-              <Type small className="text-foreground font-medium pl-1">
-                {selectedCount} selected
-              </Type>
-
-              {/* Divider */}
-              <div className="w-px h-5 bg-border" />
-
-              {/* Add button */}
-              <button
-                onClick={onAdd}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-accent bg-transparent text-secondary-foreground text-sm font-medium hover:bg-accent transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                {selectedCount === 1 ? "Add" : "Add all"}
-              </button>
-
-              {/* Divider */}
-              <div className="w-px h-5 bg-border" />
-
+            <div
+              data-command-bar
+              className="bg-background border rounded-2xl shadow-2xl px-3 py-2 flex items-center gap-3"
+            >
               {/* Clear button */}
               <button
                 onClick={onClear}
@@ -183,6 +169,27 @@ export function CommandBar({
                 aria-label="Clear selection"
               >
                 <X className="w-4 h-4" />
+              </button>
+
+              {/* Divider */}
+              <div className="w-px h-5 bg-border" />
+
+              {/* Count */}
+              <Type small className="text-foreground font-medium">
+                {selectedCount} {selectedCount === 1 ? "server" : "servers"}{" "}
+                selected
+              </Type>
+
+              {/* Divider */}
+              <div className="w-px h-5 bg-border" />
+
+              {/* Add button - min-w to prevent layout shift */}
+              <button
+                onClick={onAdd}
+                className="flex items-center justify-center gap-1.5 min-w-[5.5rem] px-3 py-1.5 rounded-full bg-foreground text-background text-sm font-medium hover:bg-foreground/90 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {selectedCount === 1 ? "Add" : "Add all"}
               </button>
             </div>
           </motion.div>
