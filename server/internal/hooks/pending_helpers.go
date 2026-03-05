@@ -101,8 +101,10 @@ func (s *Service) buildTelemetryAttributesWithMetadata(payload *gen.ClaudePayloa
 	// Parse MCP tool names
 	if strings.HasPrefix(toolName, "mcp__") {
 		parts := strings.SplitN(toolName, "__", 3)
-		attrs[attr.ToolCallSourceKey] = parts[1]
-		attrs[attr.ToolNameKey] = parts[2]
+		if len(parts) == 3 {
+			attrs[attr.ToolCallSourceKey] = parts[1]
+			attrs[attr.ToolNameKey] = parts[2]
+		}
 	}
 
 	// Hash toolUseID to create trace ID if available
