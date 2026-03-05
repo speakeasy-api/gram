@@ -17,6 +17,7 @@ import { FilterChips } from "./FilterChips";
 import { defaultFilterValues, FilterSidebar } from "./FilterSidebar";
 import { countByCategory, filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState } from "./hooks/useFilterState";
+import { useSelectionState } from "./hooks/useSelectionState";
 import { ServerCard } from "./ServerCard";
 import { SortDropdown } from "./SortDropdown";
 
@@ -32,11 +33,11 @@ export default function Catalog() {
   // Filter state from URL
   const filterState = useFilterState();
 
-  const [selectedServers, setSelectedServers] = useState<Set<string>>(
-    new Set(),
-  );
+  // Selection state from URL (persists across navigation)
+  const { selectedServers, toggleServerSelection, clearSelection } =
+    useSelectionState();
+
   const [addingServers, setAddingServers] = useState<Server[]>([]);
-  const [anchorElement, setAnchorElement] = useState<HTMLElement | null>(null);
   const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -73,39 +74,6 @@ export default function Catalog() {
       f.minTools > 0
     );
   }, [filterState.filters]);
-
-  const toggleServerSelection = (serverKey: string, element: HTMLElement) => {
-    setSelectedServers((prev) => {
-      const next = new Set(prev);
-      if (next.has(serverKey)) {
-        next.delete(serverKey);
-        // If we're deselecting and it was the last one, clear anchor
-        if (next.size === 0) {
-          setAnchorElement(null);
-        }
-      } else {
-        next.add(serverKey);
-        // Only update anchor if this card is on a different row
-        // (cards on same row have same top position)
-        if (anchorElement) {
-          const currentRect = anchorElement.getBoundingClientRect();
-          const newRect = element.getBoundingClientRect();
-          // Different row if top positions differ by more than a small threshold
-          if (Math.abs(currentRect.top - newRect.top) > 10) {
-            setAnchorElement(element);
-          }
-        } else {
-          setAnchorElement(element);
-        }
-      }
-      return next;
-    });
-  };
-
-  const clearSelection = () => {
-    setSelectedServers(new Set());
-    setAnchorElement(null);
-  };
 
   const getSelectedServerObjects = () =>
     filteredServers.filter((s) =>
@@ -150,7 +118,7 @@ export default function Catalog() {
 
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-  }, [selectedServers.size]);
+  }, [selectedServers.size, clearSelection]);
 
   return (
     <Page>
@@ -245,9 +213,7 @@ export default function Catalog() {
                         )}
                         externalMcps={externalMcps}
                         isSelected={selectedServers.has(serverKey)}
-                        onToggleSelect={(el) =>
-                          toggleServerSelection(serverKey, el)
-                        }
+                        onToggleSelect={() => toggleServerSelection(serverKey)}
                       />
                     );
                   })}
@@ -305,7 +271,6 @@ export default function Catalog() {
         selectedCount={selectedServers.size}
         onAdd={handleAdd}
         onClear={clearSelection}
-        anchorElement={anchorElement}
         containerElement={gridElement}
       />
     </Page>

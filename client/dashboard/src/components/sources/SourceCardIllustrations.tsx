@@ -109,13 +109,15 @@ export function ExternalMCPIllustration({
   name,
   slug,
 }: IllustrationProps & { logoUrl?: string; name?: string; slug: string }) {
+  const saturationClass = className ?? "saturate-[.3] group-hover:saturate-100";
+
   if (logoUrl) {
     return (
-      <div className={cn("w-full h-full relative", className)}>
+      <div className="w-full h-full relative">
         {/* Pattern background */}
         <MCPPatternIllustration
           toolsetSlug={slug}
-          className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
+          className={cn("transition-all duration-300", saturationClass)}
         />
         {/* Logo overlay */}
         <div className="absolute inset-0 flex items-center justify-center">
@@ -135,7 +137,7 @@ export function ExternalMCPIllustration({
   return (
     <MCPPatternIllustration
       toolsetSlug={slug}
-      className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
+      className={cn("transition-all duration-300", saturationClass)}
     />
   );
 }
