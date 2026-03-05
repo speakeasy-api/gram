@@ -484,7 +484,7 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 	} else {
 		externalCustomerState, err := p.polar.Customers.GetStateExternal(ctx, orgID)
 		notFoundErrors := []string{
-			"ResourceNotFound",
+			"resourcenotfound",
 			"not found",
 		}
 		containsNotFoundError := func(err error) bool {
@@ -496,10 +496,7 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 			return false
 		}
 
-		isNotFoundError := externalCustomerState != nil &&
-			externalCustomerState.HTTPMeta != nil &&
-			externalCustomerState.HTTPMeta.Response != nil &&
-			externalCustomerState.HTTPMeta.Response.StatusCode == 404
+		isNotFoundError := externalCustomerState.HTTPMeta.Response.StatusCode == 404
 
 		if err != nil && !isNotFoundError && !containsNotFoundError(err) {
 			return nil, fmt.Errorf("query polar customer state: %w", err)
