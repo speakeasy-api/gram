@@ -346,11 +346,6 @@ function SelectRemotesPhaseContent({
               );
             })}
           </div>
-          {currentConfig.selectedRemoteUrls.size === 0 && (
-            <Type small className="text-destructive">
-              Select at least one endpoint
-            </Type>
-          )}
         </div>
       </Stack>
 
