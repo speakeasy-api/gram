@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "https://app.getgram.ai/rpc/hooks.claude",
+            "url": "http://localhost:8080/rpc/hooks.claude",
             "timeout": 30
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "https://app.getgram.ai/rpc/hooks.claude",
+            "url": "http://localhost:8080/rpc/hooks.claude",
             "timeout": 30
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "https://app.getgram.ai/rpc/hooks.claude",
+            "url": "http://localhost:8080/rpc/hooks.claude",
             "timeout": 30
           }
         ]
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "https://app.getgram.ai/rpc/hooks.claude",
+            "url": "http://localhost:8080/rpc/hooks.claude",
             "timeout": 30
           }
         ]
@@ -46,3 +46,4 @@
     ]
   }
 }
+ 

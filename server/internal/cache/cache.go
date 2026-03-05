@@ -23,6 +23,9 @@ type Cache interface {
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
 	Update(ctx context.Context, key string, value any) error
 	Delete(ctx context.Context, key string) error
+	// List operations for atomic append/read
+	ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error
+	ListRange(ctx context.Context, key string, start, stop int64, value any) error
 }
 
 type TypedCacheObject[T CacheableObject[T]] struct {

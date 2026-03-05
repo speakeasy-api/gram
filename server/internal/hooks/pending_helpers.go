@@ -13,20 +13,13 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
 
-
-// bufferHook stores a hook payload in Redis for later processing
+// bufferHook stores a hook payload in Redis for later processing using atomic RPUSH
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
-	currentCache, err := s.hookBufferCache.Get(ctx, hookPendingCacheKey(sessionID))
-	if err != nil || currentCache.Payloads == nil {
-		currentCache = ClaudePayloadCache{
-			SessionID: sessionID,
-			Payloads:  make([]gen.ClaudePayload, 0),
-		}
-	}
-
-	currentCache.Payloads = append(currentCache.Payloads, *payload)
-	if err := s.hookBufferCache.Store(ctx, currentCache); err != nil {
-		return fmt.Errorf("store hook in cache: %w", err)
+	// Use atomic RPUSH operation to append to the list
+	// This eliminates the race condition from read-modify-write
+	ttl := 24 * time.Hour // TTL for buffered hooks
+	if err := s.cache.ListAppend(ctx, hookPendingCacheKey(sessionID), payload, ttl); err != nil {
+		return fmt.Errorf("append hook to list: %w", err)
 	}
 
 	s.logger.DebugContext(ctx, "Buffered hook in Redis",
@@ -129,15 +122,28 @@ func (s *Service) buildTelemetryAttributesWithMetadata(payload *gen.ClaudePayloa
 
 // flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata) {
-	pending, err := s.hookBufferCache.Get(ctx, hookPendingCacheKey(sessionID))
-	if err != nil || pending.Payloads == nil {
+	// Use LRANGE to get all payloads from the list atomically
+	var payloads []gen.ClaudePayload
+	key := hookPendingCacheKey(sessionID)
+
+	if err := s.cache.ListRange(ctx, key, 0, -1, &payloads); err != nil {
+		s.logger.DebugContext(ctx, "No pending hooks to flush or error reading list", attr.SlogError(err))
 		return
 	}
-	for _, payload := range pending.Payloads {
-		s.writeHookToClickHouseWithMetadata(ctx, &payload, metadata)
+
+	if len(payloads) == 0 {
+		return
 	}
-	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks to ClickHouse", len(pending.Payloads)))
-	if err := s.hookBufferCache.DeleteByKey(ctx, hookPendingCacheKey(sessionID)); err != nil {
+
+	// Write all payloads to ClickHouse
+	for i := range payloads {
+		s.writeHookToClickHouseWithMetadata(ctx, &payloads[i], metadata)
+	}
+
+	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks to ClickHouse", len(payloads)))
+
+	// Delete the list after successful processing
+	if err := s.cache.Delete(ctx, key); err != nil {
 		s.logger.ErrorContext(ctx, "Failed to delete hook buffer", attr.SlogError(err))
 	}
 }

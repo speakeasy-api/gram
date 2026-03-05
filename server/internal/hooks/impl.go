@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -37,8 +38,7 @@ type Service struct {
 	db               *pgxpool.Pool
 	telemetryService *telemetry.Service
 	auth             *auth.Auth
-	sessionCache     cache.TypedCacheObject[SessionMetadata]
-	hookBufferCache  cache.TypedCacheObject[ClaudePayloadCache]
+	cache            cache.Cache
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -62,17 +62,13 @@ type HookSpecificOutput struct {
 var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, tracerProvider trace.TracerProvider, telemetryService *telemetry.Service, sessions *sessions.Manager, cacheAdapter cache.Cache) *Service {
-	sessionCache := cache.NewTypedObjectCache[SessionMetadata](logger.With(attr.SlogCacheNamespace("session")), cacheAdapter, cache.SuffixNone)
-	hookBufferCache := cache.NewTypedObjectCache[ClaudePayloadCache](logger.With(attr.SlogCacheNamespace("hook_buffer")), cacheAdapter, cache.SuffixNone)
-
 	return &Service{
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		logger:           logger.With(attr.SlogComponent("hooks")),
 		db:               db,
 		telemetryService: telemetryService,
 		auth:             auth.New(logger, db, sessions),
-		sessionCache:     sessionCache,
-		hookBufferCache:  hookBufferCache,
+		cache:            cacheAdapter,
 	}
 }
 
@@ -157,6 +153,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		s.logger.WarnContext(ctx, "Logs payload contained no session ID")
 		return nil
 	}
+
 	completeMetadata := SessionMetadata{
 		SessionID:   claudeMetadata.SessionID,
 		ServiceName: claudeMetadata.ServiceName,
@@ -166,7 +163,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		ProjectID:   authCtx.ProjectID.String(),
 	}
 
-	if err := s.sessionCache.Store(ctx, completeMetadata); err != nil {
+	if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
 		s.logger.ErrorContext(ctx, "Failed to store session metadata", attr.SlogError(err))
 	}
 
@@ -284,7 +281,8 @@ func (s *Service) recordToolEvent(ctx context.Context, payload *gen.ClaudePayloa
 	}
 
 	sessionID := *payload.SessionID
-	metadata, err := s.sessionCache.Get(ctx, sessionCacheKey(sessionID))
+	var metadata SessionMetadata
+	err := s.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
 
 	if err == nil {
 		s.writeHookToClickHouseWithMetadata(ctx, payload, &metadata)
