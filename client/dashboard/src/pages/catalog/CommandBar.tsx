@@ -1,19 +1,68 @@
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Plus, X } from "lucide-react";
-import {
-  AnimatePresence,
-  motion,
-  useMotionValue,
-  useSpring,
-  useTransform,
-} from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+
+function LiquidGlassFilter() {
+  return (
+    <svg style={{ display: "none" }}>
+      <filter
+        id="command-bar-glass"
+        x="0%"
+        y="0%"
+        width="100%"
+        height="100%"
+        filterUnits="objectBoundingBox"
+      >
+        <feTurbulence
+          type="fractalNoise"
+          baseFrequency="0.02 0.02"
+          numOctaves="1"
+          seed="5"
+          result="turbulence"
+        />
+        <feComponentTransfer in="turbulence" result="mapped">
+          <feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5" />
+          <feFuncG type="gamma" amplitude="0" exponent="1" offset="0" />
+          <feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5" />
+        </feComponentTransfer>
+        <feGaussianBlur in="turbulence" stdDeviation="3" result="softMap" />
+        <feSpecularLighting
+          in="softMap"
+          surfaceScale="3"
+          specularConstant="0.8"
+          specularExponent="80"
+          lightingColor="white"
+          result="specLight"
+        >
+          <fePointLight x="-100" y="-100" z="200" />
+        </feSpecularLighting>
+        <feComposite
+          in="specLight"
+          operator="arithmetic"
+          k1="0"
+          k2="1"
+          k3="1"
+          k4="0"
+          result="litImage"
+        />
+        <feDisplacementMap
+          in="SourceGraphic"
+          in2="softMap"
+          scale="60"
+          xChannelSelector="R"
+          yChannelSelector="G"
+        />
+      </filter>
+    </svg>
+  );
+}
 
 interface CommandBarProps {
   selectedCount: number;
   onAdd: () => void;
   onClear: () => void;
-  anchorElement: HTMLElement | null;
   containerElement: HTMLElement | null;
 }
 
@@ -21,29 +70,10 @@ export function CommandBar({
   selectedCount,
   onAdd,
   onClear,
-  anchorElement,
   containerElement,
 }: CommandBarProps) {
-  const [isAnchorVisible, setIsAnchorVisible] = useState(true);
-  const wasAnchorVisible = useRef(true);
+  const barRef = useRef<HTMLDivElement>(null);
   const [containerCenter, setContainerCenter] = useState<number | null>(null);
-
-  // Motion values for smooth animation
-  const rawTop = useMotionValue(0);
-  const smoothTop = useSpring(rawTop, {
-    stiffness: 300,
-    damping: 30,
-    mass: 0.8,
-  });
-
-  // Scale for genie effect - slightly smaller when fixed at bottom
-  const scale = useTransform(smoothTop, (top) => {
-    const viewportHeight = window.innerHeight;
-    const fixedTop = viewportHeight - 72;
-    // Scale down slightly as it approaches fixed position
-    const progress = Math.min(1, Math.max(0, (top - fixedTop + 100) / 100));
-    return 0.95 + 0.05 * progress;
-  });
 
   // Track container center for horizontal positioning
   useEffect(() => {
@@ -62,81 +92,6 @@ export function CommandBar({
     return () => window.removeEventListener("resize", updateCenter);
   }, [containerElement]);
 
-  // Use IntersectionObserver to detect when anchor leaves viewport
-  useEffect(() => {
-    if (!anchorElement || selectedCount === 0) {
-      setIsAnchorVisible(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        setIsAnchorVisible(entries[0].isIntersecting);
-      },
-      { threshold: 0 },
-    );
-
-    observer.observe(anchorElement);
-    return () => observer.disconnect();
-  }, [anchorElement, selectedCount]);
-
-  // Track position and update motion value
-  useEffect(() => {
-    if (selectedCount === 0) return;
-
-    let rafId: number;
-    const barHeight = 48;
-    const gap = 12;
-
-    const updatePosition = () => {
-      const viewportHeight = window.innerHeight;
-      const fixedTop = viewportHeight - barHeight - 24;
-
-      let targetTop: number;
-
-      if (!anchorElement || !isAnchorVisible) {
-        targetTop = fixedTop;
-      } else {
-        const rect = anchorElement.getBoundingClientRect();
-        const idealTop = rect.bottom + gap;
-        targetTop = Math.min(idealTop, fixedTop);
-      }
-
-      // Check if we're transitioning between states
-      const isTransitioning = wasAnchorVisible.current !== isAnchorVisible;
-      wasAnchorVisible.current = isAnchorVisible;
-
-      if (isTransitioning) {
-        // Let the spring animate smoothly
-        rawTop.set(targetTop);
-      } else if (isAnchorVisible && anchorElement) {
-        // When following anchor, update immediately
-        rawTop.jump(targetTop);
-      } else {
-        // Fixed position
-        rawTop.set(targetTop);
-      }
-
-      rafId = requestAnimationFrame(updatePosition);
-    };
-
-    // Initialize position - always jump on first render to avoid animating from top
-    const viewportHeight = window.innerHeight;
-    const fixedTop = viewportHeight - barHeight - 24;
-    if (anchorElement && isAnchorVisible) {
-      const rect = anchorElement.getBoundingClientRect();
-      const initialTop = Math.min(rect.bottom + gap, fixedTop);
-      rawTop.jump(initialTop);
-      smoothTop.jump(initialTop);
-    } else {
-      rawTop.jump(fixedTop);
-      smoothTop.jump(fixedTop);
-    }
-
-    updatePosition();
-    return () => cancelAnimationFrame(rafId);
-  }, [anchorElement, selectedCount, isAnchorVisible, rawTop, smoothTop]);
-
   // Default to viewport center if no container
   const leftPosition = containerCenter ?? window.innerWidth / 2;
 
@@ -144,55 +99,74 @@ export function CommandBar({
     <AnimatePresence>
       {selectedCount > 0 && (
         <motion.div
-          className="z-50 fixed"
-          style={{
-            top: smoothTop,
-            left: leftPosition,
-            x: "-50%",
-          }}
+          className="z-50 fixed bottom-10"
+          style={{ left: leftPosition, x: "-50%" }}
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
         >
-          <motion.div
-            style={{ scale }}
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+          {/* Liquid Glass Container */}
+          <div
+            ref={barRef}
+            data-command-bar
+            className="relative rounded-2xl overflow-hidden"
+            style={{
+              boxShadow:
+                "0 6px 6px rgba(0, 0, 0, 0.2), 0 0 20px rgba(0, 0, 0, 0.1)",
+            }}
           >
+            {/* Glass effect layer - blur + distortion */}
             <div
-              data-command-bar
-              className="bg-background border rounded-2xl shadow-2xl px-3 py-2 flex items-center gap-3"
-            >
+              className="absolute inset-0 backdrop-blur-sm"
+              style={{ filter: "url(#command-bar-glass)" }}
+            />
+            {/* Tint layer - opaque enough for text readability */}
+            <div className="absolute inset-0 bg-white/80 dark:bg-black/70" />
+            {/* Shine layer */}
+            <div
+              className="absolute inset-0"
+              style={{
+                boxShadow:
+                  "inset 2px 2px 1px 0 rgba(255, 255, 255, 0.5), inset -1px -1px 1px 1px rgba(255, 255, 255, 0.3)",
+              }}
+            />
+            {/* Content layer */}
+            <div className="relative z-10 px-3 py-2 flex items-center gap-3">
               {/* Clear button */}
-              <button
-                onClick={onClear}
-                className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label="Clear selection"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <SimpleTooltip tooltip="Clear selection">
+                <button
+                  onClick={onClear}
+                  className="p-1.5 rounded-full text-black/50 hover:text-black hover:bg-black/10 transition-colors"
+                  aria-label="Clear selection"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </SimpleTooltip>
 
               {/* Divider */}
-              <div className="w-px h-5 bg-border" />
+              <div className="w-px h-5 bg-black/20" />
 
               {/* Count */}
-              <Type small className="text-foreground font-medium">
+              <Type small className="font-medium text-black dark:text-white">
                 {selectedCount} {selectedCount === 1 ? "server" : "servers"}{" "}
                 selected
               </Type>
 
               {/* Divider */}
-              <div className="w-px h-5 bg-border" />
+              <div className="w-px h-5 bg-black/20" />
 
               {/* Add button - min-w to prevent layout shift */}
               <button
                 onClick={onAdd}
-                className="flex items-center justify-center gap-1.5 min-w-[5.5rem] px-3 py-1.5 rounded-full bg-foreground text-background text-sm font-medium hover:bg-foreground/90 transition-colors"
+                className="flex items-center justify-center gap-1.5 min-w-[5.5rem] px-3 py-1.5 rounded-full text-sm font-medium bg-foreground text-background hover:bg-foreground/90 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
                 {selectedCount === 1 ? "Add" : "Add all"}
               </button>
             </div>
-          </motion.div>
+          </div>
+          <LiquidGlassFilter />
         </motion.div>
       )}
     </AnimatePresence>

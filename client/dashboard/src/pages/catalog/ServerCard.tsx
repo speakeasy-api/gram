@@ -8,7 +8,8 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
 import { Button } from "@speakeasy-api/moonshine";
-import { useMemo, useRef } from "react";
+import { ArrowRight, Check } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import type { Server } from "./hooks";
 import { parseServerMetadata } from "./hooks/serverMetadata";
@@ -18,7 +19,7 @@ interface ServerCardProps {
   detailHref: string;
   externalMcps: DeploymentExternalMCP[];
   isSelected?: boolean;
-  onToggleSelect?: (element: HTMLElement) => void;
+  onToggleSelect?: () => void;
 }
 
 /**
@@ -37,7 +38,6 @@ export function ServerCard({
   isSelected,
   onToggleSelect,
 }: ServerCardProps) {
-  const cardRef = useRef<HTMLDivElement>(null);
   const metadata = useMemo(() => parseServerMetadata(server), [server]);
   const displayName = server.title ?? server.registrySpecifier;
 
@@ -56,34 +56,35 @@ export function ServerCard({
     return tools.map((t) => t.name || "Unknown tool");
   }, [server.tools]);
 
+  const [isHovered, setIsHovered] = useState(false);
+
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation(); // Prevent grid's click-to-clear from firing
-    if (onToggleSelect) {
-      onToggleSelect(e.currentTarget);
+    e.stopPropagation(); // Prevent click-outside-to-deselect from firing
+    // Reset hover state when deselecting so image goes back to desaturated
+    if (isSelected) {
+      setIsHovered(false);
     }
+    onToggleSelect?.();
   };
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: Card contains nested interactive elements (buttons, links)
     <div
-      ref={cardRef}
       role="button"
       tabIndex={0}
       onClick={handleCardClick}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.stopPropagation();
-          if (onToggleSelect && cardRef.current) {
-            onToggleSelect(cardRef.current);
-          }
+          onToggleSelect?.();
         }
       }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       className={cn(
         "group bg-card text-card-foreground flex flex-col rounded-xl border overflow-hidden",
         "hover:border-foreground/20 hover:shadow-md transition-all cursor-pointer h-full",
         isAdded && "border-success/50 ring-1 ring-success/20",
-        isSelected &&
-          "border-primary/60 ring-1 ring-primary/30 bg-primary/[0.02]",
       )}
     >
       {/* Illustration header */}
@@ -93,24 +94,36 @@ export function ServerCard({
             slug={slug}
             logoUrl={server.iconUrl}
             name={displayName}
+            className={isSelected || isHovered ? "saturate-100" : undefined}
           />
         ) : (
           <MCPPatternIllustration
             toolsetSlug={slug}
-            className="saturate-[.3] group-hover:saturate-100 transition-all duration-300"
+            className={cn(
+              "transition-all duration-300",
+              isSelected || isHovered ? "saturate-100" : "saturate-[.3]",
+            )}
           />
         )}
-        {/* Official badge overlay */}
-        {metadata.isOfficial && (
-          <div className="absolute top-2 right-2">
+        {/* Badge overlays - top right */}
+        <div className="absolute top-3.5 right-3.5 flex flex-col gap-1.5 items-end">
+          {metadata.isOfficial && (
             <Badge
               variant="outline"
-              className="bg-background/50 text-foreground backdrop-blur-sm"
+              className="bg-white/70 text-black backdrop-blur-sm border-white/50"
             >
               Official
             </Badge>
-          </div>
-        )}
+          )}
+          {metadata.visitorsMonth === 0 && (
+            <Badge
+              variant="outline"
+              className="bg-white/70 text-black backdrop-blur-sm border-white/50"
+            >
+              New
+            </Badge>
+          )}
+        </div>
         {/* Added indicator overlay */}
         {isAdded && (
           <div className="absolute top-2 left-2">
@@ -151,23 +164,24 @@ export function ServerCard({
 
         {/* Footer row with stats and actions */}
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
-          {/* Usage stats */}
-          <div className="flex items-center gap-2">
-            {metadata.visitorsMonth > 0 ? (
-              <Type small muted>
-                {metadata.visitorsMonth.toLocaleString()} monthly users
-              </Type>
-            ) : (
-              <Badge variant="outline" className="text-xs">
-                New
-              </Badge>
-            )}
-          </div>
+          {/* Selection indicator */}
+          {isSelected ? (
+            <div className="size-7 rounded-full border-[1.5px] border-[#1DA1F2] flex items-center justify-center">
+              <Check className="size-4 text-[#1DA1F2]" strokeWidth={3} />
+            </div>
+          ) : (
+            <div className="size-7 rounded-full border-[1.5px] border-muted-foreground/30" />
+          )}
 
           {/* View Details button */}
-          <Link to={detailHref} onClick={(e) => e.stopPropagation()}>
+          <Link
+            to={detailHref}
+            onClick={(e) => e.stopPropagation()}
+            className="ml-auto"
+          >
             <Button variant="secondary" size="sm">
               <Button.Text>View Details</Button.Text>
+              <ArrowRight className="w-4 h-4" />
             </Button>
           </Link>
         </div>
