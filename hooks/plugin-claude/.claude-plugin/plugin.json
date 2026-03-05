@@ -9,5 +9,5 @@
   "homepage": "https://getgram.ai",
   "repository": "https://github.com/gram-ai/gram",
   "license": "MIT",
-  "keywords": ["gram", "hooks", "analytics", "monitoring", "telemetry"]
+  "keywords": ["gram", "hooks", "mcp", "analytics", "monitoring", "telemetry"]
 }

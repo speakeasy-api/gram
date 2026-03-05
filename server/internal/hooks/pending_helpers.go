@@ -91,6 +91,10 @@ func (s *Service) buildTelemetryAttributesWithMetadata(payload *gen.ClaudePayloa
 		attr.HookSourceKey:     hookSource,
 	}
 
+	if payload.ToolError != nil {
+		attrs[attr.HookErrorKey] = payload.ToolError
+	}
+
 	// Parse MCP tool names
 	if strings.HasPrefix(toolName, "mcp__") {
 		parts := strings.SplitN(toolName, "__", 3)
