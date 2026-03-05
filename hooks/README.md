@@ -63,6 +63,7 @@ The `core/` directory contains the shared implementation that powers all packagi
 - **post_tool_use_failure.sh**: Handler for PostToolUseFailure events
 
 These scripts are designed to be:
+
 1. Executable standalone
 2. Packaged as a Claude plugin
 3. Adapted for other editors (Cursor, VSCode, etc.)
@@ -72,21 +73,25 @@ These scripts are designed to be:
 All packaging methods require:
 
 **Required:**
+
 - `GRAM_API_KEY`: Your Gram API key
 
 **Optional:**
+
 - `GRAM_PROJECT`: Project name (defaults to "default")
 - `GRAM_SERVER_URL`: Server URL (defaults to "https://app.getgram.ai")
 
 ### First-Time Setup
 
 **Claude Code Plugin:**
+
 1. Run `/gram login` after installation
 2. Follow the instructions to get your API key
 3. Add the key to your shell profile and restart Claude Code
 
 **Standalone Installation:**
 Set these environment variables in your shell profile before use:
+
 ```bash
 export GRAM_API_KEY="your-api-key-here"
 export GRAM_PROJECT="default"  # optional

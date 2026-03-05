@@ -55,6 +55,7 @@ After installing the plugin, run:
 ```
 
 This will:
+
 1. Open https://app.getgram.ai/settings/api-keys in your browser
 2. Show you how to configure your `GRAM_API_KEY` environment variable
 3. Provide instructions for persisting the key across sessions
@@ -98,6 +99,7 @@ Hook events are forwarded to your Gram server at `https://app.getgram.ai/rpc/hoo
 ### Missing GRAM_API_KEY
 
 If `GRAM_API_KEY` is not set:
+
 1. You'll see a notification on session start
 2. Run `/gram login` to get your API key
 3. Follow the instructions to configure it in your shell profile
@@ -130,6 +132,7 @@ hooks/
 ```
 
 This structure allows the same core scripts to be:
+
 - Packaged as a Claude Code plugin
 - Installed standalone via `install.sh`
 - Adapted for other editors (Cursor, etc.)

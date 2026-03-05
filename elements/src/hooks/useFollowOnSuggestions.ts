@@ -213,9 +213,9 @@ ${conversation}`,
 
     // Wait for auth to be ready before attempting to fetch
     // This prevents marking a message as processed before we can actually make the request
-    if (auth.isLoading || !auth.headers) return
+    if (auth.isLoading || !auth.headers) return;
 
-    if (messages.length === 0) return
+    if (messages.length === 0) return;
 
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.role !== "assistant") return;
@@ -223,9 +223,9 @@ ${conversation}`,
     // Check if we've already processed this message
     if (lastProcessedMessageIdRef.current === lastMessage.id) return;
 
-    lastProcessedMessageIdRef.current = lastMessage.id
-    fetchSuggestions()
-  }, [isRunning, messages, fetchSuggestions, auth.isLoading, auth.headers])
+    lastProcessedMessageIdRef.current = lastMessage.id;
+    fetchSuggestions();
+  }, [isRunning, messages, fetchSuggestions, auth.isLoading, auth.headers]);
 
   // Cleanup on unmount
   useEffect(() => {

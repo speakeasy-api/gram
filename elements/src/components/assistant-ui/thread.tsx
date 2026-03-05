@@ -118,11 +118,11 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const { config } = useElements();
   const components = config.components ?? {};
   const showDangerousApiKeyWarning =
-    config.api && 'dangerousApiKey' in config.api
-  const showFeedback = config.thread?.showFeedback ?? true
-  const [isResolved, setIsResolved] = useState(false)
-  const [feedbackHidden, setFeedbackHidden] = useState(false)
-  const chatId = useChatId()
+    config.api && "dangerousApiKey" in config.api;
+  const showFeedback = config.thread?.showFeedback ?? true;
+  const [isResolved, setIsResolved] = useState(false);
+  const [feedbackHidden, setFeedbackHidden] = useState(false);
+  const chatId = useChatId();
 
   const apiUrl = getApiUrl(config);
   const auth = useAuth({

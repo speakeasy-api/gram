@@ -103,7 +103,7 @@ Some tools have custom visual components that automatically render their results
 For tools WITHOUT custom components, you should present the data clearly - either as plain text for simple results, or using the UI code block format for structured data like lists of items, categories, or dashboards.
 
 UI Widget Guidelines:
-IMPORTANT: Only render ONE generative UI widget (chart, dashboard, visualization) per response. Never render multiple widgets in a single message - this causes layout shifts during streaming and overwhelms the user. If you have multiple visualizations to show, render the most important one and explicitly offer to show others as follow-ups (e.g., "Would you like to see a breakdown by status as well?").`
+IMPORTANT: Only render ONE generative UI widget (chart, dashboard, visualization) per response. Never render multiple widgets in a single message - this causes layout shifts during streaming and overwhelms the user. If you have multiple visualizations to show, render the most important one and explicitly offer to show others as follow-ups (e.g., "Would you like to see a breakdown by status as well?").`;
 
 function mergeInternalSystemPromptWith(
   userSystemPrompt: string | undefined,
@@ -378,15 +378,15 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
 
         try {
           // This works around AI SDK bug where these fields cause validation failures
-          const cleanedMessages = cleanMessagesForModel(messages)
+          const cleanedMessages = cleanMessagesForModel(messages);
           // Filter out system messages from the UI state — the system prompt
           // is already provided via the `system:` parameter to streamText().
           // Without this, loaded chat history includes the system message which
           // gets sent alongside the `system:` param, causing duplication.
           const nonSystemMessages = cleanedMessages.filter(
-            (m) => m.role !== 'system'
-          )
-          const modelMessages = convertToModelMessages(nonSystemMessages)
+            (m) => m.role !== "system",
+          );
+          const modelMessages = convertToModelMessages(nonSystemMessages);
 
           const result = streamText({
             system: systemPrompt,

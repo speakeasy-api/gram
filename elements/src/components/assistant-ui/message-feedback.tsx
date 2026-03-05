@@ -57,7 +57,7 @@ const feedbackStyles = `
 :host(.dark) .aui-feedback-thank-you {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
-`
+`;
 
 export const MessageFeedback: FC<MessageFeedbackProps> = ({
   onFeedback,
@@ -168,7 +168,7 @@ export const MessageFeedback: FC<MessageFeedbackProps> = ({
         ) : (
           <m.div
             key="thank-you"
-            className="aui-feedback-thank-you text-muted-foreground rounded-full border border-black/[0.08] bg-gradient-to-b from-white/80 to-white/60 px-4 py-2 text-sm backdrop-blur-2xl dark:border-white/5 dark:from-white/10 dark:to-white/[0.03]"
+            className="aui-feedback-thank-you rounded-full border border-black/[0.08] bg-gradient-to-b from-white/80 to-white/60 px-4 py-2 text-sm text-muted-foreground backdrop-blur-2xl dark:border-white/5 dark:from-white/10 dark:to-white/[0.03]"
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, ease: EASE_OUT_QUINT }}

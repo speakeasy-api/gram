@@ -185,27 +185,27 @@ const TIME_RANGE_MODEL = "openai/gpt-4o-mini";
  */
 function parseAsLocalDate(isoString: string): Date {
   // Try to extract just the date part and create a local date
-  const dateMatch = isoString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  const dateMatch = isoString.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (dateMatch) {
-    const [, year, month, day] = dateMatch
+    const [, year, month, day] = dateMatch;
     // Check if there's a time component
-    const timeMatch = isoString.match(/T(\d{2}):(\d{2}):?(\d{2})?/)
+    const timeMatch = isoString.match(/T(\d{2}):(\d{2}):?(\d{2})?/);
     if (timeMatch) {
-      const [, hours, minutes, seconds = '0'] = timeMatch
+      const [, hours, minutes, seconds = "0"] = timeMatch;
       return new Date(
         parseInt(year),
         parseInt(month) - 1,
         parseInt(day),
         parseInt(hours),
         parseInt(minutes),
-        parseInt(seconds)
-      )
+        parseInt(seconds),
+      );
     }
     // Date only - use start of day local time
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   }
   // Fallback to standard parsing
-  return new Date(isoString)
+  return new Date(isoString);
 }
 
 async function parseWithAI(
@@ -267,10 +267,10 @@ Examples:
 User input: ${input}`,
     });
 
-    const parsed = result.object
+    const parsed = result.object;
     // Parse dates as local to avoid timezone shifts
-    const from = parseAsLocalDate(parsed.from)
-    const to = parseAsLocalDate(parsed.to)
+    const from = parseAsLocalDate(parsed.from);
+    const to = parseAsLocalDate(parsed.to);
 
     if (isNaN(from.getTime()) || isNaN(to.getTime())) {
       return null;
@@ -325,9 +325,9 @@ export interface TimeRangePickerProps {
   /** API URL for AI parsing (defaults to window.location.origin) */
   apiUrl?: string;
   /** Project slug for API authentication */
-  projectSlug?: string
+  projectSlug?: string;
   /** Additional class name for the trigger */
-  className?: string
+  className?: string;
 }
 
 function TimeRangePicker({
@@ -504,11 +504,11 @@ function TimeRangePicker({
       <PopoverTrigger asChild disabled={disabled}>
         <div
           className={cn(
-            'relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all outline-none',
-            'border-border hover:border-border/80',
-            disabled && 'cursor-not-allowed opacity-50',
-            timezone && 'pt-4',
-            className
+            "relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all outline-none",
+            "border-border hover:border-border/80",
+            disabled && "cursor-not-allowed opacity-50",
+            timezone && "pt-4",
+            className,
           )}
         >
           {/* Floating timezone legend */}
