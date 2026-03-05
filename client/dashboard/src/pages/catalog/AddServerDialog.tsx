@@ -298,7 +298,7 @@ function SelectRemotesPhaseContent({
                 : "Select all"}
             </button>
           </div>
-          <div className="space-y-2 max-h-64 overflow-y-auto rounded-lg border bg-background p-3">
+          <div className="space-y-2 max-h-64 overflow-y-auto rounded-lg border bg-muted/50 p-3">
             {currentConfig.remotes.map((remote) => {
               const isSelected = currentConfig.selectedRemoteUrls.has(
                 remote.url,
@@ -323,10 +323,10 @@ function SelectRemotesPhaseContent({
                 <label
                   key={remote.url}
                   className={cn(
-                    "flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors border",
+                    "flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors border bg-background",
                     isSelected
                       ? "border-primary/40"
-                      : "border-border hover:bg-muted/30",
+                      : "border-border hover:border-muted-foreground/30",
                   )}
                 >
                   <Checkbox
