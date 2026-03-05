@@ -276,16 +276,6 @@ function SelectRemotesPhaseContent({
               const isSelected = currentConfig.selectedRemoteUrls.has(
                 remote.url,
               );
-              // Extract a readable label from the URL path
-              const urlPath = (() => {
-                try {
-                  const url = new URL(remote.url);
-                  const pathParts = url.pathname.split("/").filter(Boolean);
-                  return pathParts[pathParts.length - 1] || url.pathname;
-                } catch {
-                  return remote.url;
-                }
-              })();
               const transportLabel =
                 remote.transportType === "streamable-http"
                   ? "Streamable HTTP"
@@ -295,6 +285,7 @@ function SelectRemotesPhaseContent({
               return (
                 <label
                   key={remote.url}
+                  title={remote.url}
                   className={cn(
                     "flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors bg-background",
                     isSelected
@@ -308,8 +299,8 @@ function SelectRemotesPhaseContent({
                     className="mt-0.5"
                   />
                   <div className="flex-1 min-w-0">
-                    <Type small className="font-medium">
-                      {urlPath}
+                    <Type small className="font-mono truncate block">
+                      {remote.url}
                     </Type>
                     <Type small muted>
                       {transportLabel}
