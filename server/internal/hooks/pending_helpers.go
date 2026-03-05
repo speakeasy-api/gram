@@ -17,7 +17,7 @@ import (
 // bufferHook stores a hook payload in Redis for later processing
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
 	currentCache, err := s.hookBufferCache.Get(ctx, hookPendingCacheKey(sessionID))
-	if err == nil && currentCache.Payloads == nil {
+	if err != nil || currentCache.Payloads == nil {
 		currentCache = ClaudePayloadCache{
 			SessionID: sessionID,
 			Payloads:  make([]gen.ClaudePayload, 0),
