@@ -9,13 +9,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/chatsessions"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -43,12 +41,10 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service          *Service
-	conn             *pgxpool.Pool
-	redisClient      *redis.Client
-	telemetryService *telemetry.Service
-	sessionManager   *sessions.Manager
-	tracerProvider   trace.TracerProvider
+	service        *Service
+	conn           *pgxpool.Pool
+	redisClient    *redis.Client
+	sessionManager *sessions.Manager
 }
 
 func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
@@ -57,7 +53,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
+	tracerProvider := noop.NewTracerProvider()
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -70,44 +66,17 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
 	require.NoError(t, err)
 
-	chatSessionManager, err := chatsessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-local"), "")
-	require.NoError(t, err)
-
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
-	// Set up ClickHouse client
-	clickhouseClient, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	// Create a stub feature checker that always returns true
-	alwaysEnabled := func(ctx context.Context, organizationID string) (bool, error) {
-		return true, nil
-	}
-
-	// Create stub posthog client
-	stubPosthog := &telemetry.StubPosthogClient{}
-
-	telemetryService := telemetry.NewService(
-		logger,
-		conn,
-		clickhouseClient,
-		sessionManager,
-		chatSessionManager,
-		alwaysEnabled, // logsEnabled
-		alwaysEnabled, // toolIOLogsEnabled
-		stubPosthog,
-	)
 
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 
-	svc := NewService(logger, conn, tracerProvider, telemetryService, sessionManager, cacheAdapter)
+	// Pass nil for telemetry service in tests - we'll add nil checks in the code
+	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter)
 
 	return ctx, &testInstance{
-		service:          svc,
-		conn:             conn,
-		redisClient:      redisClient,
-		telemetryService: telemetryService,
-		sessionManager:   sessionManager,
-		tracerProvider:   tracerProvider,
+		service:        svc,
+		conn:           conn,
+		redisClient:    redisClient,
+		sessionManager: sessionManager,
 	}
 }

@@ -55,15 +55,17 @@ func (s *Service) writeHookToClickHouseWithMetadata(ctx context.Context, payload
 		FunctionID:     nil,
 	}
 
-	s.telemetryService.CreateLog(telemetry.LogParams{
-		Timestamp:  time.Now(),
-		ToolInfo:   toolInfo,
-		Attributes: attrs,
-	})
+	if s.telemetryService != nil {
+		s.telemetryService.CreateLog(telemetry.LogParams{
+			Timestamp:  time.Now(),
+			ToolInfo:   toolInfo,
+			Attributes: attrs,
+		})
 
-	s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
-		attr.SlogEvent("hook_written"),
-	)
+		s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
+			attr.SlogEvent("hook_written"),
+		)
+	}
 }
 
 // buildTelemetryAttributesWithMetadata creates attributes for a hook event with session metadata

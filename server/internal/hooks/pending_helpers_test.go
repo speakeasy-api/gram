@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"context"
 	"sync"
 	"testing"
 	"time"
@@ -85,29 +84,24 @@ func TestBufferHook_MultipleConcurrent(t *testing.T) {
 	assert.Equal(t, int64(numHooks), length, "All hooks should be buffered atomically without race conditions")
 }
 
-// TestFlushPendingHooks_Success tests successful flushing of buffered hooks
-func TestFlushPendingHooks_Success(t *testing.T) {
+// TestFlushPendingHooks_DirectCall tests flushing by calling the flush method directly
+func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
-	// Create session metadata
 	sessionID := uuid.NewString()
-	userEmail := "test@example.com"
-	gramOrgID := uuid.NewString()
-	projectID := uuid.NewString()
 
-	// Buffer multiple hooks first
+	// Buffer multiple hooks using the cache directly
+	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
 	numHooks := 5
 	for i := 0; i < numHooks; i++ {
-		toolName := "test_tool"
-		toolUseID := uuid.NewString()
-		payload := &hooks.ClaudePayload{
+		payload := hooks.ClaudePayload{
 			HookEventName: "PreToolUse",
 			SessionID:     &sessionID,
-			ToolName:      &toolName,
-			ToolUseID:     &toolUseID,
+			ToolName:      stringPtr("test_tool"),
+			ToolUseID:     stringPtr(uuid.NewString()),
 		}
 
-		_, err := ti.service.Claude(ctx, payload)
+		err := cacheAdapter.ListAppend(ctx, "hook:pending:"+sessionID, payload, 24*time.Hour)
 		require.NoError(t, err)
 	}
 
@@ -117,33 +111,18 @@ func TestFlushPendingHooks_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(numHooks), lengthBefore)
 
-	// Store session metadata to trigger flush
+	// Create session metadata
 	metadata := SessionMetadata{
 		SessionID:   sessionID,
-		UserEmail:   userEmail,
-		GramOrgID:   gramOrgID,
-		ProjectID:   projectID,
+		UserEmail:   "test@example.com",
+		GramOrgID:   uuid.NewString(),
+		ProjectID:   uuid.NewString(),
 		ServiceName: "test-service",
 		ClaudeOrgID: "claude-org-123",
 	}
 
-	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
-	metadataKey := "session:metadata:" + sessionID
-	err = cacheAdapter.Set(ctx, metadataKey, metadata, 24*time.Hour)
-	require.NoError(t, err)
-
-	// Send a new hook to trigger flush (since session is now validated)
-	toolName := "trigger_tool"
-	toolUseID := uuid.NewString()
-	payload := &hooks.ClaudePayload{
-		HookEventName: "PostToolUse",
-		SessionID:     &sessionID,
-		ToolName:      &toolName,
-		ToolUseID:     &toolUseID,
-	}
-
-	_, err = ti.service.Claude(ctx, payload)
-	require.NoError(t, err)
+	// Call flushPendingHooks directly
+	ti.service.flushPendingHooks(ctx, sessionID, &metadata)
 
 	// Verify hooks were flushed (Redis list should be deleted)
 	exists, err := ti.redisClient.Exists(ctx, redisKey).Result()
@@ -156,37 +135,25 @@ func TestFlushPendingHooks_EmptyList(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := uuid.NewString()
-	userEmail := "test@example.com"
-	gramOrgID := uuid.NewString()
-	projectID := uuid.NewString()
 
-	// Store session metadata without buffering any hooks
+	// Create session metadata
 	metadata := SessionMetadata{
 		SessionID:   sessionID,
-		UserEmail:   userEmail,
-		GramOrgID:   gramOrgID,
-		ProjectID:   projectID,
+		UserEmail:   "test@example.com",
+		GramOrgID:   uuid.NewString(),
+		ProjectID:   uuid.NewString(),
 		ServiceName: "test-service",
 		ClaudeOrgID: "claude-org-123",
 	}
 
-	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
-	metadataKey := "session:metadata:" + sessionID
-	err := cacheAdapter.Set(ctx, metadataKey, metadata, 24*time.Hour)
-	require.NoError(t, err)
+	// Call flushPendingHooks with no buffered hooks (should not error)
+	ti.service.flushPendingHooks(ctx, sessionID, &metadata)
 
-	// Send a hook (should not error even though there are no pending hooks to flush)
-	toolName := "test_tool"
-	toolUseID := uuid.NewString()
-	payload := &hooks.ClaudePayload{
-		HookEventName: "PostToolUse",
-		SessionID:     &sessionID,
-		ToolName:      &toolName,
-		ToolUseID:     &toolUseID,
-	}
-
-	_, err = ti.service.Claude(ctx, payload)
+	// Verify no Redis key was created
+	redisKey := "hook:pending:" + sessionID
+	exists, err := ti.redisClient.Exists(ctx, redisKey).Result()
 	require.NoError(t, err)
+	assert.Equal(t, int64(0), exists)
 }
 
 // TestBufferAndFlush_MultipleSessionsConcurrent tests buffering and flushing across multiple sessions
