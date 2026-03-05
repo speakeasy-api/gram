@@ -166,11 +166,11 @@ export function ServerCard({
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
           {/* Selection indicator */}
           {isSelected ? (
-            <div className="size-7 rounded-full border-[1.5px] border-[#1DA1F2] flex items-center justify-center">
-              <Check className="size-4 text-[#1DA1F2]" strokeWidth={3} />
+            <div className="size-7 rounded-full bg-[#1DA1F2] flex items-center justify-center">
+              <Check className="size-4 text-white" strokeWidth={5} />
             </div>
           ) : (
-            <div className="size-7 rounded-full border-[1.5px] border-muted-foreground/30" />
+            <div className="size-7 rounded-full border-2 border-muted-foreground/30" />
           )}
 
           {/* View Details button */}

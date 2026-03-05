@@ -99,21 +99,24 @@ export function CommandBar({
     <AnimatePresence>
       {selectedCount > 0 && (
         <motion.div
-          className="z-50 fixed bottom-10"
+          className="z-50 fixed bottom-14"
           style={{ left: leftPosition, x: "-50%" }}
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          initial={{ opacity: 0, scale: 0.8, y: 40 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
+          transition={{
+            duration: 0.4,
+            ease: [0.34, 1.56, 0.64, 1], // Bouncy spring effect
+          }}
         >
           {/* Liquid Glass Container */}
           <div
             ref={barRef}
             data-command-bar
-            className="relative rounded-2xl overflow-hidden"
+            className="relative rounded-2xl overflow-hidden border border-primary/20"
             style={{
               boxShadow:
-                "0 6px 6px rgba(0, 0, 0, 0.2), 0 0 20px rgba(0, 0, 0, 0.1)",
+                "0 8px 32px rgba(0, 0, 0, 0.25), 0 0 40px rgba(59, 130, 246, 0.2), 0 0 80px rgba(59, 130, 246, 0.1)",
             }}
           >
             {/* Glass effect layer - blur + distortion */}
@@ -132,7 +135,7 @@ export function CommandBar({
               }}
             />
             {/* Content layer */}
-            <div className="relative z-10 px-3 py-2 flex items-center gap-3">
+            <div className="relative z-10 px-4 py-3 flex items-center gap-4">
               {/* Clear button */}
               <SimpleTooltip tooltip="Clear selection">
                 <button
@@ -162,7 +165,7 @@ export function CommandBar({
                 className="flex items-center justify-center gap-1.5 min-w-[5.5rem] px-3 py-1.5 rounded-full text-sm font-medium bg-foreground text-background hover:bg-foreground/90 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
-                {selectedCount === 1 ? "Add" : "Add all"}
+                Add to project
               </button>
             </div>
           </div>
