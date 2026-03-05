@@ -15,6 +15,7 @@ import (
 
 // TestBufferHook_AtomicAppend tests that buffering hooks uses atomic RPUSH
 func TestBufferHook_AtomicAppend(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := uuid.NewString()
@@ -49,6 +50,7 @@ func TestBufferHook_AtomicAppend(t *testing.T) {
 
 // TestBufferHook_MultipleConcurrent tests that concurrent buffering works correctly
 func TestBufferHook_MultipleConcurrent(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := uuid.NewString()
@@ -86,6 +88,7 @@ func TestBufferHook_MultipleConcurrent(t *testing.T) {
 
 // TestFlushPendingHooks_DirectCall tests flushing by calling the flush method directly
 func TestFlushPendingHooks_DirectCall(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := uuid.NewString()
@@ -132,6 +135,7 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 
 // TestFlushPendingHooks_EmptyList tests flushing when there are no pending hooks
 func TestFlushPendingHooks_EmptyList(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := uuid.NewString()
@@ -158,6 +162,7 @@ func TestFlushPendingHooks_EmptyList(t *testing.T) {
 
 // TestBufferAndFlush_MultipleSessionsConcurrent tests buffering and flushing across multiple sessions
 func TestBufferAndFlush_MultipleSessionsConcurrent(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
 	numSessions := 10
@@ -201,6 +206,7 @@ func TestBufferAndFlush_MultipleSessionsConcurrent(t *testing.T) {
 
 // TestSessionMetadata_CacheSetGet tests storing and retrieving session metadata
 func TestSessionMetadata_CacheSetGet(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := uuid.NewString()
@@ -236,6 +242,7 @@ func TestSessionMetadata_CacheSetGet(t *testing.T) {
 
 // TestListAppend_TTLBehavior tests that TTL is only set once for new keys
 func TestListAppend_TTLBehavior(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
@@ -265,6 +272,7 @@ func TestListAppend_TTLBehavior(t *testing.T) {
 
 // TestListRange_CorrectDeserialization tests that ListRange properly deserializes msgpack data
 func TestListRange_CorrectDeserialization(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)

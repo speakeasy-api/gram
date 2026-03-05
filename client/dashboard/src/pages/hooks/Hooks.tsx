@@ -803,8 +803,16 @@ function HookLogRow({
   }, [timestamp]);
 
   const serverNameBadge = useMemo(() => {
+    const isLocal = !serverName;
     return (
-      <span className="text-xs font-mono truncate bg-muted px-1 py-1 rounded-sm">
+      <span
+        className={cn(
+          "text-xs font-mono truncate px-2 py-1 rounded-md",
+          isLocal
+            ? "bg-muted/50 text-muted-foreground"
+            : "bg-primary/10 text-primary border border-primary/20 font-medium",
+        )}
+      >
         {serverName || "local"}
       </span>
     );
@@ -830,7 +838,7 @@ function HookLogRow({
       <div className="shrink-0 w-[150px] flex items-center gap-2">
         <HookSourceIcon source={hookSource} className="size-4 shrink-0" />
         {hookSource && (
-          <span className="text-xs text-muted-foreground truncate">
+          <span className="text-xs text-foreground font-medium truncate">
             {hookSource}
           </span>
         )}
