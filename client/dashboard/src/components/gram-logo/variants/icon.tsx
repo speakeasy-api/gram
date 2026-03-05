@@ -1,10 +1,6 @@
 export const GramIcon = () => {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 100 97"
-    >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 100 97">
       <path
         d="M70.9355 91.3402L5.05057 81.9787L0 86.3592L70.9355 96.4351L100 71.2201L94.9557 70.5059L70.9355 91.3402Z"
         fill="#232323"
