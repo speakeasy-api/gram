@@ -1,0 +1,55 @@
+name: Plugin Version Check
+
+on:
+  pull_request:
+    paths:
+      - 'hooks/plugin-claude/**'
+
+jobs:
+  check-version-bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get plugin.json version from PR
+        id: pr-version
+        run: |
+          PR_VERSION=$(jq -r '.version' hooks/plugin-claude/.claude-plugin/plugin.json)
+          echo "version=$PR_VERSION" >> $GITHUB_OUTPUT
+          echo "PR version: $PR_VERSION"
+
+      - name: Get plugin.json version from base branch
+        id: base-version
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          BASE_VERSION=$(git show origin/${{ github.base_ref }}:hooks/plugin-claude/.claude-plugin/plugin.json | jq -r '.version')
+          echo "version=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "Base version: $BASE_VERSION"
+
+      - name: Compare versions
+        env:
+          PR_VERSION: ${{ steps.pr-version.outputs.version }}
+          BASE_VERSION: ${{ steps.base-version.outputs.version }}
+        run: |
+          if [ "$PR_VERSION" == "$BASE_VERSION" ]; then
+            echo "❌ Error: plugin.json version has not been updated"
+            echo "Current version: $BASE_VERSION"
+            echo "Please bump the version in hooks/plugin-claude/.claude-plugin/plugin.json"
+            exit 1
+          else
+            echo "✅ Version has been updated: $BASE_VERSION -> $PR_VERSION"
+          fi
+
+      - name: Validate version format
+        env:
+          VERSION: ${{ steps.pr-version.outputs.version }}
+        run: |
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "❌ Error: Invalid version format: $VERSION"
+            echo "Version must follow semantic versioning (e.g., 0.0.3)"
+            exit 1
+          fi
+          echo "✅ Version format is valid: $VERSION"
