@@ -56,5 +56,5 @@ func registryCacheKey(prefix string, req *http.Request) string {
 		_, _ = fmt.Fprintf(h, "%s=%s\n", k, strings.Join(vals, ","))
 	}
 
-	return fmt.Sprintf("registry:%s:%s:%x", prefix, req.URL.String(), h.Sum(nil))
+	return fmt.Sprintf("registry-v2:%s:%s:%x", prefix, req.URL.String(), h.Sum(nil))
 }

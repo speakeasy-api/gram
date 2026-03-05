@@ -269,7 +269,7 @@ function SelectRemotesPhaseContent({
         </div>
 
         {/* Remote checkboxes */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 mt-2">
           <Label>Select endpoints to include</Label>
           <div className="space-y-2 max-h-64 overflow-y-auto rounded-lg border bg-background p-3">
             {currentConfig.remotes.map((remote) => {
@@ -296,10 +296,8 @@ function SelectRemotesPhaseContent({
                 <label
                   key={remote.url}
                   className={cn(
-                    "flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors bg-background",
-                    isSelected
-                      ? "bg-primary/5 ring-1 ring-primary/20"
-                      : "hover:bg-muted/50",
+                    "flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors",
+                    isSelected ? "ring-1 ring-primary/30" : "hover:bg-muted/30",
                   )}
                 >
                   <Checkbox
@@ -327,7 +325,7 @@ function SelectRemotesPhaseContent({
         </div>
       </Stack>
 
-      <Dialog.Footer>
+      <Dialog.Footer className="pt-4">
         <Button variant="tertiary" onClick={onClose}>
           Cancel
         </Button>

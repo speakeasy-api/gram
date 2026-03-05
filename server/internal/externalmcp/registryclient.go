@@ -54,7 +54,7 @@ func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider,
 
 	if cacheImpl != nil {
 		listCache := cache.NewTypedObjectCache[CachedListServersResponse](
-			logger.With(attr.SlogCacheNamespace("registry-list")),
+			logger.With(attr.SlogCacheNamespace("registry-list-v2")),
 			cacheImpl,
 			cache.SuffixNone,
 		)
@@ -235,6 +235,12 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		if s.Meta.Version.Status == "deleted" {
 			continue
 		}
+
+		// Debug: log what remotes we're getting from the registry
+		c.logger.InfoContext(ctx, "registry server remotes",
+			slog.String("server", s.Server.Name),
+			slog.Int("remotes_count", len(s.Server.Remotes)),
+		)
 
 		var iconURL *string
 		if len(s.Server.Icons) > 0 {
