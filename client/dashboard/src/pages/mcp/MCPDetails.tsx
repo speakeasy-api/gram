@@ -446,8 +446,7 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
   return (
     <>
       <Button
-        variant="secondary"
-        className="bg-foreground hover:bg-foreground/90 text-background hover:text-background"
+        variant="primary"
         onClick={() => setIsServerEnableDialogOpen(true)}
       >
         {toolset.mcpEnabled ? "DISABLE" : "ENABLE"}
