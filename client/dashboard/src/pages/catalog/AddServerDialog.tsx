@@ -1,3 +1,4 @@
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import { cn, getServerURL } from "@/lib/utils";
@@ -25,6 +26,7 @@ import {
   type DeployingPhase,
   type ErrorPhase,
   type ExternalMcpReleaseWorkflow,
+  type SelectRemotesPhase,
   type ServerToolsetStatus,
   useExternalMcpReleaseWorkflow,
 } from "./useExternalMcpReleaseWorkflow";
@@ -77,14 +79,18 @@ export function AddServerDialog({
   if (servers.length === 0) return null;
 
   const isSingle = servers.length === 1;
-  const title =
-    releaseState.phase === "complete"
-      ? "Added to Project"
-      : releaseState.phase === "error"
-        ? "Deployment Error"
-        : isSingle
-          ? "Add to Project"
-          : `Add ${servers.length} servers to project`;
+  const title = (() => {
+    if (releaseState.phase === "complete") return "Added to Project";
+    if (releaseState.phase === "error") return "Deployment Error";
+    if (releaseState.phase === "selectRemotes") {
+      const config =
+        releaseState.multiRemoteConfigs[releaseState.currentServerIndex];
+      return `Configure ${config?.server.title ?? config?.server.registrySpecifier ?? "Server"}`;
+    }
+    return isSingle
+      ? "Add to Project"
+      : `Add ${servers.length} servers to project`;
+  })();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -113,6 +119,8 @@ function PhaseDescription({
   isSingle: boolean;
 }) {
   switch (phase) {
+    case "selectRemotes":
+      return "This server has multiple endpoints. Select which ones to include.";
     case "configure":
       return isSingle
         ? "Add this MCP server to your project."
@@ -136,6 +144,13 @@ function PhaseContent({
   onClose: () => void;
 }) {
   switch (releaseState.phase) {
+    case "selectRemotes":
+      return (
+        <SelectRemotesPhaseContent
+          releaseState={releaseState}
+          onClose={onClose}
+        />
+      );
     case "configure":
       return (
         <ConfigurePhaseContent
@@ -167,6 +182,150 @@ function useTargetRoutes(releaseState: ExternalMcpReleaseWorkflow) {
     releaseState.projectSlug
       ? { projectSlug: releaseState.projectSlug }
       : undefined,
+  );
+}
+
+// --- Select Remotes Phase ---
+
+function SelectRemotesPhaseContent({
+  releaseState,
+  onClose,
+}: {
+  releaseState: SelectRemotesPhase;
+  onClose: () => void;
+}) {
+  const currentConfig =
+    releaseState.multiRemoteConfigs[releaseState.currentServerIndex];
+  if (!currentConfig) return null;
+
+  const totalServers = releaseState.multiRemoteConfigs.length;
+  const currentNumber = releaseState.currentServerIndex + 1;
+  const isLast = releaseState.currentServerIndex === totalServers - 1;
+
+  const handleRemoteToggle = (url: string) => {
+    const newSelected = new Set(currentConfig.selectedRemoteUrls);
+    if (newSelected.has(url)) {
+      newSelected.delete(url);
+    } else {
+      newSelected.add(url);
+    }
+    releaseState.updateCurrentConfig({ selectedRemoteUrls: newSelected });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && releaseState.canProceed) {
+      e.preventDefault();
+      releaseState.nextServer();
+    }
+  };
+
+  return (
+    <div onKeyDown={handleKeyDown}>
+      <Stack gap={4} className="py-2">
+        {/* Progress indicator */}
+        {totalServers > 1 && (
+          <Type small muted>
+            Server {currentNumber} of {totalServers}
+          </Type>
+        )}
+
+        {/* Server icon and info */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            {currentConfig.server.iconUrl ? (
+              <img
+                src={currentConfig.server.iconUrl}
+                alt=""
+                className="w-6 h-6 rounded"
+              />
+            ) : (
+              <ServerIcon className="w-5 h-5 text-muted-foreground" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <Type className="font-medium truncate">
+              {currentConfig.server.title ??
+                currentConfig.server.registrySpecifier}
+            </Type>
+            <Type small muted className="truncate">
+              {currentConfig.remotes.length} endpoints available
+            </Type>
+          </div>
+        </div>
+
+        {/* Name input */}
+        <div className="flex flex-col gap-2">
+          <Label>Source name</Label>
+          <Input
+            placeholder={
+              currentConfig.server.title ??
+              currentConfig.server.registrySpecifier
+            }
+            value={currentConfig.name}
+            onChange={(e) =>
+              releaseState.updateCurrentConfig({ name: e.target.value })
+            }
+          />
+        </div>
+
+        {/* Remote checkboxes */}
+        <div className="flex flex-col gap-2">
+          <Label>Select endpoints to include</Label>
+          <div className="space-y-2 max-h-48 overflow-y-auto rounded-lg border p-3">
+            {currentConfig.remotes.map((remote) => {
+              const isSelected = currentConfig.selectedRemoteUrls.has(
+                remote.url,
+              );
+              return (
+                <label
+                  key={remote.url}
+                  className={cn(
+                    "flex items-start gap-3 p-2 rounded-md cursor-pointer transition-colors",
+                    isSelected
+                      ? "bg-primary/5 border border-primary/20"
+                      : "hover:bg-muted/50",
+                  )}
+                >
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => handleRemoteToggle(remote.url)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <Type small className="font-mono truncate block">
+                      {remote.url}
+                    </Type>
+                    <Type small muted className="capitalize">
+                      {remote.transportType}
+                    </Type>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          {currentConfig.selectedRemoteUrls.size === 0 && (
+            <Type small className="text-destructive">
+              Select at least one endpoint
+            </Type>
+          )}
+        </div>
+      </Stack>
+
+      <Dialog.Footer>
+        <Button variant="tertiary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          disabled={!releaseState.canProceed}
+          onClick={() => releaseState.nextServer()}
+        >
+          <Button.Text>{isLast ? "Continue" : "Next"}</Button.Text>
+          <Button.RightIcon>
+            <ArrowRight className="w-4 h-4" />
+          </Button.RightIcon>
+        </Button>
+      </Dialog.Footer>
+    </div>
   );
 }
 

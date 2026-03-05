@@ -251,6 +251,14 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			})
 		}
 
+		remotes := make([]*types.ExternalMCPRemote, 0, len(s.Server.Remotes))
+		for _, r := range s.Server.Remotes {
+			remotes = append(remotes, &types.ExternalMCPRemote{
+				URL:           r.URL,
+				TransportType: r.Type,
+			})
+		}
+
 		server := &types.ExternalMCPServer{
 			RegistrySpecifier: s.Server.Name,
 			Version:           s.Server.Version,
@@ -260,6 +268,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			IconURL:           iconURL,
 			Meta:              s.Meta,
 			Tools:             tools,
+			Remotes:           remotes,
 		}
 
 		servers = append(servers, server)

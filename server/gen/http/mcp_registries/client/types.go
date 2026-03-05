@@ -226,6 +226,8 @@ type ExternalMCPServerResponseBody struct {
 	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 	// Tools available on the server
 	Tools []*ExternalMCPToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Available remote endpoints for the server
+	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 }
 
 // ExternalMCPToolResponseBody is used to define fields on response body types.
@@ -238,6 +240,15 @@ type ExternalMCPToolResponseBody struct {
 	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
 	// Annotations for the tool
 	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// ExternalMCPRemoteResponseBody is used to define fields on response body
+// types.
+type ExternalMCPRemoteResponseBody struct {
+	// URL of the remote endpoint
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Transport type (sse or streamable-http)
+	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
 }
 
 // NewListCatalogResultOK builds a "mcpRegistries" service "listCatalog"
@@ -684,6 +695,33 @@ func ValidateExternalMCPServerResponseBody(body *ExternalMCPServerResponseBody) 
 	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
+	}
+	for _, e := range body.Remotes {
+		if e != nil {
+			if err2 := ValidateExternalMCPRemoteResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateExternalMCPRemoteResponseBody runs the validations defined on
+// ExternalMCPRemoteResponseBody
+func ValidateExternalMCPRemoteResponseBody(body *ExternalMCPRemoteResponseBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.TransportType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("transport_type", "body"))
+	}
+	if body.URL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
+	}
+	if body.TransportType != nil {
+		if !(*body.TransportType == "sse" || *body.TransportType == "streamable-http") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.transport_type", *body.TransportType, []any{"sse", "streamable-http"}))
+		}
 	}
 	return
 }

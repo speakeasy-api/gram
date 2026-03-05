@@ -74,6 +74,7 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	})
 	Attribute("meta", Any, "Opaque metadata from the registry")
 	Attribute("tools", ArrayOf(ExternalMCPTool), "Tools available on the server")
+	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
 
 	Required("registry_specifier", "version", "description", "registry_id")
 })
@@ -85,4 +86,19 @@ var ExternalMCPTool = Type("ExternalMCPTool", func() {
 	Attribute("description", String, "Description of the tool")
 	Attribute("input_schema", Any, "Input schema for the tool")
 	Attribute("annotations", Any, "Annotations for the tool")
+})
+
+var ExternalMCPRemote = Type("ExternalMCPRemote", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A remote endpoint for an MCP server")
+
+	Attribute("url", String, "URL of the remote endpoint", func() {
+		Format(FormatURI)
+	})
+	Attribute("transport_type", String, "Transport type (sse or streamable-http)", func() {
+		Enum("sse", "streamable-http")
+	})
+
+	Required("url", "transport_type")
 })
