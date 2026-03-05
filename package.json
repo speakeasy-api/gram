@@ -10,7 +10,8 @@
     "dev:docs": "pnpm --filter ./client/docs dev",
     "lint": "tsc --noEmit && pnpm -r lint",
     "build": "pnpm -r build",
-    "type-check": "pnpm -r type-check"
+    "type-check": "pnpm -r type-check",
+    "format": "oxfmt -c .oxfmtrc.json"
   },
   "keywords": [],
   "author": "",

@@ -26,6 +26,33 @@ local linters = new Mapping<String, Step> {
     check = "mise run -q gen:sdk --check"
     fix = "mise run -q gen:sdk"
   }
+  ["oxfmt"] {
+    glob =
+      List(
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.mjs",
+        "**/*.cjs",
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mts",
+        "**/*.cts",
+        "**/*.css",
+        "**/*.scss",
+        "**/*.less",
+        "**/*.html",
+        "**/*.json",
+        "**/*.json5",
+        "**/*.jsonc",
+        "**/*.yaml",
+        "**/*.yml",
+        "**/*.markdown",
+        "**/*.markdown.mdx",
+        "**/*.md",
+      )
+    check = "pnpm oxfmt --check {{files}}"
+    fix = "pnpm oxfmt --write {{files}}"
+  }
 }
 
 hooks {
