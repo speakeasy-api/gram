@@ -18,8 +18,7 @@ import {
   Outlet,
 } from "react-router-dom";
 
-mapboxgl.accessToken =
-  "pk.eyJ1IjoiZXJpY25pbmciLCJhIjoiY21icXlubWM1MDRiczJvb2xwM2p0amNyayJ9.n-3O6JI5nOp_Lw96ZO5vJQ";
+mapboxgl.accessToken = "example-secret";
 
 function fitMapToMarkers(map, coords) {
   if (!map || !coords.length) return;
@@ -29,7 +28,7 @@ function fitMapToMarkers(map, coords) {
   }
   const bounds = coords.reduce(
     (b, c) => b.extend(c),
-    new mapboxgl.LngLatBounds(coords[0], coords[0])
+    new mapboxgl.LngLatBounds(coords[0], coords[0]),
   );
   map.fitBounds(bounds, { padding: 60, animate: true });
 }
@@ -128,7 +127,7 @@ export default function App() {
 
   function panTo(
     coord,
-    { offsetForInspector } = { offsetForInspector: false }
+    { offsetForInspector } = { offsetForInspector: false },
   ) {
     if (!mapObj.current) return;
     const inspectorOffset = offsetForInspector ? getInspectorOffsetPx() : 0;
@@ -283,5 +282,5 @@ function RouterRoot() {
 createRoot(document.getElementById("pizzaz-root")).render(
   <BrowserRouter>
     <RouterRoot />
-  </BrowserRouter>
+  </BrowserRouter>,
 );

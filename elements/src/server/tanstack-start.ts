@@ -30,7 +30,7 @@
  * ```
  */
 
-import { createChatSession, type SessionHandlerOptions } from './core'
+import { createChatSession, type SessionHandlerOptions } from "./core";
 
 /**
  * Create a TanStack Start server route handler for the chat session endpoint.
@@ -45,33 +45,33 @@ export function createTanStackStartHandler(
   options:
     | SessionHandlerOptions
     | ((
-        request: Request
-      ) => SessionHandlerOptions | Promise<SessionHandlerOptions>)
+        request: Request,
+      ) => SessionHandlerOptions | Promise<SessionHandlerOptions>),
 ) {
   return async (request: Request) => {
-    const projectSlug = request.headers.get('gram-project')
+    const projectSlug = request.headers.get("gram-project");
 
     if (!projectSlug) {
       return new Response(
-        JSON.stringify({ error: 'Missing Gram-Project header' }),
+        JSON.stringify({ error: "Missing Gram-Project header" }),
         {
           status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     const sessionOptions =
-      typeof options === 'function' ? await options(request) : options
+      typeof options === "function" ? await options(request) : options;
 
     const result = await createChatSession({
       projectSlug,
       options: sessionOptions,
-    })
+    });
 
     return new Response(result.body, {
       status: result.status,
       headers: result.headers,
-    })
-  }
+    });
+  };
 }

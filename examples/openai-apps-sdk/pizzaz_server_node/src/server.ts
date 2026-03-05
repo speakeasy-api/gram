@@ -14,7 +14,10 @@ async function main() {
   app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Mcp-Protocol-Version");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Mcp-Protocol-Version",
+    );
     if (req.method === "OPTIONS") {
       res.sendStatus(200);
       return;
@@ -34,7 +37,9 @@ async function main() {
     try {
       // Check if this is an initialization request
       const messages = Array.isArray(req.body) ? req.body : [req.body];
-      const isInitRequest = messages.some((msg) => msg?.method === "initialize");
+      const isInitRequest = messages.some(
+        (msg) => msg?.method === "initialize",
+      );
 
       // Get or generate session ID
       let sessionId = req.headers["mcp-session-id"] as string | undefined;
@@ -50,7 +55,7 @@ async function main() {
       // Use stateless mode - no session validation
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
-        enableJsonResponse: true
+        enableJsonResponse: true,
       });
 
       // Manually set the session ID for sticky sessions

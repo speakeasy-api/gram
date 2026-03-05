@@ -1,5 +1,8 @@
 #!/usr/bin/env -S node --enable-source-maps
-import { createServer as createHttpServer, request as httpRequest } from "node:http";
+import {
+  createServer as createHttpServer,
+  request as httpRequest,
+} from "node:http";
 import { URL } from "node:url";
 import { spawn } from "node:child_process";
 import fg from "fast-glob";
@@ -23,7 +26,7 @@ function startVite(configFile: string, port: number) {
         ...process.env,
         VITE_DEV_CLIENT_ORIGIN: `http://localhost:${port}`,
       },
-    }
+    },
   );
 
   const prefix = (s: string) => `[react] ${s}`;
@@ -59,12 +62,15 @@ async function main() {
           entryNames
             .map((n) => `<li><a href="/${n}.js">/${n}.js</a></li>`)
             .join("") +
-          `</ul>`
+          `</ul>`,
       );
       return;
     }
 
-    const targetUrl = new URL(urlObj.pathname + urlObj.search, `http://localhost:${REACT_PORT}`);
+    const targetUrl = new URL(
+      urlObj.pathname + urlObj.search,
+      `http://localhost:${REACT_PORT}`,
+    );
     const opts = {
       method: req.method,
       headers: {

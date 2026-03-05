@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
-import * as React from 'react'
-import { Checkbox } from './checkbox'
-import { Label } from './label'
+import * as React from "react";
+import { Checkbox } from "./checkbox";
+import { Label } from "./label";
 
 export interface CheckboxWrapperProps {
-  label?: string
+  label?: string;
   /** Path for form state management (future use) */
-  valuePath: string
-  defaultChecked?: boolean
+  valuePath: string;
+  defaultChecked?: boolean;
 }
 
 /**
@@ -19,7 +19,7 @@ export function CheckboxWrapper({
   valuePath,
   defaultChecked,
 }: CheckboxWrapperProps) {
-  const id = React.useId()
+  const id = React.useId();
 
   return (
     <div className="flex items-center gap-2">
@@ -35,5 +35,5 @@ export function CheckboxWrapper({
         </Label>
       )}
     </div>
-  )
+  );
 }

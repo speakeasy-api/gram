@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import {
   useEffect,
@@ -7,19 +7,19 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
-} from 'react'
-import { createPortal } from 'react-dom'
-import { PortalContainerProvider } from '@/contexts/portal-container'
-import { useElements } from '@/hooks/useElements'
-import { useThemeProps } from '@/hooks/useThemeProps'
-import { cn } from '@/lib/utils'
-import { ROOT_SELECTOR } from '@/constants/tailwind'
-import elementsStyles from '@/global.css?inline'
+} from "react";
+import { createPortal } from "react-dom";
+import { PortalContainerProvider } from "@/contexts/portal-container";
+import { useElements } from "@/hooks/useElements";
+import { useThemeProps } from "@/hooks/useThemeProps";
+import { cn } from "@/lib/utils";
+import { ROOT_SELECTOR } from "@/constants/tailwind";
+import elementsStyles from "@/global.css?inline";
 
 interface ShadowRootProps {
-  children: ReactNode
-  hostClassName?: string
-  hostStyle?: CSSProperties
+  children: ReactNode;
+  hostClassName?: string;
+  hostStyle?: CSSProperties;
 }
 
 export const ShadowRoot = ({
@@ -27,52 +27,52 @@ export const ShadowRoot = ({
   hostClassName,
   hostStyle,
 }: ShadowRootProps) => {
-  const hostRef = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [shadowRoot, setShadowRoot] = useState<ShadowRoot | null>(null)
-  const { config } = useElements()
-  const themeProps = useThemeProps()
+  const hostRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [shadowRoot, setShadowRoot] = useState<ShadowRoot | null>(null);
+  const { config } = useElements();
+  const themeProps = useThemeProps();
 
   const rootClassName = useMemo(
     () => cn(ROOT_SELECTOR, themeProps.className),
-    [themeProps.className]
-  )
+    [themeProps.className],
+  );
 
   useEffect(() => {
-    const host = hostRef.current
+    const host = hostRef.current;
     if (!host) {
-      return
+      return;
     }
 
-    const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
-    setShadowRoot(root)
-  }, [])
+    const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
+    setShadowRoot(root);
+  }, []);
 
   useEffect(() => {
     if (!shadowRoot) {
-      return
+      return;
     }
 
     const existingStyle = shadowRoot.querySelector<HTMLStyleElement>(
-      'style[data-gram-elements]'
-    )
+      "style[data-gram-elements]",
+    );
 
     if (existingStyle) {
-      existingStyle.textContent = elementsStyles
-      return
+      existingStyle.textContent = elementsStyles;
+      return;
     }
 
-    const styleElement = document.createElement('style')
-    styleElement.setAttribute('data-gram-elements', 'true')
-    styleElement.textContent = elementsStyles
-    shadowRoot.prepend(styleElement)
-  }, [shadowRoot, elementsStyles])
+    const styleElement = document.createElement("style");
+    styleElement.setAttribute("data-gram-elements", "true");
+    styleElement.textContent = elementsStyles;
+    shadowRoot.prepend(styleElement);
+  }, [shadowRoot, elementsStyles]);
 
   return (
     <div
       ref={hostRef}
       className={hostClassName}
-      style={{ isolation: 'isolate', ...hostStyle }}
+      style={{ isolation: "isolate", ...hostStyle }}
     >
       {shadowRoot
         ? createPortal(
@@ -81,8 +81,8 @@ export const ShadowRoot = ({
               className={rootClassName}
               data-radius={config.theme?.radius}
               style={
-                config.variant === 'standalone'
-                  ? { height: '100%', width: '100%' }
+                config.variant === "standalone"
+                  ? { height: "100%", width: "100%" }
                   : undefined
               }
             >
@@ -90,9 +90,9 @@ export const ShadowRoot = ({
                 {children}
               </PortalContainerProvider>
             </div>,
-            shadowRoot
+            shadowRoot,
           )
         : null}
     </div>
-  )
-}
+  );
+};

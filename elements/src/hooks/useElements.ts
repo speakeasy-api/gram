@@ -1,14 +1,14 @@
-import { useContext } from 'react'
-import { ElementsContext } from '@/contexts/contexts'
+import { useContext } from "react";
+import { ElementsContext } from "@/contexts/contexts";
 
 /**
  * @private Internal hook to access the ElementsContext
  *
  */
 export const useElements = () => {
-  const context = useContext(ElementsContext)
+  const context = useContext(ElementsContext);
   if (!context) {
-    throw new Error('useElements must be used within a ElementsProvider')
+    throw new Error("useElements must be used within a ElementsProvider");
   }
-  return context
-}
+  return context;
+};

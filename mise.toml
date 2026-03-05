@@ -122,7 +122,7 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 ## Local development settings ##
 ################################
-JAEGER_WEB_PORT = "16686" 
+JAEGER_WEB_PORT = "16686"
 GRAM_LOG_PRETTY = 1
 ## DO NOT SET THIS VARIABLE WHEN DEPLOYING TO PRODUCTION.
 GRAM_UNSAFE_LOCAL_ENV_PATH = "{{config_root}}/.local.env.json"

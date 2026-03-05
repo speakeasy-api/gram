@@ -7,9 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "eslint --fix",
-    "format": "prettier --write .",
-    "check": "prettier --check . && eslint . && tsc --noEmit"
+    "lint": "eslint --fix"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.11.58",
@@ -49,7 +47,6 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.4",
     "jsdom": "^27.0.0",
-    "prettier": "^3.5.3",
     "typescript": "^5.7.2",
     "vite": "^7.1.7",
     "vitest": "^3.0.5",

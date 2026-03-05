@@ -6,9 +6,8 @@
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
     "build": "vite build",
-    "lint": "prettier --check . && eslint . && tsc -b --noEmit",
+    "lint": "oxfmt --check . && eslint . && tsc -b --noEmit",
     "preview": "vite preview",
-    "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
     "analyze-bundle": "pnpm dlx vite-bundle-visualizer",

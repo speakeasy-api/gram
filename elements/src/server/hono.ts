@@ -18,8 +18,8 @@
  * ```
  */
 
-import type { Context } from 'hono'
-import { createChatSession, type SessionHandlerOptions } from './core'
+import type { Context } from "hono";
+import { createChatSession, type SessionHandlerOptions } from "./core";
 
 /**
  * Create a Hono route handler for the chat session endpoint.
@@ -30,26 +30,26 @@ import { createChatSession, type SessionHandlerOptions } from './core'
 export function createHonoHandler(
   options:
     | SessionHandlerOptions
-    | ((c: Context) => SessionHandlerOptions | Promise<SessionHandlerOptions>)
+    | ((c: Context) => SessionHandlerOptions | Promise<SessionHandlerOptions>),
 ) {
   return async (c: Context) => {
-    const projectSlug = c.req.header('gram-project')
+    const projectSlug = c.req.header("gram-project");
 
     if (!projectSlug) {
-      return c.json({ error: 'Missing Gram-Project header' }, 400)
+      return c.json({ error: "Missing Gram-Project header" }, 400);
     }
 
     const sessionOptions =
-      typeof options === 'function' ? await options(c) : options
+      typeof options === "function" ? await options(c) : options;
 
     const result = await createChatSession({
       projectSlug,
       options: sessionOptions,
-    })
+    });
 
     return new Response(result.body, {
       status: result.status,
       headers: result.headers,
-    })
-  }
+    });
+  };
 }

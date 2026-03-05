@@ -1,10 +1,10 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext } from "react";
 
 export interface ChatIdContextValue {
-  chatId: string | null
+  chatId: string | null;
 }
 
-export const ChatIdContext = createContext<ChatIdContextValue | null>(null)
+export const ChatIdContext = createContext<ChatIdContextValue | null>(null);
 
 /**
  * Hook to access the current chat ID from the Elements context.
@@ -13,9 +13,9 @@ export const ChatIdContext = createContext<ChatIdContextValue | null>(null)
  * @returns The current chat ID, or null if not yet initialized
  */
 export const useChatId = () => {
-  const context = useContext(ChatIdContext)
+  const context = useContext(ChatIdContext);
   if (!context) {
-    throw new Error('useChatId must be used within ElementsProvider')
+    throw new Error("useChatId must be used within ElementsProvider");
   }
-  return context.chatId
-}
+  return context.chatId;
+};

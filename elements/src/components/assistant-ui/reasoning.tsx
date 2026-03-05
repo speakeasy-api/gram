@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { BrainIcon, ChevronDownIcon } from 'lucide-react'
+import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -8,24 +8,24 @@ import {
   useState,
   type FC,
   type PropsWithChildren,
-} from 'react'
+} from "react";
 
 import {
   useAssistantState,
   useScrollLock,
   type ReasoningGroupComponent,
   type ReasoningMessagePartComponent,
-} from '@assistant-ui/react'
+} from "@assistant-ui/react";
 
-import { MarkdownText } from '@/components/assistant-ui/markdown-text'
+import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import { cn } from '@/lib/utils'
+} from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
-const ANIMATION_DURATION = 200
+const ANIMATION_DURATION = 200;
 
 /**
  * Root collapsible container that manages open/closed state and scroll lock.
@@ -33,41 +33,41 @@ const ANIMATION_DURATION = 200
  */
 const ReasoningRoot: FC<
   PropsWithChildren<{
-    className?: string
+    className?: string;
   }>
 > = ({ className, children }) => {
-  const collapsibleRef = useRef<HTMLDivElement>(null)
-  const [isOpen, setIsOpen] = useState(false)
-  const lockScroll = useScrollLock(collapsibleRef, ANIMATION_DURATION)
+  const collapsibleRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const lockScroll = useScrollLock(collapsibleRef, ANIMATION_DURATION);
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
-        lockScroll()
+        lockScroll();
       }
-      setIsOpen(open)
+      setIsOpen(open);
     },
-    [lockScroll]
-  )
+    [lockScroll],
+  );
 
   return (
     <Collapsible
       ref={collapsibleRef}
       open={isOpen}
       onOpenChange={handleOpenChange}
-      className={cn('aui-reasoning-root mb-4 w-full', className)}
+      className={cn("aui-reasoning-root mb-4 w-full", className)}
       style={
         {
-          '--animation-duration': `${ANIMATION_DURATION}ms`,
+          "--animation-duration": `${ANIMATION_DURATION}ms`,
         } as React.CSSProperties
       }
     >
       {children}
     </Collapsible>
-  )
-}
+  );
+};
 
-ReasoningRoot.displayName = 'ReasoningRoot'
+ReasoningRoot.displayName = "ReasoningRoot";
 
 /**
  * Gradient overlay that softens the bottom edge during expand/collapse animations.
@@ -76,19 +76,19 @@ ReasoningRoot.displayName = 'ReasoningRoot'
 const GradientFade: FC<{ className?: string }> = ({ className }) => (
   <div
     className={cn(
-      'aui-reasoning-fade pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16',
-      'bg-[linear-gradient(to_top,var(--color-background),transparent)]',
-      'fade-in-0 animate-in',
-      'group-data-[state=open]/collapsible-content:animate-out',
-      'group-data-[state=open]/collapsible-content:fade-out-0',
-      'group-data-[state=open]/collapsible-content:delay-[calc(var(--animation-duration)*0.75)]', // calc for timing the delay
-      'group-data-[state=open]/collapsible-content:fill-mode-forwards',
-      'duration-(--animation-duration)',
-      'group-data-[state=open]/collapsible-content:duration-(--animation-duration)',
-      className
+      "aui-reasoning-fade pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16",
+      "bg-[linear-gradient(to_top,var(--color-background),transparent)]",
+      "animate-in fade-in-0",
+      "group-data-[state=open]/collapsible-content:animate-out",
+      "group-data-[state=open]/collapsible-content:fade-out-0",
+      "group-data-[state=open]/collapsible-content:delay-[calc(var(--animation-duration)*0.75)]", // calc for timing the delay
+      "group-data-[state=open]/collapsible-content:fill-mode-forwards",
+      "duration-(--animation-duration)",
+      "group-data-[state=open]/collapsible-content:duration-(--animation-duration)",
+      className,
     )}
   />
-)
+);
 
 /**
  * Trigger button for the Reasoning collapsible.
@@ -100,9 +100,9 @@ const ReasoningTrigger: FC<{ active: boolean; className?: string }> = ({
 }) => (
   <CollapsibleTrigger
     className={cn(
-      'aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground -mb-2 flex max-w-[75%] items-center gap-2 py-2 text-sm transition-colors',
+      "aui-reasoning-trigger group/trigger -mb-2 flex max-w-[75%] items-center gap-2 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground",
       className,
-      active && 'shimmer'
+      active && "shimmer",
     )}
   >
     <BrainIcon className="aui-reasoning-trigger-icon size-4 shrink-0" />
@@ -111,7 +111,7 @@ const ReasoningTrigger: FC<{ active: boolean; className?: string }> = ({
       {active ? (
         <span
           aria-hidden
-          className="aui-reasoning-trigger-shimmer shimmer pointer-events-none absolute inset-0 motion-reduce:animate-none"
+          className="aui-reasoning-trigger-shimmer pointer-events-none absolute inset-0 shimmer motion-reduce:animate-none"
         >
           Reasoning
         </span>
@@ -119,14 +119,14 @@ const ReasoningTrigger: FC<{ active: boolean; className?: string }> = ({
     </span>
     <ChevronDownIcon
       className={cn(
-        'aui-reasoning-trigger-chevron mt-0.5 size-4 shrink-0',
-        'transition-transform duration-(--animation-duration) ease-out',
-        'group-data-[state=closed]/trigger:-rotate-90',
-        'group-data-[state=open]/trigger:rotate-0'
+        "aui-reasoning-trigger-chevron mt-0.5 size-4 shrink-0",
+        "transition-transform duration-(--animation-duration) ease-out",
+        "group-data-[state=closed]/trigger:-rotate-90",
+        "group-data-[state=open]/trigger:rotate-0",
       )}
     />
   </CollapsibleTrigger>
-)
+);
 
 /**
  * Collapsible content wrapper that handles height expand/collapse animation.
@@ -135,30 +135,30 @@ const ReasoningTrigger: FC<{ active: boolean; className?: string }> = ({
  */
 const ReasoningContent: FC<
   PropsWithChildren<{
-    className?: string
-    'aria-busy'?: boolean
+    className?: string;
+    "aria-busy"?: boolean;
   }>
-> = ({ className, children, 'aria-busy': ariaBusy }) => (
+> = ({ className, children, "aria-busy": ariaBusy }) => (
   <CollapsibleContent
     className={cn(
-      'aui-reasoning-content text-muted-foreground relative overflow-hidden text-sm outline-none',
-      'group/collapsible-content ease-out',
-      'data-[state=closed]:animate-collapsible-up',
-      'data-[state=open]:animate-collapsible-down',
-      'data-[state=closed]:fill-mode-forwards',
-      'data-[state=closed]:pointer-events-none',
-      'data-[state=open]:duration-(--animation-duration)',
-      'data-[state=closed]:duration-(--animation-duration)',
-      className
+      "aui-reasoning-content relative overflow-hidden text-sm text-muted-foreground outline-none",
+      "group/collapsible-content ease-out",
+      "data-[state=closed]:animate-collapsible-up",
+      "data-[state=open]:animate-collapsible-down",
+      "data-[state=closed]:fill-mode-forwards",
+      "data-[state=closed]:pointer-events-none",
+      "data-[state=open]:duration-(--animation-duration)",
+      "data-[state=closed]:duration-(--animation-duration)",
+      className,
     )}
     aria-busy={ariaBusy}
   >
     {children}
     <GradientFade />
   </CollapsibleContent>
-)
+);
 
-ReasoningContent.displayName = 'ReasoningContent'
+ReasoningContent.displayName = "ReasoningContent";
 
 /**
  * Text content wrapper that animates the reasoning text visibility.
@@ -167,30 +167,30 @@ ReasoningContent.displayName = 'ReasoningContent'
  */
 const ReasoningText: FC<
   PropsWithChildren<{
-    className?: string
+    className?: string;
   }>
 > = ({ className, children }) => (
   <div
     className={cn(
-      'aui-reasoning-text relative z-0 space-y-4 pt-4 pl-6 leading-relaxed',
-      'transform-gpu transition-[transform,opacity]',
-      'group-data-[state=open]/collapsible-content:animate-in',
-      'group-data-[state=closed]/collapsible-content:animate-out',
-      'group-data-[state=open]/collapsible-content:fade-in-0',
-      'group-data-[state=closed]/collapsible-content:fade-out-0',
-      'group-data-[state=open]/collapsible-content:slide-in-from-top-4',
-      'group-data-[state=closed]/collapsible-content:slide-out-to-top-4',
-      'group-data-[state=open]/collapsible-content:duration-(--animation-duration)',
-      'group-data-[state=closed]/collapsible-content:duration-(--animation-duration)',
-      '[&_p]:-mb-2',
-      className
+      "aui-reasoning-text relative z-0 space-y-4 pt-4 pl-6 leading-relaxed",
+      "transform-gpu transition-[transform,opacity]",
+      "group-data-[state=open]/collapsible-content:animate-in",
+      "group-data-[state=closed]/collapsible-content:animate-out",
+      "group-data-[state=open]/collapsible-content:fade-in-0",
+      "group-data-[state=closed]/collapsible-content:fade-out-0",
+      "group-data-[state=open]/collapsible-content:slide-in-from-top-4",
+      "group-data-[state=closed]/collapsible-content:slide-out-to-top-4",
+      "group-data-[state=open]/collapsible-content:duration-(--animation-duration)",
+      "group-data-[state=closed]/collapsible-content:duration-(--animation-duration)",
+      "[&_p]:-mb-2",
+      className,
     )}
   >
     {children}
   </div>
-)
+);
 
-ReasoningText.displayName = 'ReasoningText'
+ReasoningText.displayName = "ReasoningText";
 
 /**
  * Renders a single reasoning part's text with markdown support.
@@ -208,7 +208,7 @@ ReasoningText.displayName = 'ReasoningText'
  * />
  * ```
  */
-const ReasoningImpl: ReasoningMessagePartComponent = () => <MarkdownText />
+const ReasoningImpl: ReasoningMessagePartComponent = () => <MarkdownText />;
 
 /**
  * Collapsible wrapper that groups consecutive reasoning parts together.
@@ -235,13 +235,13 @@ const ReasoningGroupImpl: ReasoningGroupComponent = ({
    * Detects if reasoning is currently streaming within this group's range.
    */
   const isReasoningStreaming = useAssistantState(({ message }) => {
-    if (message.status?.type !== 'running') return false
-    const lastIndex = message.parts.length - 1
-    if (lastIndex < 0) return false
-    const lastType = message.parts[lastIndex]?.type
-    if (lastType !== 'reasoning') return false
-    return lastIndex >= startIndex && lastIndex <= endIndex
-  })
+    if (message.status?.type !== "running") return false;
+    const lastIndex = message.parts.length - 1;
+    if (lastIndex < 0) return false;
+    const lastType = message.parts[lastIndex]?.type;
+    if (lastType !== "reasoning") return false;
+    return lastIndex >= startIndex && lastIndex <= endIndex;
+  });
 
   return (
     <ReasoningRoot>
@@ -251,11 +251,11 @@ const ReasoningGroupImpl: ReasoningGroupComponent = ({
         <ReasoningText>{children}</ReasoningText>
       </ReasoningContent>
     </ReasoningRoot>
-  )
-}
+  );
+};
 
-export const Reasoning = memo(ReasoningImpl)
-Reasoning.displayName = 'Reasoning'
+export const Reasoning = memo(ReasoningImpl);
+Reasoning.displayName = "Reasoning";
 
-export const ReasoningGroup = memo(ReasoningGroupImpl)
-ReasoningGroup.displayName = 'ReasoningGroup'
+export const ReasoningGroup = memo(ReasoningGroupImpl);
+ReasoningGroup.displayName = "ReasoningGroup";

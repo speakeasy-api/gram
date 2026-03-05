@@ -22,15 +22,15 @@ checksum:
 
 signs:
   - cmd: cosign
-    signature: '${artifact}.keyless.sig'
-    certificate: '${artifact}.pem'
+    signature: "${artifact}.keyless.sig"
+    certificate: "${artifact}.pem"
     output: true
     artifacts: checksum
     args:
       - sign-blob
-      - '--output-certificate=${certificate}'
-      - '--output-signature=${signature}'
-      - '${artifact}'
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
       - --yes
 
 snapshot:

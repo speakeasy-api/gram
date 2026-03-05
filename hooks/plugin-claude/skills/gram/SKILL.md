@@ -15,11 +15,13 @@ This skill provides commands for managing the Gram plugin configuration.
 Opens the Gram API keys page in your browser and provides instructions for setting up your GRAM_API_KEY.
 
 **Usage:**
+
 ```
 /gram login
 ```
 
 **What it does:**
+
 1. Opens the Gram dashboard and returns an API key for Claude to save
 
 **After getting your API key:**

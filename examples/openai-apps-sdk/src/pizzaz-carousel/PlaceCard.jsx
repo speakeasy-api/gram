@@ -13,7 +13,9 @@ export default function PlaceCard({ place }) {
         />
       </div>
       <div className="mt-3 flex flex-col flex-1">
-        <div className="text-base font-medium truncate line-clamp-1">{place.name}</div>
+        <div className="text-base font-medium truncate line-clamp-1">
+          {place.name}
+        </div>
         <div className="text-xs mt-1 text-black/60 flex items-center gap-1">
           <Star className="h-3 w-3" aria-hidden="true" />
           {place.rating?.toFixed ? place.rating.toFixed(1) : place.rating}

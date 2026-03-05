@@ -108,15 +108,14 @@ const mathTools = new Gram()
   });
 
 // String tools
-const stringTools = new Gram()
-  .tool({
-    name: "uppercase",
-    description: "Convert string to uppercase",
-    inputSchema: { text: z.string() },
-    async execute(ctx, input) {
-      return ctx.text(input.text.toUpperCase());
-    },
-  });
+const stringTools = new Gram().tool({
+  name: "uppercase",
+  description: "Convert string to uppercase",
+  inputSchema: { text: z.string() },
+  async execute(ctx, input) {
+    return ctx.text(input.text.toUpperCase());
+  },
+});
 
 // Combine both
 const gram = mathTools.extend(stringTools);

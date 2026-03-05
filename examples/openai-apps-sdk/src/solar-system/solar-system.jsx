@@ -76,7 +76,7 @@ function SceneBackground() {
   const { scene } = useThree();
   const texture = useLoader(
     THREE.TextureLoader,
-    "https://persistent.oaistatic.com/ecosys/stars_8k.webp"
+    "https://persistent.oaistatic.com/ecosys/stars_8k.webp",
   );
   useEffect(() => {
     texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -393,7 +393,7 @@ function Sun() {
 function SaturnRing({ planetSize }) {
   const texture = useLoader(
     THREE.TextureLoader,
-    "https://persistent.oaistatic.com/ecosys/saturn_ring.webp"
+    "https://persistent.oaistatic.com/ecosys/saturn_ring.webp",
   );
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]}>
@@ -416,7 +416,7 @@ function Planet({ name, radius, size, speed, isOrbiting, onPlanetClick, ref }) {
   /* texture per planet */
   const texture = useLoader(
     THREE.TextureLoader,
-    `https://persistent.oaistatic.com/ecosys/${name.toLowerCase()}_2k.webp`
+    `https://persistent.oaistatic.com/ecosys/${name.toLowerCase()}_2k.webp`,
   );
 
   useFrame(() => {

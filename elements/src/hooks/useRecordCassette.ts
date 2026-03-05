@@ -19,61 +19,61 @@
  * ```
  */
 
-import { useThreadRuntime } from '@assistant-ui/react'
-import { useCallback, useRef, useState, useSyncExternalStore } from 'react'
-import { recordCassette } from '@/lib/cassette'
+import { useThreadRuntime } from "@assistant-ui/react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { recordCassette } from "@/lib/cassette";
 
 export function useRecordCassette(): {
   /** Whether recording is currently active. */
-  isRecording: boolean
+  isRecording: boolean;
   /** Current number of messages in the thread. */
-  messageCount: number
+  messageCount: number;
   /** Start recording from the current point in the conversation. */
-  startRecording: () => void
+  startRecording: () => void;
   /** Stop recording. */
-  stopRecording: () => void
+  stopRecording: () => void;
   /** Downloads the recorded conversation as a `.cassette.json` file. */
-  download: (filename?: string) => void
+  download: (filename?: string) => void;
 } {
-  const runtime = useThreadRuntime()
-  const [isRecording, setIsRecording] = useState(false)
-  const startIndexRef = useRef(0)
+  const runtime = useThreadRuntime();
+  const [isRecording, setIsRecording] = useState(false);
+  const startIndexRef = useRef(0);
 
   // Subscribe to runtime state to get reactive message count
   const messageCount = useSyncExternalStore(
     (cb) => runtime.subscribe(cb),
-    () => runtime.getState().messages.length
-  )
+    () => runtime.getState().messages.length,
+  );
 
   const startRecording = useCallback(() => {
-    startIndexRef.current = runtime.getState().messages.length
-    setIsRecording(true)
-  }, [runtime])
+    startIndexRef.current = runtime.getState().messages.length;
+    setIsRecording(true);
+  }, [runtime]);
 
   const stopRecording = useCallback(() => {
-    setIsRecording(false)
-  }, [])
+    setIsRecording(false);
+  }, []);
 
   const download = useCallback(
     (filename?: string) => {
-      const state = runtime.getState()
-      const messages = state.messages.slice(startIndexRef.current)
-      const cassette = recordCassette(messages)
+      const state = runtime.getState();
+      const messages = state.messages.slice(startIndexRef.current);
+      const cassette = recordCassette(messages);
 
-      const json = JSON.stringify(cassette, null, 2)
-      const blob = new Blob([json], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
+      const json = JSON.stringify(cassette, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
 
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${filename ?? 'cassette'}.cassette.json`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${filename ?? "cassette"}.cassette.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     },
-    [runtime]
-  )
+    [runtime],
+  );
 
-  return { isRecording, messageCount, startRecording, stopRecording, download }
+  return { isRecording, messageCount, startRecording, stopRecording, download };
 }

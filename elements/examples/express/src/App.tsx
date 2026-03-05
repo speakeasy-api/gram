@@ -1,6 +1,6 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { LoginPage } from './pages/LoginPage'
-import { ChatPage } from './pages/ChatPage'
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { LoginPage } from "./pages/LoginPage";
+import { ChatPage } from "./pages/ChatPage";
 
 export function App() {
   return (
@@ -10,5 +10,5 @@ export function App() {
         <Route path="/chat" element={<ChatPage />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }

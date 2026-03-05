@@ -1,14 +1,14 @@
-import { cn } from '@/lib/utils'
+import { cn } from "@/lib/utils";
 import {
   useAssistantState,
   type ToolCallMessagePartComponent,
-} from '@assistant-ui/react'
-import { useToolApproval } from '@/hooks/useToolApproval'
+} from "@assistant-ui/react";
+import { useToolApproval } from "@/hooks/useToolApproval";
 import {
   ToolUI,
   type ToolStatus,
   type ContentItem,
-} from '@/components/ui/tool-ui'
+} from "@/components/ui/tool-ui";
 
 export const ToolFallback: ToolCallMessagePartComponent = ({
   toolName,
@@ -22,47 +22,47 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
     whitelistTool,
     confirmPendingApproval,
     rejectPendingApproval,
-  } = useToolApproval()
+  } = useToolApproval();
 
   // Check if this specific tool call has a pending approval
-  const pendingApproval = pendingApprovals.get(toolCallId)
-  const message = useAssistantState(({ message }) => message)
-  const toolParts = message.parts.filter((part) => part.type === 'tool-call')
+  const pendingApproval = pendingApprovals.get(toolCallId);
+  const message = useAssistantState(({ message }) => message);
+  const toolParts = message.parts.filter((part) => part.type === "tool-call");
   const matchingMessagePartIndex = toolParts.findIndex(
-    (part) => part.toolCallId === toolCallId
-  )
+    (part) => part.toolCallId === toolCallId,
+  );
 
   const handleApproveOnce = () => {
-    confirmPendingApproval(toolCallId)
-  }
+    confirmPendingApproval(toolCallId);
+  };
 
   const handleApproveForSession = () => {
-    whitelistTool(toolName)
-    confirmPendingApproval(toolCallId)
-  }
+    whitelistTool(toolName);
+    confirmPendingApproval(toolCallId);
+  };
 
   const handleDeny = () => {
-    rejectPendingApproval(toolCallId)
-  }
+    rejectPendingApproval(toolCallId);
+  };
 
   // Map assistant-ui status to ToolUI status
   const getToolStatus = (): ToolStatus => {
-    if (pendingApproval) return 'approval'
-    if (status.type === 'incomplete') return 'error'
-    if (status.type === 'complete') {
+    if (pendingApproval) return "approval";
+    if (status.type === "incomplete") return "error";
+    if (status.type === "complete") {
       // Check if the result indicates an error (e.g., tool was denied)
       if (
         result &&
-        typeof result === 'object' &&
-        'isError' in result &&
+        typeof result === "object" &&
+        "isError" in result &&
         result.isError
       ) {
-        return 'error'
+        return "error";
       }
-      return 'complete'
+      return "complete";
     }
-    return 'running'
-  }
+    return "running";
+  };
 
   // Parse result to structured content if possible
   const getResult = ():
@@ -70,28 +70,28 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
     | Record<string, unknown>
     | { content: ContentItem[] }
     | undefined => {
-    if (result === undefined) return undefined
+    if (result === undefined) return undefined;
     // Check if it's structured content with a content array
     if (
-      typeof result === 'object' &&
+      typeof result === "object" &&
       result !== null &&
-      'content' in result &&
+      "content" in result &&
       Array.isArray((result as { content: unknown }).content)
     ) {
-      return result as { content: ContentItem[] }
+      return result as { content: ContentItem[] };
     }
     // Otherwise return as-is (string or object)
-    if (typeof result === 'string') return result
-    return result as Record<string, unknown>
-  }
+    if (typeof result === "string") return result;
+    return result as Record<string, unknown>;
+  };
 
   return (
     <div
       className={cn(
-        'aui-tool-fallback-root flex w-full flex-col',
+        "aui-tool-fallback-root flex w-full flex-col",
         matchingMessagePartIndex !== -1 &&
           matchingMessagePartIndex !== toolParts.length - 1 &&
-          'border-b'
+          "border-b",
       )}
     >
       <ToolUI
@@ -107,5 +107,5 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
         className="rounded-none border-0"
       />
     </div>
-  )
-}
+  );
+};

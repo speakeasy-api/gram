@@ -6,7 +6,7 @@ import {
 } from "./types";
 
 export function useOpenAiGlobal<K extends keyof OpenAiGlobals>(
-  key: K
+  key: K,
 ): OpenAiGlobals[K] | null {
   return useSyncExternalStore(
     (onChange) => {
@@ -32,6 +32,6 @@ export function useOpenAiGlobal<K extends keyof OpenAiGlobals>(
       };
     },
     () => window.openai?.[key] ?? null,
-    () => window.openai?.[key] ?? null
+    () => window.openai?.[key] ?? null,
   );
 }

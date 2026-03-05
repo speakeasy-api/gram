@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useContext } from 'react'
-import { PortalContainerContext } from '@/contexts/portal-container-context'
+import { useContext } from "react";
+import { PortalContainerContext } from "@/contexts/portal-container-context";
 
 /**
  * Because we do not want Tailwind to leak from the Elements library, and
@@ -11,6 +11,6 @@ import { PortalContainerContext } from '@/contexts/portal-container-context'
  * scope so that they still inherit the Elements CSS
  */
 export function usePortalContainer(): HTMLElement | null {
-  const ref = useContext(PortalContainerContext)
-  return ref?.current ?? null
+  const ref = useContext(PortalContainerContext);
+  return ref?.current ?? null;
 }

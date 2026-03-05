@@ -5,11 +5,13 @@ This Gram Function provides a tool for executing SQL queries against a PlanetSca
 ## Overview
 
 This example demonstrates how to:
+
 - Connect to a PlanetScale database using the serverless driver
 - Execute parameterized SQL queries
 - Work with the Chinook sample dataset
 
 The function provides a single tool:
+
 - `execute_query`: Execute SQL queries against your PlanetScale database
 
 ## Prerequisites
@@ -36,12 +38,14 @@ npm run db:seed
 ```
 
 This script will:
+
 1. Extract the CSV files from `../../assets/chinook_dataset.csv.zip`
 2. Create all necessary tables in your PlanetScale database
 3. Import the data with proper foreign key relationships
 4. Clean up temporary files
 
 The Chinook dataset includes these tables:
+
 - `Artist` - Music artists
 - `Album` - Albums by artists
 - `Track` - Individual tracks on albums

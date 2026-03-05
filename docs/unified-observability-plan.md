@@ -13,14 +13,17 @@ Combine the original raw telemetry logs concept with the new chat-centric resolu
 ## Current State
 
 ### Pages
+
 - **Insights page**: High-level metrics (chat resolutions, tool performance, system health)
 - **Logs page**: Chat sessions table with resolution scores and status filters
 
 ### Copilot Integration
+
 - Insights Copilot: Uses metrics tools (`*metrics*` filter)
 - Logs Copilot: Uses chat tools (`*chat*` filter)
 
 ### Available Tools
+
 - `searchChats` - Search chat session summaries
 - `listChatsWithResolutions` - Chat sessions with resolution data
 - `searchLogs` - Search raw telemetry logs (trace ID, severity, HTTP info, etc.)
@@ -36,17 +39,20 @@ Combine the original raw telemetry logs concept with the new chat-centric resolu
 When a user clicks on a chat session in the Logs table, the detail panel should show:
 
 **Tab 1: Overview (Current)**
+
 - Resolution status and score
 - User goal and resolution notes
 - Message timeline
 
 **Tab 2: Telemetry Logs (New)**
+
 - Raw telemetry logs filtered by `gram_chat_id`
 - Searchable/filterable log entries
 - Log severity indicators (info, warn, error)
 - Expandable log details with full attributes
 
 **Tab 3: Tool Calls (New)**
+
 - Tool calls made during this chat session
 - Success/failure status for each call
 - Latency and duration metrics
@@ -57,15 +63,18 @@ When a user clicks on a chat session in the Logs table, the detail panel should 
 Add a view toggle or tabs at the page level:
 
 **View A: Chat Sessions (Current default)**
+
 - Current table showing chat sessions with resolution scores
 - Filter by resolution status, search, date range
 
 **View B: Raw Telemetry Logs**
+
 - Table of raw log entries (similar to old Logs page)
 - Columns: timestamp, severity, message, trace ID, service, etc.
 - Clicking a log entry could link to the parent chat session
 
 **View C: Tool Calls**
+
 - Table of individual tool calls
 - Columns: timestamp, tool name, status, duration, trace ID
 - Link to parent chat session
@@ -76,17 +85,12 @@ Update the Logs page copilot to include BOTH chat and logs tools:
 
 ```typescript
 // Updated filter to include both chat and telemetry tools
-const combinedToolFilter = useCallback(
-  ({ toolName }: { toolName: string }) => {
-    const name = toolName.toLowerCase();
-    return (
-      name.includes("chat") ||
-      name.includes("logs") ||
-      name.includes("toolcall")
-    );
-  },
-  [],
-);
+const combinedToolFilter = useCallback(({ toolName }: { toolName: string }) => {
+  const name = toolName.toLowerCase();
+  return (
+    name.includes("chat") || name.includes("logs") || name.includes("toolcall")
+  );
+}, []);
 ```
 
 Update system prompt to explain the dual capability:
@@ -114,11 +118,13 @@ Add intuitive drill-down paths:
 ### 5. Search & Filter Integration
 
 Unified search that works across:
+
 - Chat content (messages, user goals)
 - Telemetry logs (log body, attributes)
 - Tool calls (tool names, status)
 
 Could use a global search bar with type facets:
+
 ```
 [ Search across chats, logs, and tools... ] [Type: All ▼] [Date: 30d ▼]
 ```
@@ -128,19 +134,23 @@ Could use a global search bar with type facets:
 ## Implementation Phases
 
 ### Phase 1: Chat Detail Panel Tabs ✅ PRIORITY
+
 - Add Telemetry Logs tab to ChatDetailPanel
 - Add Tool Calls tab to ChatDetailPanel
 - Query logs/tool calls filtered by gram_chat_id
 
 ### Phase 2: Page View Toggle ❌ DROPPED
+
 Raw telemetry logs are supplementary to chat resolutions, not a separate view.
 
 ### Phase 3: Copilot Enhancement ✅ PRIORITY
+
 - Update tool filter to include all relevant tools (chat + logs)
 - Update system prompt for dual capability
 - Add example prompts for cross-domain queries
 
 ### Phase 4: Navigation & Linking ❌ DROPPED
+
 Not needed since Phase 2 was dropped.
 
 ---

@@ -5,7 +5,14 @@ import {
   Reorder,
   useDragControls,
 } from "framer-motion";
-import { List, GripVertical, Plus, Calendar, EllipsisVertical, Trash2 } from "lucide-react";
+import {
+  List,
+  GripVertical,
+  Plus,
+  Calendar,
+  EllipsisVertical,
+  Trash2,
+} from "lucide-react";
 
 // NEW: react-datepicker import (drop-in replacement for native date picker)
 import DatePicker from "react-datepicker";
@@ -110,8 +117,8 @@ function uid() {
     return crypto.randomUUID();
   }
   return (
-    (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).toUpperCase()
-  );
+    Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+  ).toUpperCase();
 }
 
 /** Format YYYY-MM-DD for compact display (e.g., "Aug 12" or "Aug 12, 2026"). */
@@ -182,7 +189,8 @@ function useClickOutside(ref, handler) {
 
 /** Position of a child rect relative to a container rect */
 function getRelativePosition(element, target) {
-  if (!element || !target) throw new Error("Both element and target must be provided");
+  if (!element || !target)
+    throw new Error("Both element and target must be provided");
   const left = element.left - target.left;
   const top = element.top - target.top;
   const width = element.width;
@@ -267,7 +275,9 @@ function DetailsSection({
               ref={noteRef}
               autoFocus={autoFocusNote}
               value={item.note ?? ""}
-              onChange={(e) => updateItemById(item.id, { note: e.target.value })}
+              onChange={(e) =>
+                updateItemById(item.id, { note: e.target.value })
+              }
               placeholder="Add Note"
               className="-ml-1 w-full bg-transparent outline-none border-0 focus:ring-0 focus-visible:ring-0 text-sm text-black/55 placeholder-black/30"
             />
@@ -279,13 +289,7 @@ function DetailsSection({
 }
 
 /* ============================= Item row ============================= */
-function TodoListItem({
-  item,
-  index,
-  isNew,
-  updateItemById,
-  deleteTodoById,
-}) {
+function TodoListItem({ item, index, isNew, updateItemById, deleteTodoById }) {
   const controls = useDragControls();
   const [isFocused, setIsFocused] = useState(isNew ?? false);
   const [isHovered, setIsHovered] = useState(false);
@@ -388,7 +392,12 @@ function TodoListItem({
   /* --------- Custom header for react-datepicker (Prev | Month YYYY | Next) --------- */
   function monthYearLabel(date) {
     try {
-      return date?.toLocaleDateString(undefined, { month: "long", year: "numeric" }) || "";
+      return (
+        date?.toLocaleDateString(undefined, {
+          month: "long",
+          year: "numeric",
+        }) || ""
+      );
     } catch {
       return "";
     }
@@ -462,7 +471,9 @@ function TodoListItem({
           {/* Circle checkbox */}
           <CircleCheckbox
             checked={!!item.isComplete}
-            onToggle={() => updateItemById(item.id, { isComplete: !item.isComplete })}
+            onToggle={() =>
+              updateItemById(item.id, { isComplete: !item.isComplete })
+            }
             label={item.title || "Todo"}
           />
 
@@ -509,7 +520,10 @@ function TodoListItem({
             )}
 
             {/* Absolutely positioned portal directly beneath the controls */}
-            <div id={portalId} className="absolute left-0 top-full mt-1 z-[70]" />
+            <div
+              id={portalId}
+              className="absolute left-0 top-full mt-1 z-[70]"
+            />
 
             {/* Hidden input anchors Popper; calendar content portals into the div above */}
             <DatePicker
@@ -527,7 +541,10 @@ function TodoListItem({
               popperStrategy="absolute"
               popperModifiers={[
                 { name: "offset", options: { offset: [0, 6] } },
-                { name: "preventOverflow", options: { padding: 8, boundary: "clippingParents" } },
+                {
+                  name: "preventOverflow",
+                  options: { padding: 8, boundary: "clippingParents" },
+                },
               ]}
               /* Use our custom header so we can show "Prev" and "Next" at the extremes */
               renderCustomHeader={renderHeader}
@@ -724,7 +741,7 @@ function TodoList({
 function ZoomViewer({ origin, containerRef, children }) {
   const originRect = getRelativePosition(
     origin.current.getBoundingClientRect(),
-    containerRef.current.getBoundingClientRect()
+    containerRef.current.getBoundingClientRect(),
   );
   const initial = {
     left: originRect.left,
@@ -825,13 +842,17 @@ export function App() {
   }, [currentTodoList, currentTodoListRef, rowRefs]);
 
   const todoLists = data.lists;
-  const currentList = currentTodoList != null ? todoLists[currentTodoList] : null;
+  const currentList =
+    currentTodoList != null ? todoLists[currentTodoList] : null;
   const currentItems = currentList ? currentList.todos : [];
 
   /* List-level ops */
   const addList = () => {
     setData((prev) => ({
-      lists: [{ id: uid(), title: "New List", isCurrentlyOpen: false, todos: [] }, ...prev.lists],
+      lists: [
+        { id: uid(), title: "New List", isCurrentlyOpen: false, todos: [] },
+        ...prev.lists,
+      ],
     }));
     setCurrentTodoList((idx) => (idx == null ? idx : idx + 1));
   };
@@ -858,7 +879,10 @@ export function App() {
     setCurrentTodoList(index);
     // Optionally reflect open state back into data
     setData((prev) => {
-      const lists = prev.lists.map((l, i) => ({ ...l, isCurrentlyOpen: i === index }));
+      const lists = prev.lists.map((l, i) => ({
+        ...l,
+        isCurrentlyOpen: i === index,
+      }));
       return { lists };
     });
   };
@@ -931,7 +955,10 @@ export function App() {
     <div className="my-5 antialiased">
       <div
         className="relative max-w/full max-h/full"
-        style={{ width: `${MAX_CARD_WIDTH_REM}rem`, height: `${MAX_CARD_HEIGHT_REM}rem` }}
+        style={{
+          width: `${MAX_CARD_WIDTH_REM}rem`,
+          height: `${MAX_CARD_HEIGHT_REM}rem`,
+        }}
       >
         <BaseCard>
           <div ref={ref} className="w-full h-full pt-9">
@@ -945,12 +972,21 @@ export function App() {
                   setCurrentTodoList(null);
                   setCurrentTodoListRef(null);
                   // Clear open state on lists
-                  setData((prev) => ({ lists: prev.lists.map((l) => ({ ...l, isCurrentlyOpen: false })) }));
+                  setData((prev) => ({
+                    lists: prev.lists.map((l) => ({
+                      ...l,
+                      isCurrentlyOpen: false,
+                    })),
+                  }));
                 }}
                 className="cursor-pointer"
               />
               <div className="flex-auto" />
-              <Plus size={20} onClick={currentList ? addTodo : addList} className="cursor-pointer" />
+              <Plus
+                size={20}
+                onClick={currentList ? addTodo : addList}
+                className="cursor-pointer"
+              />
             </div>
 
             {/* Lists overview */}
@@ -963,7 +999,9 @@ export function App() {
               className="w-full h-full"
             >
               <div className="p-5">
-                <h1 className="font-medium text-2xl tracking-tight">My Lists</h1>
+                <h1 className="font-medium text-2xl tracking-tight">
+                  My Lists
+                </h1>
               </div>
               {todoLists.map((list, idx) => (
                 <TodoListGroup
@@ -981,8 +1019,8 @@ export function App() {
 
             {/* Detail view; if we have an origin ref, use fancy ZoomViewer, else render directly */}
             <AnimatePresence mode="popLayout">
-              {currentList != null && (
-                currentTodoListRef ? (
+              {currentList != null &&
+                (currentTodoListRef ? (
                   <ZoomViewer origin={currentTodoListRef} containerRef={ref}>
                     <TodoList
                       list={currentList}
@@ -1012,8 +1050,7 @@ export function App() {
                       recentlyAddedId={recentlyAddedId}
                     />
                   </motion.div>
-                )
-              )}
+                ))}
             </AnimatePresence>
           </div>
         </BaseCard>

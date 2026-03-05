@@ -35,6 +35,7 @@ cp test-config.example.json test-config.json
 ```
 
 Edit `test-config.json` to configure:
+
 - **model**: Claude model to use (default: `claude-3-5-sonnet-20241022`)
 - **numIterations**: Number of times to run each prompt (default: `1`)
 - **mcpServers**: Array of MCP servers to test
@@ -164,6 +165,7 @@ When `numIterations` is set to more than 1, each prompt will be run multiple tim
 - Detect outliers in execution time
 
 Example analysis (outside this tool):
+
 ```javascript
 // Group by promptId and calculate averages
 const byPrompt = results.reduce((acc, r) => {
@@ -173,7 +175,8 @@ const byPrompt = results.reduce((acc, r) => {
 }, {});
 
 Object.entries(byPrompt).forEach(([promptId, runs]) => {
-  const avgTokens = runs.reduce((sum, r) => sum + r.totalTokens, 0) / runs.length;
+  const avgTokens =
+    runs.reduce((sum, r) => sum + r.totalTokens, 0) / runs.length;
   console.log(`${promptId}: avg ${avgTokens.toFixed(2)} tokens`);
 });
 ```

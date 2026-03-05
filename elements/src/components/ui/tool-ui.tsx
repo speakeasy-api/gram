@@ -1,6 +1,6 @@
-import * as React from 'react'
-import { useState, useEffect } from 'react'
-import { cva } from 'class-variance-authority'
+import * as React from "react";
+import { useState, useEffect } from "react";
+import { cva } from "class-variance-authority";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -9,94 +9,98 @@ import {
   CopyIcon,
   LoaderIcon,
   XIcon,
-} from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { codeToHtml, BundledLanguage } from 'shiki'
-import { Button } from './button'
-import { Popover, PopoverAnchor, PopoverContent } from './popover'
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { codeToHtml, BundledLanguage } from "shiki";
+import { Button } from "./button";
+import { Popover, PopoverAnchor, PopoverContent } from "./popover";
 
 /* -----------------------------------------------------------------------------
  * Status indicator styles
  * -------------------------------------------------------------------------- */
 
 const statusVariants = cva(
-  'flex size-5 items-center justify-center rounded-full',
+  "flex size-5 items-center justify-center rounded-full",
   {
     variants: {
       status: {
-        pending: 'border border-dashed border-muted-foreground/50',
-        running: 'text-primary',
-        complete: 'text-green-600 dark:text-green-500',
-        error: 'text-destructive',
-        approval: 'text-amber-500',
+        pending: "border border-dashed border-muted-foreground/50",
+        running: "text-primary",
+        complete: "text-green-600 dark:text-green-500",
+        error: "text-destructive",
+        approval: "text-amber-500",
       },
     },
     defaultVariants: {
-      status: 'pending',
+      status: "pending",
     },
-  }
-)
+  },
+);
 
 /* -----------------------------------------------------------------------------
  * Types
  * -------------------------------------------------------------------------- */
 
-type ToolStatus = 'pending' | 'running' | 'complete' | 'error' | 'approval'
+type ToolStatus = "pending" | "running" | "complete" | "error" | "approval";
 
 type ContentItem =
-  | { type: 'text'; text: string; _meta?: { 'getgram.ai/mime-type'?: string } }
-  | { type: 'image'; data: string; _meta?: { 'getgram.ai/mime-type'?: string } }
+  | { type: "text"; text: string; _meta?: { "getgram.ai/mime-type"?: string } }
+  | {
+      type: "image";
+      data: string;
+      _meta?: { "getgram.ai/mime-type"?: string };
+    };
 
 /** MCP tool annotations providing hints about tool behavior */
 interface ToolAnnotations {
   /** Human-readable display name for the tool */
-  title?: string
+  title?: string;
   /** If true, the tool does not modify its environment */
-  readOnlyHint?: boolean
+  readOnlyHint?: boolean;
   /** If true, the tool may perform destructive updates */
-  destructiveHint?: boolean
+  destructiveHint?: boolean;
   /** If true, repeated calls with same args have no additional effect */
-  idempotentHint?: boolean
+  idempotentHint?: boolean;
   /** If true, tool interacts with external entities */
-  openWorldHint?: boolean
+  openWorldHint?: boolean;
 }
 
 interface ToolUIProps {
   /** Display name of the tool */
-  name: string
+  name: string;
   /** Optional icon to display (defaults to first letter of name) */
-  icon?: React.ReactNode
+  icon?: React.ReactNode;
   /** Provider/source name (e.g., "Notion", "GitHub") */
-  provider?: string
+  provider?: string;
   /** Current status of the tool execution */
-  status?: ToolStatus
+  status?: ToolStatus;
   /** Request/input data - can be string or object */
-  request?: string | Record<string, unknown>
+  request?: string | Record<string, unknown>;
   /** Result/output data - can be string, object, or structured content array */
-  result?: string | Record<string, unknown> | { content: ContentItem[] }
+  result?: string | Record<string, unknown> | { content: ContentItem[] };
   /** Whether the tool card starts expanded */
-  defaultExpanded?: boolean
+  defaultExpanded?: boolean;
   /** Additional class names */
-  className?: string
+  className?: string;
   /** MCP tool annotations */
-  annotations?: ToolAnnotations
+  annotations?: ToolAnnotations;
   /** Approval callbacks */
-  onApproveOnce?: () => void
-  onApproveForSession?: () => void
-  onDeny?: () => void
+  onApproveOnce?: () => void;
+  onApproveForSession?: () => void;
+  onDeny?: () => void;
 }
 
 interface ToolUISectionProps {
   /** Section title */
-  title: string
+  title: string;
   /** Content to display - string or object (will be JSON stringified) */
-  content: string | Record<string, unknown> | { content: ContentItem[] }
+  content: string | Record<string, unknown> | { content: ContentItem[] };
   /** Whether section starts expanded */
-  defaultExpanded?: boolean
+  defaultExpanded?: boolean;
   /** Enable syntax highlighting */
-  highlightSyntax?: boolean
+  highlightSyntax?: boolean;
   /** Language hint for syntax highlighting */
-  language?: BundledLanguage
+  language?: BundledLanguage;
 }
 
 /* -----------------------------------------------------------------------------
@@ -104,51 +108,51 @@ interface ToolUISectionProps {
  * -------------------------------------------------------------------------- */
 
 function getLanguageFromMimeType(
-  mimeType: string
+  mimeType: string,
 ): BundledLanguage | undefined {
   switch (mimeType) {
-    case 'text/markdown':
-      return 'markdown'
-    case 'text/html':
-      return 'html'
-    case 'text/css':
-      return 'css'
-    case 'application/json':
-      return 'json'
-    case 'text/javascript':
-      return 'javascript'
-    case 'text/typescript':
-      return 'typescript'
-    case 'text/python':
-      return 'python'
+    case "text/markdown":
+      return "markdown";
+    case "text/html":
+      return "html";
+    case "text/css":
+      return "css";
+    case "application/json":
+      return "json";
+    case "text/javascript":
+      return "javascript";
+    case "text/typescript":
+      return "typescript";
+    case "text/python":
+      return "python";
     default:
-      return undefined
+      return undefined;
   }
 }
 
 function formatTextForLanguage(
   text: string,
-  language: BundledLanguage | undefined
+  language: BundledLanguage | undefined,
 ): string {
-  if (language === 'json') {
+  if (language === "json") {
     try {
-      return JSON.stringify(JSON.parse(text), null, 2)
+      return JSON.stringify(JSON.parse(text), null, 2);
     } catch {
-      return text
+      return text;
     }
   }
-  return text
+  return text;
 }
 
 function isStructuredContent(
-  content: unknown
+  content: unknown,
 ): content is { content: ContentItem[] } {
   return (
-    typeof content === 'object' &&
+    typeof content === "object" &&
     content !== null &&
-    'content' in content &&
+    "content" in content &&
     Array.isArray((content as { content: unknown }).content)
-  )
+  );
 }
 
 /* -----------------------------------------------------------------------------
@@ -158,31 +162,31 @@ function isStructuredContent(
 function StatusIndicator({ status }: { status: ToolStatus }) {
   return (
     <div className={cn(statusVariants({ status }))}>
-      {status === 'pending' && null}
-      {status === 'running' && <LoaderIcon className="size-4 animate-spin" />}
-      {status === 'complete' && <CheckIcon className="size-4" />}
-      {status === 'error' && <XIcon className="size-4" />}
-      {status === 'approval' && (
-        <LoaderIcon className="text-muted-foreground size-4 animate-spin" />
+      {status === "pending" && null}
+      {status === "running" && <LoaderIcon className="size-4 animate-spin" />}
+      {status === "complete" && <CheckIcon className="size-4" />}
+      {status === "error" && <XIcon className="size-4" />}
+      {status === "approval" && (
+        <LoaderIcon className="size-4 animate-spin text-muted-foreground" />
       )}
     </div>
-  )
+  );
 }
 
 function CopyButton({ content }: { content: string }) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    await navigator.clipboard.writeText(content)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+    e.stopPropagation();
+    await navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <button
       onClick={handleCopy}
-      className="text-muted-foreground hover:bg-accent hover:text-foreground rounded p-1 transition-colors"
+      className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       aria-label="Copy to clipboard"
     >
       {copied ? (
@@ -191,7 +195,7 @@ function CopyButton({ content }: { content: string }) {
         <CopyIcon className="size-4" />
       )}
     </button>
-  )
+  );
 }
 
 /* -----------------------------------------------------------------------------
@@ -199,19 +203,19 @@ function CopyButton({ content }: { content: string }) {
  * -------------------------------------------------------------------------- */
 
 /** Max characters to send through shiki — above this we skip highlighting. */
-const SHIKI_CHAR_LIMIT = 8_000
+const SHIKI_CHAR_LIMIT = 8_000;
 /** Max lines shown in the collapsed preview. */
-const PREVIEW_LINE_LIMIT = 50
+const PREVIEW_LINE_LIMIT = 50;
 
 function truncateToLines(text: string, maxLines: number) {
-  let pos = 0
+  let pos = 0;
   for (let i = 0; i < maxLines; i++) {
-    const next = text.indexOf('\n', pos)
-    if (next === -1) return { text, truncated: false, totalLines: i + 1 }
-    pos = next + 1
+    const next = text.indexOf("\n", pos);
+    if (next === -1) return { text, truncated: false, totalLines: i + 1 };
+    pos = next + 1;
   }
-  const totalLines = text.split('\n').length
-  return { text: text.slice(0, pos), truncated: true, totalLines }
+  const totalLines = text.split("\n").length;
+  return { text: text.slice(0, pos), truncated: true, totalLines };
 }
 
 function SyntaxHighlightedCode({
@@ -219,43 +223,43 @@ function SyntaxHighlightedCode({
   language,
   className,
 }: {
-  text: string
-  language?: BundledLanguage
-  className?: string
+  text: string;
+  language?: BundledLanguage;
+  className?: string;
 }) {
-  const [highlightedCode, setHighlightedCode] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState(false)
+  const [highlightedCode, setHighlightedCode] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const preview = React.useMemo(
     () => truncateToLines(text, PREVIEW_LINE_LIMIT),
-    [text]
-  )
-  const displayText = expanded ? text : preview.text
-  const canHighlight = displayText.length <= SHIKI_CHAR_LIMIT
+    [text],
+  );
+  const displayText = expanded ? text : preview.text;
+  const canHighlight = displayText.length <= SHIKI_CHAR_LIMIT;
 
   useEffect(() => {
-    setHighlightedCode(null)
-    if (!language || !canHighlight) return
-    let cancelled = false
+    setHighlightedCode(null);
+    if (!language || !canHighlight) return;
+    let cancelled = false;
     codeToHtml(displayText, {
       lang: language,
-      theme: 'github-dark-default',
-      rootStyle: 'background-color: transparent;',
+      theme: "github-dark-default",
+      rootStyle: "background-color: transparent;",
       transformers: [
         {
           pre(node) {
             node.properties.class =
-              'w-full py-3 px-4 max-h-[300px] overflow-y-auto whitespace-pre-wrap text-left text-sm'
+              "w-full py-3 px-4 max-h-[300px] overflow-y-auto whitespace-pre-wrap text-left text-sm";
           },
         },
       ],
     }).then((html) => {
-      if (!cancelled) setHighlightedCode(html)
-    })
+      if (!cancelled) setHighlightedCode(html);
+    });
     return () => {
-      cancelled = true
-    }
-  }, [displayText, language, canHighlight])
+      cancelled = true;
+    };
+  }, [displayText, language, canHighlight]);
 
   const showMoreButton = preview.truncated && !expanded && (
     <button
@@ -265,28 +269,28 @@ function SyntaxHighlightedCode({
     >
       Show all {preview.totalLines} lines…
     </button>
-  )
+  );
 
   if (!canHighlight || !highlightedCode) {
     return (
-      <div className={cn('w-full', className)}>
+      <div className={cn("w-full", className)}>
         <pre className="max-h-[300px] w-full overflow-y-auto bg-slate-800/90 px-4 py-3 text-sm whitespace-pre-wrap text-slate-100">
           {displayText}
         </pre>
         {showMoreButton}
       </div>
-    )
+    );
   }
 
   return (
-    <div className={cn('w-full', className)}>
+    <div className={cn("w-full", className)}>
       <div
         className="w-full bg-slate-800/90"
         dangerouslySetInnerHTML={{ __html: highlightedCode }}
       />
       {showMoreButton}
     </div>
-  )
+  );
 }
 
 /* -----------------------------------------------------------------------------
@@ -294,7 +298,7 @@ function SyntaxHighlightedCode({
  * -------------------------------------------------------------------------- */
 
 function ImageContent({ data }: { data: string }) {
-  const image = `data:image/png;base64,${data}`
+  const image = `data:image/png;base64,${data}`;
   return (
     <div
       className="flex items-center justify-center rounded-lg p-5"
@@ -303,13 +307,13 @@ function ImageContent({ data }: { data: string }) {
                           linear-gradient(135deg, #ccc 25%, transparent 25%),
                           linear-gradient(45deg, transparent 75%, #ccc 75%),
                           linear-gradient(135deg, transparent 75%, #ccc 75%)`,
-        backgroundSize: '25px 25px',
-        backgroundPosition: '0 0, 12.5px 0, 12.5px -12.5px, 0px 12.5px',
+        backgroundSize: "25px 25px",
+        backgroundPosition: "0 0, 12.5px 0, 12.5px -12.5px, 0px 12.5px",
       }}
     >
       <img src={image} className="max-h-[300px] max-w-full object-contain" />
     </div>
-  )
+  );
 }
 
 /* -----------------------------------------------------------------------------
@@ -319,27 +323,27 @@ function ImageContent({ data }: { data: string }) {
 function StructuredResultContent({
   content,
 }: {
-  content: { content: ContentItem[] }
+  content: { content: ContentItem[] };
 }) {
   return (
     <div className="w-full">
       {content.content.map((item, index) => {
         switch (item.type) {
-          case 'text': {
+          case "text": {
             const language = getLanguageFromMimeType(
-              item._meta?.['getgram.ai/mime-type'] ?? 'text/plain'
-            )
-            const formattedText = formatTextForLanguage(item.text, language)
+              item._meta?.["getgram.ai/mime-type"] ?? "text/plain",
+            );
+            const formattedText = formatTextForLanguage(item.text, language);
             return (
               <SyntaxHighlightedCode
                 key={index}
                 text={formattedText}
                 language={language}
               />
-            )
+            );
           }
-          case 'image': {
-            return <ImageContent key={index} data={item.data} />
+          case "image": {
+            return <ImageContent key={index} data={item.data} />;
           }
           default:
             return (
@@ -349,11 +353,11 @@ function StructuredResultContent({
               >
                 {JSON.stringify(item, null, 2)}
               </pre>
-            )
+            );
         }
       })}
     </div>
-  )
+  );
 }
 
 /* -----------------------------------------------------------------------------
@@ -365,53 +369,53 @@ function ToolUISection({
   content,
   defaultExpanded = false,
   highlightSyntax = true,
-  language = 'json',
+  language = "json",
 }: ToolUISectionProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   // For structured content, we don't stringify it
-  const isStructured = isStructuredContent(content)
+  const isStructured = isStructuredContent(content);
   const contentString = isStructured
     ? JSON.stringify(content, null, 2)
-    : typeof content === 'string'
+    : typeof content === "string"
       ? content
-      : JSON.stringify(content, null, 2)
+      : JSON.stringify(content, null, 2);
 
   return (
-    <div data-slot="tool-ui-section" className="border-border border-t">
+    <div data-slot="tool-ui-section" className="border-t border-border">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="hover:bg-accent/50 flex w-full cursor-pointer items-center justify-between px-5 py-2.5 text-left transition-colors"
+        className="flex w-full cursor-pointer items-center justify-between px-5 py-2.5 text-left transition-colors hover:bg-accent/50"
       >
-        <span className="text-muted-foreground text-sm">{title}</span>
+        <span className="text-sm text-muted-foreground">{title}</span>
         <div className="flex items-center gap-1">
           <CopyButton content={contentString} />
           <ChevronRightIcon
             className={cn(
-              'text-muted-foreground size-4 transition-transform duration-200',
-              isExpanded && 'rotate-90'
+              "size-4 text-muted-foreground transition-transform duration-200",
+              isExpanded && "rotate-90",
             )}
           />
         </div>
       </button>
       {isExpanded && (
-        <div className="border-border border-t">
+        <div className="border-t border-border">
           {isStructured ? (
             <StructuredResultContent content={content} />
           ) : highlightSyntax ? (
             <SyntaxHighlightedCode text={contentString} language={language} />
           ) : (
-            <pre className="text-foreground overflow-x-auto px-4 py-3 text-sm whitespace-pre-wrap">
+            <pre className="overflow-x-auto px-4 py-3 text-sm whitespace-pre-wrap text-foreground">
               {contentString}
             </pre>
           )}
         </div>
       )}
     </div>
-  )
+  );
 }
 
-type ApprovalMode = 'one-time' | 'for-session'
+type ApprovalMode = "one-time" | "for-session";
 
 /* -----------------------------------------------------------------------------
  * ToolUI - Main component
@@ -421,7 +425,7 @@ function ToolUI({
   name,
   icon,
   provider,
-  status = 'complete',
+  status = "complete",
   request,
   result,
   defaultExpanded = false,
@@ -432,40 +436,42 @@ function ToolUI({
   onDeny,
 }: ToolUIProps) {
   // Use annotation title if available, otherwise fall back to name
-  const displayName = annotations?.title || name
+  const displayName = annotations?.title || name;
   const isApprovalPending =
-    status === 'approval' && onApproveOnce !== undefined && onDeny !== undefined
+    status === "approval" &&
+    onApproveOnce !== undefined &&
+    onDeny !== undefined;
   // Auto-expand when approval is pending, collapse when approved
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
-  const hasContent = request !== undefined || result !== undefined
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const hasContent = request !== undefined || result !== undefined;
 
   // Track approval mode: 'one-time' or 'for-session'
-  const [approvalMode, setApprovalMode] = useState<ApprovalMode>('one-time')
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const dropdownTriggerRef = React.useRef<HTMLButtonElement>(null)
+  const [approvalMode, setApprovalMode] = useState<ApprovalMode>("one-time");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownTriggerRef = React.useRef<HTMLButtonElement>(null);
 
   // Collapse when transitioning from approval to non-approval (i.e., when approved/denied)
   useEffect(() => {
     if (!isApprovalPending && isExpanded && !defaultExpanded) {
-      setIsExpanded(false)
+      setIsExpanded(false);
     }
-  }, [isApprovalPending])
+  }, [isApprovalPending]);
 
   // Handle approve based on selected mode
   const handleApprove = () => {
-    if (approvalMode === 'for-session' && onApproveForSession) {
-      onApproveForSession()
+    if (approvalMode === "for-session" && onApproveForSession) {
+      onApproveForSession();
     } else if (onApproveOnce) {
-      onApproveOnce()
+      onApproveOnce();
     }
-  }
+  };
 
   return (
     <div
       data-slot="tool-ui"
       className={cn(
-        'border-border bg-card @container overflow-hidden rounded-lg border',
-        className
+        "@container overflow-hidden rounded-lg border border-border bg-card",
+        className,
       )}
     >
       {/* Header with provider */}
@@ -473,7 +479,7 @@ function ToolUI({
         <div
           data-slot="tool-ui-provider"
           className={cn(
-            'border-border flex items-center gap-2 border-b px-4 py-2.5'
+            "flex items-center gap-2 border-b border-border px-4 py-2.5",
           )}
         >
           {icon ? (
@@ -481,7 +487,7 @@ function ToolUI({
               {icon}
             </span>
           ) : (
-            <span className="bg-muted flex size-5 items-center justify-center rounded text-xs font-medium">
+            <span className="flex size-5 items-center justify-center rounded bg-muted text-xs font-medium">
               {provider.charAt(0).toUpperCase()}
             </span>
           )}
@@ -494,15 +500,15 @@ function ToolUI({
         onClick={() => hasContent && setIsExpanded(!isExpanded)}
         disabled={!hasContent}
         className={cn(
-          'flex w-full items-center gap-2 px-4 py-3 text-left',
-          hasContent && 'hover:bg-accent/50 cursor-pointer transition-colors'
+          "flex w-full items-center gap-2 px-4 py-3 text-left",
+          hasContent && "cursor-pointer transition-colors hover:bg-accent/50",
         )}
       >
         <StatusIndicator status={status} />
         <span
           className={cn(
-            'flex-1 text-sm',
-            !provider && isApprovalPending && 'shimmer'
+            "flex-1 text-sm",
+            !provider && isApprovalPending && "shimmer",
           )}
         >
           {displayName}
@@ -510,8 +516,8 @@ function ToolUI({
         {hasContent && (
           <ChevronDownIcon
             className={cn(
-              'text-muted-foreground size-4 transition-transform duration-200',
-              isExpanded && 'rotate-180'
+              "size-4 text-muted-foreground transition-transform duration-200",
+              isExpanded && "rotate-180",
             )}
           />
         )}
@@ -545,14 +551,14 @@ function ToolUI({
       {isApprovalPending && (
         <div
           data-slot="tool-ui-approval-actions"
-          className="border-border flex flex-col gap-2 border-t px-4 py-3 @[320px]:flex-row @[320px]:items-center @[320px]:justify-end"
+          className="flex flex-col gap-2 border-t border-border px-4 py-3 @[320px]:flex-row @[320px]:items-center @[320px]:justify-end"
         >
           <div className="flex items-center gap-2 @[320px]:mr-auto">
-            <span className="text-muted-foreground text-sm">
+            <span className="text-sm text-muted-foreground">
               This tool requires approval
             </span>
             {annotations?.readOnlyHint && (
-              <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                 Read-only
               </span>
             )}
@@ -580,16 +586,16 @@ function ToolUI({
                 onClick={handleApprove}
                 className="flex cursor-pointer justify-between gap-1 rounded-r-none bg-emerald-600 hover:bg-emerald-700"
               >
-                <CheckIcon className="dark:text-foreground mr-1 size-3" />
+                <CheckIcon className="mr-1 size-3 dark:text-foreground" />
 
-                <span className="dark:text-foreground @[320px]:hidden">
+                <span className="@[320px]:hidden dark:text-foreground">
                   Approve
                 </span>
                 {/* The min-width is needed to prevent the button from shifting when the text changes */}
-                <span className="dark:text-foreground hidden min-w-[110px] @[320px]:inline">
-                  {approvalMode === 'one-time'
-                    ? 'Approve this time'
-                    : 'Approve always'}
+                <span className="hidden min-w-[110px] @[320px]:inline dark:text-foreground">
+                  {approvalMode === "one-time"
+                    ? "Approve this time"
+                    : "Approve always"}
                 </span>
               </Button>
               <Popover open={isDropdownOpen}>
@@ -602,9 +608,9 @@ function ToolUI({
                     onClick={() => setIsDropdownOpen((prev) => !prev)}
                   >
                     {isDropdownOpen ? (
-                      <ChevronUpIcon className="dark:text-foreground size-3" />
+                      <ChevronUpIcon className="size-3 dark:text-foreground" />
                     ) : (
-                      <ChevronDownIcon className="dark:text-foreground size-3" />
+                      <ChevronDownIcon className="size-3 dark:text-foreground" />
                     )}
                   </Button>
                 </PopoverAnchor>
@@ -615,17 +621,17 @@ function ToolUI({
                   onInteractOutside={(e) => {
                     // Prevent Radix auto-dismiss to avoid race condition
                     // between DismissableLayer's pointerdown and button's click
-                    e.preventDefault()
+                    e.preventDefault();
                     // Use composedPath to detect trigger clicks across Shadow DOM
                     const originalEvent = (
                       e.detail as { originalEvent?: PointerEvent }
-                    )?.originalEvent
-                    const path = originalEvent?.composedPath?.() ?? []
+                    )?.originalEvent;
+                    const path = originalEvent?.composedPath?.() ?? [];
                     if (
                       !path.includes(dropdownTriggerRef.current as EventTarget)
                     ) {
                       // Clicked outside both popover and trigger - close it
-                      setIsDropdownOpen(false)
+                      setIsDropdownOpen(false);
                     }
                     // If clicked on trigger, do nothing - onClick will toggle
                   }}
@@ -633,20 +639,20 @@ function ToolUI({
                 >
                   <button
                     onClick={() => {
-                      setApprovalMode('one-time')
-                      setIsDropdownOpen(false)
+                      setApprovalMode("one-time");
+                      setIsDropdownOpen(false);
                     }}
-                    className="hover:bg-accent relative flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left"
+                    className="relative flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left hover:bg-accent"
                   >
                     <CheckIcon
                       className={cn(
-                        'relative top-1 mt-0.5 size-3 shrink-0',
-                        approvalMode !== 'one-time' && 'invisible'
+                        "relative top-1 mt-0.5 size-3 shrink-0",
+                        approvalMode !== "one-time" && "invisible",
                       )}
                     />
                     <div className="flex flex-col gap-0.5">
                       <span className="text-sm">Approve only once</span>
-                      <span className="text-muted-foreground text-xs">
+                      <span className="text-xs text-muted-foreground">
                         You'll be asked again next time
                       </span>
                     </div>
@@ -654,20 +660,20 @@ function ToolUI({
                   {onApproveForSession && (
                     <button
                       onClick={() => {
-                        setApprovalMode('for-session')
-                        setIsDropdownOpen(false)
+                        setApprovalMode("for-session");
+                        setIsDropdownOpen(false);
                       }}
-                      className="hover:bg-accent relative flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left"
+                      className="relative flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left hover:bg-accent"
                     >
                       <CheckIcon
                         className={cn(
-                          'relative top-1 mt-0.5 size-3 shrink-0',
-                          approvalMode !== 'for-session' && 'invisible'
+                          "relative top-1 mt-0.5 size-3 shrink-0",
+                          approvalMode !== "for-session" && "invisible",
                         )}
                       />
                       <div className="flex flex-col gap-0.5">
                         <span className="text-sm">Approve always</span>
-                        <span className="text-muted-foreground text-xs">
+                        <span className="text-xs text-muted-foreground">
                           Trust this tool for the session
                         </span>
                       </div>
@@ -680,7 +686,7 @@ function ToolUI({
         </div>
       )}
     </div>
-  )
+  );
 }
 
 /* -----------------------------------------------------------------------------
@@ -689,59 +695,59 @@ function ToolUI({
 
 interface ToolUIGroupProps {
   /** Title for the group header */
-  title: string
+  title: string;
   /** Optional icon */
-  icon?: React.ReactNode
+  icon?: React.ReactNode;
   /** Overall status of the group */
-  status?: 'running' | 'complete'
+  status?: "running" | "complete";
   /** Whether the group starts expanded */
-  defaultExpanded?: boolean
+  defaultExpanded?: boolean;
   /** Child tool UI components */
-  children: React.ReactNode
+  children: React.ReactNode;
   /** Additional class names */
-  className?: string
+  className?: string;
 }
 
 function ToolUIGroup({
   title,
   icon,
-  status = 'complete',
+  status = "complete",
   defaultExpanded = false,
   children,
   className,
 }: ToolUIGroupProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   return (
     <div
       data-slot="tool-ui-group"
       className={cn(
-        'border-border bg-card overflow-hidden rounded-lg border',
-        className
+        "overflow-hidden rounded-lg border border-border bg-card",
+        className,
       )}
     >
       {/* Group header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="hover:bg-accent/50 flex w-full items-center gap-2 px-4 py-3 text-left transition-colors"
+        className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-accent/50"
       >
         {icon || (
           <StatusIndicator
-            status={status === 'running' ? 'running' : 'complete'}
+            status={status === "running" ? "running" : "complete"}
           />
         )}
         <span
           className={cn(
-            'flex-1 text-sm font-medium',
-            status === 'running' && 'shimmer'
+            "flex-1 text-sm font-medium",
+            status === "running" && "shimmer",
           )}
         >
           {title}
         </span>
         <ChevronDownIcon
           className={cn(
-            'text-muted-foreground size-4 transition-transform duration-200',
-            isExpanded && 'rotate-180'
+            "size-4 text-muted-foreground transition-transform duration-200",
+            isExpanded && "rotate-180",
           )}
         />
       </button>
@@ -750,13 +756,13 @@ function ToolUIGroup({
       {isExpanded && (
         <div
           data-slot="tool-ui-group-content"
-          className="border-border border-t"
+          className="border-t border-border"
         >
           {children}
         </div>
       )}
     </div>
-  )
+  );
 }
 
 /* -----------------------------------------------------------------------------
@@ -770,11 +776,11 @@ export {
   SyntaxHighlightedCode,
   StatusIndicator,
   CopyButton,
-}
+};
 export type {
   ToolUIProps,
   ToolUISectionProps,
   ToolUIGroupProps,
   ToolStatus,
   ContentItem,
-}
+};

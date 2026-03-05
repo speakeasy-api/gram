@@ -45,7 +45,11 @@ const BUNDLING_HINTS = [
  */
 function diagnoseImportError(defaultMessage, cause) {
   const msg =
-    cause instanceof Error ? cause.message : typeof cause === "string" ? cause : "";
+    cause instanceof Error
+      ? cause.message
+      : typeof cause === "string"
+        ? cause
+        : "";
   for (const { pattern, hint } of BUNDLING_HINTS) {
     if (pattern.test(msg)) {
       return `${defaultMessage}. ${hint}`;

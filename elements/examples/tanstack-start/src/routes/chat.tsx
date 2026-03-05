@@ -1,56 +1,56 @@
-import { useEffect, useState } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { Chat, GramElementsProvider } from '@gram-ai/elements'
-import type { ElementsConfig } from '@gram-ai/elements'
-import '@gram-ai/elements/elements.css'
+import { useEffect, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Chat, GramElementsProvider } from "@gram-ai/elements";
+import type { ElementsConfig } from "@gram-ai/elements";
+import "@gram-ai/elements/elements.css";
 
-export const Route = createFileRoute('/chat')({
+export const Route = createFileRoute("/chat")({
   component: ChatPage,
-})
+});
 
 function ChatPage() {
-  const navigate = useNavigate()
-  const [username, setUsername] = useState<string | null>(null)
-  const [token, setToken] = useState<string | null>(null)
+  const navigate = useNavigate();
+  const [username, setUsername] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem('token')
+    const stored = localStorage.getItem("token");
     if (!stored) {
-      navigate({ to: '/' })
-      return
+      navigate({ to: "/" });
+      return;
     }
 
     try {
-      const payload = JSON.parse(atob(stored)) as { username: string }
-      setUsername(payload.username)
-      setToken(stored)
+      const payload = JSON.parse(atob(stored)) as { username: string };
+      setUsername(payload.username);
+      setToken(stored);
     } catch {
-      localStorage.removeItem('token')
-      navigate({ to: '/' })
+      localStorage.removeItem("token");
+      navigate({ to: "/" });
     }
-  }, [navigate])
+  }, [navigate]);
 
-  if (!username || !token) return null
+  if (!username || !token) return null;
 
   const config: ElementsConfig = {
     projectSlug: import.meta.env.VITE_GRAM_PROJECT_SLUG,
     mcp: import.meta.env.VITE_GRAM_MCP_URL,
-    variant: 'standalone',
+    variant: "standalone",
     environment: { MY_MCP_BEARER_TOKEN: token },
     api: {
       session: async ({ projectSlug }) => {
-        const response = await fetch('/api/chat/session', {
-          method: 'POST',
+        const response = await fetch("/api/chat/session", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'Gram-Project': projectSlug,
+            "Content-Type": "application/json",
+            "Gram-Project": projectSlug,
           },
-        })
-        const data = await response.json()
-        return data.client_token
+        });
+        const data = await response.json();
+        return data.client_token;
       },
     },
-  }
+  };
 
   return (
     <div className="flex h-screen flex-col">
@@ -61,15 +61,15 @@ function ChatPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate({ to: '/chat/server-fn' })}
+            onClick={() => navigate({ to: "/chat/server-fn" })}
             className="rounded border px-3 py-1 text-sm"
           >
             Try Server Function
           </button>
           <button
             onClick={() => {
-              localStorage.removeItem('token')
-              navigate({ to: '/' })
+              localStorage.removeItem("token");
+              navigate({ to: "/" });
             }}
             className="rounded border px-3 py-1 text-sm"
           >
@@ -85,5 +85,5 @@ function ChatPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

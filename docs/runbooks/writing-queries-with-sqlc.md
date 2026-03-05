@@ -345,7 +345,7 @@ GROUP BY p.id;
 
 1. **"column does not exist"**: Check that your query matches the current schema, and you have run the migrations using `./zero`
 2. **Transaction deadlocks**: Use proper transaction ordering and timeouts
-3. **Type conversion**: Use the conv package to convert from Go types to SQLC types 
+3. **Type conversion**: Use the conv package to convert from Go types to SQLC types
 
 ### Regenerating code
 

@@ -107,6 +107,7 @@ This starts a local MCP server over stdio transport, allowing you to interactive
 ### Example Usage
 
 **Search for files:**
+
 ```json
 {
   "query": "report"
@@ -114,6 +115,7 @@ This starts a local MCP server over stdio transport, allowing you to interactive
 ```
 
 **Read a PDF:**
+
 ```json
 {
   "filePath": "gs://your-bucket/documents/report.pdf"

@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import * as React from 'react'
-import { Avatar, AvatarImage, AvatarFallback } from './avatar'
+import * as React from "react";
+import { Avatar, AvatarImage, AvatarFallback } from "./avatar";
 
 export interface AvatarWrapperProps {
-  src?: string
-  alt?: string
-  fallback: string
+  src?: string;
+  alt?: string;
+  fallback: string;
 }
 
 /**
@@ -18,5 +18,5 @@ export function AvatarWrapper({ src, alt, fallback }: AvatarWrapperProps) {
       {src && <AvatarImage src={src} alt={alt} />}
       <AvatarFallback>{fallback}</AvatarFallback>
     </Avatar>
-  )
+  );
 }

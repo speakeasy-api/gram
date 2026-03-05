@@ -65,7 +65,9 @@ The `environment` field on `ElementsConfig` maps to environment variables on
 the MCP server. When you set:
 
 ```ts
-environment: { MY_MCP_BEARER_TOKEN: token }
+environment: {
+  MY_MCP_BEARER_TOKEN: token;
+}
 ```
 
 Gram delivers `token` to the MCP server as a header. The environment variable
@@ -111,10 +113,10 @@ Visit `http://localhost:3000`, sign in, and the chat UI will load on `/chat`.
 
 ## Key files
 
-| File | Purpose |
-|---|---|
-| `src/routes/index.tsx` | Login page — authenticates the user and stores a token in `localStorage` |
-| `src/routes/api/login.ts` | Login API endpoint — in a real app, replace this with your actual auth provider |
-| `src/routes/chat.tsx` | Chat page — reads the token and passes it to `GramElementsProvider` as an MCP environment variable |
-| `src/routes/api/chat.session.ts` | Session proxy — server-side route that calls Gram's session API using your secret API key |
-| `.env` | Environment variable configuration |
+| File                             | Purpose                                                                                            |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `src/routes/index.tsx`           | Login page — authenticates the user and stores a token in `localStorage`                           |
+| `src/routes/api/login.ts`        | Login API endpoint — in a real app, replace this with your actual auth provider                    |
+| `src/routes/chat.tsx`            | Chat page — reads the token and passes it to `GramElementsProvider` as an MCP environment variable |
+| `src/routes/api/chat.session.ts` | Session proxy — server-side route that calls Gram's session API using your secret API key          |
+| `.env`                           | Environment variable configuration                                                                 |

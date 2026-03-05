@@ -1,32 +1,32 @@
-import { MODELS } from '@/lib/models'
-import type { FrontendTool } from '@/lib/tools'
+import { MODELS } from "@/lib/models";
+import type { FrontendTool } from "@/lib/tools";
 import {
   ImageMessagePartComponent,
   ReasoningGroupComponent,
   ReasoningMessagePartComponent,
   TextMessagePartComponent,
   ToolCallMessagePartComponent,
-} from '@assistant-ui/react'
-import { LanguageModel } from 'ai'
+} from "@assistant-ui/react";
+import { LanguageModel } from "ai";
 import {
   ComponentType,
   Dispatch,
   PropsWithChildren,
   SetStateAction,
   type ReactNode,
-} from 'react'
-import type { Plugin } from './plugins'
+} from "react";
+import type { Plugin } from "./plugins";
 
 /**
  * Function to retrieve the session token from the backend endpoint.
  * Override this if you have mounted your session endpoint at a different path.
  */
-export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>
+export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>;
 
-type ServerUrl = string
+type ServerUrl = string;
 
-export const VARIANTS = ['widget', 'sidecar', 'standalone'] as const
-export type Variant = (typeof VARIANTS)[number]
+export const VARIANTS = ["widget", "sidecar", "standalone"] as const;
+export type Variant = (typeof VARIANTS)[number];
 
 /**
  * The top level configuration object for the Elements library.
@@ -42,14 +42,14 @@ export interface ElementsConfig {
   /**
    * The system prompt to use for the Elements library.
    */
-  systemPrompt?: string
+  systemPrompt?: string;
 
   /**
    * Any plugins to use for the Elements library.
    *
    * @default import { recommended } from '@gram-ai/elements/plugins'
    */
-  plugins?: Plugin[]
+  plugins?: Plugin[];
 
   /**
    * Override the default components used by the Elements library.
@@ -76,7 +76,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  components?: ComponentOverrides
+  components?: ComponentOverrides;
 
   /**
    * The project slug to use for the Elements library.
@@ -88,7 +88,7 @@ export interface ElementsConfig {
    *   projectSlug: 'your-project-slug',
    * }
    */
-  projectSlug: string
+  projectSlug: string;
 
   /**
    * The Gram Server URL to use for the Elements library.
@@ -101,7 +101,7 @@ export interface ElementsConfig {
    *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
    * }
    */
-  mcp?: ServerUrl
+  mcp?: ServerUrl;
 
   /**
    * Custom environment variable overrides for the Elements library.
@@ -109,14 +109,14 @@ export interface ElementsConfig {
    *
    * For more documentation on passing through different kinds of environment variables, including bearer tokens, see the [Gram documentation](https://www.speakeasy.com/docs/gram/host-mcp/public-private-servers#pass-through-authentication).
    */
-  environment?: Record<string, unknown>
+  environment?: Record<string, unknown>;
 
   /**
    * The environment slug to use for resolving secrets.
    * When specified, this is sent as the Gram-Environment header to select
    * which environment's secrets to use for tool execution.
    */
-  gramEnvironment?: string
+  gramEnvironment?: string;
 
   /**
    * The layout variant for the chat interface.
@@ -127,7 +127,7 @@ export interface ElementsConfig {
    *
    * @default 'widget'
    */
-  variant?: Variant
+  variant?: Variant;
 
   /**
    * LLM model configuration.
@@ -140,7 +140,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  model?: ModelConfig
+  model?: ModelConfig;
 
   /**
    * Visual appearance configuration options.
@@ -155,7 +155,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  theme?: ThemeConfig
+  theme?: ThemeConfig;
 
   /**
    * The configuration for the welcome message and initial suggestions.
@@ -171,7 +171,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  welcome?: WelcomeConfig
+  welcome?: WelcomeConfig;
 
   /**
    * The configuration for the composer.
@@ -183,7 +183,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  composer?: ComposerConfig
+  composer?: ComposerConfig;
 
   /**
    * Optional property to override the LLM provider. If you override the model,
@@ -205,7 +205,7 @@ export interface ElementsConfig {
    * }
    * ```
    */
-  languageModel?: LanguageModel
+  languageModel?: LanguageModel;
 
   /**
    * The configuration for the modal window.
@@ -227,7 +227,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  modal?: ModalConfig
+  modal?: ModalConfig;
 
   /**
    * The configuration for the sidecar panel.
@@ -248,7 +248,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  sidecar?: SidecarConfig
+  sidecar?: SidecarConfig;
 
   /**
    * The configuration for the tools.
@@ -266,7 +266,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  tools?: ToolsConfig
+  tools?: ToolsConfig;
 
   /**
    * Configuration for chat history and thread persistence.
@@ -280,7 +280,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  history?: HistoryConfig
+  history?: HistoryConfig;
 
   /**
    * The API configuration to use for the Elements library.
@@ -294,7 +294,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  api?: ApiConfig
+  api?: ApiConfig;
 
   /**
    * Error tracking configuration.
@@ -307,7 +307,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  errorTracking?: ErrorTrackingConfigOption
+  errorTracking?: ErrorTrackingConfigOption;
 
   /**
    * Configuration for the chat thread display and behavior.
@@ -320,7 +320,7 @@ export interface ElementsConfig {
    *   },
    * }
    */
-  thread?: ThreadConfig
+  thread?: ThreadConfig;
 }
 
 /**
@@ -331,7 +331,7 @@ export interface ErrorTrackingConfigOption {
    * Set to false to disable error reporting.
    * @default true
    */
-  enabled?: boolean
+  enabled?: boolean;
 }
 
 /**
@@ -348,7 +348,7 @@ export type BaseApiConfig = {
    *   },
    * }
    */
-  url?: string
+  url?: string;
 
   /**
    * Additional headers to send with the API request.
@@ -360,8 +360,8 @@ export type BaseApiConfig = {
    *   },
    * }
    */
-  headers?: Record<string, string>
-}
+  headers?: Record<string, string>;
+};
 
 /**
  * @deprecated Use `{ session: mySessionFn }` instead. Will be removed in a future major version.
@@ -382,8 +382,8 @@ export type SessionAuthConfig = {
    *   },
    * }
    */
-  sessionFn: GetSessionFn
-}
+  sessionFn: GetSessionFn;
+};
 
 /**
  * @deprecated Use `{ session: 'your-token' }` instead. Will be removed in a future major version.
@@ -401,18 +401,18 @@ export type StaticSessionAuthConfig = {
    *   },
    * }
    */
-  sessionToken: string
-}
+  sessionToken: string;
+};
 
 export type DangerousApiKeyAuthConfig = {
   /** WARNING: Exposes API key in browser. Dev/testing only. */
-  dangerousApiKey: string
-}
+  dangerousApiKey: string;
+};
 
 export type UnifiedSessionAuthConfig = {
   /** String = static token (shows expiry warning). Function = dynamic fetcher. */
-  session: string | GetSessionFn
-}
+  session: string | GetSessionFn;
+};
 
 /**
  * API configuration - base URL, session auth (static token or fetcher function),
@@ -426,7 +426,7 @@ export type ApiConfig =
   | (BaseApiConfig & UnifiedSessionAuthConfig)
   | (BaseApiConfig & DangerousApiKeyAuthConfig)
   | (BaseApiConfig & SessionAuthConfig)
-  | (BaseApiConfig & StaticSessionAuthConfig)
+  | (BaseApiConfig & StaticSessionAuthConfig);
 
 /**
  * The LLM model to use for the Elements library.
@@ -438,7 +438,7 @@ export type ApiConfig =
  *   },
  * }
  */
-export type Model = (typeof MODELS)[number]
+export type Model = (typeof MODELS)[number];
 
 /**
  * ModelConfig is used to configure model support in the Elements library.
@@ -448,21 +448,21 @@ export interface ModelConfig {
   /**
    * Whether to show the model picker in the composer.
    */
-  showModelPicker?: boolean
+  showModelPicker?: boolean;
 
   /**
    * The default model to use for the Elements library.
    */
-  defaultModel?: Model
+  defaultModel?: Model;
 }
 
-export const DENSITIES = ['compact', 'normal', 'spacious'] as const
-export type Density = (typeof DENSITIES)[number]
-export const COLOR_SCHEMES = ['light', 'dark', 'system'] as const
-export type ColorScheme = (typeof COLOR_SCHEMES)[number]
+export const DENSITIES = ["compact", "normal", "spacious"] as const;
+export type Density = (typeof DENSITIES)[number];
+export const COLOR_SCHEMES = ["light", "dark", "system"] as const;
+export type ColorScheme = (typeof COLOR_SCHEMES)[number];
 
-export const RADII = ['round', 'soft', 'sharp'] as const
-export type Radius = (typeof RADII)[number]
+export const RADII = ["round", "soft", "sharp"] as const;
+export type Radius = (typeof RADII)[number];
 
 /**
  * ThemeConfig provides visual appearance customization options.
@@ -482,7 +482,7 @@ export interface ThemeConfig {
    * The color scheme to use for the UI.
    * @default 'light'
    */
-  colorScheme?: ColorScheme
+  colorScheme?: ColorScheme;
 
   /**
    * Determines the overall spacing of the UI.
@@ -491,7 +491,7 @@ export interface ThemeConfig {
    * - `spacious`: Increased padding and margins for airy layouts
    * @default 'normal'
    */
-  density?: Density
+  density?: Density;
 
   /**
    * Determines the overall roundness of the UI.
@@ -500,69 +500,69 @@ export interface ThemeConfig {
    * - `sharp`: Minimal border radius
    * @default 'soft'
    */
-  radius?: Radius
+  radius?: Radius;
 }
 
 export interface ComponentOverrides {
   /**
    * The component to use for the composer (the input area where users type messages)
    */
-  Composer?: ComponentType
+  Composer?: ComponentType;
   /**
    * The component to use for the user message.
    */
-  UserMessage?: ComponentType
+  UserMessage?: ComponentType;
   /**
    * The component to use for the edit composer (inline message editor)
    */
-  EditComposer?: ComponentType
+  EditComposer?: ComponentType;
   /**
    * The component to use for the assistant message (messages generated by the LLM).
    *
    * Note: if you override this, the Text component will not be used.
    */
-  AssistantMessage?: ComponentType
+  AssistantMessage?: ComponentType;
   /**
    * The component to use for the thread welcome.
    */
-  ThreadWelcome?: ComponentType
+  ThreadWelcome?: ComponentType;
 
   // MessagePrimitive.Parts components
   /**
    * The component to use for the text message.
    */
-  Text?: TextMessagePartComponent
+  Text?: TextMessagePartComponent;
   /**
    * The component to use for the image message.
    */
-  Image?: ImageMessagePartComponent
+  Image?: ImageMessagePartComponent;
   /**
    * The component to use for the tool fallback (default UI shown when a tool returns a result).
    */
-  ToolFallback?: ToolCallMessagePartComponent
+  ToolFallback?: ToolCallMessagePartComponent;
   /**
    * The component to use for the reasoning message.
    */
-  Reasoning?: ReasoningMessagePartComponent
+  Reasoning?: ReasoningMessagePartComponent;
   /**
    * The component to use for the reasoning group.
    */
-  ReasoningGroup?: ReasoningGroupComponent
+  ReasoningGroup?: ReasoningGroupComponent;
 
   /**
    * The component to use for the tool group (a group of tool calls returned by the LLM in a single message).
    */
   ToolGroup?: ComponentType<
     PropsWithChildren<{ startIndex: number; endIndex: number }>
-  >
+  >;
 }
 
 export type ToolsFilter =
   | string[]
-  | (({ toolName }: { toolName: string }) => boolean)
+  | (({ toolName }: { toolName: string }) => boolean);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type FrontendTools = Record<string, FrontendTool<any, any>>
+export type FrontendTools = Record<string, FrontendTool<any, any>>;
 
 /**
  * ToolsConfig is used to configure tool support in the Elements library.
@@ -583,7 +583,7 @@ export interface ToolsConfig {
    * Whether individual tool calls within a group should be expanded by default.
    * @default false
    */
-  expandToolGroupsByDefault?: boolean
+  expandToolGroupsByDefault?: boolean;
 
   /**
    * `components` can be used to override the default components used by the
@@ -602,7 +602,7 @@ export interface ToolsConfig {
    */
   components?:
     | Record<string, ToolCallMessagePartComponent | undefined>
-    | undefined
+    | undefined;
 
   /**
    * The frontend tools to use for the Elements library.
@@ -653,7 +653,7 @@ export interface ToolsConfig {
    * }
    * ```
    */
-  frontendTools?: FrontendTools
+  frontendTools?: FrontendTools;
 
   /**
    * List of tool names that require confirmation from the end user before
@@ -677,7 +677,7 @@ export interface ToolsConfig {
    * }
    * ```
    */
-  toolsRequiringApproval?: ToolsFilter
+  toolsRequiringApproval?: ToolsFilter;
 
   /**
    * List of MCP tool names to expose to the chat.
@@ -689,91 +689,91 @@ export interface ToolsConfig {
    *   toolsToInclude: ['get_current_weather', 'get_current_time'],
    * }
    */
-  toolsToInclude?: ToolsFilter
+  toolsToInclude?: ToolsFilter;
 }
 
 export interface WelcomeConfig {
   /**
    * The welcome message to display when the thread is empty.
    */
-  title?: string
+  title?: string;
 
   /**
    * The subtitle to display when the thread is empty.
    */
-  subtitle?: string
+  subtitle?: string;
 
   /**
    * The suggestions to display when the thread is empty.
    */
-  suggestions?: Suggestion[]
+  suggestions?: Suggestion[];
 }
 
 export interface Suggestion {
   /** Suggestion heading */
-  title: string
+  title: string;
   /** Suggestion subheading */
-  label: string
+  label: string;
   /** The prompt sent when the suggestion is clicked */
-  prompt: string
+  prompt: string;
 }
 
 export interface Dimensions {
-  default: Dimension
+  default: Dimension;
   expanded?: {
-    width: number | string
-    height: number | string
-  }
+    width: number | string;
+    height: number | string;
+  };
 }
 
 export interface Dimension {
-  width: number | string
-  height: number | string
-  maxHeight?: number | string
+  width: number | string;
+  height: number | string;
+  maxHeight?: number | string;
 }
 
 interface ExpandableConfig {
   /**
    * Whether the modal or sidecar can be expanded
    */
-  expandable?: boolean
+  expandable?: boolean;
 
   /**
    * Whether the modal or sidecar should be expanded by default.
    * @default false
    */
-  defaultExpanded?: boolean
+  defaultExpanded?: boolean;
 
   /**
    * The dimensions for the modal or sidecar window.
    */
-  dimensions?: Dimensions
+  dimensions?: Dimensions;
 }
 
 export type ModalTriggerPosition =
-  | 'bottom-right'
-  | 'bottom-left'
-  | 'top-right'
-  | 'top-left'
+  | "bottom-right"
+  | "bottom-left"
+  | "top-right"
+  | "top-left";
 
 export interface ModalConfig extends ExpandableConfig {
   /**
    * Whether to open the modal window by default.
    */
-  defaultOpen?: boolean
+  defaultOpen?: boolean;
 
   /**
    * The title displayed in the modal header.
    * @default 'Chat'
    */
-  title?: string
+  title?: string;
 
   /**
    * The position of the modal trigger
    *
    * @default 'bottom-right'
    */
-  position?: ModalTriggerPosition
+  position?: ModalTriggerPosition;
 
   /**
    * The icon to use for the modal window.
@@ -795,7 +795,7 @@ export interface ModalConfig extends ExpandableConfig {
    * }
    * ```
    */
-  icon?: (state: 'open' | 'closed' | undefined) => ReactNode
+  icon?: (state: "open" | "closed" | undefined) => ReactNode;
 }
 
 export interface ComposerConfig {
@@ -803,7 +803,7 @@ export interface ComposerConfig {
    * The placeholder text for the composer input.
    * @default 'Send a message...'
    */
-  placeholder?: string
+  placeholder?: string;
 
   /**
    * Configuration for file attachments in the composer.
@@ -812,14 +812,14 @@ export interface ComposerConfig {
    * Or provide an object for fine-grained control.
    * @default true
    */
-  attachments?: boolean | AttachmentsConfig
+  attachments?: boolean | AttachmentsConfig;
 
   /**
    * Configuration for @tool mentions in the composer.
    * Set to `false` to disable, `true` for defaults, or an object for fine-grained control.
    * @default true
    */
-  toolMentions?: boolean | ToolMentionsConfig
+  toolMentions?: boolean | ToolMentionsConfig;
 }
 
 /**
@@ -832,27 +832,27 @@ export interface AttachmentsConfig {
    * Accepted file types. Can be MIME types or file extensions.
    * @example ['image/*', '.pdf', '.docx']
    */
-  accept?: string[]
+  accept?: string[];
 
   /**
    * Maximum number of files that can be attached at once.
    * @default 10
    */
-  maxCount?: number
+  maxCount?: number;
 
   /**
    * Maximum file size in bytes.
    * @default 104857600 (100MB)
    */
-  maxSize?: number
+  maxSize?: number;
 }
 
 export interface ToolMentionsConfig {
   /** @default true */
-  enabled?: boolean
+  enabled?: boolean;
   /** @default 10 */
-  maxSuggestions?: number
-  placeholder?: string
+  maxSuggestions?: number;
+  placeholder?: string;
 }
 
 export interface SidecarConfig extends ExpandableConfig {
@@ -860,7 +860,7 @@ export interface SidecarConfig extends ExpandableConfig {
    * The title displayed in the sidecar header.
    * @default 'Chat'
    */
-  title?: string
+  title?: string;
 }
 
 /**
@@ -880,14 +880,14 @@ export interface ThreadConfig {
    * When enabled, users can mark conversations as resolved or provide feedback.
    * @default true
    */
-  showFeedback?: boolean
+  showFeedback?: boolean;
 
   /**
    * Whether to show AI-generated follow-up question suggestions after each assistant response.
    * When enabled, suggestions appear below the assistant's message to help guide the conversation.
    * @default true
    */
-  followUpSuggestions?: boolean
+  followUpSuggestions?: boolean;
 }
 
 /**
@@ -908,7 +908,7 @@ export interface HistoryConfig {
    * When true, threads will be saved and can be loaded from the thread list.
    * @default false
    */
-  enabled: boolean
+  enabled: boolean;
 
   /**
    * Whether to show the thread list sidebar/panel.
@@ -916,7 +916,7 @@ export interface HistoryConfig {
    * Only applies when history is enabled.
    * @default true when history.enabled is true
    */
-  showThreadList?: boolean
+  showThreadList?: boolean;
 
   /**
    * Initial thread ID to load when the component mounts.
@@ -935,20 +935,20 @@ export interface HistoryConfig {
    *   },
    * }}>
    */
-  initialThreadId?: string
+  initialThreadId?: string;
 }
 
 /**
  * @internal
  */
 export type ElementsContextType = {
-  config: ElementsConfig
-  setModel: (model: Model) => void
-  model: Model
-  isExpanded: boolean
-  setIsExpanded: Dispatch<SetStateAction<boolean>>
-  isOpen: boolean
-  setIsOpen: (isOpen: boolean) => void
-  plugins: Plugin[]
-  mcpTools: Record<string, unknown> | undefined
-}
+  config: ElementsConfig;
+  setModel: (model: Model) => void;
+  model: Model;
+  isExpanded: boolean;
+  setIsExpanded: Dispatch<SetStateAction<boolean>>;
+  isOpen: boolean;
+  setIsOpen: (isOpen: boolean) => void;
+  plugins: Plugin[];
+  mcpTools: Record<string, unknown> | undefined;
+};

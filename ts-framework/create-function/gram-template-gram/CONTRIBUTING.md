@@ -89,13 +89,13 @@ clients. They align with the
 
 Available annotation fields:
 
-| Field              | Type      | Default | Description                                     |
-| ------------------ | --------- | ------- | ----------------------------------------------- |
-| `title`            | `string`  | —       | Human-readable display name for the tool         |
-| `readOnlyHint`     | `boolean` | `false` | Tool does not modify its environment             |
-| `destructiveHint`  | `boolean` | `true`  | Tool may perform destructive updates             |
-| `idempotentHint`   | `boolean` | `false` | Repeated calls with same args have no extra effect |
-| `openWorldHint`    | `boolean` | `true`  | Tool interacts with external entities            |
+| Field             | Type      | Default | Description                                        |
+| ----------------- | --------- | ------- | -------------------------------------------------- |
+| `title`           | `string`  | —       | Human-readable display name for the tool           |
+| `readOnlyHint`    | `boolean` | `false` | Tool does not modify its environment               |
+| `destructiveHint` | `boolean` | `true`  | Tool may perform destructive updates               |
+| `idempotentHint`  | `boolean` | `false` | Repeated calls with same args have no extra effect |
+| `openWorldHint`   | `boolean` | `true`  | Tool interacts with external entities              |
 
 All annotation properties are **hints** — they are not guaranteed to be
 accurate and clients should not rely on them for security decisions.

@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { cn } from '@/lib/utils'
-import { FC } from 'react'
+import { cn } from "@/lib/utils";
+import { FC } from "react";
 import {
   PieChart as RechartsPieChart,
   Pie,
@@ -10,44 +10,44 @@ import {
   Legend,
   ResponsiveContainer,
   TooltipProps,
-} from 'recharts'
+} from "recharts";
 
 const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
-  if (!active || !payload || payload.length === 0) return null
-  const entry = payload[0]
+  if (!active || !payload || payload.length === 0) return null;
+  const entry = payload[0];
   return (
-    <div className="bg-background text-foreground border-border rounded-md border px-2 py-1 text-xs shadow-sm">
+    <div className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm">
       <span className="font-medium">
-        {typeof entry?.value === 'number'
+        {typeof entry?.value === "number"
           ? entry.value.toLocaleString()
           : entry?.value}
       </span>
     </div>
-  )
-}
+  );
+};
 
 const COLORS = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-]
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
 interface DataPoint {
-  label: string
-  value: number
-  color?: string
+  label: string;
+  value: number;
+  color?: string;
 }
 
 export interface DonutChartProps {
-  title?: string
-  data: DataPoint[]
-  showLabels?: boolean
-  showLegend?: boolean
-  innerLabel?: string
-  innerValue?: string | number
-  className?: string
+  title?: string;
+  data: DataPoint[];
+  showLabels?: boolean;
+  showLegend?: boolean;
+  innerLabel?: string;
+  innerValue?: string | number;
+  className?: string;
 }
 
 export const DonutChart: FC<DonutChartProps> = ({
@@ -64,12 +64,12 @@ export const DonutChart: FC<DonutChartProps> = ({
     name: d.label,
     value: d.value,
     color: d.color,
-  }))
+  }));
 
   return (
-    <div className={cn('flex flex-col gap-2', className)}>
+    <div className={cn("flex flex-col gap-2", className)}>
       {title && (
-        <h3 className="text-foreground text-sm font-medium">{title}</h3>
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
       )}
       <div className="relative h-[320px] w-full">
         <ResponsiveContainer width="100%" height="100%">
@@ -94,33 +94,33 @@ export const DonutChart: FC<DonutChartProps> = ({
                       midAngle,
                       outerRadius,
                     }: {
-                      name?: string
-                      percent?: number
-                      cx?: number
-                      cy?: number
-                      midAngle?: number
-                      outerRadius?: number
+                      name?: string;
+                      percent?: number;
+                      cx?: number;
+                      cy?: number;
+                      midAngle?: number;
+                      outerRadius?: number;
                     }) => {
-                      const RADIAN = Math.PI / 180
-                      const radius = (outerRadius ?? 80) + 25
+                      const RADIAN = Math.PI / 180;
+                      const radius = (outerRadius ?? 80) + 25;
                       const x =
                         (cx ?? 0) +
-                        radius * Math.cos(-((midAngle ?? 0) * RADIAN))
+                        radius * Math.cos(-((midAngle ?? 0) * RADIAN));
                       const y =
                         (cy ?? 0) +
-                        radius * Math.sin(-((midAngle ?? 0) * RADIAN))
+                        radius * Math.sin(-((midAngle ?? 0) * RADIAN));
                       return (
                         <text
                           x={x}
                           y={y}
                           fill="var(--foreground)"
-                          textAnchor={x > (cx ?? 0) ? 'start' : 'end'}
+                          textAnchor={x > (cx ?? 0) ? "start" : "end"}
                           dominantBaseline="central"
                           fontSize={12}
                         >
-                          {`${name ?? ''} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+                          {`${name ?? ""} (${((percent ?? 0) * 100).toFixed(0)}%)`}
                         </text>
-                      )
+                      );
                     }
                   : undefined
               }
@@ -138,9 +138,9 @@ export const DonutChart: FC<DonutChartProps> = ({
             {showLegend && (
               <Legend
                 verticalAlign="bottom"
-                wrapperStyle={{ color: 'var(--foreground)', paddingTop: 20 }}
+                wrapperStyle={{ color: "var(--foreground)", paddingTop: 20 }}
                 formatter={(value) => (
-                  <span style={{ color: 'var(--foreground)' }}>{value}</span>
+                  <span style={{ color: "var(--foreground)" }}>{value}</span>
                 )}
               />
             )}
@@ -150,12 +150,12 @@ export const DonutChart: FC<DonutChartProps> = ({
         {(innerLabel !== undefined || innerValue !== undefined) && (
           <div className="pointer-events-none absolute inset-x-0 top-[45%] flex -translate-y-1/2 flex-col items-center">
             {innerValue !== undefined && (
-              <span className="text-foreground text-2xl font-bold">
+              <span className="text-2xl font-bold text-foreground">
                 {innerValue}
               </span>
             )}
             {innerLabel && (
-              <span className="text-muted-foreground text-xs">
+              <span className="text-xs text-muted-foreground">
                 {innerLabel}
               </span>
             )}
@@ -163,5 +163,5 @@ export const DonutChart: FC<DonutChartProps> = ({
         )}
       </div>
     </div>
-  )
-}
+  );
+};

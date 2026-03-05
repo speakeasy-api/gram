@@ -27,7 +27,7 @@ const builtNames: string[] = [];
 function wrapEntryPlugin(
   virtualId: string,
   entryFile: string,
-  cssPaths: string[]
+  cssPaths: string[],
 ): Plugin {
   return {
     name: `virtual-entry-wrapper:${entryFile}`,
@@ -80,7 +80,7 @@ for (const file of entries) {
 
   // Final CSS list (global first for predictable cascade)
   const cssToInclude = [...globalCss, ...perEntryCss].filter((p) =>
-    fs.existsSync(p)
+    fs.existsSync(p),
   );
 
   const virtualId = `\0virtual-entry:${entryAbs}`;
@@ -164,7 +164,8 @@ console.log("new hash: ", h);
 
 const defaultBaseUrl = "http://localhost:4444";
 const baseUrlCandidate = process.env.BASE_URL?.trim() ?? "";
-const baseUrlRaw = baseUrlCandidate.length > 0 ? baseUrlCandidate : defaultBaseUrl;
+const baseUrlRaw =
+  baseUrlCandidate.length > 0 ? baseUrlCandidate : defaultBaseUrl;
 const normalizedBaseUrl = baseUrlRaw.replace(/\/+$/, "") || defaultBaseUrl;
 console.log(`Using BASE_URL ${normalizedBaseUrl} for generated HTML`);
 

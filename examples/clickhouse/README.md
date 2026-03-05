@@ -5,12 +5,14 @@ This Gram Function provides a tool for executing SQL queries against a ClickHous
 ## Overview
 
 This example demonstrates how to:
+
 - Connect to a ClickHouse database using the web client
 - Execute parameterized SQL queries with ClickHouse's named parameter syntax
 - Work with time series data (1M+ TrackPlays rows)
 - Query the complete Chinook sample dataset
 
 The function provides a single tool:
+
 - `execute_query`: Execute SQL queries against your ClickHouse database with named parameters
 
 ## Prerequisites
@@ -30,6 +32,7 @@ npm run db:start
 ```
 
 This will:
+
 1. Start the ClickHouse Docker container (port 8124)
 2. Wait for ClickHouse to be ready
 3. Automatically seed the database with the Chinook dataset
@@ -68,6 +71,7 @@ npm run db:seed
 ```
 
 The ClickHouse container runs with:
+
 - HTTP interface on port 8124
 - Database: `gram_example`
 - Username: `gram_user`
@@ -189,6 +193,7 @@ docker compose ps
 To learn more about using the Gram Functions framework, check out [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 For ClickHouse documentation:
+
 - [ClickHouse SQL Reference](https://clickhouse.com/docs/sql-reference)
 - [JavaScript Client](https://clickhouse.com/docs/integrations/javascript)
 - [Time Series Functions](https://clickhouse.com/docs/sql-reference/functions/date-time-functions)
