@@ -102,18 +102,28 @@ export function MCPHeroIllustration({
  * Illustration for external MCP servers
  * Shows the server logo on a pattern background if available,
  * otherwise uses the pattern alone
+ *
+ * @param className - Applied to the outer container (for transforms like scale-200)
+ * @param saturationClassName - Applied to the pattern for saturation control (defaults to desaturated with hover)
  */
 export function ExternalMCPIllustration({
   className,
+  saturationClassName,
   logoUrl,
   name,
   slug,
-}: IllustrationProps & { logoUrl?: string; name?: string; slug: string }) {
-  const saturationClass = className ?? "saturate-[.3] group-hover:saturate-100";
+}: IllustrationProps & {
+  saturationClassName?: string;
+  logoUrl?: string;
+  name?: string;
+  slug: string;
+}) {
+  const saturationClass =
+    saturationClassName ?? "saturate-[.3] group-hover:saturate-100";
 
   if (logoUrl) {
     return (
-      <div className="w-full h-full relative">
+      <div className={cn("w-full h-full relative", className)}>
         {/* Pattern background */}
         <MCPPatternIllustration
           toolsetSlug={slug}
@@ -135,9 +145,11 @@ export function ExternalMCPIllustration({
 
   // Fallback: just use the pattern illustration
   return (
-    <MCPPatternIllustration
-      toolsetSlug={slug}
-      className={cn("transition-all duration-300", saturationClass)}
-    />
+    <div className={cn("w-full h-full", className)}>
+      <MCPPatternIllustration
+        toolsetSlug={slug}
+        className={cn("transition-all duration-300", saturationClass)}
+      />
+    </div>
   );
 }

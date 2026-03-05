@@ -1,7 +1,3 @@
-import {
-  ExternalMCPIllustration,
-  MCPPatternIllustration,
-} from "@/components/sources/SourceCardIllustrations";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
@@ -9,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
 import { Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router";
 import type { Server } from "./hooks";
 import { parseServerMetadata } from "./hooks/serverMetadata";
@@ -46,9 +42,6 @@ export function ServerCard({
   );
   const isAdded = !!existingMcp;
 
-  // Generate a slug from the registry specifier for pattern generation
-  const slug = server.registrySpecifier.replace(/[/@]/g, "-");
-
   // Get tool names for the badge tooltip
   const toolNames = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,14 +49,8 @@ export function ServerCard({
     return tools.map((t) => t.name || "Unknown tool");
   }, [server.tools]);
 
-  const [isHovered, setIsHovered] = useState(false);
-
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation(); // Prevent click-outside-to-deselect from firing
-    // Reset hover state when deselecting so image goes back to desaturated
-    if (isSelected) {
-      setIsHovered(false);
-    }
     onToggleSelect?.();
   };
 
@@ -79,8 +66,6 @@ export function ServerCard({
           onToggleSelect?.();
         }
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       className={cn(
         "group bg-card text-card-foreground flex flex-row rounded-xl border !border-foreground/10 overflow-hidden",
         "hover:!border-foreground/60 hover:shadow-md transition-all cursor-pointer h-full",
