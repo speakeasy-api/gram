@@ -224,15 +224,17 @@
 }
 
 /* Dotted background scroll animation for catalog cards */
-@keyframes scroll-dots {
-  from {
-    background-position: 0 0;
+@layer utilities {
+  @keyframes scroll-dots {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: 64px 64px;
+    }
   }
-  to {
-    background-position: 64px 64px;
-  }
-}
 
-.server-card:hover .scroll-dots-target {
-  animation: scroll-dots 3s linear infinite;
+  .server-card:hover .scroll-dots-target {
+    animation: scroll-dots 3s linear infinite;
+  }
 }
