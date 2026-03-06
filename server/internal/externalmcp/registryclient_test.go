@@ -131,7 +131,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 		URL: server.URL,
 	}
 
-	details, err := client.GetServerDetails(ctx, registry, "test-server")
+	details, err := client.GetServerDetails(ctx, registry, "test-server", nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, details)
@@ -176,7 +176,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 		URL: server.URL,
 	}
 
-	details, err := client.GetServerDetails(ctx, registry, "test-server")
+	details, err := client.GetServerDetails(ctx, registry, "test-server", nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, details)
@@ -222,7 +222,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 		URL: server.URL,
 	}
 
-	details, err := client.GetServerDetails(ctx, registry, "test-server")
+	details, err := client.GetServerDetails(ctx, registry, "test-server", nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, details)

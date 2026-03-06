@@ -300,7 +300,8 @@ type ServerDetails struct {
 }
 
 // GetServerDetails fetches server details including the remote URL from the registry.
-func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry, serverName string) (*ServerDetails, error) {
+// If allowedRemoteURLs is provided and non-empty, only remotes with matching URLs are considered.
+func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry, serverName string, allowedRemoteURLs []string) (*ServerDetails, error) {
 	u, err := url.Parse(registry.URL)
 	if err != nil {
 		return nil, oops.Permanent(fmt.Errorf("parse external mcp registry url: %w", err))
@@ -355,13 +356,28 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return nil, fmt.Errorf("decode external mcp server details response: %w", err)
 	}
 
+	// Build a set of allowed URLs for filtering (if provided)
+	allowedURLSet := make(map[string]struct{}, len(allowedRemoteURLs))
+	for _, u := range allowedRemoteURLs {
+		allowedURLSet[u] = struct{}{}
+	}
+	hasFilter := len(allowedURLSet) > 0
+
 	// Find the remote URL, preferring streamable-http over sse
+	// If allowedRemoteURLs is set, only consider remotes in that list
 	var remoteURL string
 	var transportType externalmcptypes.TransportType
 	var tools []serverTool
 	var headers []RemoteHeader
 	var remoteIndex int
 	for i, remote := range serverResp.Server.Remotes {
+		// Skip remotes not in allowed list (if filter is active)
+		if hasFilter {
+			if _, ok := allowedURLSet[remote.URL]; !ok {
+				continue
+			}
+		}
+
 		if remote.Type == "streamable-http" {
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeStreamableHTTP
