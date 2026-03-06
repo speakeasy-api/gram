@@ -5,8 +5,8 @@ management:
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.17
-  configChecksum: d3d048ed22064641e7ac966f2c1017bd
+  releaseVersion: 0.27.19
+  configChecksum: 7b3fe3dd7aee44ad99269cfe2b651e44
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -1400,11 +1400,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:abb756c3d6a6fe6bb382b1ba44dec16b8ecaaf80
+    last_write_checksum: sha1:d486873d730a1498fb450d86270980f521a74fb3
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:9e35c3d441da0377588a9cce917bb95b4a017d16
+    last_write_checksum: sha1:8b9bf2a4f28fa156a9c4800903ebb337105b096e
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1862,7 +1862,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:9983e360381ad1142009ae7592e5efa375daae02
+    last_write_checksum: sha1:5e70e08561dc38c08e4a12676809431b0d0eabe5
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -5248,17 +5248,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  listAttributeKeys:
-    speakeasy-default-list-attribute-keys:
-      requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
-      responses:
-        "200":
-          application/json: {"keys": ["<value 1>", "<value 2>"]}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   configureSlackApp:
     speakeasy-default-configure-slack-app:
       requestBody:
@@ -5278,9 +5267,9 @@ examples:
         "200":
           application/json: {"app": {"created_at": "2026-07-25T21:54:40.471Z", "id": "de9ddbde-9158-4b64-9810-ba3a7304aa8e", "name": "<value>", "status": "<value>", "toolset_ids": [], "updated_at": "2024-05-18T22:41:43.897Z"}}
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   deleteSlackApp:
     speakeasy-default-delete-slack-app:
       parameters:
@@ -5323,6 +5312,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAttributeKeys:
+    speakeasy-default-list-attribute-keys:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"keys": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getProductFeatures:
     speakeasy-default-get-product-features:
       responses:

@@ -1,4 +1,4 @@
-h1:IQPXNJRQXeZF/biiQJxJwCpgcgj3RLq6y6GcIh+8hgg=
+h1:XSsoAPMjgBsNb79zXPZbfajLARNxWh5xfR27hXtEGXM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -108,5 +108,6 @@ h1:IQPXNJRQXeZF/biiQJxJwCpgcgj3RLq6y6GcIh+8hgg=
 20260218000001_oauth-proxy-server-audience.sql h1:2bnirfFCHHKh3gtEOigHlT1bPYORon/j4FyjAejgeUI=
 20260227194055_add-workos-identity-fields.sql h1:f9mTAnu8rIlwzGGhxu2+r2Pnngh4IbxBQrn9tBcsugc=
 20260227224912_add-slack-apps-tables.sql h1:7gBj1mNj0I2mqDoqG55pi1HnAyloA9kMoF5fOdJ6F08=
-20260303144420_deployment-tags.sql h1:+4b/+iiEGBsOu7PZv5doW83CeiGLB6sTanGTXeSWwJU=
-20260305144932_add-workos-org-id.sql h1:KNcwC34iHLPViXsZrVK5ugIwGs1WZXs0sbUoYc8tNBE=
+20260227231157_slack-user-auth-tables.sql h1:te1Zvc6bp0HON3oJj3CEOcYw1BEJG9NlM9fCkqjLUjI=
+20260303144420_deployment-tags.sql h1:P2BigOdr674atO/oEOno1AqiUOvLhVYC95uYzI0JoHA=
+20260305144932_add-workos-org-id.sql h1:e1iGovU+VEJSMKkQ+e+vb4jtrYiPyi2k5peWmmfp824=

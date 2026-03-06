@@ -1,12 +1,14 @@
-package slack
+package slack // trigger CI
 
 import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,6 +21,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
@@ -97,6 +100,14 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+
+	// Auth routes — registered before {id} routes so "auth" isn't captured as an ID
+	o11y.AttachHandler(mux, "GET", "/rpc/slack-apps/auth/{token}", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.SlackAuthInfo).ServeHTTP(w, r)
+	})
+	o11y.AttachHandler(mux, "POST", "/rpc/slack-apps/auth/{token}/complete", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.CompleteSlackAuth).ServeHTTP(w, r)
+	})
 
 	o11y.AttachHandler(mux, "GET", "/rpc/slack-apps/{id}/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.SlackAppOAuthCallback).ServeHTTP(w, r)
@@ -263,6 +274,54 @@ func (s *Service) SlackAppEventHandler(w http.ResponseWriter, r *http.Request) e
 	}
 
 	if processEvent {
+		slackUserID := event.Event.User
+		if slackUserID != "" {
+			_, err := s.repo.GetSlackUserMapping(ctx, repo.GetSlackUserMappingParams{
+				SlackAppID:  appID,
+				SlackUserID: slackUserID,
+			})
+			if err != nil {
+				if !errors.Is(err, pgx.ErrNoRows) {
+					return oops.E(oops.CodeUnexpected, err, "check slack user mapping").Log(ctx, s.logger)
+				}
+
+				// No mapping — create pending auth and send ephemeral login link
+				tokenBytes := make([]byte, 16)
+				if _, err := rand.Read(tokenBytes); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "generate auth token").Log(ctx, s.logger)
+				}
+				token := hex.EncodeToString(tokenBytes)
+
+				if _, err := s.repo.CreatePendingAuth(ctx, repo.CreatePendingAuthParams{
+					SlackAppID:  appID,
+					SlackUserID: slackUserID,
+					Token:       token,
+					ChannelID:   event.Event.Channel,
+				}); err != nil {
+					return oops.E(oops.CodeUnexpected, err, "create pending auth").Log(ctx, s.logger)
+				}
+
+				loginURL := fmt.Sprintf("%s/slack/login/%s", s.cfg.GramServerURL, token)
+
+				decryptedBotToken, err := s.enc.Decrypt(app.SlackBotToken.String)
+				if err != nil {
+					return oops.E(oops.CodeUnexpected, err, "decrypt bot token for ephemeral").Log(ctx, s.logger)
+				}
+
+				if err := s.client.PostEphemeralMessage(ctx, decryptedBotToken, slack_client.SlackPostEphemeralInput{
+					ChannelID: event.Event.Channel,
+					UserID:    slackUserID,
+					Message:   fmt.Sprintf("To use this bot, please sign in first: <%s|Sign in to Gram>", loginURL),
+					ThreadTS:  &threadTs,
+				}); err != nil {
+					s.logger.ErrorContext(ctx, "send ephemeral login link", attr.SlogError(err))
+				}
+
+				w.WriteHeader(http.StatusOK)
+				return nil
+			}
+		}
+
 		if _, err := background.ExecuteProcessSlackEventWorkflow(ctx, s.temporal, background.ProcessSlackWorkflowParams{
 			Event: event,
 		}); err != nil {
@@ -271,6 +330,101 @@ func (s *Service) SlackAppEventHandler(w http.ResponseWriter, r *http.Request) e
 	}
 
 	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+// --- Slack User Auth ---
+
+type slackAuthInfoToolset struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+type slackAuthInfoResponse struct {
+	AppName  string                 `json:"appName"`
+	Toolsets []slackAuthInfoToolset `json:"toolsets"`
+	Token    string                 `json:"token"`
+}
+
+func (s *Service) SlackAuthInfo(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	token := chi.URLParam(r, "token")
+
+	pendingAuth, err := s.repo.GetPendingAuthByToken(ctx, token)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "pending auth not found").Log(ctx, s.logger)
+	}
+
+	app, err := s.repo.GetSlackAppByID(ctx, pendingAuth.SlackAppID)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "slack app not found").Log(ctx, s.logger)
+	}
+
+	toolsets, err := s.repo.ListSlackAppToolsetNames(ctx, app.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list slack app toolsets").Log(ctx, s.logger)
+	}
+
+	toolsetResults := make([]slackAuthInfoToolset, 0, len(toolsets))
+	for _, ts := range toolsets {
+		toolsetResults = append(toolsetResults, slackAuthInfoToolset{
+			Name: ts.Name,
+			Slug: ts.Slug,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(slackAuthInfoResponse{
+		AppName:  app.Name,
+		Toolsets: toolsetResults,
+		Token:    token,
+	}); err != nil {
+		return fmt.Errorf("encode auth info response: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) CompleteSlackAuth(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	token := chi.URLParam(r, "token")
+
+	// Authenticate via session cookie
+	ctx, err := s.sessions.AuthenticateWithCookie(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "authentication required").Log(ctx, s.logger)
+	}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.E(oops.CodeUnauthorized, fmt.Errorf("no auth context"), "authentication required").Log(ctx, s.logger)
+	}
+
+	gramUserID, err := uuid.Parse(authCtx.UserID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "parse user ID").Log(ctx, s.logger)
+	}
+
+	pendingAuth, err := s.repo.GetPendingAuthByToken(ctx, token)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "pending auth not found").Log(ctx, s.logger)
+	}
+
+	if _, err := s.repo.CreateSlackUserMapping(ctx, repo.CreateSlackUserMappingParams{
+		SlackAppID:  pendingAuth.SlackAppID,
+		SlackUserID: pendingAuth.SlackUserID,
+		GramUserID:  gramUserID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "create slack user mapping").Log(ctx, s.logger)
+	}
+
+	if err := s.repo.CompletePendingAuth(ctx, pendingAuth.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "complete pending auth").Log(ctx, s.logger)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]bool{"ok": true}); err != nil {
+		return fmt.Errorf("encode complete auth response: %w", err)
+	}
 	return nil
 }
 
