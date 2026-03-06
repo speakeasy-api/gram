@@ -25,6 +25,7 @@ uv = "0.10.4"
 yq = "4.52.4"
 hk = "1.36.0"
 pkl = "0.30.2"
+air = "1.64.5"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.

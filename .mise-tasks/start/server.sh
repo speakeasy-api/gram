@@ -10,4 +10,8 @@ if [ -f "../config.local.toml" ]; then
     CONFIG_ARGS=(--config-file ../config.local.toml)
 fi
 
-go run -ldflags="-X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=${GIT_SHA} -X goa.design/clue/health.Version=${GIT_SHA}" main.go start "${CONFIG_ARGS[@]}" "$@"
+# Export ldflags for air's build command
+export AIR_BUILD_LDFLAGS="-X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=${GIT_SHA} -X goa.design/clue/health.Version=${GIT_SHA}"
+
+# Use air for hot reload - args after -- are passed to the binary
+air -- start "${CONFIG_ARGS[@]}" "$@"
