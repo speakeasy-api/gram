@@ -233,6 +233,6 @@
   }
 }
 
-.group:hover .scroll-dots-target {
+.server-card:hover .scroll-dots-target {
   animation: scroll-dots 3s linear infinite;
 }
