@@ -166,7 +166,7 @@ export function useExternalMcpReleaseWorkflow({
           server,
           name: server.title ?? server.registrySpecifier,
           remotes,
-          selectedRemoteUrls: new Set(remotes.map((r) => r.url)),
+          selectedRemoteUrls: new Set(),
         });
       } else {
         singleRemote.push({
@@ -493,7 +493,7 @@ export function useExternalMcpReleaseWorkflow({
           server,
           name: server.title ?? server.registrySpecifier,
           remotes,
-          selectedRemoteUrls: new Set(remotes.map((r) => r.url)),
+          selectedRemoteUrls: new Set(),
         });
       } else {
         singleRemote.push({

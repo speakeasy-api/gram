@@ -233,6 +233,13 @@ export function AddServerDialog({
   const hasConfiguredMultiRemote =
     releaseState.phase === "configure" &&
     releaseState.serverConfigs.some((c) => c.selectedRemotes);
+  // Check if all servers are already added (for title/description)
+  const allAlreadyAdded =
+    releaseState.phase === "configure" &&
+    releaseState.existingSpecifiers.size > 0 &&
+    releaseState.serverConfigs.every((c) =>
+      releaseState.existingSpecifiers.has(c.server.registrySpecifier),
+    );
   const title = (() => {
     if (releaseState.phase === "complete") return "Added to Project";
     if (releaseState.phase === "error") return "Deployment Error";
@@ -241,6 +248,7 @@ export function AddServerDialog({
         releaseState.multiRemoteConfigs[releaseState.currentServerIndex];
       return `Configure ${config?.server.title ?? config?.server.registrySpecifier ?? "Server"}`;
     }
+    if (allAlreadyAdded) return "Already in Project";
     if (hasConfiguredMultiRemote) return "One more step";
     return isSingle
       ? "Add to Project"
@@ -257,6 +265,7 @@ export function AddServerDialog({
               phase={releaseState.phase}
               isSingle={isSingle}
               hasConfiguredMultiRemote={hasConfiguredMultiRemote}
+              allAlreadyAdded={allAlreadyAdded}
             />
           </Dialog.Description>
         </Dialog.Header>
@@ -274,15 +283,20 @@ function PhaseDescription({
   phase,
   isSingle,
   hasConfiguredMultiRemote,
+  allAlreadyAdded,
 }: {
   phase: ExternalMcpReleaseWorkflow["phase"];
   isSingle: boolean;
   hasConfiguredMultiRemote: boolean;
+  allAlreadyAdded: boolean;
 }) {
   switch (phase) {
     case "selectRemotes":
       return "This server has multiple endpoints. Select which ones to include.";
     case "configure":
+      if (allAlreadyAdded) {
+        return "";
+      }
       if (hasConfiguredMultiRemote) {
         return "Name the remaining servers before adding to your project.";
       }
