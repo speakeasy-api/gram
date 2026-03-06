@@ -64,6 +64,8 @@ export const MessageFeedback: FC<MessageFeedbackProps> = ({
   onResolved,
   className,
 }) => {
+  const [tooltipContainer, setTooltipContainer] =
+    useState<HTMLDivElement | null>(null);
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackType | null>(
     null,
   );
@@ -91,6 +93,7 @@ export const MessageFeedback: FC<MessageFeedbackProps> = ({
         {!showDislikeFeedback ? (
           <m.div
             key="feedback-buttons"
+            ref={setTooltipContainer}
             className="aui-feedback-buttons relative flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-gradient-to-b from-white/80 to-white/60 px-3 py-1 backdrop-blur-2xl dark:border-white/5 dark:from-white/10 dark:to-white/[0.03]"
             initial={{ opacity: 0, scale: 0.8, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -157,7 +160,11 @@ export const MessageFeedback: FC<MessageFeedbackProps> = ({
                         </span>
                       </m.button>
                     </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={8}>
+                    <TooltipContent
+                      side="top"
+                      sideOffset={8}
+                      container={tooltipContainer}
+                    >
                       {button.label}
                     </TooltipContent>
                   </Tooltip>
