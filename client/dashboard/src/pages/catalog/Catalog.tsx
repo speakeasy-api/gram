@@ -39,13 +39,26 @@ export default function Catalog() {
   const [addingServers, setAddingServers] = useState<Server[]>([]);
   const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
+  // Track if we've loaded all data (for client-side search)
+  const [allDataLoaded, setAllDataLoaded] = useState(false);
+
+  // Only use server-side search if we haven't loaded all data yet
+  const serverSideSearch = allDataLoaded ? undefined : searchQuery;
+
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useInfiniteListMCPCatalog(searchQuery);
+    useInfiniteListMCPCatalog(serverSideSearch);
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
   const externalMcps = deployment?.externalMcps ?? [];
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Track when all data has been loaded
+  useEffect(() => {
+    if (!hasNextPage && !isLoading && data?.pages && data.pages.length > 0) {
+      setAllDataLoaded(true);
+    }
+  }, [hasNextPage, isLoading, data?.pages]);
 
   // Flatten all pages into a single list
   const allServers = useMemo(() => {
@@ -53,9 +66,11 @@ export default function Catalog() {
   }, [data]);
 
   // Apply client-side filtering based on filter state
+  // Use client-side search when all data is loaded
+  const clientSideSearch = allDataLoaded ? searchQuery : undefined;
   const filteredServers = useMemo(() => {
-    return filterAndSortServers(allServers, filterState);
-  }, [allServers, filterState]);
+    return filterAndSortServers(allServers, filterState, clientSideSearch);
+  }, [allServers, filterState, clientSideSearch]);
 
   // Check if any granular filters are active
   const hasActiveFilters = useMemo(() => {
