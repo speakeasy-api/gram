@@ -261,9 +261,9 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRe
 			URL:           r.URL,
 			TransportType: r.Type,
 		})
-		if r.Type == "streamable-http" {
+		// Track preferred remote but don't break - we need all remotes in the slice
+		if r.Type == "streamable-http" && preferredIndex == -1 {
 			preferredIndex = i
-			break
 		} else if r.Type == "sse" && preferredIndex == -1 {
 			preferredIndex = i
 		}
