@@ -67,15 +67,15 @@ export function ServerCard({
         }
       }}
       className={cn(
-        "group bg-card text-card-foreground flex flex-row rounded-xl border !border-foreground/10 overflow-hidden",
-        "hover:!border-foreground/60 hover:shadow-md transition-all cursor-pointer h-full",
+        "server-card group bg-card text-card-foreground flex flex-row rounded-xl border !border-foreground/10 overflow-hidden",
+        "hover:!border-foreground/30 hover:shadow-md transition-all cursor-pointer h-full",
         isAdded && "border-success/50 ring-1 ring-success/20",
       )}
     >
       {/* Illustration sidebar with dot pattern */}
       <div className="w-40 shrink-0 overflow-hidden border-r relative bg-muted/30 text-muted-foreground/20">
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 scroll-dots-target"
           style={{
             backgroundImage:
               "radial-gradient(circle, currentColor 1px, transparent 1px)",
@@ -96,7 +96,7 @@ export function ServerCard({
         )}
         {/* Added indicator overlay */}
         {isAdded && (
-          <div className="absolute top-3.5 left-3.5">
+          <div className="absolute top-3.5 left-3.5 z-10">
             <Badge
               variant="outline"
               className="border-success/50 bg-success/10 text-success backdrop-blur-sm"

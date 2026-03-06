@@ -39,13 +39,44 @@ export default function Catalog() {
   const [addingServers, setAddingServers] = useState<Server[]>([]);
   const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useInfiniteListMCPCatalog(searchQuery);
+  // Track if we've loaded all data (for client-side search)
+  const [allDataLoaded, setAllDataLoaded] = useState(false);
+
+  // Only use server-side search if we haven't loaded all data yet
+  // Normalize empty string to undefined for consistent query keys
+  const serverSideSearch = allDataLoaded ? undefined : searchQuery || undefined;
+
+  const {
+    data,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    debouncedSearch,
+  } = useInfiniteListMCPCatalog(serverSideSearch);
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
   const externalMcps = deployment?.externalMcps ?? [];
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Track when all data has been loaded (for the unfiltered query only)
+  // Once we've loaded all data without a search, we can switch to client-side filtering
+  useEffect(() => {
+    // Only set allDataLoaded based on the unfiltered (no search) query state
+    // Use debouncedSearch (not searchQuery) to ensure we're checking against the actual
+    // query state, avoiding timing mismatches during debounce transitions
+    if (
+      !debouncedSearch &&
+      !hasNextPage &&
+      !isLoading &&
+      data?.pages &&
+      data.pages.length > 0
+    ) {
+      setAllDataLoaded(true);
+    }
+    // Never reset allDataLoaded to false - once we have all data, we keep it
+  }, [hasNextPage, isLoading, data?.pages, debouncedSearch]);
 
   // Flatten all pages into a single list
   const allServers = useMemo(() => {
@@ -53,9 +84,11 @@ export default function Catalog() {
   }, [data]);
 
   // Apply client-side filtering based on filter state
+  // Use client-side search when all data is loaded
+  const clientSideSearch = allDataLoaded ? searchQuery : undefined;
   const filteredServers = useMemo(() => {
-    return filterAndSortServers(allServers, filterState);
-  }, [allServers, filterState]);
+    return filterAndSortServers(allServers, filterState, clientSideSearch);
+  }, [allServers, filterState, clientSideSearch]);
 
   // Check if any granular filters are active
   const hasActiveFilters = useMemo(() => {
@@ -169,7 +202,7 @@ export default function Catalog() {
               {/* Server grid */}
               <div
                 ref={setGridElement}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+                className="grid grid-cols-1 xl:grid-cols-2 gap-6"
               >
                 {isLoading &&
                   Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(

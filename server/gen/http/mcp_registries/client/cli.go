@@ -66,3 +66,47 @@ func BuildListCatalogPayload(mcpRegistriesListCatalogRegistryID string, mcpRegis
 
 	return v, nil
 }
+
+// BuildGetServerDetailsPayload builds the payload for the mcpRegistries
+// getServerDetails endpoint from CLI flags.
+func BuildGetServerDetailsPayload(mcpRegistriesGetServerDetailsRegistryID string, mcpRegistriesGetServerDetailsServerSpecifier string, mcpRegistriesGetServerDetailsSessionToken string, mcpRegistriesGetServerDetailsApikeyToken string, mcpRegistriesGetServerDetailsProjectSlugInput string) (*mcpregistries.GetServerDetailsPayload, error) {
+	var err error
+	var registryID string
+	{
+		registryID = mcpRegistriesGetServerDetailsRegistryID
+		err = goa.MergeErrors(err, goa.ValidateFormat("registry_id", registryID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var serverSpecifier string
+	{
+		serverSpecifier = mcpRegistriesGetServerDetailsServerSpecifier
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesGetServerDetailsSessionToken != "" {
+			sessionToken = &mcpRegistriesGetServerDetailsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesGetServerDetailsApikeyToken != "" {
+			apikeyToken = &mcpRegistriesGetServerDetailsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesGetServerDetailsProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesGetServerDetailsProjectSlugInput
+		}
+	}
+	v := &mcpregistries.GetServerDetailsPayload{}
+	v.RegistryID = registryID
+	v.ServerSpecifier = serverSpecifier
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

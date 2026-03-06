@@ -367,6 +367,10 @@ var AddExternalMCPForm = Type("AddExternalMCPForm", func() {
 		Description("The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').")
 		Example("slack")
 	})
+	Attribute("selected_remotes", ArrayOf(String), func() {
+		Description("URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.")
+		Example([]string{"https://mcp.example.com/sse"})
+	})
 })
 
 var CreateDeploymentResult = Type("CreateDeploymentResult", func() {

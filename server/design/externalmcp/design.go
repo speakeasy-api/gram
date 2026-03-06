@@ -51,6 +51,38 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listCatalog")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMCPCatalog"}`)
 	})
+
+	Method("getServerDetails", func() {
+		Description("Get detailed information about an MCP server including remotes")
+
+		Payload(func() {
+			Attribute("registry_id", String, "ID of the registry", func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_specifier", String, "Server specifier (e.g., 'io.github.user/server')")
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+
+			Required("registry_id", "server_specifier")
+		})
+
+		Result(ExternalMCPServer)
+
+		HTTP(func() {
+			GET("/rpc/mcpRegistries.getServerDetails")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Param("registry_id")
+			Param("server_specifier")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMCPServerDetails")
+		Meta("openapi:extension:x-speakeasy-name-override", "getServerDetails")
+	})
 })
 
 var ExternalMCPServer = Type("ExternalMCPServer", func() {
@@ -74,6 +106,7 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	})
 	Attribute("meta", Any, "Opaque metadata from the registry")
 	Attribute("tools", ArrayOf(ExternalMCPTool), "Tools available on the server")
+	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
 
 	Required("registry_specifier", "version", "description", "registry_id")
 })
@@ -85,4 +118,19 @@ var ExternalMCPTool = Type("ExternalMCPTool", func() {
 	Attribute("description", String, "Description of the tool")
 	Attribute("input_schema", Any, "Input schema for the tool")
 	Attribute("annotations", Any, "Annotations for the tool")
+})
+
+var ExternalMCPRemote = Type("ExternalMCPRemote", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A remote endpoint for an MCP server")
+
+	Attribute("url", String, "URL of the remote endpoint", func() {
+		Format(FormatURI)
+	})
+	Attribute("transport_type", String, "Transport type (sse or streamable-http)", func() {
+		Enum("sse", "streamable-http")
+	})
+
+	Required("url", "transport_type")
 })

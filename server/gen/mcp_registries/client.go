@@ -10,18 +10,21 @@ package mcpregistries
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
 // Client is the "mcpRegistries" service client.
 type Client struct {
-	ListCatalogEndpoint goa.Endpoint
+	ListCatalogEndpoint      goa.Endpoint
+	GetServerDetailsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "mcpRegistries" service client given the endpoints.
-func NewClient(listCatalog goa.Endpoint) *Client {
+func NewClient(listCatalog, getServerDetails goa.Endpoint) *Client {
 	return &Client{
-		ListCatalogEndpoint: listCatalog,
+		ListCatalogEndpoint:      listCatalog,
+		GetServerDetailsEndpoint: getServerDetails,
 	}
 }
 
@@ -45,4 +48,27 @@ func (c *Client) ListCatalog(ctx context.Context, p *ListCatalogPayload) (res *L
 		return
 	}
 	return ires.(*ListCatalogResult), nil
+}
+
+// GetServerDetails calls the "getServerDetails" endpoint of the
+// "mcpRegistries" service.
+// GetServerDetails may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetServerDetails(ctx context.Context, p *GetServerDetailsPayload) (res *types.ExternalMCPServer, err error) {
+	var ires any
+	ires, err = c.GetServerDetailsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.ExternalMCPServer), nil
 }

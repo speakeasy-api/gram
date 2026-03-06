@@ -1864,6 +1864,9 @@ type AddExternalMCPFormRequestBody struct {
 	// The canonical server name used to look up the server in the registry (e.g.,
 	// 'slack', 'ai.exa/exa').
 	RegistryServerSpecifier *string `form:"registry_server_specifier,omitempty" json:"registry_server_specifier,omitempty" xml:"registry_server_specifier,omitempty"`
+	// URLs of the remotes to use for this MCP server. If not provided, the backend
+	// will auto-select based on transport type preference.
+	SelectedRemotes []string `form:"selected_remotes,omitempty" json:"selected_remotes,omitempty" xml:"selected_remotes,omitempty"`
 }
 
 // AddPackageFormRequestBody is used to define fields on request body types.
