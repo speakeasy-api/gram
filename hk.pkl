@@ -50,6 +50,7 @@ local linters = new Mapping<String, Step> {
         "**/*.markdown.mdx",
         "**/*.md",
       )
+    exclude = List(".speakeasy/**", "server/gen/**", "client/sdk/**")
     check = "pnpm oxfmt --check {{files}}"
     fix = "pnpm oxfmt --write {{files}}"
   }

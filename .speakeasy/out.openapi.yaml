@@ -4,8 +4,7 @@ info:
   description: Gram is the tools platform for AI agents
   version: 0.0.1
 servers:
-  - url: http://localhost:80
-    description: Default server for gram
+  - url: https://app.getgram.ai
 paths:
   /rpc/assets.createSignedChatAttachmentURL:
     post:
