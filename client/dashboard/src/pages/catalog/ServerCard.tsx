@@ -68,7 +68,7 @@ export function ServerCard({
       }}
       className={cn(
         "server-card group bg-card text-card-foreground flex flex-row rounded-xl border !border-foreground/10 overflow-hidden",
-        "hover:!border-foreground/60 hover:shadow-md transition-all cursor-pointer h-full",
+        "hover:!border-foreground/30 hover:shadow-md transition-all cursor-pointer h-full",
         isAdded && "border-success/50 ring-1 ring-success/20",
       )}
     >
