@@ -184,7 +184,7 @@ export default function Catalog() {
               {/* Server grid */}
               <div
                 ref={setGridElement}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+                className="grid grid-cols-1 xl:grid-cols-2 gap-6"
               >
                 {isLoading &&
                   Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
