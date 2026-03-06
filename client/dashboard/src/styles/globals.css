@@ -233,6 +233,6 @@
   }
 }
 
-.animate-scroll-dots {
+.group:hover .scroll-dots-target {
   animation: scroll-dots 3s linear infinite;
 }

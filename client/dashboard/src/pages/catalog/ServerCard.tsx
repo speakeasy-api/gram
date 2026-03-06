@@ -75,7 +75,7 @@ export function ServerCard({
       {/* Illustration sidebar with dot pattern */}
       <div className="w-40 shrink-0 overflow-hidden border-r relative bg-muted/30 text-muted-foreground/20">
         <div
-          className="absolute inset-0 group-hover:animate-scroll-dots"
+          className="absolute inset-0 scroll-dots-target"
           style={{
             backgroundImage:
               "radial-gradient(circle, currentColor 1px, transparent 1px)",
