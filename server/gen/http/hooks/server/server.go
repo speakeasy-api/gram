@@ -51,7 +51,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"Claude", "POST", "/rpc/hooks.claude"},
-			{"Logs", "POST", "/hooks/v1/logs"},
+			{"Logs", "POST", "/rpc/hooks.otel/v1/logs"},
 		},
 		Claude: NewClaudeHandler(e.Claude, mux, decoder, encoder, errhandler, formatter),
 		Logs:   NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
@@ -143,7 +143,7 @@ func MountLogsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/hooks/v1/logs", f)
+	mux.Handle("POST", "/rpc/hooks.otel/v1/logs", f)
 }
 
 // NewLogsHandler creates a HTTP handler which loads the HTTP request and calls

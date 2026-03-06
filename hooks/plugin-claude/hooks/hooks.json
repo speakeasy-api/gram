@@ -1,22 +1,11 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "http",
-            "url": "https://app.getgram.ai/rpc/hooks.claude",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "hooks": [
           {
-            "type": "http",
-            "url": "https://app.getgram.ai/rpc/hooks.claude",
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
             "timeout": 30
           }
         ]
@@ -26,8 +15,8 @@
       {
         "hooks": [
           {
-            "type": "http",
-            "url": "https://app.getgram.ai/rpc/hooks.claude",
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
             "timeout": 30
           }
         ]
@@ -37,8 +26,8 @@
       {
         "hooks": [
           {
-            "type": "http",
-            "url": "https://app.getgram.ai/rpc/hooks.claude",
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
             "timeout": 30
           }
         ]

@@ -141,7 +141,7 @@ var _ = Service("hooks", func() {
 		Result(Empty)
 
 		HTTP(func() {
-			POST("/hooks/v1/logs")
+			POST("/rpc/hooks.otel/v1/logs")
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusAccepted)
