@@ -15697,6 +15697,134 @@ components:
             required:
                 - slug
                 - provider_type
+        OTELAttribute:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Attribute key
+                value:
+                    $ref: '#/components/schemas/OTELAttributeValue'
+            description: OTEL log attribute with key and typed value
+            required:
+                - key
+                - value
+        OTELAttributeValue:
+            type: object
+            properties:
+                intValue:
+                    type: integer
+                    description: Integer value
+                    format: int64
+                stringValue:
+                    type: string
+                    description: String value
+            description: OTEL attribute value - supports stringValue or intValue
+        OTELLogBody:
+            type: object
+            properties:
+                stringValue:
+                    type: string
+                    description: String body value
+            description: OTEL log body
+        OTELLogRecord:
+            type: object
+            properties:
+                attributes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OTELAttribute'
+                    description: Log attributes
+                body:
+                    $ref: '#/components/schemas/OTELLogBody'
+                droppedAttributesCount:
+                    type: integer
+                    description: Number of dropped attributes
+                    format: int64
+                observedTimeUnixNano:
+                    type: string
+                    description: Observed timestamp in nanoseconds
+                timeUnixNano:
+                    type: string
+                    description: Timestamp in nanoseconds since Unix epoch
+            description: Individual OTEL log record
+            required:
+                - timeUnixNano
+                - observedTimeUnixNano
+                - body
+                - attributes
+        OTELLogsPayload:
+            type: object
+            properties:
+                resourceLogs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OTELResourceLog'
+                    description: Array of resource logs
+            description: OTEL logs export payload
+            required:
+                - resourceLogs
+        OTELResource:
+            type: object
+            properties:
+                attributes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OTELResourceAttribute'
+                    description: Resource attributes
+                droppedAttributesCount:
+                    type: integer
+                    description: Number of dropped attributes
+                    format: int64
+            description: OTEL resource information
+        OTELResourceAttribute:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Resource attribute key
+                value:
+                    $ref: '#/components/schemas/OTELAttributeValue'
+            description: OTEL resource attribute
+            required:
+                - key
+                - value
+        OTELResourceLog:
+            type: object
+            properties:
+                resource:
+                    $ref: '#/components/schemas/OTELResource'
+                scopeLogs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OTELScopeLog'
+                    description: Array of scope logs
+            description: OTEL resource logs container
+            required:
+                - scopeLogs
+        OTELScope:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Scope name
+                version:
+                    type: string
+                    description: Scope version
+            description: OTEL instrumentation scope
+        OTELScopeLog:
+            type: object
+            properties:
+                logRecords:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OTELLogRecord'
+                    description: Array of log records
+                scope:
+                    $ref: '#/components/schemas/OTELScope'
+            description: OTEL scope logs container
+            required:
+                - logRecords
         ObservabilitySummary:
             type: object
             properties:

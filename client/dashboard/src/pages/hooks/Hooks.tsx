@@ -31,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "../logs/LogDetailSheet";
 import { HooksEmptyState } from "./HooksEmptyState";
+import { HookSourceIcon } from "./HookSourceIcon";
 
 const validPresets: DateRangePreset[] = [
   "15m",
@@ -380,7 +381,7 @@ function HooksContent() {
           <Page.Header>
             <Page.Header.Breadcrumbs fullWidth />
           </Page.Header>
-          <Page.Body fullWidth className="flex-1">
+          <Page.Body fullWidth noPadding overflowHidden className="flex-1">
             <EnterpriseGate
               icon="workflow"
               description="Hooks are available on the Enterprise plan. Book a time to get started."
@@ -509,9 +510,9 @@ function HooksInnerContent({
 
   return (
     <>
-      <div className="flex flex-col flex-1 min-h-0 w-full -mx-8 -mt-6">
+      <div className="flex flex-col flex-1 min-h-0 w-full">
         {/* Header section */}
-        <div className="px-8 py-4 shrink-0">
+        <div className="px-8 pt-8 pb-4 shrink-0">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex flex-col gap-1 min-w-0">
               <h1 className="text-xl font-semibold">Hooks</h1>
@@ -580,6 +581,7 @@ function HooksInnerContent({
               <div className="shrink-0 w-[150px]">Timestamp</div>
               <div className="flex-1 min-w-0">Server / Tool</div>
               <div className="shrink-0 w-[250px]">User</div>
+              <div className="shrink-0 w-[150px]">Source</div>
               <div className="shrink-0 w-20 text-right">Event</div>
             </div>
 
@@ -775,6 +777,7 @@ function HookLogRow({
   const serverName = log.attributes?.gram?.tool_call?.source as
     | string
     | undefined;
+  const hookSource = log.attributes?.gram?.hook?.source as string | undefined;
   const userEmail = log.attributes?.user?.email as string | undefined;
 
   const timestamp = new Date(Number(log.timeUnixNano) / 1000000);
@@ -793,8 +796,16 @@ function HookLogRow({
   }, [timestamp]);
 
   const serverNameBadge = useMemo(() => {
+    const isLocal = !serverName;
     return (
-      <span className="text-xs font-mono truncate bg-muted px-1 py-1 rounded-sm">
+      <span
+        className={cn(
+          "text-xs font-mono truncate px-2 py-1 rounded-md",
+          isLocal
+            ? "bg-muted/50 text-muted-foreground"
+            : "bg-primary/10 text-primary border border-primary/20 font-medium",
+        )}
+      >
         {serverName || "local"}
       </span>
     );
@@ -816,6 +827,14 @@ function HookLogRow({
       </div>
       <div className="shrink-0 w-[250px] text-sm text-muted-foreground truncate">
         {userEmail || "—"}
+      </div>
+      <div className="shrink-0 w-[150px] flex items-center gap-2">
+        <HookSourceIcon source={hookSource} className="size-4 shrink-0" />
+        {hookSource && (
+          <span className="text-xs text-foreground font-medium truncate">
+            {hookSource}
+          </span>
+        )}
       </div>
       <div className="shrink-0 w-20 flex justify-end">
         <HookEventBadge eventName={hookEventName} />
