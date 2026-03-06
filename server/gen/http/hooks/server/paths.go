@@ -14,5 +14,5 @@ func ClaudeHooksPath() string {
 
 // LogsHooksPath returns the URL path to the hooks service logs HTTP endpoint.
 func LogsHooksPath() string {
-	return "/hooks/v1/logs"
+	return "/rpc/hooks.otel/v1/logs"
 }
