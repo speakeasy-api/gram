@@ -163,39 +163,10 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").Log(ctx, s.logger)
 	}
 
-	details, err := s.registryClient.GetServerDetails(ctx, Registry{
-		ID:  registry.ID,
-		URL: registry.Url,
-	}, payload.ServerSpecifier, nil)
+	// Fetch all server details in a single HTTP call
+	details, err := s.fetchServerDetails(ctx, registry, payload.ServerSpecifier)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch server details from registry").Log(ctx, s.logger)
-	}
-
-	// Build the remotes array from the full details response
-	// We need to re-fetch the raw response to get all remotes since GetServerDetails
-	// only returns the selected remote. Let's use a different approach - fetch the list
-	// endpoint filtered by server name to get remotes.
-	// Actually, looking at the registry client, the serverDetailsJSON.Remotes field
-	// has all remotes. We need to fetch the raw details ourselves.
-
-	// Make a separate call to get all remotes
-	allRemotes, err := s.fetchAllRemotes(ctx, registry, payload.ServerSpecifier)
-	if err != nil {
-		// Log warning but continue - we still have the basic details
-		s.logger.WarnContext(ctx, "failed to fetch all remotes for server",
-			attr.SlogError(err),
-		)
-	}
-
-	// Convert tools from registry format to API format
-	tools := make([]*types.ExternalMCPTool, 0, len(details.Tools))
-	for _, tool := range details.Tools {
-		tools = append(tools, &types.ExternalMCPTool{
-			Name:        &tool.Name,
-			Description: &tool.Description,
-			InputSchema: tool.InputSchema,
-			Annotations: tool.Annotations,
-		})
 	}
 
 	return &types.ExternalMCPServer{
@@ -206,13 +177,22 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		Title:             nil, // Not available from details endpoint
 		IconURL:           nil, // Not available from details endpoint
 		Meta:              nil, // Not available from details endpoint
-		Tools:             tools,
-		Remotes:           allRemotes,
+		Tools:             details.Tools,
+		Remotes:           details.Remotes,
 	}, nil
 }
 
-// fetchAllRemotes fetches all available remotes for a server from the registry.
-func (s *Service) fetchAllRemotes(ctx context.Context, registry repo.GetMCPRegistryByIDRow, serverName string) ([]*types.ExternalMCPRemote, error) {
+// serverDetailsResult contains all details fetched from the registry for a server.
+type serverDetailsResult struct {
+	Name        string
+	Description string
+	Version     string
+	Tools       []*types.ExternalMCPTool
+	Remotes     []*types.ExternalMCPRemote
+}
+
+// fetchServerDetails fetches all server details from the registry in a single HTTP call.
+func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRegistryByIDRow, serverName string) (*serverDetailsResult, error) {
 	reqURL := fmt.Sprintf("%s/v0.1/servers/%s/versions/latest", registry.Url, url.PathEscape(serverName))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
@@ -243,16 +223,32 @@ func (s *Service) fetchAllRemotes(ctx context.Context, registry repo.GetMCPRegis
 
 	var serverResp struct {
 		Server struct {
-			Remotes []struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			Version     string `json:"version"`
+			Remotes     []struct {
 				URL  string `json:"url"`
 				Type string `json:"type"`
 			} `json:"remotes"`
 		} `json:"server"`
+		Meta struct {
+			Version struct {
+				FirstRemote struct {
+					Tools []struct {
+						Name        string          `json:"name"`
+						Description string          `json:"description"`
+						InputSchema json.RawMessage `json:"inputSchema"`
+						Annotations map[string]any  `json:"annotations"`
+					} `json:"tools"`
+				} `json:"remotes[0]"`
+			} `json:"com.pulsemcp/server-version"`
+		} `json:"_meta"`
 	}
 	if err := json.Unmarshal(body, &serverResp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
+	// Convert remotes
 	var remotes []*types.ExternalMCPRemote
 	for _, r := range serverResp.Server.Remotes {
 		remotes = append(remotes, &types.ExternalMCPRemote{
@@ -261,5 +257,22 @@ func (s *Service) fetchAllRemotes(ctx context.Context, registry repo.GetMCPRegis
 		})
 	}
 
-	return remotes, nil
+	// Convert tools
+	var tools []*types.ExternalMCPTool
+	for _, t := range serverResp.Meta.Version.FirstRemote.Tools {
+		tools = append(tools, &types.ExternalMCPTool{
+			Name:        &t.Name,
+			Description: &t.Description,
+			InputSchema: t.InputSchema,
+			Annotations: t.Annotations,
+		})
+	}
+
+	return &serverDetailsResult{
+		Name:        serverResp.Server.Name,
+		Description: serverResp.Server.Description,
+		Version:     serverResp.Server.Version,
+		Tools:       tools,
+		Remotes:     remotes,
+	}, nil
 }
