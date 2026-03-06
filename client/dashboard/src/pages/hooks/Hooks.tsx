@@ -582,7 +582,7 @@ function HooksInnerContent({
               <div className="flex-1 min-w-0">Server / Tool</div>
               <div className="shrink-0 w-[250px]">User</div>
               <div className="shrink-0 w-[150px]">Source</div>
-              <div className="shrink-0 w-20 text-right">Event</div> 
+              <div className="shrink-0 w-20 text-right">Event</div>
             </div>
 
             {/* Scrollable logs list */}

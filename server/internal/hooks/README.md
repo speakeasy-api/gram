@@ -20,7 +20,7 @@ Claude Code sends two types of requests to our service:
    - Contain `session_id`, `user_email`, `organization.id`
    - Validated through API key authentication
 
-**Problem**: Hook events often arrive *before* we know the user's identity via the Logs endpoint.
+**Problem**: Hook events often arrive _before_ we know the user's identity via the Logs endpoint.
 
 ### The Solution: Redis Buffering
 
