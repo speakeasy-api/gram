@@ -545,13 +545,20 @@ function ConfigurePhaseContent({
   const hasOnlySingleRemote = singleRemoteConfigs.length > 0;
   const effectiveIsSingle = singleRemoteConfigs.length === 1;
 
+  // Multi-remote servers (with selectedRemotes) are always considered "new"
+  // because different remote selections make them distinct configurations
   const allAlreadyAdded =
     existingSpecifiers.size > 0 &&
-    releaseState.serverConfigs.every((c) =>
-      existingSpecifiers.has(c.server.registrySpecifier),
+    releaseState.serverConfigs.every(
+      (c) =>
+        // Multi-remote servers are never "already added" - they're new configs
+        !c.selectedRemotes &&
+        existingSpecifiers.has(c.server.registrySpecifier),
     );
   const hasNewServers = releaseState.serverConfigs.some(
-    (c) => !existingSpecifiers.has(c.server.registrySpecifier),
+    (c) =>
+      // Multi-remote servers are always "new"
+      c.selectedRemotes || !existingSpecifiers.has(c.server.registrySpecifier),
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
