@@ -595,15 +595,18 @@ function ConfigurePhaseContent({
         )}
       </Stack>
       <Dialog.Footer>
-        {releaseState.goBack ? (
-          <Button variant="tertiary" onClick={releaseState.goBack}>
-            Back
-          </Button>
-        ) : (
-          <Button variant="tertiary" onClick={onClose}>
-            {allAlreadyAdded ? "Close" : "Cancel"}
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {releaseState.goBack && (
+            <Button variant="tertiary" onClick={releaseState.goBack}>
+              Back
+            </Button>
+          )}
+          {(!releaseState.goBack || allAlreadyAdded) && (
+            <Button variant="tertiary" onClick={onClose}>
+              {allAlreadyAdded ? "Close" : "Cancel"}
+            </Button>
+          )}
+        </div>
         {!allAlreadyAdded && (
           <Button
             disabled={!releaseState.canDeploy || !hasNewServers}
