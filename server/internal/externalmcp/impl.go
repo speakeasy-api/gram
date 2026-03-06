@@ -221,6 +221,14 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRe
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	type remoteMeta struct {
+		Tools []struct {
+			Name        string          `json:"name"`
+			Description string          `json:"description"`
+			InputSchema json.RawMessage `json:"inputSchema"`
+			Annotations map[string]any  `json:"annotations"`
+		} `json:"tools"`
+	}
 	var serverResp struct {
 		Server struct {
 			Name        string `json:"name"`
@@ -233,14 +241,11 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRe
 		} `json:"server"`
 		Meta struct {
 			Version struct {
-				FirstRemote struct {
-					Tools []struct {
-						Name        string          `json:"name"`
-						Description string          `json:"description"`
-						InputSchema json.RawMessage `json:"inputSchema"`
-						Annotations map[string]any  `json:"annotations"`
-					} `json:"tools"`
-				} `json:"remotes[0]"`
+				FirstRemote  remoteMeta `json:"remotes[0]"`
+				SecondRemote remoteMeta `json:"remotes[1]"`
+				ThirdRemote  remoteMeta `json:"remotes[2]"`
+				FourthRemote remoteMeta `json:"remotes[3]"`
+				FifthRemote  remoteMeta `json:"remotes[4]"`
 			} `json:"com.pulsemcp/server-version"`
 		} `json:"_meta"`
 	}
@@ -248,18 +253,40 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRe
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
-	// Convert remotes
+	// Convert remotes and find preferred remote index (streamable-http > sse)
 	var remotes []*types.ExternalMCPRemote
-	for _, r := range serverResp.Server.Remotes {
+	preferredIndex := -1
+	for i, r := range serverResp.Server.Remotes {
 		remotes = append(remotes, &types.ExternalMCPRemote{
 			URL:           r.URL,
 			TransportType: r.Type,
 		})
+		if r.Type == "streamable-http" {
+			preferredIndex = i
+			break
+		} else if r.Type == "sse" && preferredIndex == -1 {
+			preferredIndex = i
+		}
+	}
+
+	// Get tools from the preferred remote (matching registryclient.go behavior)
+	var selectedRemote remoteMeta
+	switch preferredIndex {
+	case 0:
+		selectedRemote = serverResp.Meta.Version.FirstRemote
+	case 1:
+		selectedRemote = serverResp.Meta.Version.SecondRemote
+	case 2:
+		selectedRemote = serverResp.Meta.Version.ThirdRemote
+	case 3:
+		selectedRemote = serverResp.Meta.Version.FourthRemote
+	case 4:
+		selectedRemote = serverResp.Meta.Version.FifthRemote
 	}
 
 	// Convert tools
 	var tools []*types.ExternalMCPTool
-	for _, t := range serverResp.Meta.Version.FirstRemote.Tools {
+	for _, t := range selectedRemote.Tools {
 		tools = append(tools, &types.ExternalMCPTool{
 			Name:        &t.Name,
 			Description: &t.Description,

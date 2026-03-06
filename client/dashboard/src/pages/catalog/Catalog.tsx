@@ -43,7 +43,8 @@ export default function Catalog() {
   const [allDataLoaded, setAllDataLoaded] = useState(false);
 
   // Only use server-side search if we haven't loaded all data yet
-  const serverSideSearch = allDataLoaded ? undefined : searchQuery;
+  // Normalize empty string to undefined for consistent query keys
+  const serverSideSearch = allDataLoaded ? undefined : searchQuery || undefined;
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteListMCPCatalog(serverSideSearch);
