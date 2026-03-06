@@ -222,3 +222,17 @@
 [data-slot="popover-trigger"] > div.inline-flex.rounded-md.border {
   background: transparent !important;
 }
+
+/* Dotted background scroll animation for catalog cards */
+@keyframes scroll-dots {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 64px 64px;
+  }
+}
+
+.animate-scroll-dots {
+  animation: scroll-dots 3s linear infinite;
+}
