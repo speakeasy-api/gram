@@ -53,15 +53,22 @@ export default function Catalog() {
   const externalMcps = deployment?.externalMcps ?? [];
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Track when all data has been loaded
+  // Track when all data has been loaded (for the unfiltered query only)
+  // Once we've loaded all data without a search, we can switch to client-side filtering
   useEffect(() => {
-    if (!hasNextPage && !isLoading && data?.pages && data.pages.length > 0) {
+    // Only set allDataLoaded based on the unfiltered (no search) query state
+    // If there's a search query active, don't update allDataLoaded based on its pagination state
+    if (
+      !searchQuery &&
+      !hasNextPage &&
+      !isLoading &&
+      data?.pages &&
+      data.pages.length > 0
+    ) {
       setAllDataLoaded(true);
-    } else if (hasNextPage) {
-      // Reset when query changes and there are more pages to load
-      setAllDataLoaded(false);
     }
-  }, [hasNextPage, isLoading, data?.pages]);
+    // Never reset allDataLoaded to false - once we have all data, we keep it
+  }, [hasNextPage, isLoading, data?.pages, searchQuery]);
 
   // Flatten all pages into a single list
   const allServers = useMemo(() => {
