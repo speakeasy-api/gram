@@ -384,7 +384,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	var transportType externalmcptypes.TransportType
 	var tools []serverTool
 	var headers []RemoteHeader
-	var remoteIndex int
+	remoteIndex := -1 // Use -1 as sentinel to detect when no remote matched
 	for i, remote := range serverResp.Server.Remotes {
 		// Skip remotes not in allowed list (if filter is active)
 		if hasFilter {
@@ -407,7 +407,9 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		}
 	}
 
-	// Obviously not ideal, this is just the way the registry API is structured
+	// Only fetch tools if a remote was actually matched.
+	// If remoteIndex is -1 (no match), tools stays nil.
+	// Obviously not ideal, this is just the way the registry API is structured.
 	switch remoteIndex {
 	case 0:
 		tools = serverResp.Meta.Version.FirstRemote.Tools
