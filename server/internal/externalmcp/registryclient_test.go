@@ -232,3 +232,99 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	require.Equal(t, "https://example.com/streamable", details.RemoteURL)
 	require.Equal(t, types.TransportTypeStreamableHTTP, details.TransportType)
 }
+
+func TestGetServerDetails_SelectedRemotesFiltersToSSE(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := slog.New(slog.DiscardHandler)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
+
+		// Server has both SSE and streamable-http remotes
+		response := serverDetailsEntry{
+			Server: serverDetailsJSON{
+				Name:        "test-server",
+				Description: "Test server description",
+				Version:     "1.0.0",
+				Remotes: []serverRemoteBasic{
+					{URL: "https://example.com/sse", Type: "sse"},
+					{URL: "https://example.com/streamable", Type: "streamable-http"},
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err := json.NewEncoder(w).Encode(response)
+		assert.NoError(t, err)
+	}))
+	defer server.Close()
+
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
+	client.httpClient = server.Client()
+	registry := Registry{
+		ID:  uuid.New(),
+		URL: server.URL,
+	}
+
+	// Filter to only allow the SSE remote, not the streamable-http
+	selectedRemotes := []string{"https://example.com/sse"}
+	details, err := client.GetServerDetails(ctx, registry, "test-server", selectedRemotes)
+
+	require.NoError(t, err)
+	require.NotNil(t, details)
+	require.Equal(t, "test-server", details.Name)
+	// Should select SSE since streamable-http is filtered out
+	require.Equal(t, "https://example.com/sse", details.RemoteURL)
+	require.Equal(t, types.TransportTypeSSE, details.TransportType)
+}
+
+func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := slog.New(slog.DiscardHandler)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
+
+		// Server has both SSE and streamable-http remotes
+		response := serverDetailsEntry{
+			Server: serverDetailsJSON{
+				Name:        "test-server",
+				Description: "Test server description",
+				Version:     "1.0.0",
+				Remotes: []serverRemoteBasic{
+					{URL: "https://example.com/sse", Type: "sse"},
+					{URL: "https://example.com/streamable", Type: "streamable-http"},
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err := json.NewEncoder(w).Encode(response)
+		assert.NoError(t, err)
+	}))
+	defer server.Close()
+
+	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
+	client.httpClient = server.Client()
+	registry := Registry{
+		ID:  uuid.New(),
+		URL: server.URL,
+	}
+
+	// Allow both remotes, should still prefer streamable-http
+	selectedRemotes := []string{"https://example.com/sse", "https://example.com/streamable"}
+	details, err := client.GetServerDetails(ctx, registry, "test-server", selectedRemotes)
+
+	require.NoError(t, err)
+	require.NotNil(t, details)
+	require.Equal(t, "test-server", details.Name)
+	// Should prefer streamable-http when both are allowed
+	require.Equal(t, "https://example.com/streamable", details.RemoteURL)
+	require.Equal(t, types.TransportTypeStreamableHTTP, details.TransportType)
+}
