@@ -154,6 +154,9 @@ export function useExternalMcpReleaseWorkflow({
   // Track whether we've already transitioned from deploying to complete
   const hasTransitionedRef = useRef(false);
 
+  // Track last processed server index to prevent double-click duplicates
+  const lastProcessedIndexRef = useRef(-1);
+
   // Initialize server configs when servers change - partition into multi/single remote
   useEffect(() => {
     const multiRemote: MultiRemoteServerConfig[] = [];
@@ -378,6 +381,10 @@ export function useExternalMcpReleaseWorkflow({
   const nextServer = useCallback(() => {
     if (!canProceed) return;
 
+    // Prevent double-click duplicates by checking if this index was already processed
+    if (lastProcessedIndexRef.current === currentServerIndex) return;
+    lastProcessedIndexRef.current = currentServerIndex;
+
     const currentConfig = multiRemoteConfigs[currentServerIndex];
     if (currentConfig) {
       // Add the configured multi-remote server to serverConfigs
@@ -416,6 +423,7 @@ export function useExternalMcpReleaseWorkflow({
       prev.filter((config) => !config.selectedRemotes),
     );
     setCurrentServerIndex(0);
+    lastProcessedIndexRef.current = -1; // Reset to allow re-processing
     setPhase("selectRemotes");
   }, []);
 
