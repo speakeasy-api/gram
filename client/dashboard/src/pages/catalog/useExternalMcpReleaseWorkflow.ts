@@ -441,6 +441,9 @@ export function useExternalMcpReleaseWorkflow({
           evolveForm: {
             deploymentId: latestDeployment?.id,
             nonBlocking: true,
+            // TODO: Pass config.selectedRemotes to the backend once the API supports it.
+            // Currently the remote selection UI collects user preferences but the backend
+            // AddExternalMCPForm doesn't have a remotes field yet.
             upsertExternalMcps: serverConfigs.map((config) => {
               const slug = generateSlug(config.server.registrySpecifier);
               return {
