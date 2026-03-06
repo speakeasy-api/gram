@@ -187,11 +187,26 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		)
 	}
 
+	// Convert tools from registry format to API format
+	tools := make([]*types.ExternalMCPTool, 0, len(details.Tools))
+	for _, tool := range details.Tools {
+		tools = append(tools, &types.ExternalMCPTool{
+			Name:        &tool.Name,
+			Description: &tool.Description,
+			InputSchema: tool.InputSchema,
+			Annotations: tool.Annotations,
+		})
+	}
+
 	return &types.ExternalMCPServer{
 		RegistrySpecifier: details.Name,
 		Version:           details.Version,
 		Description:       details.Description,
 		RegistryID:        registryID.String(),
+		Title:             nil, // Not available from details endpoint
+		IconURL:           nil, // Not available from details endpoint
+		Meta:              nil, // Not available from details endpoint
+		Tools:             tools,
 		Remotes:           allRemotes,
 	}, nil
 }
