@@ -22,7 +22,7 @@ type ManifestToolV0 struct {
 	Variables   map[string]*ManifestVariableAttributeV0 `json:"variables"`
 	AuthInput   *ManifestAuthInputAttributeV0           `json:"authInput,omitempty"`
 	Annotations *ManifestAnnotationsV0                  `json:"annotations,omitempty"`
-	Meta        map[string]string                       `json:"meta"`
+	Meta        map[string]any                          `json:"meta"`
 }
 
 type ManifestAnnotationsV0 struct {
