@@ -790,7 +790,7 @@ The default server can be overridden globally by passing a URL to the `serverURL
 import { Gram } from "@gram/client";
 
 const gram = new Gram({
-  serverURL: "http://localhost:80",
+  serverURL: "https://app.getgram.ai",
 });
 
 async function run() {
