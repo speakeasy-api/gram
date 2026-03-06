@@ -295,7 +295,7 @@ func (s *Service) SlackAppEventHandler(w http.ResponseWriter, r *http.Request) e
 	if processEvent {
 		slackAccountID := event.Event.User
 		if slackAccountID != "" {
-			registration, err := s.repo.GetSlackRegistrationWithUser(ctx, repo.GetSlackRegistrationWithUserParams{
+			_, err := s.repo.GetSlackRegistrationWithUser(ctx, repo.GetSlackRegistrationWithUserParams{
 				SlackAppID:     appID,
 				SlackAccountID: slackAccountID,
 			})
