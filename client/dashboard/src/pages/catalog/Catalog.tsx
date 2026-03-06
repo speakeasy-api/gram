@@ -57,6 +57,9 @@ export default function Catalog() {
   useEffect(() => {
     if (!hasNextPage && !isLoading && data?.pages && data.pages.length > 0) {
       setAllDataLoaded(true);
+    } else if (hasNextPage) {
+      // Reset when query changes and there are more pages to load
+      setAllDataLoaded(false);
     }
   }, [hasNextPage, isLoading, data?.pages]);
 

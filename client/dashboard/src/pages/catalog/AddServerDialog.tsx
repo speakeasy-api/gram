@@ -382,11 +382,14 @@ export function AddServerDialog({
     releaseState.phase === "configure" &&
     releaseState.serverConfigs.some((c) => c.selectedRemotes);
   // Check if all servers are already added (for title/description)
+  // Multi-remote servers with selectedRemotes are always new deployments
   const allAlreadyAdded =
     releaseState.phase === "configure" &&
     releaseState.existingSpecifiers.size > 0 &&
-    releaseState.serverConfigs.every((c) =>
-      releaseState.existingSpecifiers.has(c.server.registrySpecifier),
+    releaseState.serverConfigs.every(
+      (c) =>
+        !c.selectedRemotes &&
+        releaseState.existingSpecifiers.has(c.server.registrySpecifier),
     );
   const title = (() => {
     if (releaseState.phase === "complete") return "Added to Project";

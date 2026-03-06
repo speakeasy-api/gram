@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
@@ -321,9 +323,22 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		}
 	}
 
+	// Build cache key including allowedRemoteURLs filter
+	buildCacheKey := func() string {
+		baseKey := registryCacheKey("details", req)
+		if len(allowedRemoteURLs) == 0 {
+			return baseKey
+		}
+		// Sort URLs for deterministic key
+		sortedURLs := make([]string, len(allowedRemoteURLs))
+		copy(sortedURLs, allowedRemoteURLs)
+		sort.Strings(sortedURLs)
+		return fmt.Sprintf("%s:filter:%s", baseKey, strings.Join(sortedURLs, ","))
+	}
+
 	// Check cache after authorization so headers are populated.
 	if c.detailsCache != nil {
-		cacheKey := registryCacheKey("details", req)
+		cacheKey := buildCacheKey()
 		cached, err := c.detailsCache.Get(ctx, cacheKey)
 		if err == nil {
 			c.logger.DebugContext(ctx, "registry details cache hit", attr.SlogCacheKey(cacheKey))
@@ -418,7 +433,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 	// Store in cache on success.
 	if c.detailsCache != nil {
-		cacheKey := registryCacheKey("details", req)
+		cacheKey := buildCacheKey()
 		if storeErr := c.detailsCache.Store(ctx, CachedServerDetailsResponse{
 			Key:     cacheKey,
 			Details: details,
