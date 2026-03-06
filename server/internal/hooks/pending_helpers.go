@@ -17,7 +17,7 @@ import (
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
 	// Use atomic RPUSH operation to append to the list
 	// This eliminates the race condition from read-modify-write
-	ttl := 24 * time.Hour // TTL for buffered hooks
+	ttl := 5 * time.Minute // TTL for buffered hooks. This is very generous. Could be lower since this can trigger through an unauthenticated endpoint.
 	if err := s.cache.ListAppend(ctx, hookPendingCacheKey(sessionID), payload, ttl); err != nil {
 		return fmt.Errorf("append hook to list: %w", err)
 	}
