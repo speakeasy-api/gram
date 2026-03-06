@@ -46,8 +46,14 @@ export default function Catalog() {
   // Normalize empty string to undefined for consistent query keys
   const serverSideSearch = allDataLoaded ? undefined : searchQuery || undefined;
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useInfiniteListMCPCatalog(serverSideSearch);
+  const {
+    data,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    debouncedSearch,
+  } = useInfiniteListMCPCatalog(serverSideSearch);
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
@@ -58,9 +64,10 @@ export default function Catalog() {
   // Once we've loaded all data without a search, we can switch to client-side filtering
   useEffect(() => {
     // Only set allDataLoaded based on the unfiltered (no search) query state
-    // If there's a search query active, don't update allDataLoaded based on its pagination state
+    // Use debouncedSearch (not searchQuery) to ensure we're checking against the actual
+    // query state, avoiding timing mismatches during debounce transitions
     if (
-      !searchQuery &&
+      !debouncedSearch &&
       !hasNextPage &&
       !isLoading &&
       data?.pages &&
@@ -69,7 +76,7 @@ export default function Catalog() {
       setAllDataLoaded(true);
     }
     // Never reset allDataLoaded to false - once we have all data, we keep it
-  }, [hasNextPage, isLoading, data?.pages, searchQuery]);
+  }, [hasNextPage, isLoading, data?.pages, debouncedSearch]);
 
   // Flatten all pages into a single list
   const allServers = useMemo(() => {
