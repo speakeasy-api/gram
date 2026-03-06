@@ -46,6 +46,7 @@ export * from "./gethookssummary.js";
 export * from "./getinstance.js";
 export * from "./getlatestdeployment.js";
 export * from "./getmcpmetadata.js";
+export * from "./getmcpserverdetails.js";
 export * from "./getobservabilityoverview.js";
 export * from "./getperiodusage.js";
 export * from "./getproductfeatures.js";

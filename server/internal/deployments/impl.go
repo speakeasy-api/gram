@@ -440,6 +440,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 			name:                    add.Name,
 			slug:                    string(add.Slug),
 			registryServerSpecifier: add.RegistryServerSpecifier,
+			selectedRemotes:         add.SelectedRemotes,
 		})
 	}
 
@@ -623,6 +624,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			name:                    add.Name,
 			slug:                    string(add.Slug),
 			registryServerSpecifier: add.RegistryServerSpecifier,
+			selectedRemotes:         add.SelectedRemotes,
 		})
 	}
 

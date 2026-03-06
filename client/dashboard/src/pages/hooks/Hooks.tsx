@@ -376,42 +376,51 @@ function HooksContent() {
       subtitle="Ask me about your hooks! Powered by Elements + Gram MCP"
       hideTrigger={isLogsDisabled}
     >
-      <EnterpriseGate
-        icon="workflow"
-        description="Hooks are available on the Enterprise plan. Book a time to get started."
-      >
-        <HooksInnerContent
-          isLogsDisabled={isLogsDisabled}
-          isLoading={isLoading}
-          isFetching={isFetching}
-          error={error}
-          summaryData={summaryData}
-          logs={logs}
-          searchQuery={searchQuery}
-          searchInput={searchInput}
-          setSearchInput={setSearchInput}
-          userEmailInput={userEmailInput}
-          setUserEmailInput={setUserEmailInput}
-          userEmailFilter={userEmailFilter}
-          selectedServer={selectedServer}
-          onServerChange={handleServerChange}
-          selectedLog={selectedLog}
-          handleLogClick={handleLogClick}
-          setSelectedLog={setSelectedLog}
-          containerRef={containerRef}
-          handleScroll={handleScroll}
-          hasNextPage={hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          refetch={refetch}
-          dateRange={dateRange}
-          customRange={customRange}
-          customRangeLabel={urlLabel}
-          onDateRangeChange={setDateRangeParam}
-          onCustomRangeChange={setCustomRangeParam}
-          onClearCustomRange={clearCustomRange}
-          projectSlug={projectSlug}
-        />
-      </EnterpriseGate>
+      <div className="h-full overflow-hidden flex flex-col">
+        <Page>
+          <Page.Header>
+            <Page.Header.Breadcrumbs fullWidth />
+          </Page.Header>
+          <Page.Body fullWidth noPadding overflowHidden className="flex-1">
+            <EnterpriseGate
+              icon="workflow"
+              description="Hooks are available on the Enterprise plan. Book a time to get started."
+            >
+              <HooksInnerContent
+                isLogsDisabled={isLogsDisabled}
+                isLoading={isLoading}
+                isFetching={isFetching}
+                error={error}
+                summaryData={summaryData}
+                logs={logs}
+                searchQuery={searchQuery}
+                searchInput={searchInput}
+                setSearchInput={setSearchInput}
+                userEmailInput={userEmailInput}
+                setUserEmailInput={setUserEmailInput}
+                userEmailFilter={userEmailFilter}
+                selectedServer={selectedServer}
+                onServerChange={handleServerChange}
+                selectedLog={selectedLog}
+                handleLogClick={handleLogClick}
+                setSelectedLog={setSelectedLog}
+                containerRef={containerRef}
+                handleScroll={handleScroll}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                refetch={refetch}
+                dateRange={dateRange}
+                customRange={customRange}
+                customRangeLabel={urlLabel}
+                onDateRangeChange={setDateRangeParam}
+                onCustomRangeChange={setCustomRangeParam}
+                onClearCustomRange={clearCustomRange}
+                projectSlug={projectSlug}
+              />
+            </EnterpriseGate>
+          </Page.Body>
+        </Page>
+      </div>
     </InsightsSidebar>
   );
 }
@@ -479,148 +488,132 @@ function HooksInnerContent({
 }) {
   if (isLogsDisabled) {
     return (
-      <div className="h-full overflow-hidden flex flex-col">
-        <Page>
-          <Page.Header>
-            <Page.Header.Breadcrumbs fullWidth />
-          </Page.Header>
-          <Page.Body fullWidth className="space-y-6">
-            <div className="flex flex-col gap-1 min-w-0">
-              <h1 className="text-xl font-semibold">Hooks</h1>
-              <p className="text-sm text-muted-foreground">
-                Monitor hook events and tool executions across all servers
-              </p>
-            </div>
-            <div className="flex-1 relative">
-              <div
-                className="pointer-events-none select-none h-full"
-                aria-hidden="true"
-              >
-                <ObservabilitySkeleton />
-              </div>
-              <EnableLoggingOverlay onEnabled={refetch} />
-            </div>
-          </Page.Body>
-        </Page>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-1 min-w-0">
+          <h1 className="text-xl font-semibold">Hooks</h1>
+          <p className="text-sm text-muted-foreground">
+            Monitor hook events and tool executions across all servers
+          </p>
+        </div>
+        <div className="flex-1 relative">
+          <div
+            className="pointer-events-none select-none h-full"
+            aria-hidden="true"
+          >
+            <ObservabilitySkeleton />
+          </div>
+          <EnableLoggingOverlay onEnabled={refetch} />
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      <div className="h-full overflow-hidden flex flex-col">
-        <Page>
-          <Page.Header>
-            <Page.Header.Breadcrumbs fullWidth />
-          </Page.Header>
-          <Page.Body fullWidth noPadding overflowHidden>
-            <div className="flex flex-col flex-1 min-h-0 w-full">
-              {/* Header section */}
-              <div className="px-8 py-4 shrink-0">
-                <div className="flex items-start justify-between gap-4 mb-4">
-                  <div className="flex flex-col gap-1 min-w-0">
-                    <h1 className="text-xl font-semibold">Hooks</h1>
-                    <p className="text-sm text-muted-foreground">
-                      Monitor hook events and tool executions across all servers
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to="../settings/logs">
-                      <Settings className="h-4 w-4" />
-                      Configure settings
-                    </Link>
-                  </Button>
-                </div>
-
-                {/* Server Cards */}
-                {summaryData && summaryData.servers.length > 0 && (
-                  <div className="mb-4">
-                    <HooksServerCards
-                      servers={summaryData.servers}
-                      selectedServer={selectedServer}
-                      onServerChange={onServerChange}
-                    />
-                  </div>
-                )}
-
-                {/* Filter and Search Row */}
-                <div className="flex items-center gap-4 flex-wrap">
-                  <SearchBar
-                    value={searchInput}
-                    onChange={setSearchInput}
-                    placeholder="Search by tool name"
-                    className="flex-1 min-w-[200px]"
-                  />
-                  <SearchBar
-                    value={userEmailInput}
-                    onChange={setUserEmailInput}
-                    placeholder="Filter by user email"
-                    className="flex-1 min-w-[200px]"
-                  />
-                  <div className="ml-auto">
-                    <TimeRangePicker
-                      preset={customRange ? null : dateRange}
-                      customRange={customRange}
-                      customRangeLabel={customRangeLabel}
-                      onPresetChange={onDateRangeChange}
-                      onCustomRangeChange={onCustomRangeChange}
-                      onClearCustomRange={onClearCustomRange}
-                      projectSlug={projectSlug}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Content section */}
-              <div className="flex-1 overflow-hidden min-h-0 border-t">
-                <div className="h-full flex flex-col bg-background">
-                  {isFetching && logs.length > 0 && (
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
-                      <div className="h-full bg-primary animate-pulse" />
-                    </div>
-                  )}
-
-                  {/* Header */}
-                  <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-                    <div className="shrink-0 w-[150px]">Timestamp</div>
-                    <div className="flex-1 min-w-0">Server / Tool</div>
-                    <div className="shrink-0 w-[250px]">User</div>
-                    <div className="shrink-0 w-[150px]">Source</div>
-                    <div className="shrink-0 w-20 text-right">Event</div>
-                  </div>
-
-                  {/* Scrollable logs list */}
-                  <div
-                    ref={containerRef}
-                    className="overflow-y-auto flex-1"
-                    onScroll={handleScroll}
-                  >
-                    <HooksLogsContent
-                      error={error}
-                      isLoading={isLoading}
-                      logs={logs}
-                      searchQuery={searchQuery}
-                      selectedServer={selectedServer}
-                      userEmailFilter={userEmailFilter}
-                      isFetchingNextPage={isFetchingNextPage}
-                      onLogClick={handleLogClick}
-                    />
-                  </div>
-
-                  {/* Footer */}
-                  {logs.length > 0 && (
-                    <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
-                      <span>
-                        {logs.length} {logs.length === 1 ? "event" : "events"}
-                        {hasNextPage && " • Scroll to load more"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
+      <div className="flex flex-col flex-1 min-h-0 w-full">
+        {/* Header section */}
+        <div className="px-8 pt-8 pb-4 shrink-0">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="flex flex-col gap-1 min-w-0">
+              <h1 className="text-xl font-semibold">Hooks</h1>
+              <p className="text-sm text-muted-foreground">
+                Monitor hook events and tool executions across all servers
+              </p>
             </div>
-          </Page.Body>
-        </Page>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="../settings/logs">
+                <Settings className="h-4 w-4" />
+                Configure settings
+              </Link>
+            </Button>
+          </div>
+
+          {/* Server Cards */}
+          {summaryData && summaryData.servers.length > 0 && (
+            <div className="mb-4">
+              <HooksServerCards
+                servers={summaryData.servers}
+                selectedServer={selectedServer}
+                onServerChange={onServerChange}
+              />
+            </div>
+          )}
+
+          {/* Filter and Search Row */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <SearchBar
+              value={searchInput}
+              onChange={setSearchInput}
+              placeholder="Search by tool name"
+              className="flex-1 min-w-[200px]"
+            />
+            <SearchBar
+              value={userEmailInput}
+              onChange={setUserEmailInput}
+              placeholder="Filter by user email"
+              className="flex-1 min-w-[200px]"
+            />
+            <div className="ml-auto">
+              <TimeRangePicker
+                preset={customRange ? null : dateRange}
+                customRange={customRange}
+                customRangeLabel={customRangeLabel}
+                onPresetChange={onDateRangeChange}
+                onCustomRangeChange={onCustomRangeChange}
+                onClearCustomRange={onClearCustomRange}
+                projectSlug={projectSlug}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Content section */}
+        <div className="flex-1 overflow-hidden min-h-0 border-t">
+          <div className="h-full flex flex-col bg-background">
+            {isFetching && logs.length > 0 && (
+              <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
+                <div className="h-full bg-primary animate-pulse" />
+              </div>
+            )}
+
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+              <div className="shrink-0 w-[150px]">Timestamp</div>
+              <div className="flex-1 min-w-0">Server / Tool</div>
+              <div className="shrink-0 w-[250px]">User</div>
+              <div className="shrink-0 w-[150px]">Source</div>
+              <div className="shrink-0 w-20 text-right">Event</div> 
+            </div>
+
+            {/* Scrollable logs list */}
+            <div
+              ref={containerRef}
+              className="overflow-y-auto flex-1"
+              onScroll={handleScroll}
+            >
+              <HooksLogsContent
+                error={error}
+                isLoading={isLoading}
+                logs={logs}
+                searchQuery={searchQuery}
+                selectedServer={selectedServer}
+                userEmailFilter={userEmailFilter}
+                isFetchingNextPage={isFetchingNextPage}
+                onLogClick={handleLogClick}
+              />
+            </div>
+
+            {/* Footer */}
+            {logs.length > 0 && (
+              <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+                <span>
+                  {logs.length} {logs.length === 1 ? "event" : "events"}
+                  {hasNextPage && " • Scroll to load more"}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <LogDetailSheet

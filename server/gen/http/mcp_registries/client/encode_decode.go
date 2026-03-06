@@ -268,6 +268,248 @@ func DecodeListCatalogResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
+// BuildGetServerDetailsRequest instantiates a HTTP request object with method
+// and path set to call the "mcpRegistries" service "getServerDetails" endpoint
+func (c *Client) BuildGetServerDetailsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetServerDetailsMcpRegistriesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "getServerDetails", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetServerDetailsRequest returns an encoder for requests sent to the
+// mcpRegistries getServerDetails server.
+func EncodeGetServerDetailsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpregistries.GetServerDetailsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpRegistries", "getServerDetails", "*mcpregistries.GetServerDetailsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("registry_id", p.RegistryID)
+		values.Add("server_specifier", p.ServerSpecifier)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetServerDetailsResponse returns a decoder for responses returned by
+// the mcpRegistries getServerDetails endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetServerDetailsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetServerDetailsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetServerDetailsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+			}
+			err = ValidateGetServerDetailsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+			}
+			res := NewGetServerDetailsExternalMCPServerOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetServerDetailsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+			}
+			err = ValidateGetServerDetailsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+			}
+			return nil, NewGetServerDetailsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetServerDetailsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+			}
+			err = ValidateGetServerDetailsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+			}
+			return nil, NewGetServerDetailsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetServerDetailsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+			}
+			err = ValidateGetServerDetailsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+			}
+			return nil, NewGetServerDetailsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetServerDetailsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+			}
+			err = ValidateGetServerDetailsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+			}
+			return nil, NewGetServerDetailsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetServerDetailsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+			}
+			err = ValidateGetServerDetailsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+			}
+			return nil, NewGetServerDetailsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetServerDetailsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+			}
+			err = ValidateGetServerDetailsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+			}
+			return nil, NewGetServerDetailsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetServerDetailsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+			}
+			err = ValidateGetServerDetailsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+			}
+			return nil, NewGetServerDetailsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetServerDetailsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+				}
+				err = ValidateGetServerDetailsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+				}
+				return nil, NewGetServerDetailsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetServerDetailsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+				}
+				err = ValidateGetServerDetailsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+				}
+				return nil, NewGetServerDetailsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "getServerDetails", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetServerDetailsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getServerDetails", err)
+			}
+			err = ValidateGetServerDetailsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getServerDetails", err)
+			}
+			return nil, NewGetServerDetailsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "getServerDetails", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer builds a
 // value of type *types.ExternalMCPServer from a value of type
 // *ExternalMCPServerResponseBody.
@@ -291,6 +533,16 @@ func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalM
 			res.Tools[i] = unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool(val)
 		}
 	}
+	if v.Remotes != nil {
+		res.Remotes = make([]*types.ExternalMCPRemote, len(v.Remotes))
+		for i, val := range v.Remotes {
+			if val == nil {
+				res.Remotes[i] = nil
+				continue
+			}
+			res.Remotes[i] = unmarshalExternalMCPRemoteResponseBodyToTypesExternalMCPRemote(val)
+		}
+	}
 
 	return res
 }
@@ -307,6 +559,21 @@ func unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool(v *ExternalMCPTo
 		Description: v.Description,
 		InputSchema: v.InputSchema,
 		Annotations: v.Annotations,
+	}
+
+	return res
+}
+
+// unmarshalExternalMCPRemoteResponseBodyToTypesExternalMCPRemote builds a
+// value of type *types.ExternalMCPRemote from a value of type
+// *ExternalMCPRemoteResponseBody.
+func unmarshalExternalMCPRemoteResponseBodyToTypesExternalMCPRemote(v *ExternalMCPRemoteResponseBody) *types.ExternalMCPRemote {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPRemote{
+		URL:           *v.URL,
+		TransportType: *v.TransportType,
 	}
 
 	return res

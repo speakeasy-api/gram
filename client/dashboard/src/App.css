@@ -85,3 +85,18 @@
   transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* Dotted background scroll animation for catalog cards */
+@keyframes scroll-dots {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 64px 64px;
+  }
+}
+
+.server-card:hover .scroll-dots-target {
+  animation: scroll-dots 3s linear infinite;
+  color: oklch(0.553 0.013 58.071 / 0.4);
+}

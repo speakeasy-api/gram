@@ -86,7 +86,7 @@ export function TopHeader() {
         <div className="flex items-center gap-3">
           {/* Logo */}
           <routes.home.Link className="hover:no-underline flex items-center">
-            <GramLogo className="w-20" />
+            <GramLogo className="w-28" />
           </routes.home.Link>
 
           {/* Separator */}

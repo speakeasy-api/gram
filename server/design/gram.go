@@ -38,4 +38,11 @@ var _ = API("gram", func() {
 	Description("Gram is the tools platform for AI agents")
 	Meta("openapi:example", "false")
 	Randomizer(expr.NewDeterministicRandomizer())
+
+	Server("gram", func() {
+		Host("production", func() {
+			Description("Gram production API base URL")
+			URI("https://app.getgram.ai")
+		})
+	})
 })

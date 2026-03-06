@@ -11,3 +11,8 @@ package server
 func ListCatalogMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.listCatalog"
 }
+
+// GetServerDetailsMcpRegistriesPath returns the URL path to the mcpRegistries service getServerDetails HTTP endpoint.
+func GetServerDetailsMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.getServerDetails"
+}

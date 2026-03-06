@@ -424,6 +424,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 					Name:                    mcp.Name,
 					Slug:                    mcp.Slug,
 					RegistryServerSpecifier: mcp.RegistryServerSpecifier,
+					SelectedRemotes:         mcp.SelectedRemotes,
 				},
 			})
 		})

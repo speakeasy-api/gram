@@ -214,7 +214,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   project_id uuid,
   created_by_user_id TEXT NOT NULL,
 
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 255),
   key_prefix TEXT NOT NULL,
   key_hash TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -1285,6 +1285,7 @@ CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   name TEXT NOT NULL CHECK (name <> ''),
   slug TEXT NOT NULL CHECK (slug <> ''),
   registry_server_specifier TEXT NOT NULL CHECK (registry_server_specifier <> ''),
+  selected_remotes TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
