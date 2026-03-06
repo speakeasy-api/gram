@@ -458,6 +458,15 @@ func (s *Service) Register(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeUnexpected, err, "parse slack app ID from token").Log(ctx, s.logger)
 	}
 
+	slackApp, err := s.repo.GetSlackAppByID(ctx, slackAppID)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "slack app not found").Log(ctx, s.logger)
+	}
+
+	if err := s.auth.CheckProjectAccess(ctx, s.logger, slackApp.ProjectID); err != nil {
+		return err
+	}
+
 	if _, err := s.repo.CreateSlackRegistration(ctx, repo.CreateSlackRegistrationParams{
 		SlackAppID:     slackAppID,
 		SlackAccountID: cached.SlackAccountID,
