@@ -56,6 +56,7 @@ export * from "./evolveform.js";
 export * from "./evolveresult.js";
 export * from "./exportmcpmetadatarequestbody.js";
 export * from "./externalmcpheaderdefinition.js";
+export * from "./externalmcpremote.js";
 export * from "./externalmcpserver.js";
 export * from "./externalmcptool.js";
 export * from "./externalmcptooldefinition.js";
