@@ -37,21 +37,11 @@ type SlackAppToolset struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
-type SlackPendingAuth struct {
-	ID          uuid.UUID
-	SlackAppID  uuid.UUID
-	SlackUserID string
-	Token       string
-	ChannelID   string
-	Status      string
-	CreatedAt   pgtype.Timestamptz
-	CompletedAt pgtype.Timestamptz
-}
-
-type SlackUserMapping struct {
-	ID          uuid.UUID
-	SlackAppID  uuid.UUID
-	SlackUserID string
-	GramUserID  uuid.UUID
-	CreatedAt   pgtype.Timestamptz
+type SlackRegistration struct {
+	ID             uuid.UUID
+	SlackAppID     uuid.UUID
+	SlackAccountID string
+	UserID         uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }

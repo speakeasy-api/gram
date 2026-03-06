@@ -12,6 +12,7 @@ export default defineConfig({
   define: {
     __GRAM_SERVER_URL__: JSON.stringify(""),
     __GRAM_GIT_SHA__: JSON.stringify(""),
+    __GRAM_DEV_AUTH_BYPASS__: true,
   },
   test: {
     environment: "happy-dom",

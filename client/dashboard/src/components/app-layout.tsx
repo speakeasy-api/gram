@@ -13,12 +13,12 @@ export const LoginCheck = () => {
   const session = useSession();
   const location = useLocation();
 
-  if (session.session === "" && !import.meta.env.DEV) {
+  if (session.session === "" && !__GRAM_DEV_AUTH_BYPASS__) {
     const redirectTo = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?redirect=${redirectTo}`} />;
   }
 
-  if (!session.activeOrganizationId && !import.meta.env.DEV) {
+  if (!session.activeOrganizationId && !__GRAM_DEV_AUTH_BYPASS__) {
     const redirectTo = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/register?redirect=${redirectTo}`} />;
   }

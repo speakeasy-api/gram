@@ -895,7 +895,7 @@ CREATE TABLE IF NOT EXISTS slack_apps (
 CREATE UNIQUE INDEX IF NOT EXISTS slack_apps_project_name_key
   ON slack_apps (project_id, name) WHERE deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS slack_apps_slack_team_id_key
+CREATE INDEX IF NOT EXISTS slack_apps_slack_team_id_idx
   ON slack_apps (slack_team_id) WHERE deleted IS FALSE AND slack_team_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS slack_app_toolsets (
@@ -909,30 +909,17 @@ CREATE TABLE IF NOT EXISTS slack_app_toolsets (
   CONSTRAINT slack_app_toolsets_slack_app_id_toolset_id_key UNIQUE (slack_app_id, toolset_id)
 );
 
-CREATE TABLE IF NOT EXISTS slack_user_mappings (
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  slack_user_id TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS slack_registrations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   slack_app_id uuid NOT NULL,
-  gram_user_id uuid NOT NULL,
-
-  CONSTRAINT slack_user_mappings_slack_app_id_fkey FOREIGN KEY (slack_app_id) REFERENCES slack_apps (id) ON DELETE CASCADE,
-  CONSTRAINT slack_user_mappings_slack_app_id_slack_user_id_key UNIQUE (slack_app_id, slack_user_id)
-);
-
-CREATE TABLE IF NOT EXISTS slack_pending_auths (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  slack_app_id uuid NOT NULL,
-  slack_user_id TEXT NOT NULL,
-  token TEXT NOT NULL,
-  channel_id TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
+  slack_account_id TEXT NOT NULL,
+  user_id uuid NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  completed_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT slack_pending_auths_slack_app_id_fkey FOREIGN KEY (slack_app_id) REFERENCES slack_apps (id) ON DELETE CASCADE,
-  CONSTRAINT slack_pending_auths_token_key UNIQUE (token)
+  CONSTRAINT slack_registrations_slack_app_id_fkey FOREIGN KEY (slack_app_id) REFERENCES slack_apps (id) ON DELETE CASCADE,
+  CONSTRAINT slack_registrations_slack_app_id_slack_account_id_key UNIQUE (slack_app_id, slack_account_id)
 );
 
 CREATE TABLE IF NOT EXISTS tool_variations_groups (

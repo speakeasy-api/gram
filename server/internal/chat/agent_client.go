@@ -235,7 +235,7 @@ func (c *Client) AgentChat(
 		messages = append(messages, *response.Message)
 
 		// No tool calls = final assistant message
-		if response.Message.Type == or.MessageTypeAssistant {
+		if response.Message.Type == or.MessageTypeAssistant && len(response.ToolCalls) == 0 {
 			return openrouter.GetText(*response.Message), nil
 		}
 

@@ -15,6 +15,7 @@ import {
   useLocation,
 } from "react-router";
 import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
+import SlackRegister from "./pages/slackapp/SlackRegister";
 import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
@@ -215,6 +216,9 @@ const RouteProvider = () => {
       <Routes>
         {/* Register these unauthenticated paths outside of root layout */}
         {routesWithSubroutes(unauthenticatedRoutes)}
+        <Route path="/slack/register" element={<LoginCheck />}>
+          <Route index element={<SlackRegister />} />
+        </Route>
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}

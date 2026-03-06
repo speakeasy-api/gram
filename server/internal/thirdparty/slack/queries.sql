@@ -122,30 +122,21 @@ WHERE sat.slack_app_id = @slack_app_id
   AND t.deleted IS FALSE
 ORDER BY t.name ASC;
 
--- name: GetSlackUserMapping :one
+-- name: GetSlackRegistration :one
 SELECT *
-FROM slack_user_mappings
+FROM slack_registrations
 WHERE slack_app_id = @slack_app_id
-  AND slack_user_id = @slack_user_id;
+  AND slack_account_id = @slack_account_id;
 
--- name: CreateSlackUserMapping :one
-INSERT INTO slack_user_mappings (slack_app_id, slack_user_id, gram_user_id)
-VALUES (@slack_app_id, @slack_user_id, @gram_user_id)
-ON CONFLICT (slack_app_id, slack_user_id) DO UPDATE SET gram_user_id = @gram_user_id
+-- name: GetSlackRegistrationWithUser :one
+SELECT sr.*, u.display_name AS user_display_name, u.email AS user_email
+FROM slack_registrations sr
+JOIN users u ON u.id = sr.user_id::text
+WHERE sr.slack_app_id = @slack_app_id
+  AND sr.slack_account_id = @slack_account_id;
+
+-- name: CreateSlackRegistration :one
+INSERT INTO slack_registrations (slack_app_id, slack_account_id, user_id)
+VALUES (@slack_app_id, @slack_account_id, @user_id)
+ON CONFLICT (slack_app_id, slack_account_id) DO UPDATE SET user_id = @user_id, updated_at = clock_timestamp()
 RETURNING *;
-
--- name: CreatePendingAuth :one
-INSERT INTO slack_pending_auths (slack_app_id, slack_user_id, token, channel_id)
-VALUES (@slack_app_id, @slack_user_id, @token, @channel_id)
-RETURNING *;
-
--- name: GetPendingAuthByToken :one
-SELECT *
-FROM slack_pending_auths
-WHERE token = @token
-  AND status = 'pending';
-
--- name: CompletePendingAuth :exec
-UPDATE slack_pending_auths
-SET status = 'completed', completed_at = clock_timestamp()
-WHERE id = @id;

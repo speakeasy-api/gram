@@ -58,6 +58,7 @@ type SlackAppAuthInfoResponse struct {
 	AccessToken    string
 	TeamName       string
 	TeamID         string
+	SystemPrompt   string
 }
 
 func (s *SlackClient) Enabled() bool {
@@ -86,6 +87,7 @@ func (s *SlackClient) GetAppAuthInfo(ctx context.Context, slackTeamID string) (*
 		ProjectID:      app.ProjectID,
 		TeamName:       conv.PtrValOr(conv.FromPGText[string](app.SlackTeamName), ""),
 		TeamID:         conv.PtrValOr(conv.FromPGText[string](app.SlackTeamID), ""),
+		SystemPrompt:   conv.PtrValOr(conv.FromPGText[string](app.SystemPrompt), ""),
 	}, nil
 }
 
@@ -282,6 +284,32 @@ func (s *SlackClient) PostEphemeralMessage(ctx context.Context, accessToken stri
 	}
 
 	return nil
+}
+
+func (s *SlackClient) GetAppAuthInfoByID(ctx context.Context, gramAppID uuid.UUID) (*SlackAppAuthInfoResponse, error) {
+	app, err := s.repo.GetSlackAppByID(ctx, gramAppID)
+	if err != nil {
+		return nil, fmt.Errorf("get slack app by id: %w", err)
+	}
+
+	if !app.SlackBotToken.Valid {
+		return nil, fmt.Errorf("slack app has no bot token")
+	}
+
+	decryptedAccessToken, err := s.enc.Decrypt(app.SlackBotToken.String)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt bot token: %w", err)
+	}
+
+	return &SlackAppAuthInfoResponse{
+		SlackAppID:     app.ID,
+		AccessToken:    decryptedAccessToken,
+		OrganizationID: app.OrganizationID,
+		ProjectID:      app.ProjectID,
+		TeamName:       conv.PtrValOr(conv.FromPGText[string](app.SlackTeamName), ""),
+		TeamID:         conv.PtrValOr(conv.FromPGText[string](app.SlackTeamID), ""),
+		SystemPrompt:   conv.PtrValOr(conv.FromPGText[string](app.SystemPrompt), ""),
+	}, nil
 }
 
 func (s *SlackClient) OAuthV2Access(ctx context.Context, code, initialRedirectUI string) (*slackOAuthResponse, error) {

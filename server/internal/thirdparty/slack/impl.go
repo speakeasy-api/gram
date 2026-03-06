@@ -69,12 +69,15 @@ type Service struct {
 	client              *slack_client.SlackClient
 	temporal            *temporal.Environment
 	watchedThreadsCache cache.TypedCacheObject[types.AppMentionedThreads]
+	tokenCache          cache.TypedCacheObject[types.SlackRegistrationToken]
 }
 
 var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, redisClient *redis.Client, client *slack_client.SlackClient, temporal *temporal.Environment, cfg Configurations) *Service {
 	logger = logger.With(attr.SlogComponent("slack"))
+
+	redisCacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 
 	return &Service{
 		tracer:              otel.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
@@ -88,7 +91,8 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		cfg:                 &cfg,
 		client:              client,
 		temporal:            temporal,
-		watchedThreadsCache: cache.NewTypedObjectCache[types.AppMentionedThreads](logger.With(attr.SlogCacheNamespace("watched_threads")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		watchedThreadsCache: cache.NewTypedObjectCache[types.AppMentionedThreads](logger.With(attr.SlogCacheNamespace("watched_threads")), redisCacheAdapter, cache.SuffixNone),
+		tokenCache:          cache.NewTypedObjectCache[types.SlackRegistrationToken](logger.With(attr.SlogCacheNamespace("slack_tokens")), redisCacheAdapter, cache.SuffixNone),
 	}
 }
 
@@ -101,12 +105,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// Auth routes — registered before {id} routes so "auth" isn't captured as an ID
-	o11y.AttachHandler(mux, "GET", "/rpc/slack-apps/auth/{token}", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.SlackAuthInfo).ServeHTTP(w, r)
+	// Registration routes
+	o11y.AttachHandler(mux, "GET", "/rpc/slack-apps.getByToken", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.GetByToken).ServeHTTP(w, r)
 	})
-	o11y.AttachHandler(mux, "POST", "/rpc/slack-apps/auth/{token}/complete", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.CompleteSlackAuth).ServeHTTP(w, r)
+	o11y.AttachHandler(mux, "POST", "/rpc/slack-apps.register", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.Register).ServeHTTP(w, r)
 	})
 
 	o11y.AttachHandler(mux, "GET", "/rpc/slack-apps/{id}/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +150,22 @@ func (s *Service) SlackAppOAuthCallback(w http.ResponseWriter, r *http.Request) 
 		return oops.E(oops.CodeUnexpected, err, "decrypt client secret").Log(ctx, s.logger)
 	}
 
-	response, err := s.client.OAuthV2AccessWithCredentials(ctx, code, s.oauthCallbackURL(appID), app.SlackClientID.String, decryptedSecret)
+	// Use the actual request URL as redirect_uri so it matches what Slack saw
+	// during the authorize step (e.g. when proxied through ngrok).
+	callbackURL := fmt.Sprintf("%s://%s%s", r.URL.Scheme, r.Host, r.URL.Path)
+	if r.URL.Scheme == "" {
+		// Behind reverse proxy / TLS termination — reconstruct from headers.
+		scheme := r.Header.Get("X-Forwarded-Proto")
+		if scheme == "" {
+			scheme = "https"
+		}
+		host := r.Header.Get("X-Forwarded-Host")
+		if host == "" {
+			host = r.Host
+		}
+		callbackURL = fmt.Sprintf("%s://%s%s", scheme, host, r.URL.Path)
+	}
+	response, err := s.client.OAuthV2AccessWithCredentials(ctx, code, callbackURL, app.SlackClientID.String, decryptedSecret)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "slack oauth exchange failed").Log(ctx, s.logger)
 	}
@@ -274,34 +293,34 @@ func (s *Service) SlackAppEventHandler(w http.ResponseWriter, r *http.Request) e
 	}
 
 	if processEvent {
-		slackUserID := event.Event.User
-		if slackUserID != "" {
-			_, err := s.repo.GetSlackUserMapping(ctx, repo.GetSlackUserMappingParams{
-				SlackAppID:  appID,
-				SlackUserID: slackUserID,
+		slackAccountID := event.Event.User
+		if slackAccountID != "" {
+			registration, err := s.repo.GetSlackRegistrationWithUser(ctx, repo.GetSlackRegistrationWithUserParams{
+				SlackAppID:     appID,
+				SlackAccountID: slackAccountID,
 			})
 			if err != nil {
 				if !errors.Is(err, pgx.ErrNoRows) {
-					return oops.E(oops.CodeUnexpected, err, "check slack user mapping").Log(ctx, s.logger)
+					return oops.E(oops.CodeUnexpected, err, "check slack registration").Log(ctx, s.logger)
 				}
 
-				// No mapping — create pending auth and send ephemeral login link
+				// No registration — store token in Redis and send ephemeral registration link
 				tokenBytes := make([]byte, 16)
 				if _, err := rand.Read(tokenBytes); err != nil {
-					return oops.E(oops.CodeUnexpected, err, "generate auth token").Log(ctx, s.logger)
+					return oops.E(oops.CodeUnexpected, err, "generate registration token").Log(ctx, s.logger)
 				}
 				token := hex.EncodeToString(tokenBytes)
 
-				if _, err := s.repo.CreatePendingAuth(ctx, repo.CreatePendingAuthParams{
-					SlackAppID:  appID,
-					SlackUserID: slackUserID,
-					Token:       token,
-					ChannelID:   event.Event.Channel,
+				if err := s.tokenCache.Store(ctx, types.SlackRegistrationToken{
+					Token:          token,
+					SlackAppID:     appID.String(),
+					SlackAccountID: slackAccountID,
+					ChannelID:      event.Event.Channel,
 				}); err != nil {
-					return oops.E(oops.CodeUnexpected, err, "create pending auth").Log(ctx, s.logger)
+					return oops.E(oops.CodeUnexpected, err, "cache registration token").Log(ctx, s.logger)
 				}
 
-				loginURL := fmt.Sprintf("%s/slack/login/%s", s.cfg.GramServerURL, token)
+				registerURL := fmt.Sprintf("%s/slack/register?token=%s", s.cfg.GramSiteURL, token)
 
 				decryptedBotToken, err := s.enc.Decrypt(app.SlackBotToken.String)
 				if err != nil {
@@ -310,18 +329,20 @@ func (s *Service) SlackAppEventHandler(w http.ResponseWriter, r *http.Request) e
 
 				if err := s.client.PostEphemeralMessage(ctx, decryptedBotToken, slack_client.SlackPostEphemeralInput{
 					ChannelID: event.Event.Channel,
-					UserID:    slackUserID,
-					Message:   fmt.Sprintf("To use this bot, please sign in first: <%s|Sign in to Gram>", loginURL),
+					UserID:    slackAccountID,
+					Message:   fmt.Sprintf("To use this bot, please link your Gram account first: <%s|Connect to Gram>", registerURL),
 					ThreadTS:  &threadTs,
 				}); err != nil {
-					s.logger.ErrorContext(ctx, "send ephemeral login link", attr.SlogError(err))
+					s.logger.ErrorContext(ctx, "send ephemeral registration link", attr.SlogError(err))
 				}
 
 				w.WriteHeader(http.StatusOK)
 				return nil
 			}
+
 		}
 
+		event.GramAppID = appID.String()
 		if _, err := background.ExecuteProcessSlackEventWorkflow(ctx, s.temporal, background.ProcessSlackWorkflowParams{
 			Event: event,
 		}); err != nil {
@@ -333,29 +354,39 @@ func (s *Service) SlackAppEventHandler(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-// --- Slack User Auth ---
+// --- Slack User Registration ---
 
-type slackAuthInfoToolset struct {
+type getByTokenToolset struct {
 	Name string `json:"name"`
 	Slug string `json:"slug"`
 }
 
-type slackAuthInfoResponse struct {
-	AppName  string                 `json:"appName"`
-	Toolsets []slackAuthInfoToolset `json:"toolsets"`
-	Token    string                 `json:"token"`
+type getByTokenResponse struct {
+	AppName  string              `json:"appName"`
+	Toolsets []getByTokenToolset `json:"toolsets"`
+	Token    string              `json:"token"`
 }
 
-func (s *Service) SlackAuthInfo(w http.ResponseWriter, r *http.Request) error {
+// GetByToken resolves a registration token to a slack app and returns its info.
+// This is called by the dashboard when a user visits /slack/register?token={token}.
+func (s *Service) GetByToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	token := chi.URLParam(r, "token")
-
-	pendingAuth, err := s.repo.GetPendingAuthByToken(ctx, token)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "pending auth not found").Log(ctx, s.logger)
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		return oops.E(oops.CodeBadRequest, fmt.Errorf("missing token"), "token is required").Log(ctx, s.logger)
 	}
 
-	app, err := s.repo.GetSlackAppByID(ctx, pendingAuth.SlackAppID)
+	cached, err := s.tokenCache.Get(ctx, types.SlackTokenCacheKey(token))
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "token not found or expired").Log(ctx, s.logger)
+	}
+
+	appID, err := uuid.Parse(cached.SlackAppID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "parse slack app ID from token").Log(ctx, s.logger)
+	}
+
+	app, err := s.repo.GetSlackAppByID(ctx, appID)
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "slack app not found").Log(ctx, s.logger)
 	}
@@ -365,28 +396,41 @@ func (s *Service) SlackAuthInfo(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeUnexpected, err, "list slack app toolsets").Log(ctx, s.logger)
 	}
 
-	toolsetResults := make([]slackAuthInfoToolset, 0, len(toolsets))
+	toolsetResults := make([]getByTokenToolset, 0, len(toolsets))
 	for _, ts := range toolsets {
-		toolsetResults = append(toolsetResults, slackAuthInfoToolset{
+		toolsetResults = append(toolsetResults, getByTokenToolset{
 			Name: ts.Name,
 			Slug: ts.Slug,
 		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(slackAuthInfoResponse{
+	if err := json.NewEncoder(w).Encode(getByTokenResponse{
 		AppName:  app.Name,
 		Toolsets: toolsetResults,
 		Token:    token,
 	}); err != nil {
-		return fmt.Errorf("encode auth info response: %w", err)
+		return fmt.Errorf("encode getByToken response: %w", err)
 	}
 	return nil
 }
 
-func (s *Service) CompleteSlackAuth(w http.ResponseWriter, r *http.Request) error {
+type registerRequest struct {
+	Token string `json:"token"`
+}
+
+// Register completes the registration flow by linking a Slack account to a Gram user.
+// The user must be authenticated via session cookie.
+func (s *Service) Register(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	token := chi.URLParam(r, "token")
+
+	var body registerRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, s.logger)
+	}
+	if body.Token == "" {
+		return oops.E(oops.CodeBadRequest, fmt.Errorf("missing token"), "token is required").Log(ctx, s.logger)
+	}
 
 	// Authenticate via session cookie
 	ctx, err := s.sessions.AuthenticateWithCookie(ctx)
@@ -399,31 +443,37 @@ func (s *Service) CompleteSlackAuth(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnauthorized, fmt.Errorf("no auth context"), "authentication required").Log(ctx, s.logger)
 	}
 
-	gramUserID, err := uuid.Parse(authCtx.UserID)
+	userID, err := uuid.Parse(authCtx.UserID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "parse user ID").Log(ctx, s.logger)
 	}
 
-	pendingAuth, err := s.repo.GetPendingAuthByToken(ctx, token)
+	cached, err := s.tokenCache.Get(ctx, types.SlackTokenCacheKey(body.Token))
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "pending auth not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "token not found or expired").Log(ctx, s.logger)
 	}
 
-	if _, err := s.repo.CreateSlackUserMapping(ctx, repo.CreateSlackUserMappingParams{
-		SlackAppID:  pendingAuth.SlackAppID,
-		SlackUserID: pendingAuth.SlackUserID,
-		GramUserID:  gramUserID,
+	slackAppID, err := uuid.Parse(cached.SlackAppID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "parse slack app ID from token").Log(ctx, s.logger)
+	}
+
+	if _, err := s.repo.CreateSlackRegistration(ctx, repo.CreateSlackRegistrationParams{
+		SlackAppID:     slackAppID,
+		SlackAccountID: cached.SlackAccountID,
+		UserID:         userID,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "create slack user mapping").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "create slack registration").Log(ctx, s.logger)
 	}
 
-	if err := s.repo.CompletePendingAuth(ctx, pendingAuth.ID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "complete pending auth").Log(ctx, s.logger)
+	// Consume the token
+	if err := s.tokenCache.DeleteByKey(ctx, types.SlackTokenCacheKey(body.Token)); err != nil {
+		s.logger.ErrorContext(ctx, "delete consumed registration token", attr.SlogError(err))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]bool{"ok": true}); err != nil {
-		return fmt.Errorf("encode complete auth response: %w", err)
+		return fmt.Errorf("encode register response: %w", err)
 	}
 	return nil
 }

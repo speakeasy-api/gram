@@ -40,17 +40,6 @@ func (q *Queries) AddSlackAppToolset(ctx context.Context, arg AddSlackAppToolset
 	return i, err
 }
 
-const completePendingAuth = `-- name: CompletePendingAuth :exec
-UPDATE slack_pending_auths
-SET status = 'completed', completed_at = clock_timestamp()
-WHERE id = $1
-`
-
-func (q *Queries) CompletePendingAuth(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, completePendingAuth, id)
-	return err
-}
-
 const configureSlackApp = `-- name: ConfigureSlackApp :one
 UPDATE slack_apps
 SET
@@ -101,40 +90,6 @@ func (q *Queries) ConfigureSlackApp(ctx context.Context, arg ConfigureSlackAppPa
 		&i.ProjectID,
 		&i.ID,
 		&i.Deleted,
-	)
-	return i, err
-}
-
-const createPendingAuth = `-- name: CreatePendingAuth :one
-INSERT INTO slack_pending_auths (slack_app_id, slack_user_id, token, channel_id)
-VALUES ($1, $2, $3, $4)
-RETURNING id, slack_app_id, slack_user_id, token, channel_id, status, created_at, completed_at
-`
-
-type CreatePendingAuthParams struct {
-	SlackAppID  uuid.UUID
-	SlackUserID string
-	Token       string
-	ChannelID   string
-}
-
-func (q *Queries) CreatePendingAuth(ctx context.Context, arg CreatePendingAuthParams) (SlackPendingAuth, error) {
-	row := q.db.QueryRow(ctx, createPendingAuth,
-		arg.SlackAppID,
-		arg.SlackUserID,
-		arg.Token,
-		arg.ChannelID,
-	)
-	var i SlackPendingAuth
-	err := row.Scan(
-		&i.ID,
-		&i.SlackAppID,
-		&i.SlackUserID,
-		&i.Token,
-		&i.ChannelID,
-		&i.Status,
-		&i.CreatedAt,
-		&i.CompletedAt,
 	)
 	return i, err
 }
@@ -198,51 +153,29 @@ func (q *Queries) CreateSlackApp(ctx context.Context, arg CreateSlackAppParams) 
 	return i, err
 }
 
-const createSlackUserMapping = `-- name: CreateSlackUserMapping :one
-INSERT INTO slack_user_mappings (slack_app_id, slack_user_id, gram_user_id)
+const createSlackRegistration = `-- name: CreateSlackRegistration :one
+INSERT INTO slack_registrations (slack_app_id, slack_account_id, user_id)
 VALUES ($1, $2, $3)
-ON CONFLICT (slack_app_id, slack_user_id) DO UPDATE SET gram_user_id = $3
-RETURNING id, slack_app_id, slack_user_id, gram_user_id, created_at
+ON CONFLICT (slack_app_id, slack_account_id) DO UPDATE SET user_id = $3, updated_at = clock_timestamp()
+RETURNING id, slack_app_id, slack_account_id, user_id, created_at, updated_at
 `
 
-type CreateSlackUserMappingParams struct {
-	SlackAppID  uuid.UUID
-	SlackUserID string
-	GramUserID  uuid.UUID
+type CreateSlackRegistrationParams struct {
+	SlackAppID     uuid.UUID
+	SlackAccountID string
+	UserID         uuid.UUID
 }
 
-func (q *Queries) CreateSlackUserMapping(ctx context.Context, arg CreateSlackUserMappingParams) (SlackUserMapping, error) {
-	row := q.db.QueryRow(ctx, createSlackUserMapping, arg.SlackAppID, arg.SlackUserID, arg.GramUserID)
-	var i SlackUserMapping
+func (q *Queries) CreateSlackRegistration(ctx context.Context, arg CreateSlackRegistrationParams) (SlackRegistration, error) {
+	row := q.db.QueryRow(ctx, createSlackRegistration, arg.SlackAppID, arg.SlackAccountID, arg.UserID)
+	var i SlackRegistration
 	err := row.Scan(
 		&i.ID,
 		&i.SlackAppID,
-		&i.SlackUserID,
-		&i.GramUserID,
+		&i.SlackAccountID,
+		&i.UserID,
 		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const getPendingAuthByToken = `-- name: GetPendingAuthByToken :one
-SELECT id, slack_app_id, slack_user_id, token, channel_id, status, created_at, completed_at
-FROM slack_pending_auths
-WHERE token = $1
-  AND status = 'pending'
-`
-
-func (q *Queries) GetPendingAuthByToken(ctx context.Context, token string) (SlackPendingAuth, error) {
-	row := q.db.QueryRow(ctx, getPendingAuthByToken, token)
-	var i SlackPendingAuth
-	err := row.Scan(
-		&i.ID,
-		&i.SlackAppID,
-		&i.SlackUserID,
-		&i.Token,
-		&i.ChannelID,
-		&i.Status,
-		&i.CreatedAt,
-		&i.CompletedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -352,27 +285,68 @@ func (q *Queries) GetSlackAppByTeamID(ctx context.Context, slackTeamID pgtype.Te
 	return i, err
 }
 
-const getSlackUserMapping = `-- name: GetSlackUserMapping :one
-SELECT id, slack_app_id, slack_user_id, gram_user_id, created_at
-FROM slack_user_mappings
+const getSlackRegistration = `-- name: GetSlackRegistration :one
+SELECT id, slack_app_id, slack_account_id, user_id, created_at, updated_at
+FROM slack_registrations
 WHERE slack_app_id = $1
-  AND slack_user_id = $2
+  AND slack_account_id = $2
 `
 
-type GetSlackUserMappingParams struct {
-	SlackAppID  uuid.UUID
-	SlackUserID string
+type GetSlackRegistrationParams struct {
+	SlackAppID     uuid.UUID
+	SlackAccountID string
 }
 
-func (q *Queries) GetSlackUserMapping(ctx context.Context, arg GetSlackUserMappingParams) (SlackUserMapping, error) {
-	row := q.db.QueryRow(ctx, getSlackUserMapping, arg.SlackAppID, arg.SlackUserID)
-	var i SlackUserMapping
+func (q *Queries) GetSlackRegistration(ctx context.Context, arg GetSlackRegistrationParams) (SlackRegistration, error) {
+	row := q.db.QueryRow(ctx, getSlackRegistration, arg.SlackAppID, arg.SlackAccountID)
+	var i SlackRegistration
 	err := row.Scan(
 		&i.ID,
 		&i.SlackAppID,
-		&i.SlackUserID,
-		&i.GramUserID,
+		&i.SlackAccountID,
+		&i.UserID,
 		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSlackRegistrationWithUser = `-- name: GetSlackRegistrationWithUser :one
+SELECT sr.id, sr.slack_app_id, sr.slack_account_id, sr.user_id, sr.created_at, sr.updated_at, u.display_name AS user_display_name, u.email AS user_email
+FROM slack_registrations sr
+JOIN users u ON u.id = sr.user_id::text
+WHERE sr.slack_app_id = $1
+  AND sr.slack_account_id = $2
+`
+
+type GetSlackRegistrationWithUserParams struct {
+	SlackAppID     uuid.UUID
+	SlackAccountID string
+}
+
+type GetSlackRegistrationWithUserRow struct {
+	ID              uuid.UUID
+	SlackAppID      uuid.UUID
+	SlackAccountID  string
+	UserID          uuid.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	UserDisplayName string
+	UserEmail       string
+}
+
+func (q *Queries) GetSlackRegistrationWithUser(ctx context.Context, arg GetSlackRegistrationWithUserParams) (GetSlackRegistrationWithUserRow, error) {
+	row := q.db.QueryRow(ctx, getSlackRegistrationWithUser, arg.SlackAppID, arg.SlackAccountID)
+	var i GetSlackRegistrationWithUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.SlackAppID,
+		&i.SlackAccountID,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UserDisplayName,
+		&i.UserEmail,
 	)
 	return i, err
 }

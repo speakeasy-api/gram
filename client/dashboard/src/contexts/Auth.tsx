@@ -10,7 +10,12 @@ import { useSessionInfo } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Navigate, useNavigate, useSearchParams } from "react-router";
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -179,9 +184,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// Paths that are authenticated but don't require org/project slug context.
+const SLUG_EXEMPT_PATHS = ["/slack/register"];
+
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { session, error, status } = useSessionData();
 
   const isLoading = status === "pending";
@@ -212,12 +221,19 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
+  // Skip all slug-based redirect logic for exempt paths
+  const isSlugExempt = SLUG_EXEMPT_PATHS.some((p) =>
+    location.pathname.startsWith(p),
+  );
+
   // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
   if (redirectParam) {
-    if (!import.meta.env.DEV) {
+    if (!__GRAM_DEV_AUTH_BYPASS__) {
       return <Navigate to={redirectParam} replace />;
     }
+  } else if (isSlugExempt) {
+    // Fall through to render children
   } else if (session.organization && !projectSlug) {
     // if we're logged in but the URL doesn't have a project slug, redirect to
     // the default project
@@ -240,6 +256,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     });
     const paramsToForwardString = forwardParams.toString();
 
+    console.log(
+      "[AuthHandler] REDIRECT: no projectSlug, going to default project →",
+      preferredProject,
+    );
     return (
       <Navigate
         to={`/${session.organization.slug}/${preferredProject}?${paramsToForwardString}`}

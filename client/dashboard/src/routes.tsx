@@ -38,7 +38,6 @@ import SDK from "./pages/sdk/SDK";
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
-import SlackLogin from "./pages/slackapp/SlackLogin";
 import SourceDetails from "./pages/sources/SourceDetails";
 import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
@@ -117,12 +116,6 @@ const ROUTE_STRUCTURE = {
     title: "Register",
     url: "/register",
     component: Register,
-    unauthenticated: true,
-  },
-  slackLogin: {
-    title: "Slack Login",
-    url: "/slack/login/:token",
-    component: SlackLogin,
     unauthenticated: true,
   },
   onboarding: {
