@@ -5,11 +5,10 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-# Build command - ldflags are set via environment variable AIR_BUILD_LDFLAGS
-# -gcflags="all=-N -l" disables optimizations for faster compile (fine for dev)
-cmd = "go build -gcflags='all=-N -l' -ldflags=\"${AIR_BUILD_LDFLAGS}\" -o ./tmp/main ."
+# Build command - uses mise build task
+cmd = "mise run -q build:server"
 # Binary to run after build
-bin = "./tmp/main"
+bin = "./bin/gram"
 # Arguments passed to binary via command line: air -- start [args...]
 # Watch these extensions
 include_ext = ["go", "toml"]
