@@ -96,7 +96,7 @@ export function ServerCard({
         )}
         {/* Added indicator overlay */}
         {isAdded && (
-          <div className="absolute top-3.5 left-3.5">
+          <div className="absolute top-3.5 left-3.5 z-10">
             <Badge
               variant="outline"
               className="border-success/50 bg-success/10 text-success backdrop-blur-sm"
