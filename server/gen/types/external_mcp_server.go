@@ -26,4 +26,6 @@ type ExternalMCPServer struct {
 	Meta any
 	// Tools available on the server
 	Tools []*ExternalMCPTool
+	// Available remote endpoints for the server
+	Remotes []*ExternalMCPRemote
 }

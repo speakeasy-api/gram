@@ -282,6 +282,16 @@ func marshalTypesExternalMCPServerToExternalMCPServerResponseBody(v *types.Exter
 			res.Tools[i] = marshalTypesExternalMCPToolToExternalMCPToolResponseBody(val)
 		}
 	}
+	if v.Remotes != nil {
+		res.Remotes = make([]*ExternalMCPRemoteResponseBody, len(v.Remotes))
+		for i, val := range v.Remotes {
+			if val == nil {
+				res.Remotes[i] = nil
+				continue
+			}
+			res.Remotes[i] = marshalTypesExternalMCPRemoteToExternalMCPRemoteResponseBody(val)
+		}
+	}
 
 	return res
 }
@@ -298,6 +308,21 @@ func marshalTypesExternalMCPToolToExternalMCPToolResponseBody(v *types.ExternalM
 		Description: v.Description,
 		InputSchema: v.InputSchema,
 		Annotations: v.Annotations,
+	}
+
+	return res
+}
+
+// marshalTypesExternalMCPRemoteToExternalMCPRemoteResponseBody builds a value
+// of type *ExternalMCPRemoteResponseBody from a value of type
+// *types.ExternalMCPRemote.
+func marshalTypesExternalMCPRemoteToExternalMCPRemoteResponseBody(v *types.ExternalMCPRemote) *ExternalMCPRemoteResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalMCPRemoteResponseBody{
+		URL:           v.URL,
+		TransportType: v.TransportType,
 	}
 
 	return res

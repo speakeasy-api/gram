@@ -225,6 +225,8 @@ type ExternalMCPServerResponseBody struct {
 	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 	// Tools available on the server
 	Tools []*ExternalMCPToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Available remote endpoints for the server
+	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 }
 
 // ExternalMCPToolResponseBody is used to define fields on response body types.
@@ -237,6 +239,15 @@ type ExternalMCPToolResponseBody struct {
 	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
 	// Annotations for the tool
 	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// ExternalMCPRemoteResponseBody is used to define fields on response body
+// types.
+type ExternalMCPRemoteResponseBody struct {
+	// URL of the remote endpoint
+	URL string `form:"url" json:"url" xml:"url"`
+	// Transport type (sse or streamable-http)
+	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
 }
 
 // NewListCatalogResponseBody builds the HTTP response body from the result of

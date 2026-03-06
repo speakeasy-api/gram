@@ -13718,6 +13718,23 @@ components:
                 - header_name
                 - required
                 - secret
+        ExternalMCPRemote:
+            type: object
+            properties:
+                transport_type:
+                    type: string
+                    description: Transport type (sse or streamable-http)
+                    enum:
+                        - sse
+                        - streamable-http
+                url:
+                    type: string
+                    description: URL of the remote endpoint
+                    format: uri
+            description: A remote endpoint for an MCP server
+            required:
+                - url
+                - transport_type
         ExternalMCPServer:
             type: object
             properties:
@@ -13738,6 +13755,11 @@ components:
                     type: string
                     description: Server specifier used to look up in the registry (e.g., 'io.github.user/server')
                     example: io.modelcontextprotocol.anonymous/exa
+                remotes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPRemote'
+                    description: Available remote endpoints for the server
                 title:
                     type: string
                     description: Display name for the server
