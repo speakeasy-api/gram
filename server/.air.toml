@@ -6,7 +6,8 @@ tmp_dir = "tmp"
 
 [build]
 # Build command - ldflags are set via environment variable AIR_BUILD_LDFLAGS
-cmd = "go build -ldflags=\"${AIR_BUILD_LDFLAGS}\" -o ./tmp/main ."
+# -gcflags="all=-N -l" disables optimizations for faster compile (fine for dev)
+cmd = "go build -gcflags='all=-N -l' -ldflags=\"${AIR_BUILD_LDFLAGS}\" -o ./tmp/main ."
 # Binary to run after build
 bin = "./tmp/main"
 # Arguments passed to binary via command line: air -- start [args...]
