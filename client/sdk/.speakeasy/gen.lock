@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 4b37bd35908f2cfddcd0f39ef6214072
+  docChecksum: 7af64608092034fbb6d3c2d8df496a28
   docVersion: 0.0.1
   speakeasyVersion: 1.700.2
   generationVersion: 2.801.2
-  releaseVersion: 0.27.21
-  configChecksum: be6c897742b4ea0c5f3544d1091f4acb
+  releaseVersion: 0.27.23
+  configChecksum: 7df4aa723bdef3855527c2cd72d73eba
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -850,6 +850,14 @@ trackedFiles:
     last_write_checksum: sha1:c131618f5c00345d91782be882c1566ceeb7f38e
   docs/models/operations/getmcpmetadatasecurityoption2.md:
     last_write_checksum: sha1:e03021cee333e9a2427ace8d920b896eac52596f
+  docs/models/operations/getmcpserverdetailsrequest.md:
+    last_write_checksum: sha1:cfbf3c34bd36240da0fdd6278ae35b834768b5fd
+  docs/models/operations/getmcpserverdetailssecurity.md:
+    last_write_checksum: sha1:3d1f1582bff87e28ddac1b07efd7414a324a4fa1
+  docs/models/operations/getmcpserverdetailssecurityoption1.md:
+    last_write_checksum: sha1:85c2070e219711b5d4eded37f8b4705bd81f06ae
+  docs/models/operations/getmcpserverdetailssecurityoption2.md:
+    last_write_checksum: sha1:97ba9a8f64052e9980ba35a5df252ee6f1d86130
   docs/models/operations/getobservabilityoverviewrequest.md:
     last_write_checksum: sha1:d138596358cbb131061c700af8b3cf8ff468723b
   docs/models/operations/getobservabilityoverviewsecurity.md:
@@ -1363,7 +1371,7 @@ trackedFiles:
   docs/sdks/mcpmetadata/README.md:
     last_write_checksum: sha1:c6b5740a3f5a951130dc2f63d5de659165147e50
   docs/sdks/mcpregistries/README.md:
-    last_write_checksum: sha1:5e7de08372cc0db24de661e0ef14180c40cb7edf
+    last_write_checksum: sha1:ea58ae1edc65023869ce0e68a1147e6c121b2d63
   docs/sdks/packages/README.md:
     last_write_checksum: sha1:630727b17ae78739629705da27f894236bba7ad0
   docs/sdks/projects/README.md:
@@ -1404,11 +1412,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:eea1ca638b0748d9fdce6350498f63caca8b4f50
+    last_write_checksum: sha1:fd662514e1088bc84b7856e2d27b9b9fcd8f0044
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:39a4aa1f56cd5df6e00da5dbbbd87737164632bb
+    last_write_checksum: sha1:17794304257dcedda4bbff44ed635b0537cfb70e
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1648,6 +1656,8 @@ trackedFiles:
     id: 777d5714010c
     last_write_checksum: sha1:3a1b66b78d963d0a2504619f6afe3d483621b5b6
     pristine_git_object: 18c70af34c8453afaa5e090924f2dcef0c2af170
+  src/funcs/mcpRegistriesGetServerDetails.ts:
+    last_write_checksum: sha1:5103f4f414ae370b2daed1ed52c887d69af26ed5
   src/funcs/mcpRegistriesListCatalog.ts:
     id: b86a29fb5a51
     last_write_checksum: sha1:b47d466b710b059b05869118741a5a3bf4097b35
@@ -1866,7 +1876,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:c90e673045e63e6cbae40e104958f3696ff465d9
+    last_write_checksum: sha1:41b6a99323bd819b6bbdae584c3a637c57e0e8c7
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2852,6 +2862,8 @@ trackedFiles:
     id: 938eecf7dbd5
     last_write_checksum: sha1:ced18a4cf28bcf240897c5a580d38dcd44006c38
     pristine_git_object: 68b334a669fc30a8ed985415c92d9851ae71ca9b
+  src/models/operations/getmcpserverdetails.ts:
+    last_write_checksum: sha1:d2f8088de6c1a6daf9e160425975a26af60d0505
   src/models/operations/getobservabilityoverview.ts:
     last_write_checksum: sha1:e1baabbb69c8ed056f1e1a4135bd41916b20543c
   src/models/operations/getperiodusage.ts:
@@ -2890,7 +2902,7 @@ trackedFiles:
     last_write_checksum: sha1:ce121229f9e0be0fe1eeba1361ab61bf384d3785
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:5449cd060687a161788ae2209bb3df723167f2d9
+    last_write_checksum: sha1:9a9dc48dea5923920cf56d7150eb1a0c11210766
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -3376,7 +3388,7 @@ trackedFiles:
     pristine_git_object: 48f56cd5f501f734c3428170db837bbe2568246f
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:01fdb6085d59783a34744ff02fb517d08e212939
+    last_write_checksum: sha1:b2c68b93e2121532fdbc1e278dfd40b7f26a1c7d
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -3546,6 +3558,10 @@ trackedFiles:
     id: df2aab879ca0
     last_write_checksum: sha1:00f08cba6b017ff5592a0d3dc5c66f0cb0a46877
     pristine_git_object: 8c0e5f323ab05193a7619787d8d281479594e899
+  src/react-query/mcpRegistriesGetServerDetails.core.ts:
+    last_write_checksum: sha1:ccb8f1c7a3d2d448c67bf6970b1897be78cb6e63
+  src/react-query/mcpRegistriesGetServerDetails.ts:
+    last_write_checksum: sha1:90741896d415378a98edf0142e48b3980752b2e3
   src/react-query/project.core.ts:
     id: 4a361f9f6939
     last_write_checksum: sha1:51f138b1e1b38011471634ec2f99d786a836ca96
@@ -3808,7 +3824,7 @@ trackedFiles:
     pristine_git_object: 8bc617d9d74eedcc809e73aef7d6535f7236c485
   src/sdk/mcpregistries.ts:
     id: ed029413aa4e
-    last_write_checksum: sha1:4734bd3deccd08d94a6890859a0892ca54e3ce19
+    last_write_checksum: sha1:0527086e03bc069ddcd03f14e6570364b319dd3d
     pristine_git_object: dfebfc79f3a9812d656d81002e00f583178b86dd
   src/sdk/packages.ts:
     id: d71e5e0d5096
@@ -5349,6 +5365,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getMCPServerDetails:
+    speakeasy-default-get-MCP-server-details:
+      parameters:
+        query:
+          registry_id: "75ead363-4933-438a-82e3-95cfe25cbb4d"
+          server_specifier: "<value>"
+      responses:
+        "200":
+          application/json: {"description": "pearl advancement knowledgeable nor psst duh under ha", "registry_id": "517e978d-f6f6-4c8d-99b4-b4735239ffea", "registry_specifier": "io.modelcontextprotocol.anonymous/exa", "version": "1.0.0"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

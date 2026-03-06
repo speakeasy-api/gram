@@ -7,7 +7,8 @@
 
 package types
 
-// An MCP server from an external registry
+// ExternalMCPServer is the result type of the mcpRegistries service
+// getServerDetails method.
 type ExternalMCPServer struct {
 	// Server specifier used to look up in the registry (e.g.,
 	// 'io.github.user/server')

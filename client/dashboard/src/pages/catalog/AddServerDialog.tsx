@@ -1,9 +1,11 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
+import { useSdkClient } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
 import type { Server } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
+import type { ExternalMCPRemote } from "@gram/client/models/components";
 import { Button, Dialog, Input, Stack } from "@speakeasy-api/moonshine";
 import {
   AlertCircle,
@@ -19,7 +21,7 @@ import {
   Settings,
   X,
 } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type ConfigurePhase,
   type CompletePhase,
@@ -189,6 +191,94 @@ export interface AddServerDialogProps {
   projectSlug?: string;
 }
 
+/**
+ * Hook to fetch server details (including remotes) for all servers.
+ * This enriches the server objects with remote endpoint data from the registry.
+ */
+function useEnrichedServers(servers: Server[], open: boolean) {
+  const client = useSdkClient();
+  const [enrichedServers, setEnrichedServers] = useState<Server[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Track the server specifiers to avoid re-fetching for the same servers
+  const fetchedForRef = useRef<string | null>(null);
+  const serversKey = servers.map((s) => s.registrySpecifier).join(",");
+
+  // Fetch details when dialog opens
+  useEffect(() => {
+    if (!open) {
+      // Reset when dialog closes
+      setEnrichedServers([]);
+      setIsLoading(false);
+      setError(null);
+      fetchedForRef.current = null;
+      return;
+    }
+
+    if (servers.length === 0) {
+      setEnrichedServers([]);
+      return;
+    }
+
+    // Skip if we've already fetched for these servers
+    if (fetchedForRef.current === serversKey) {
+      return;
+    }
+
+    const fetchServerDetails = async () => {
+      setIsLoading(true);
+      setError(null);
+      fetchedForRef.current = serversKey;
+
+      try {
+        const enriched = await Promise.all(
+          servers.map(async (server) => {
+            // Skip if server already has remotes populated
+            if (server.remotes && server.remotes.length > 0) {
+              return server;
+            }
+
+            try {
+              const details = await client.mcpRegistries.getServerDetails({
+                registryId: server.registryId,
+                serverSpecifier: server.registrySpecifier,
+              });
+
+              // Merge remotes from details into the server object
+              return {
+                ...server,
+                remotes: details.remotes as ExternalMCPRemote[] | undefined,
+              };
+            } catch (err) {
+              // If we can't fetch details for a specific server, just use original
+              console.warn(
+                `Failed to fetch details for ${server.registrySpecifier}:`,
+                err,
+              );
+              return server;
+            }
+          }),
+        );
+
+        setEnrichedServers(enriched);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to fetch details",
+        );
+        // Fall back to original servers
+        setEnrichedServers(servers);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchServerDetails();
+  }, [open, serversKey, servers, client]);
+
+  return { enrichedServers, isLoading, error };
+}
+
 export function AddServerDialog({
   servers,
   open,
@@ -196,8 +286,16 @@ export function AddServerDialog({
   onServersAdded,
   projectSlug,
 }: AddServerDialogProps) {
+  // Fetch server details (including remotes) when dialog opens
+  const {
+    enrichedServers,
+    isLoading: isLoadingDetails,
+    error: detailsError,
+  } = useEnrichedServers(servers, open);
+
+  // Use enriched servers (with remotes) for the workflow
   const releaseState = useExternalMcpReleaseWorkflow({
-    servers,
+    servers: enrichedServers,
     projectSlug,
   });
 
@@ -228,7 +326,57 @@ export function AddServerDialog({
 
   if (servers.length === 0) return null;
 
-  const isSingle = servers.length === 1;
+  // Show loading state while fetching server details
+  if (isLoadingDetails) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog.Content className="gap-2">
+          <Dialog.Header>
+            <Dialog.Title>Loading...</Dialog.Title>
+            <Dialog.Description>Fetching server details...</Dialog.Description>
+          </Dialog.Header>
+          <div className="py-8 flex items-center justify-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            <Type muted>Loading server configuration...</Type>
+          </div>
+        </Dialog.Content>
+      </Dialog>
+    );
+  }
+
+  // Show error state if details fetch failed
+  if (detailsError) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog.Content className="gap-2">
+          <Dialog.Header>
+            <Dialog.Title>Error</Dialog.Title>
+            <Dialog.Description>
+              Failed to load server details
+            </Dialog.Description>
+          </Dialog.Header>
+          <div className="py-4">
+            <div className="flex items-start gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5">
+              <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+              <Type small className="text-destructive/80">
+                {detailsError}
+              </Type>
+            </div>
+          </div>
+          <Dialog.Footer>
+            <Button variant="tertiary" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    );
+  }
+
+  // Wait for enriched servers to be ready
+  if (enrichedServers.length === 0) return null;
+
+  const isSingle = enrichedServers.length === 1;
   // Check if we came from multi-remote flow (some servers have selectedRemotes)
   const hasConfiguredMultiRemote =
     releaseState.phase === "configure" &&
@@ -252,7 +400,7 @@ export function AddServerDialog({
     if (hasConfiguredMultiRemote) return "One more step";
     return isSingle
       ? "Add to Project"
-      : `Add ${servers.length} servers to project`;
+      : `Add ${enrichedServers.length} servers to project`;
   })();
 
   return (

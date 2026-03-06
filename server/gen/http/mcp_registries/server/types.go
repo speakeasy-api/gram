@@ -9,6 +9,7 @@ package server
 
 import (
 	mcpregistries "github.com/speakeasy-api/gram/server/gen/mcp_registries"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -19,6 +20,30 @@ type ListCatalogResponseBody struct {
 	Servers []*ExternalMCPServerResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// Pagination cursor for the next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetServerDetailsResponseBody is the type of the "mcpRegistries" service
+// "getServerDetails" endpoint HTTP response body.
+type GetServerDetailsResponseBody struct {
+	// Server specifier used to look up in the registry (e.g.,
+	// 'io.github.user/server')
+	RegistrySpecifier string `form:"registry_specifier" json:"registry_specifier" xml:"registry_specifier"`
+	// Semantic version of the server
+	Version string `form:"version" json:"version" xml:"version"`
+	// Description of what the server does
+	Description string `form:"description" json:"description" xml:"description"`
+	// ID of the registry this server came from
+	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
+	// Display name for the server
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// URL to the server's icon
+	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
+	// Opaque metadata from the registry
+	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
+	// Tools available on the server
+	Tools []*ExternalMCPToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Available remote endpoints for the server
+	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 }
 
 // ListCatalogUnauthorizedResponseBody is the type of the "mcpRegistries"
@@ -205,6 +230,196 @@ type ListCatalogGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetServerDetailsUnauthorizedResponseBody is the type of the "mcpRegistries"
+// service "getServerDetails" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetServerDetailsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerDetailsForbiddenResponseBody is the type of the "mcpRegistries"
+// service "getServerDetails" endpoint HTTP response body for the "forbidden"
+// error.
+type GetServerDetailsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerDetailsBadRequestResponseBody is the type of the "mcpRegistries"
+// service "getServerDetails" endpoint HTTP response body for the "bad_request"
+// error.
+type GetServerDetailsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerDetailsNotFoundResponseBody is the type of the "mcpRegistries"
+// service "getServerDetails" endpoint HTTP response body for the "not_found"
+// error.
+type GetServerDetailsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerDetailsConflictResponseBody is the type of the "mcpRegistries"
+// service "getServerDetails" endpoint HTTP response body for the "conflict"
+// error.
+type GetServerDetailsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerDetailsUnsupportedMediaResponseBody is the type of the
+// "mcpRegistries" service "getServerDetails" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetServerDetailsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerDetailsInvalidResponseBody is the type of the "mcpRegistries"
+// service "getServerDetails" endpoint HTTP response body for the "invalid"
+// error.
+type GetServerDetailsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerDetailsInvariantViolationResponseBody is the type of the
+// "mcpRegistries" service "getServerDetails" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetServerDetailsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerDetailsUnexpectedResponseBody is the type of the "mcpRegistries"
+// service "getServerDetails" endpoint HTTP response body for the "unexpected"
+// error.
+type GetServerDetailsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerDetailsGatewayErrorResponseBody is the type of the "mcpRegistries"
+// service "getServerDetails" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetServerDetailsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ExternalMCPServerResponseBody is used to define fields on response body
 // types.
 type ExternalMCPServerResponseBody struct {
@@ -267,6 +482,41 @@ func NewListCatalogResponseBody(res *mcpregistries.ListCatalogResult) *ListCatal
 		}
 	} else {
 		body.Servers = []*ExternalMCPServerResponseBody{}
+	}
+	return body
+}
+
+// NewGetServerDetailsResponseBody builds the HTTP response body from the
+// result of the "getServerDetails" endpoint of the "mcpRegistries" service.
+func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDetailsResponseBody {
+	body := &GetServerDetailsResponseBody{
+		RegistrySpecifier: res.RegistrySpecifier,
+		Version:           res.Version,
+		Description:       res.Description,
+		RegistryID:        res.RegistryID,
+		Title:             res.Title,
+		IconURL:           res.IconURL,
+		Meta:              res.Meta,
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ExternalMCPToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesExternalMCPToolToExternalMCPToolResponseBody(val)
+		}
+	}
+	if res.Remotes != nil {
+		body.Remotes = make([]*ExternalMCPRemoteResponseBody, len(res.Remotes))
+		for i, val := range res.Remotes {
+			if val == nil {
+				body.Remotes[i] = nil
+				continue
+			}
+			body.Remotes[i] = marshalTypesExternalMCPRemoteToExternalMCPRemoteResponseBody(val)
+		}
 	}
 	return body
 }
@@ -411,6 +661,150 @@ func NewListCatalogGatewayErrorResponseBody(res *goa.ServiceError) *ListCatalogG
 	return body
 }
 
+// NewGetServerDetailsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getServerDetails" endpoint of the "mcpRegistries"
+// service.
+func NewGetServerDetailsUnauthorizedResponseBody(res *goa.ServiceError) *GetServerDetailsUnauthorizedResponseBody {
+	body := &GetServerDetailsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerDetailsForbiddenResponseBody builds the HTTP response body from
+// the result of the "getServerDetails" endpoint of the "mcpRegistries" service.
+func NewGetServerDetailsForbiddenResponseBody(res *goa.ServiceError) *GetServerDetailsForbiddenResponseBody {
+	body := &GetServerDetailsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerDetailsBadRequestResponseBody builds the HTTP response body from
+// the result of the "getServerDetails" endpoint of the "mcpRegistries" service.
+func NewGetServerDetailsBadRequestResponseBody(res *goa.ServiceError) *GetServerDetailsBadRequestResponseBody {
+	body := &GetServerDetailsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerDetailsNotFoundResponseBody builds the HTTP response body from
+// the result of the "getServerDetails" endpoint of the "mcpRegistries" service.
+func NewGetServerDetailsNotFoundResponseBody(res *goa.ServiceError) *GetServerDetailsNotFoundResponseBody {
+	body := &GetServerDetailsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerDetailsConflictResponseBody builds the HTTP response body from
+// the result of the "getServerDetails" endpoint of the "mcpRegistries" service.
+func NewGetServerDetailsConflictResponseBody(res *goa.ServiceError) *GetServerDetailsConflictResponseBody {
+	body := &GetServerDetailsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerDetailsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getServerDetails" endpoint of the
+// "mcpRegistries" service.
+func NewGetServerDetailsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetServerDetailsUnsupportedMediaResponseBody {
+	body := &GetServerDetailsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerDetailsInvalidResponseBody builds the HTTP response body from
+// the result of the "getServerDetails" endpoint of the "mcpRegistries" service.
+func NewGetServerDetailsInvalidResponseBody(res *goa.ServiceError) *GetServerDetailsInvalidResponseBody {
+	body := &GetServerDetailsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerDetailsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getServerDetails" endpoint of the
+// "mcpRegistries" service.
+func NewGetServerDetailsInvariantViolationResponseBody(res *goa.ServiceError) *GetServerDetailsInvariantViolationResponseBody {
+	body := &GetServerDetailsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerDetailsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getServerDetails" endpoint of the "mcpRegistries" service.
+func NewGetServerDetailsUnexpectedResponseBody(res *goa.ServiceError) *GetServerDetailsUnexpectedResponseBody {
+	body := &GetServerDetailsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerDetailsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getServerDetails" endpoint of the "mcpRegistries"
+// service.
+func NewGetServerDetailsGatewayErrorResponseBody(res *goa.ServiceError) *GetServerDetailsGatewayErrorResponseBody {
+	body := &GetServerDetailsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListCatalogPayload builds a mcpRegistries service listCatalog endpoint
 // payload.
 func NewListCatalogPayload(registryID *string, search *string, cursor *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ListCatalogPayload {
@@ -418,6 +812,19 @@ func NewListCatalogPayload(registryID *string, search *string, cursor *string, s
 	v.RegistryID = registryID
 	v.Search = search
 	v.Cursor = cursor
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetServerDetailsPayload builds a mcpRegistries service getServerDetails
+// endpoint payload.
+func NewGetServerDetailsPayload(registryID string, serverSpecifier string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.GetServerDetailsPayload {
+	v := &mcpregistries.GetServerDetailsPayload{}
+	v.RegistryID = registryID
+	v.ServerSpecifier = serverSpecifier
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

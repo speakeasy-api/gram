@@ -19,6 +19,8 @@ import (
 type Service interface {
 	// List available MCP servers from configured registries
 	ListCatalog(context.Context, *ListCatalogPayload) (res *ListCatalogResult, err error)
+	// Get detailed information about an MCP server including remotes
+	GetServerDetails(context.Context, *GetServerDetailsPayload) (res *types.ExternalMCPServer, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -41,7 +43,19 @@ const ServiceName = "mcpRegistries"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"listCatalog"}
+var MethodNames = [2]string{"listCatalog", "getServerDetails"}
+
+// GetServerDetailsPayload is the payload type of the mcpRegistries service
+// getServerDetails method.
+type GetServerDetailsPayload struct {
+	// ID of the registry
+	RegistryID string
+	// Server specifier (e.g., 'io.github.user/server')
+	ServerSpecifier  string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
 
 // ListCatalogPayload is the payload type of the mcpRegistries service
 // listCatalog method.

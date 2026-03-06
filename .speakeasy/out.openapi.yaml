@@ -5869,6 +5869,120 @@ paths:
       tags:
         - mcpMetadata
       x-speakeasy-name-override: set
+  /rpc/mcpRegistries.getServerDetails:
+    get:
+      description: Get detailed information about an MCP server including remotes
+      operationId: getMCPServerDetails
+      parameters:
+        - allowEmptyValue: true
+          description: ID of the registry
+          in: query
+          name: registry_id
+          required: true
+          schema:
+            description: ID of the registry
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Server specifier (e.g., 'io.github.user/server')
+          in: query
+          name: server_specifier
+          required: true
+          schema:
+            description: Server specifier (e.g., 'io.github.user/server')
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalMCPServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getServerDetails mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: getServerDetails
   /rpc/mcpRegistries.listCatalog:
     get:
       description: List available MCP servers from configured registries
