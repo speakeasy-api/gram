@@ -256,14 +256,17 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRe
 	// Convert remotes and find preferred remote index (streamable-http > sse)
 	var remotes []*types.ExternalMCPRemote
 	preferredIndex := -1
+	foundStreamable := false
 	for i, r := range serverResp.Server.Remotes {
 		remotes = append(remotes, &types.ExternalMCPRemote{
 			URL:           r.URL,
 			TransportType: r.Type,
 		})
-		// Track preferred remote but don't break - we need all remotes in the slice
-		if r.Type == "streamable-http" && preferredIndex == -1 {
+		// Prefer first streamable-http; fall back to first sse.
+		// Can't break early because we need all remotes in the slice.
+		if r.Type == "streamable-http" && !foundStreamable {
 			preferredIndex = i
+			foundStreamable = true
 		} else if r.Type == "sse" && preferredIndex == -1 {
 			preferredIndex = i
 		}
