@@ -66,7 +66,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { generateText } from "ai";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
@@ -2113,10 +2113,47 @@ function OAuthTabModal({
   toolset: Toolset;
   onSuccess: () => void;
 }) {
+  // Extract discovered OAuth metadata from external MCP tools.
+  // Uses rawTools because proxy-type tools are filtered out of toolset.tools.
+  const discoveredOAuth = useMemo(() => {
+    for (const tool of toolset.rawTools) {
+      const def = tool.externalMcpToolDefinition;
+      if (!def?.requiresOauth) continue;
+
+      const metadata: Record<string, unknown> = {};
+      if (def.oauthAuthorizationEndpoint) {
+        metadata.authorization_endpoint = def.oauthAuthorizationEndpoint;
+        try {
+          const url = new URL(def.oauthAuthorizationEndpoint);
+          metadata.issuer = url.origin;
+        } catch {
+          // skip issuer derivation
+        }
+      }
+      if (def.oauthTokenEndpoint)
+        metadata.token_endpoint = def.oauthTokenEndpoint;
+      if (def.oauthRegistrationEndpoint)
+        metadata.registration_endpoint = def.oauthRegistrationEndpoint;
+      if (def.oauthScopesSupported?.length)
+        metadata.scopes_supported = def.oauthScopesSupported;
+
+      if (Object.keys(metadata).length === 0) continue;
+
+      return {
+        slug: def.slug,
+        name: def.registryServerName,
+        version: def.oauthVersion,
+        metadata,
+      };
+    }
+    return null;
+  }, [toolset.rawTools]);
+
   const [activeTab, setActiveTab] = useState("external");
   const [externalSlug, setExternalSlug] = useState("");
   const [metadataJson, setMetadataJson] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
   const telemetry = useTelemetry();
 
   // OAuth Proxy form state
@@ -2132,6 +2169,28 @@ function OAuthTabModal({
   );
   const [proxyAudience, setProxyAudience] = useState("");
   const [proxyError, setProxyError] = useState<string | null>(null);
+
+  const applyDiscoveredOAuth = useCallback(
+    (tab: "external" | "proxy") => {
+      if (!discoveredOAuth) return;
+      if (tab === "external") {
+        setExternalSlug(discoveredOAuth.slug);
+        setMetadataJson(JSON.stringify(discoveredOAuth.metadata, null, 2));
+        setJsonError(null);
+      } else {
+        setProxySlug(discoveredOAuth.slug);
+        const m = discoveredOAuth.metadata;
+        if (typeof m.authorization_endpoint === "string")
+          setProxyAuthorizationEndpoint(m.authorization_endpoint);
+        if (typeof m.token_endpoint === "string")
+          setProxyTokenEndpoint(m.token_endpoint);
+        if (Array.isArray(m.scopes_supported))
+          setProxyScopes(m.scopes_supported.join(", "));
+      }
+      setPrefilled(true);
+    },
+    [discoveredOAuth],
+  );
 
   const hasMultipleOAuth2AuthCode =
     toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
@@ -2306,6 +2365,27 @@ function OAuthTabModal({
                   </Type>
                 </div>
               )}
+              {discoveredOAuth && !prefilled && (
+                <div className="border border-border bg-muted/50 rounded-md p-4 mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <Type small className="font-medium">
+                      OAuth detected from {discoveredOAuth.name}
+                    </Type>
+                    <Type muted small className="mt-1">
+                      We discovered OAuth {discoveredOAuth.version} metadata
+                      from this server. You can use it to pre-fill the form
+                      below.
+                    </Type>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => applyDiscoveredOAuth("external")}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              )}
               <div>
                 <Type className="font-medium mb-2">
                   External OAuth Server Configuration
@@ -2392,6 +2472,28 @@ function OAuthTabModal({
                     Book a meeting
                   </Link>
                 </Type>
+
+                {discoveredOAuth && !prefilled && (
+                  <div className="border border-border bg-muted/50 rounded-md p-4 mb-4 flex items-start justify-between gap-4">
+                    <div>
+                      <Type small className="font-medium">
+                        OAuth detected from {discoveredOAuth.name}
+                      </Type>
+                      <Type muted small className="mt-1">
+                        We discovered OAuth {discoveredOAuth.version} metadata
+                        from this server. You can use it to pre-fill the
+                        endpoints below.
+                      </Type>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => applyDiscoveredOAuth("proxy")}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                )}
 
                 {proxyError && (
                   <Type className="!text-red-500 text-sm mb-4">
