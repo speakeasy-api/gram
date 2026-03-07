@@ -196,6 +196,7 @@ func (p *CustomProvider) ExchangeToken(
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
 	if useBasicAuth {
 		req.SetBasicAuth(clientID, clientSecret)
 	}
@@ -275,6 +276,7 @@ func (p *CustomProvider) RefreshToken(
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
 	if useBasicAuth {
 		req.SetBasicAuth(clientID, clientSecret)
 	}

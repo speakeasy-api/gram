@@ -2153,7 +2153,7 @@ function OAuthTabModal({
   const [externalSlug, setExternalSlug] = useState("");
   const [metadataJson, setMetadataJson] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [prefilled, setPrefilled] = useState(false);
+  const [prefilled, setPrefilled] = useState<Record<string, boolean>>({});
   const telemetry = useTelemetry();
 
   // OAuth Proxy form state
@@ -2187,7 +2187,7 @@ function OAuthTabModal({
         if (Array.isArray(m.scopes_supported))
           setProxyScopes(m.scopes_supported.join(", "));
       }
-      setPrefilled(true);
+      setPrefilled((prev) => ({ ...prev, [tab]: true }));
     },
     [discoveredOAuth],
   );
@@ -2365,7 +2365,7 @@ function OAuthTabModal({
                   </Type>
                 </div>
               )}
-              {discoveredOAuth && !prefilled && (
+              {discoveredOAuth && !prefilled.external && (
                 <div className="border border-border bg-muted/50 rounded-md p-4 mb-4 flex items-start justify-between gap-4">
                   <div>
                     <Type small className="font-medium">
@@ -2473,7 +2473,7 @@ function OAuthTabModal({
                   </Link>
                 </Type>
 
-                {discoveredOAuth && !prefilled && (
+                {discoveredOAuth && !prefilled.proxy && (
                   <div className="border border-border bg-muted/50 rounded-md p-4 mb-4 flex items-start justify-between gap-4">
                     <div>
                       <Type small className="font-medium">
