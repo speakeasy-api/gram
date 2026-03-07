@@ -216,7 +216,7 @@ export function fromGram(
   server.setRequestHandler(
     ListToolsRequestSchema,
     async (): Promise<ListToolsResult> => {
-      const tools = (g.manifest().tools || []).map((t) => {
+      const tools = (manifest.tools || []).map((t) => {
         return {
           name: t.name,
           description: t.description,
@@ -230,6 +230,9 @@ export function fromGram(
                 openWorldHint: t.annotations.openWorldHint,
               }
             : undefined,
+          ...(t.meta != null
+            ? { _meta: t.meta as Record<string, unknown> }
+            : {}),
         };
       }) as ListToolsResult["tools"];
 
