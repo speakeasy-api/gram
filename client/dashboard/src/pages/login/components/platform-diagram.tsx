@@ -258,8 +258,8 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
           className="w-full bg-white border border-slate-200 rounded-lg p-3"
         >
           <div className="flex items-center mb-3">
-            <GramLogo variant="horizontal" className="w-20" />
-            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-1">
+            <GramLogo variant="horizontal" className="w-16" />
+            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-2">
               Chat Backend
             </span>
           </div>
@@ -339,8 +339,8 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
           />
           <div className="relative bg-white rounded-lg p-3">
             <div className="flex items-center mb-3">
-              <GramLogo variant="horizontal" className="w-20" />
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-1">
+              <GramLogo variant="horizontal" className="w-16" />
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-2">
                 Tool Management
               </span>
             </div>
