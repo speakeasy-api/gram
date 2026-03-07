@@ -122,3 +122,24 @@ func (o OauthProxyClientInfo) TTL() time.Duration {
 	// we double the client expiration time we send to MCP clients for safety
 	return time.Until(o.ClientSecretExpiresAt) * 2
 }
+
+var _ cache.CacheableObject[UpstreamPKCEVerifier] = (*UpstreamPKCEVerifier)(nil)
+
+// UpstreamPKCEVerifier stores an upstream PKCE code verifier server-side so it
+// never traverses the front-channel (OAuth state parameter).
+type UpstreamPKCEVerifier struct {
+	Nonce    string `json:"nonce"`
+	Verifier string `json:"verifier"`
+}
+
+func (v UpstreamPKCEVerifier) CacheKey() string {
+	return "upstreamPKCE:" + v.Nonce
+}
+
+func (v UpstreamPKCEVerifier) AdditionalCacheKeys() []string {
+	return []string{}
+}
+
+func (v UpstreamPKCEVerifier) TTL() time.Duration {
+	return 10 * time.Minute
+}
