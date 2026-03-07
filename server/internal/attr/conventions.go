@@ -133,8 +133,6 @@ const (
 	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
-	OAuthCodeKey                   = attribute.Key("gram.oauth.code")
-	OAuthExternalCodeKey           = attribute.Key("gram.oauth.external_code")
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey                 = attribute.Key("gram.oauth.issuer")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
@@ -602,12 +600,6 @@ func SlogOAuthAuthorizationEndpoint(v string) slog.Attr {
 
 func OAuthClientID(v string) attribute.KeyValue { return OAuthClientIDKey.String(v) }
 func SlogOAuthClientID(v string) slog.Attr      { return slog.String(string(OAuthClientIDKey), v) }
-
-func OAuthCode(v string) attribute.KeyValue { return OAuthCodeKey.String(v) }
-func SlogOAuthCode(v string) slog.Attr      { return slog.String(string(OAuthCodeKey), v) }
-
-func OAuthExternalCode(v string) attribute.KeyValue { return OAuthExternalCodeKey.String(v) }
-func SlogOAuthExternalCode(v string) slog.Attr      { return slog.String(string(OAuthExternalCodeKey), v) }
 
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
 func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGrantKey), v) }
