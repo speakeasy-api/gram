@@ -157,6 +157,7 @@ func (p *CustomProvider) ExchangeToken(
 	provider repo.OauthProxyProvider,
 	toolset *toolsets_repo.Toolset,
 	serverURL *url.URL,
+	codeVerifier string,
 ) (*TokenExchangeResult, error) {
 	clientID, clientSecret, err := p.resolveClientCredentials(ctx, provider, toolset)
 	if err != nil {
@@ -170,6 +171,9 @@ func (p *CustomProvider) ExchangeToken(
 	tokenData.Set("grant_type", "authorization_code")
 	tokenData.Set("redirect_uri", callbackURL)
 	tokenData.Set("code", code)
+	if codeVerifier != "" {
+		tokenData.Set("code_verifier", codeVerifier)
+	}
 
 	// Determine authentication method based on provider configuration
 	// Default to client_secret_post (form body) if TokenEndpointAuthMethodsSupported is empty

@@ -356,11 +356,27 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			return oops.E(oops.CodeUnexpected, err, "failed to parse OAuth authorization URL").Log(ctx, s.logger)
 		}
 
+		// Generate PKCE for the upstream provider
+		upstreamCodeVerifier, err := generateCodeVerifier()
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to generate PKCE verifier").Log(ctx, s.logger)
+		}
+		upstreamCodeChallenge := generateCodeChallenge(upstreamCodeVerifier)
+
+		// Store the verifier in oauthReqInfo so it's available at callback time
+		oauthReqInfo["upstream_code_verifier"] = upstreamCodeVerifier
+		oauthReqInfoJSON, err = json.Marshal(oauthReqInfo)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "failed to encode OAuth request info").Log(ctx, s.logger)
+		}
+
 		urlParams := url.Values{}
 		urlParams.Set("client_id", clientID)
 		urlParams.Set("redirect_uri", callbackURL)
 		urlParams.Set("response_type", "code")
 		urlParams.Add("state", string(oauthReqInfoJSON))
+		urlParams.Set("code_challenge", upstreamCodeChallenge)
+		urlParams.Set("code_challenge_method", "S256")
 
 		// We will recommend the provider configuration, fallback to request scope
 		if len(provider.ScopesSupported) > 0 {
@@ -555,7 +571,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		oauthProvider = s.customProvider
 	}
 
-	result, err := oauthProvider.ExchangeToken(ctx, externalCode, provider, toolset, s.serverURL)
+	result, err := oauthProvider.ExchangeToken(ctx, externalCode, provider, toolset, s.serverURL, oauthReqInfo["upstream_code_verifier"])
 	if err != nil {
 		s.logger.ErrorContext(ctx, "provider token exchange failed",
 			attr.SlogOAuthProvider(provider.Slug),
