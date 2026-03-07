@@ -432,7 +432,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		// External OAuth server flow - only accept Authorization header
 		if authToken == "" {
 			s.logger.WarnContext(ctx, "No authorization token provided")
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 		}
 
@@ -444,17 +444,17 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		// Custom OAuth provider flow - only accept Authorization header
 		oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
 		if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
-			s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()))
+			s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
 			oauthToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
 			if err != nil {
-				s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
+				s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
 			}
 		}
 		if err != nil {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 		}
-		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
+		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
 
 		for _, externalSecret := range oauthToken.ExternalSecrets {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
@@ -478,7 +478,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		if isOAuthCapable {
 			w.Header().Set(
 				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+				fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
 			)
 		}
 
