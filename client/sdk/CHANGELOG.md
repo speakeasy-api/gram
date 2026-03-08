@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.27.24
+
+### Patch Changes
+
+- 0c90e1e: Add hooks dashboard page
+
 ## 0.28.0
 
 ### Minor Changes
@@ -148,6 +154,7 @@
 
   This is ideal for MCP servers that require sensitive credentials (such as API
   keys), as it allows organizations to:
+
   - Secure access to servers handling sensitive secrets (via Gram Environments)
   - Eliminate the need for individual users to configure credentials during installation
   - Centralize authentication and access control at the organization level
