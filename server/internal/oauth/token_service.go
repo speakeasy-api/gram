@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // TokenService handles OAuth token operations
@@ -181,20 +180,20 @@ var (
 func (ts *TokenService) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {
 	token, err := ts.getToken(ctx, toolsetId, accessToken)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, ErrInvalidAccessToken, "session not found").Log(ctx, ts.logger)
+		return nil, fmt.Errorf("%w: session not found", ErrInvalidAccessToken)
 	}
 
 	// Check if token has expired
 	if time.Now().After(token.ExpiresAt) {
 		// Don't delete — the refresh token may still be valid and the client
 		// can exchange it for a new token pair.
-		return nil, oops.E(oops.CodeUnauthorized, ErrExpiredAccessToken, "access token expired").Log(ctx, ts.logger)
+		return nil, fmt.Errorf("%w: access token expired", ErrExpiredAccessToken)
 	}
 
 	for _, externalSecret := range token.ExternalSecrets {
 		if externalSecret.ExpiresAt != nil && externalSecret.ExpiresAt.Before(time.Now()) {
 			// Return the token alongside the error so the caller can attempt an upstream refresh
-			return token, oops.E(oops.CodeUnauthorized, ErrExpiredExternalSecrets, "upstream external secret expired").Log(ctx, ts.logger)
+			return token, fmt.Errorf("%w: upstream external secret expired", ErrExpiredExternalSecrets)
 		}
 	}
 
