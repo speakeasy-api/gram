@@ -446,10 +446,10 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
   return (
     <>
       <Button
-        variant="secondary"
+        variant="primary"
         onClick={() => setIsServerEnableDialogOpen(true)}
       >
-        {toolset.mcpEnabled ? "ENABLED" : "ENABLE"}
+        {toolset.mcpEnabled ? "DISABLE" : "ENABLE"}
       </Button>
       <ServerEnableDialog
         isOpen={isServerEnableDialogOpen}
